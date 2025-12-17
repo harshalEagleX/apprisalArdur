@@ -1,0 +1,129 @@
+[
+  {
+    "rule_id": "S-1",
+    "rule_name": "Property Address Validation",
+    "status": "PASS",
+    "message": "Property address components match engagement letter.",
+    "details": null
+  },
+  {
+    "rule_id": "S-2",
+    "rule_name": "Borrower Name Validation",
+    "status": "FAIL",
+    "message": "Borrower name mismatch. Report shows 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa.' but order form shows 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.",
+    "details": {
+      "report": "SUSANA HINOJOSA; MARIA VICTORIA HINOJOSA; VICTOR HINOJOSA.",
+      "engagement": "SUSANA HINOJOSA; MARIA VICTORIA HINOJOSA; VICTOR HUGO HINOJOSA"
+    }
+  },
+  {
+    "rule_id": "S-3",
+    "rule_name": "Owner of Public Record",
+    "status": "PASS",
+    "message": "Owner of Public Record is present and valid.",
+    "details": null
+  },
+  {
+    "rule_id": "S-4",
+    "rule_name": "Legal Description and Taxes",
+    "status": "PASS",
+    "message": "Legal description and tax data are complete and valid.",
+    "details": null
+  },
+  {
+    "rule_id": "S-5",
+    "rule_name": "Neighborhood Name",
+    "status": "PASS",
+    "message": "Neighborhood name 'arenotapprasalfactors. CS' is provided.",
+    "details": null
+  },
+  {
+    "rule_id": "S-6",
+    "rule_name": "Map Reference and Census Tract",
+    "status": "PASS",
+    "message": "Map Reference and Census Tract not provided (N/A for this report type).",
+    "details": {
+      "warnings": [
+        "Map Reference not provided (N/A for this report type).",
+        "Census Tract not provided (may be N/A for this report type)."
+      ]
+    }
+  },
+  {
+    "rule_id": "S-7",
+    "rule_name": "Occupant Status",
+    "status": "WARNING",
+    "message": "Property is tenant-occupied. Please provide lease dates.",
+    "details": null
+  },
+  {
+    "rule_id": "S-8",
+    "rule_name": "Special Assessments",
+    "status": "PASS",
+    "message": "Special assessments are properly documented.",
+    "details": null
+  },
+  {
+    "rule_id": "S-9",
+    "rule_name": "PUD and HOA",
+    "status": "PASS",
+    "message": "PUD/HOA information is consistent.",
+    "details": null
+  },
+  {
+    "rule_id": "S-10",
+    "rule_name": "Lender/Client Information",
+    "status": "PASS",
+    "message": "Lender/Client information matches engagement letter.",
+    "details": null
+  },
+  {
+    "rule_id": "S-11",
+    "rule_name": "Property Rights Appraised",
+    "status": "PASS",
+    "message": "Property rights appraised: Fee Simple",
+    "details": null
+  },
+  {
+    "rule_id": "S-12",
+    "rule_name": "Prior Listing/Sale History",
+    "status": "WARNING",
+    "message": "Property was offered for sale in past 12 months. Missing: MLS Number, Days on Market (DOM), List Price, List Date.",
+    "details": null
+  },
+  {
+    "rule_id": "C-1",
+    "rule_name": "Contract Analysis Requirement",
+    "status": "WARNING",
+    "message": "Did/Did Not Analyze Contract checkbox not detected. Please verify manually.",
+    "details": null
+  },
+  {
+    "rule_id": "C-2",
+    "rule_name": "Contract Price and Date",
+    "status": "PASS",
+    "message": "Contract Price: $475,000.00",
+    "details": null
+  },
+  {
+    "rule_id": "C-3",
+    "rule_name": "Owner of Record Data Source",
+    "status": "PASS",
+    "message": "Owner of record data source is provided.",
+    "details": null
+  },
+  {
+    "rule_id": "C-4",
+    "rule_name": "Financial Assistance",
+    "status": "PASS",
+    "message": "Financial assistance information is consistent.",
+    "details": null
+  },
+  {
+    "rule_id": "C-5",
+    "rule_name": "Personal Property Analysis",
+    "status": "PASS",
+    "message": "Personal property analysis is complete.",
+    "details": null
+  }
+]

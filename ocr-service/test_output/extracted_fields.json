@@ -1,0 +1,34 @@
+{
+  "appraisal_fields": {
+    "property_address": "25126 N Jack Tone Rd",
+    "city": "Acampo",
+    "state": "CA",
+    "zip_code": "95220",
+    "county": "of",
+    "borrower_name": "Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa.",
+    "owner_of_public_record": "to buyer under conditions whereby: (1) buyer and s",
+    "legal_description": "SMALL FARMS TR MAP 6 PG 48 PART OF LOT 13",
+    "apn": "021-041-13 Tax Year 2024 R.E. Taxes $ 487",
+    "tax_year": "2024",
+    "re_taxes": "487.0",
+    "neighborhood_name": "arenotapprasalfactors. CS",
+    "occupant": "Tenant",
+    "lender_name": "United American Mortgage Corporation",
+    "property_rights": "Fee Simple",
+    "contract_price": "475000.0",
+    "is_seller_owner": true,
+    "has_financial_assistance": false,
+    "owner_record_data_source": "County / Contract",
+    "offered_for_sale_12mo": true,
+    "data_source": "-@ Are the units, common elements, and recreation facilities complete? ' | Yes | | No IfNo, describe the status of completion."
+  },
+  "engagement_fields": {
+    "borrower_name": "Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa",
+    "property_address": "25126 N Jack Tone Rd Acampo CA 95220 Property County: San Joaquin",
+    "lender_name": "United American Mortgage Corporation",
+    "assignment_type": "Purchase",
+    "city": "Acampo",
+    "state": "CA",
+    "zip_code": "95220"
+  }
+}

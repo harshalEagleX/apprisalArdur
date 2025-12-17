@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title} + ' | Ardur Appraisal'">Ardur Appraisal</title>
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+    <script th:src="@{/js/main.js}" defer></script>
+</head>
+
+<body>
+
+    <!-- Navigation Fragment for Admin -->
+    <th:block th:fragment="sidebar-admin">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">A</div>
+                    <span class="sidebar-logo-text">Ardur</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Dashboard</div>
+                    <a th:href="@{/admin/dashboard}" class="nav-item"
+                        th:classappend="${currentPage == 'dashboard'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        <span>Overview</span>
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a th:href="@{/admin/users}" class="nav-item"
+                        th:classappend="${currentPage == 'users'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m9 5.197v-1" />
+                        </svg>
+                        <span>Users</span>
+                    </a>
+                    <a th:href="@{/admin/clients}" class="nav-item"
+                        th:classappend="${currentPage == 'clients'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <span>Clients</span>
+                    </a>
+                    <a th:href="@{/admin/batches}" class="nav-item"
+                        th:classappend="${currentPage == 'batches'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                        </svg>
+                        <span>Batches</span>
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <a th:href="@{/admin/audit-logs}" class="nav-item"
+                        th:classappend="${currentPage == 'audit-logs'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Audit Logs</span>
+                    </a>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <a th:href="@{/profile}" class="user-info user-info-link">
+                    <div class="user-avatar" th:text="${user.username.substring(0, 1).toUpperCase()}">A</div>
+                    <div class="user-details">
+                        <div class="user-name" th:text="${user.fullName != null} ? ${user.fullName} : ${user.username}">
+                            Admin User</div>
+                        <div class="user-role" th:text="${user.role}">ADMIN</div>
+                    </div>
+                </a>
+                <div class="sidebar-actions">
+                    <a th:href="@{/profile}" class="btn btn-ghost btn-sm" title="Profile">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </a>
+                    <form th:action="@{/logout}" method="post" style="display: inline;">
+                        <button type="submit" class="btn btn-ghost btn-sm" title="Sign Out">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+    </th:block>
+
+    <!-- Navigation Fragment for Client -->
+    <th:block th:fragment="sidebar-client">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">A</div>
+                    <span class="sidebar-logo-text">Ardur</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Dashboard</div>
+                    <a th:href="@{/client/dashboard}" class="nav-item"
+                        th:classappend="${currentPage == 'dashboard'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        <span>Overview</span>
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Batches</div>
+                    <a th:href="@{/client/upload}" class="nav-item"
+                        th:classappend="${currentPage == 'upload'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        <span>Upload Batch</span>
+                    </a>
+                    <a th:href="@{/client/batches}" class="nav-item"
+                        th:classappend="${currentPage == 'batches'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                        </svg>
+                        <span>My Batches</span>
+                    </a>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <a th:href="@{/profile}" class="user-info user-info-link">
+                    <div class="user-avatar" th:text="${user.username.substring(0, 1).toUpperCase()}">C</div>
+                    <div class="user-details">
+                        <div class="user-name" th:text="${user.fullName != null} ? ${user.fullName} : ${user.username}">
+                            Client User</div>
+                        <div class="user-role">CLIENT</div>
+                    </div>
+                </a>
+                <div class="sidebar-actions">
+                    <a th:href="@{/profile}" class="btn btn-ghost btn-sm" title="Profile">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </a>
+                    <form th:action="@{/logout}" method="post" style="display: inline;">
+                        <button type="submit" class="btn btn-ghost btn-sm" title="Sign Out">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+    </th:block>
+
+    <!-- Navigation Fragment for Reviewer -->
+    <th:block th:fragment="sidebar-reviewer">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">A</div>
+                    <span class="sidebar-logo-text">Ardur</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Dashboard</div>
+                    <a th:href="@{/reviewer/dashboard}" class="nav-item"
+                        th:classappend="${currentPage == 'dashboard'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        <span>Overview</span>
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Reviews</div>
+                    <a th:href="@{/reviewer/batches}" class="nav-item"
+                        th:classappend="${currentPage == 'batches'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <span>My Batches</span>
+                    </a>
+                    <a th:href="@{/reviewer/completed}" class="nav-item"
+                        th:classappend="${currentPage == 'completed'} ? 'active' : ''">
+                        <svg class="nav-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Completed</span>
+                    </a>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <a th:href="@{/profile}" class="user-info user-info-link">
+                    <div class="user-avatar" th:text="${user.username.substring(0, 1).toUpperCase()}">R</div>
+                    <div class="user-details">
+                        <div class="user-name" th:text="${user.fullName != null} ? ${user.fullName} : ${user.username}">
+                            Reviewer</div>
+                        <div class="user-role">REVIEWER</div>
+                    </div>
+                </a>
+                <div class="sidebar-actions">
+                    <a th:href="@{/profile}" class="btn btn-ghost btn-sm" title="Profile">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </a>
+                    <form th:action="@{/logout}" method="post" style="display: inline;">
+                        <button type="submit" class="btn btn-ghost btn-sm" title="Sign Out">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+    </th:block>

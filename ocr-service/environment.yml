@@ -1,0 +1,17 @@
+# Conda environment for OCR Service
+# Usage:
+#   Create:   conda env create -f environment.yml
+#   Activate: conda activate apprisal
+#   Update:   conda env update -f environment.yml --prune
+
+name: apprisal
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+  - numpy>=1.24.0
+  - pip:
+    - -r requirements.txt

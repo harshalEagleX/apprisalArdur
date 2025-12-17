@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Access Denied')}"></head>
+
+<body>
+    <div class="error-container">
+        <div class="error-card animate-fade-in">
+            <div class="error-icon error-403">
+                <svg width="64" height="64" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+            </div>
+            <h1 class="error-code">403</h1>
+            <h2 class="error-title">Access Denied</h2>
+            <p class="error-message">
+                You don't have permission to access this resource.
+                Please contact your administrator if you believe this is an error.
+            </p>
+            <div class="error-actions">
+                <a href="javascript:history.back()" class="btn btn-secondary">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Go Back
+                </a>
+                <a th:href="@{/}" class="btn btn-primary">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Home
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .error-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-lg);
+        }
+
+        .error-card {
+            text-align: center;
+            max-width: 500px;
+            padding: var(--spacing-2xl);
+        }
+
+        .error-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto var(--spacing-xl);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .error-403 {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-error);
+        }
+
+        .error-code {
+            font-size: 6rem;
+            font-weight: 700;
+            background: var(--color-accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .error-title {
+            font-size: var(--font-size-2xl);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .error-message {
+            color: var(--color-text-secondary);
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .error-actions {
+            display: flex;
+            gap: var(--spacing-md);
+            justify-content: center;
+        }
+    </style>
+</body>
+
+</html>

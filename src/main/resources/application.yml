@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ardurApprisal}
+    username: ${DB_USERNAME:harshalsmac}
+    password: ${DB_PASSWORD:12345678}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+app:
+  admin:
+    username: ${ADMIN_EMAIL:dhoteharshal16@gmail.com}
+    password: ${ADMIN_PASSWORD:Admin123!}
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  storage:
+    path: ${STORAGE_PATH:./uploads}
+
+# Python OCR Service Configuration
+ocr:
+  service:
+    url: ${OCR_SERVICE_URL:http://localhost:5001}
+    timeout-seconds: ${OCR_TIMEOUT:120}
+    retry-attempts: ${OCR_RETRIES:2}
+
+# QC Processing Configuration
+qc:
+  enabled: true
+  auto-process-on-upload: false
+

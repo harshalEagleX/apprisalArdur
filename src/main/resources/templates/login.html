@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Login')}"></head>
+
+<body>
+    <div class="login-container">
+        <div class="login-card animate-fade-in">
+            <div class="login-logo">
+                <div class="login-logo-icon">A</div>
+                <h1 class="login-title">Ardur <span class="text-gradient">Appraisal</span></h1>
+                <p class="login-subtitle">Enterprise QC Automation Platform</p>
+            </div>
+
+            <!-- Error Alert -->
+            <div th:if="${param.error}" class="alert alert-error">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Invalid username or password. Please try again.</span>
+            </div>
+
+            <!-- Logout Success Alert -->
+            <div th:if="${param.logout}" class="alert alert-success">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>You have been signed out successfully.</span>
+            </div>
+
+            <form th:action="@{/login}" method="post" class="login-form">
+                <div class="form-group">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" id="username" name="username" class="form-input"
+                        placeholder="Enter your username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                        placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg">
+                    Sign In
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                </button>
+            </form>
+
+            <p class="text-center text-muted text-sm mt-lg">
+                Enterprise-grade appraisal QC automation
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>

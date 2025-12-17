@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Audit Logs')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-admin}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">Audit Logs</h1>
+                <p class="page-subtitle">View all system activity and user actions</p>
+            </header>
+
+            <div class="page-content">
+                <!-- Filters -->
+                <div class="card mb-lg">
+                    <div class="card-body">
+                        <form class="filter-form" method="get" th:action="@{/admin/audit-logs}">
+                            <div class="filter-row">
+                                <div class="form-group">
+                                    <label class="form-label" for="action">Action</label>
+                                    <select id="action" name="action" class="form-input form-select">
+                                        <option value="">All Actions</option>
+                                        <option value="LOGIN">Login</option>
+                                        <option value="LOGOUT">Logout</option>
+                                        <option value="USER_CREATED">User Created</option>
+                                        <option value="USER_UPDATED">User Updated</option>
+                                        <option value="USER_DELETED">User Deleted</option>
+                                        <option value="BATCH_UPLOADED">Batch Uploaded</option>
+                                        <option value="BATCH_ASSIGNED">Batch Assigned</option>
+                                        <option value="CLIENT_CREATED">Client Created</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="entityType">Entity Type</label>
+                                    <select id="entityType" name="entityType" class="form-input form-select">
+                                        <option value="">All Entities</option>
+                                        <option value="User">User</option>
+                                        <option value="Batch">Batch</option>
+                                        <option value="Client">Client</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="search">Search</label>
+                                    <input type="text" id="search" name="search" class="form-input"
+                                        placeholder="Search logs...">
+                                </div>
+                                <div class="form-group flex items-end">
+                                    <button type="submit" class="btn btn-primary">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        Filter
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Logs Table -->
+                <div class="card">
+                    <div class="table-container">
+                        <table class="table" id="logsTable">
+                            <thead>
+                                <tr>
+                                    <th data-sortable="timestamp">Timestamp</th>
+                                    <th data-sortable="user">User</th>
+                                    <th data-sortable="action">Action</th>
+                                    <th>Entity</th>
+                                    <th>Details</th>
+                                    <th>IP Address</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="log : ${recentLogs}" class="log-row">
+                                    <td>
+                                        <div class="text-sm"
+                                            th:text="${log.createdAt != null} ? ${#temporals.format(log.createdAt, 'MMM dd, yyyy')} : '-'">
+                                            Jan 01</div>
+                                        <div class="text-xs text-muted"
+                                            th:text="${log.createdAt != null} ? ${#temporals.format(log.createdAt, 'HH:mm:ss')} : ''">
+                                            12:00:00</div>
+                                    </td>
+                                    <td>
+                                        <div class="flex items-center gap-sm">
+                                            <div class="user-avatar"
+                                                style="width: 28px; height: 28px; font-size: 0.75rem;"
+                                                th:if="${log.user != null}"
+                                                th:text="${log.user.username.substring(0, 1).toUpperCase()}">U</div>
+                                            <span
+                                                th:text="${log.user != null} ? ${log.user.username} : 'System'">Username</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${log.action.contains('DELETED')} ? 'badge-error' : (${log.action.contains('CREATED')} ? 'badge-success' : 'badge-info')"
+                                            th:text="${log.action}">ACTION</span>
+                                    </td>
+                                    <td>
+                                        <span th:if="${log.entityType != null}">
+                                            <span class="text-muted" th:text="${log.entityType}">Entity</span>
+                                            <span th:if="${log.entityId != null}"
+                                                th:text="'#' + ${log.entityId}">#ID</span>
+                                        </span>
+                                        <span th:unless="${log.entityType != null}" class="text-muted">-</span>
+                                    </td>
+                                    <td>
+                                        <span class="log-details" th:if="${log.details != null}"
+                                            th:text="${#strings.abbreviate(log.details, 50)}">Details...</span>
+                                        <span th:unless="${log.details != null}" class="text-muted">-</span>
+                                    </td>
+                                    <td class="text-muted text-sm"
+                                        th:text="${log.ipAddress != null} ? ${log.ipAddress} : '-'">192.168.1.1</td>
+                                </tr>
+                                <tr th:if="${recentLogs == null || recentLogs.isEmpty()}">
+                                    <td colspan="6" class="text-center text-muted">
+                                        <div class="py-xl">
+                                            <svg width="48" height="48" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24" style="margin: 0 auto 16px; opacity: 0.3;">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <p>No audit logs found</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stat-grid mt-lg">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Logs Today</div>
+                        <div class="stat-value" th:text="${todayCount != null} ? ${todayCount} : '0'">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Active Users Today</div>
+                        <div class="stat-value" th:text="${activeUsersToday != null} ? ${activeUsersToday} : '0'">0
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Failed Actions</div>
+                        <div class="stat-value" style="color: var(--color-error);"
+                            th:text="${failedActionsToday != null} ? ${failedActionsToday} : '0'">0</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <style>
+        .filter-form .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: var(--spacing-md);
+            align-items: end;
+        }
+
+        .log-row:hover {
+            background: var(--color-bg-glass);
+        }
+
+        .log-details {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+
+        .py-xl {
+            padding-top: var(--spacing-xl);
+            padding-bottom: var(--spacing-xl);
+        }
+    </style>
+
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            Table.makeSortable('logsTable');
+        });
+    </script>
+</body>
+
+</html>

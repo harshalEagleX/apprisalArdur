@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Upload Batch')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-client}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">Upload Batch</h1>
+                <p class="page-subtitle">Upload a ZIP file containing appraisal documents</p>
+            </header>
+
+            <div class="page-content">
+                <!-- Alerts -->
+                <div th:if="${success}" class="alert alert-success animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span th:text="${success}">Success message</span>
+                </div>
+                <div th:if="${error}" class="alert alert-error animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span th:text="${error}">Error message</span>
+                </div>
+
+                <!-- Upload Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Upload New Batch</h3>
+                    </div>
+                    <div class="card-body">
+                        <form th:action="@{/client/upload}" method="post" enctype="multipart/form-data" id="uploadForm">
+                            <div class="upload-area" id="dropZone"
+                                onclick="document.getElementById('fileInput').click()">
+                                <div class="upload-icon">
+                                    <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                </div>
+                                <h4 class="upload-title">Drop your ZIP file here</h4>
+                                <p class="upload-subtitle">or click to browse</p>
+                                <input type="file" id="fileInput" name="file" class="upload-input" accept=".zip"
+                                    required>
+                            </div>
+
+                            <div id="selectedFile" class="hidden mt-lg">
+                                <div class="flex items-center justify-between"
+                                    style="padding: var(--spacing-md); background: var(--color-bg-glass); border-radius: var(--radius-md);">
+                                    <div class="flex items-center gap-md">
+                                        <svg width="24" height="24" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <div>
+                                            <div id="fileName" class="font-medium">filename.zip</div>
+                                            <div id="fileSize" class="text-sm text-muted">0 MB</div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary btn-sm"
+                                        onclick="clearFile()">Remove</button>
+                                </div>
+                            </div>
+
+                            <div class="mt-lg">
+                                <button type="submit" class="btn btn-primary btn-lg" id="uploadBtn" disabled>
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                    </svg>
+                                    Upload Batch
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Instructions Card -->
+                <div class="card mt-lg">
+                    <div class="card-header">
+                        <h3 class="card-title">Upload Requirements</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-lg">
+                            <h4 class="text-lg mb-sm">Required Folder Structure</h4>
+                            <div
+                                style="background: var(--color-bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); font-family: monospace;">
+                                <pre style="color: var(--color-text-secondary); margin: 0;">
+BATCH_2025_001/
+├── appraisal/
+│   ├── appraisal_001.pdf
+│   ├── appraisal_002.pdf
+│   └── ...
+└── engagement/
+    ├── engagement_001.pdf
+    ├── engagement_002.pdf
+    └── ...</pre>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-lg mb-sm">Important Notes</h4>
+                            <ul
+                                style="list-style: disc; padding-left: var(--spacing-lg); color: var(--color-text-secondary);">
+                                <li>The parent folder name will be used as the Batch ID</li>
+                                <li>Both <code>appraisal</code> and <code>engagement</code> folders are required</li>
+                                <li>Only PDF files will be processed</li>
+                                <li>Maximum file size: 100MB per ZIP</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const selectedFile = document.getElementById('selectedFile');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const uploadBtn = document.getElementById('uploadBtn');
+
+        // File input change handler
+        fileInput.addEventListener('change', function (e) {
+            handleFiles(e.target.files);
+        });
+
+        // Drag and drop handlers
+        dropZone.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', function (e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', function (e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFiles(files);
+            }
+        });
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.name.endsWith('.zip')) {
+                    fileName.textContent = file.name;
+                    fileSize.textContent = formatFileSize(file.size);
+                    selectedFile.classList.remove('hidden');
+                    dropZone.style.display = 'none';
+                    uploadBtn.disabled = false;
+                } else {
+                    alert('Please select a ZIP file');
+                    clearFile();
+                }
+            }
+        }
+
+        function clearFile() {
+            fileInput.value = '';
+            selectedFile.classList.add('hidden');
+            dropZone.style.display = 'block';
+            uploadBtn.disabled = true;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+
+</html>
