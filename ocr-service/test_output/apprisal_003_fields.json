@@ -1,0 +1,23 @@
+{
+  "appraisal_fields": {
+    "county": "Legal Description",
+    "borrower_name": "secure a professional inspection of the property",
+    "owner_of_public_record": "County",
+    "legal_description": "Assessor's Parcel #",
+    "apn": "Tax Year",
+    "neighborhood_name": "Map Reference",
+    "map_reference": "Census Tract",
+    "census_tract": "2314.81",
+    "lender_name": "to evaluate the property that is the\nsubject\nof\nthis\nappraisal\nfor\na\nmortgage",
+    "owner_record_data_source": "used, offering price(s), and date(s).",
+    "data_source": "Are the units, common elements, and recreation facilities complete?"
+  },
+  "engagement_fields": {
+    "borrower_name": "Jose Luis Arellano\u037e Odilon Diaz",
+    "property_address": "1313 Lake Drive Encinitas CA 92024",
+    "assignment_type": "Purchase",
+    "city": "Encinitas",
+    "state": "CA",
+    "zip_code": "92024"
+  }
+}

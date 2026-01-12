@@ -1,0 +1,24 @@
+{
+  "appraisal_fields": {
+    "county": "Legal Description",
+    "borrower_name": "Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa",
+    "owner_of_public_record": "County",
+    "legal_description": "Assessor's Parcel #",
+    "apn": "Tax Year",
+    "neighborhood_name": "Map Reference",
+    "map_reference": "Census Tract",
+    "lender_name": "to evaluate the property that is the\nsubject\nof\nthis\nappraisal\nfor\na\nmortgage",
+    "has_financial_assistance": false,
+    "owner_record_data_source": "used, offering price(s), and date(s).",
+    "data_source": "Are the units, common elements, and recreation facilities complete?"
+  },
+  "engagement_fields": {
+    "borrower_name": "Susana Hinojosa\u037e Maria Victoria Hinojosa\u037e Victor Hugo Hinojosa",
+    "property_address": "25126 N Jack Tone Rd Acampo CA 95220",
+    "lender_name": "United American Mortgage Corporation",
+    "assignment_type": "Purchase",
+    "city": "Acampo",
+    "state": "CA",
+    "zip_code": "95220"
+  }
+}

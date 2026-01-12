@@ -1,0 +1,4026 @@
+============================================================
+EXTRACTED TEXT FROM: apprisal_002.pdf
+Extraction Date: 2025-12-17T22:52:13.177652
+Total Characters: 98426
+Total Words: 13929
+============================================================
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+URAR .................................................................................................................................................................................................................................................................................
+URAR .................................................................................................................................................................................................................................................................................
+Additional Comparables 4-6 ...............................................................................................................................................................................................................................................
+URAR .................................................................................................................................................................................................................................................................................
+URAR .................................................................................................................................................................................................................................................................................
+URAR .................................................................................................................................................................................................................................................................................
+URAR .................................................................................................................................................................................................................................................................................
+Supplemental Addendum ...................................................................................................................................................................................................................................................
+Scanned Document ............................................................................................................................................................................................................................................................
+Subject Photos ...................................................................................................................................................................................................................................................................
+Interior Photos ...................................................................................................................................................................................................................................................................
+Interior Photos ...................................................................................................................................................................................................................................................................
+Interior Photos ...................................................................................................................................................................................................................................................................
+Comparable Photos 1-3 .....................................................................................................................................................................................................................................................
+Comparable Photos 4-6 .....................................................................................................................................................................................................................................................
+Photograph Addendum .......................................................................................................................................................................................................................................................
+Analytics Addendum ..........................................................................................................................................................................................................................................................
+Analytics Addendum ..........................................................................................................................................................................................................................................................
+Analytics Addendum ..........................................................................................................................................................................................................................................................
+Market Conditions Addendum to the Appraisal Report ........................................................................................................................................................................................................
+Plat Map ............................................................................................................................................................................................................................................................................
+Building Sketch ..................................................................................................................................................................................................................................................................
+Location Map .....................................................................................................................................................................................................................................................................
+Location Map .....................................................................................................................................................................................................................................................................
+Flood Map ..........................................................................................................................................................................................................................................................................
+USPAP Compliance ............................................................................................................................................................................................................................................................
+UAD Definitions Addendum ................................................................................................................................................................................................................................................
+Scanned Document ............................................................................................................................................................................................................................................................
+Scanned Document ............................................................................................................................................................................................................................................................
+1
+2
+3
+4
+5
+6
+7
+8
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+32
+33
+Form TOCP - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Borrower
+Lender/Client
+File No.
+Property Address
+City
+County
+State
+Zip Code
+TABLE OF CONTENTS
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Cameron Betts
+25-0335081
+25126 N Jack Tone Rd
+Acampo
+CA
+95220
+See attached addenda.
+Kenneth E Bond, Marion J Bond
+San Joaquin
+SMALL FARMS TR MAP 6 PG 48 PART OF LOT 13
+021-041-13
+2024
+487
+Small Farms / Acampo
+TB/GIS
+0047.03
+0
+0
+United American Mortgage Corporation
+3198 Airport Loop Drive, Suite F, Costa Mesa, CA 92626
+DOM 0;The subject has not been publicly listed for sale within the last 12 month period, and has 
+been offered between parties with an existing relationship (neighbors).
+Non-arms length sale;Per the appraiser's review, the contract is a typical CA RPA, with a purchase price of $300,000, and a contract 
+date of 11/01/2025. There are no counter offers. This is a sale between neighbors, with an existing relationship. The sellers are Entity Sellers.
+300,000
+11/01/2025
+County / Contract
+$0;;There is no financial assistance to be paid to the borrower.
+340
+780
+525
+22
+120
+102
+50
+1
+1
+3
+45
+Bound to the north by Liberty Rd, to the east by County Rd 88, to the south by 
+Victor Rd, and to the west by CA Hwy 99.
+See attached addenda.
+See attached addenda.
+See Plat Map (Not All Dimensions Listed)
+3.03 ac
+Rectangular
+N;Pstrl;
+AL-5
+Agricultural (See attached addenda)
+See attached 
+addenda.
+Asphalt
+None
+X
+06077C0185G
+10/20/2016
+See attached addenda.
+1
+Ranch
+1952
+40
+0
+0
+Slab/Avg
+Wood/Avg
+Comp/Avg
+Metal/Avg
+Dual Pane/Avg
+None/None
+Mesh/Avg
+Lmnt,Crpt/Fair
+Drywall/Avg
+Wood/Avg
+Tile/Fair
+Fiberglass/Avg
+Gas
+0
+Deck
+None
+0
+Wood,Mtl
+Porch
+None
+2
+Gravel
+0
+0
+5
+2
+1.0
+942
+Measurement complies with the ANSI standard.
+C5;No updates in the prior 15 years;See attached 
+addenda.
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+SUBJECT
+CONTRACT
+NEIGHBORHOOD
+SITE
+IMPROVEMENTS
+The purpose of this summary appraisal report is to provide the lender/client with an accurate, and adequately supported, opinion of the market value of the subject property.
+Property Address
+City
+State
+Zip Code
+Borrower
+Owner of Public Record
+County
+Legal Description
+Assessor's Parcel #
+Tax Year
+R.E. Taxes $
+Neighborhood Name
+Map Reference
+Census Tract
+Occupant
+Owner
+Tenant
+Vacant
+Special Assessments $
+PUD
+HOA $
+per year
+per month
+Property Rights Appraised
+Fee Simple
+Leasehold
+Other (describe)
+Assignment Type
+Purchase Transaction
+Refinance Transaction
+Other (describe)
+Lender/Client
+Address
+Is the subject property currently offered for sale or has it been offered for sale in the twelve months prior to the effective date of this appraisal?
+Yes
+No
+Report data source(s) used, offering price(s), and date(s).
+I
+did
+did not analyze the contract for sale for the subject purchase transaction. Explain the results of the analysis of the contract for sale or why the analysis was not
+performed.
+Contract Price $
+Date of Contract
+Is the property seller the owner of public record?
+Yes
+No Data Source(s)
+Is there any financial assistance (loan charges, sale concessions, gift or downpayment assistance, etc.) to be paid by any party on behalf of the borrower?
+Yes
+No
+If Yes, report the total dollar amount and describe the items to be paid.
+Note: Race and the racial composition of the neighborhood are not appraisal factors.
+Neighborhood Characteristics
+Location
+Urban
+Suburban
+Rural
+Built-Up
+Over 75%
+25-75%
+Under 25%
+Growth
+Rapid
+Stable
+Slow
+One-Unit Housing Trends
+Property Values
+Increasing
+Stable
+Declining
+Demand/Supply
+Shortage
+In Balance
+Over Supply
+Marketing Time
+Under 3 mths
+3-6 mths
+Over 6 mths
+One-Unit Housing
+PRICE
+$ (000)
+AGE
+(yrs)
+Low
+High
+Pred.
+Present Land Use %
+One-Unit
+%
+2-4 Unit
+%
+Multi-Family
+%
+Commercial
+%
+Other
+%
+Neighborhood Boundaries
+Neighborhood Description
+Market Conditions (including support for the above conclusions)
+Dimensions
+Area
+Shape
+View
+Specific Zoning Classification
+Zoning Description
+Zoning Compliance
+Legal
+Legal Nonconforming (Grandfathered Use)
+No Zoning
+Illegal (describe)
+Is the highest and best use of subject property as improved (or as proposed per plans and specifications) the present use?
+Yes
+No
+If No, describe
+Utilities
+Public
+Other (describe)
+Public
+Other (describe)
+Electricity
+Gas
+Water
+Sanitary Sewer
+Off-site Improvements - Type
+Public
+Private
+Street
+Alley
+FEMA Special Flood Hazard Area
+Yes
+No
+FEMA Flood Zone
+FEMA Map #
+FEMA Map Date
+Are the utilities and off-site improvements typical for the market area?
+Yes
+No
+If No, describe
+Are there any adverse site conditions or external factors (easements, encroachments, environmental conditions, land uses, etc.)?
+Yes
+No
+If Yes, describe
+General Description
+Units
+One
+One with Accessory Unit
+# of Stories
+Type
+Det.
+Att.
+S-Det./End Unit
+Existing
+Proposed
+Under Const.
+Design (Style)
+Year Built
+Effective Age (Yrs)
+Foundation
+Concrete Slab
+Crawl Space
+Full Basement
+Partial Basement
+Basement Area
+sq.ft.
+Basement Finish
+%
+Outside Entry/Exit
+Sump Pump
+Evidence of
+Infestation
+Dampness
+Settlement
+Exterior Description
+materials/condition
+Foundation Walls
+Exterior Walls
+Roof Surface
+Gutters & Downspouts
+Window Type
+Storm Sash/Insulated
+Screens
+Interior
+materials/condition
+Floors
+Walls
+Trim/Finish
+Bath Floor
+Bath Wainscot
+Attic
+None
+Drop Stair
+Stairs
+Floor
+Scuttle
+Finished
+Heated
+Heating
+FWA
+HWBB
+Radiant
+Other
+Fuel
+Cooling
+Central Air Conditioning
+Individual
+Other
+Amenities
+Fireplace(s) #
+Patio/Deck
+Pool
+Woodstove(s) #
+Fence
+Porch
+Other
+Car Storage
+None
+Driveway
+# of Cars
+Driveway Surface
+Garage
+# of Cars
+Carport
+# of Cars
+Att.
+Det.
+Built-in
+Appliances
+Refrigerator
+Range/Oven
+Dishwasher
+Disposal
+Microwave
+Washer/Dryer
+Other (describe)
+Finished area above grade contains:
+Rooms
+Bedrooms
+Bath(s)
+Square Feet of Gross Living Area Above Grade
+Additional features (special energy efficient items, etc.).
+Describe the condition of the property (including needed repairs, deterioration, renovations, remodeling, etc.).
+Are there any physical deficiencies or adverse conditions that affect the livability, soundness, or structural integrity of the property?
+Yes
+No
+If Yes, describe
+Does the property generally conform to the neighborhood (functional utility, style, condition, use, construction, etc.)?
+Yes
+No
+If No, describe
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 1 of 6
+Fannie Mae Form 1004 March 2005
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+0
+0
+0
+4
+490,000
+780,000
+25126 N Jack Tone Rd
+Acampo, CA 95220
+300,000
+318.47
+N;Rural;
+Fee Simple
+3.03 ac
+N;Pstrl;
+DT1;Ranch
+Q4
+73
+C5
+5
+2
+1.0
+942
+0sf
+Typical
+FWA/CAC
+None
+2dw
+Porch/Deck
+Pool/Other
+Barn
+Updating
+"Fixer"/Dmgd.
+Listing Price
+N/A
+CoreLogic Public Records
+12/15/2025
+23707 N Graham Rd
+Acampo, CA 95220
+1.03 miles SW
+475,000
+463.41
+SACM#225055120;DOM 14
+Doc#56640
+ArmLth
+Private;0
+s07/25;c06/25
+N;Rural;
+Fee Simple
+4.92 ac
+-30,000
+N;Pstrl;
+DT1;Ranch
+Q4
+107
+0
+C4
+-80,000
++20,000
+3
+1
+1.0
+0
+1,025
+0
+0sf
+Typical
+Wall/Window
++10,000
+None
+2ga3cp
+-20,000
+Porch/Patio
+0
+None
+0
+Similar
+0
+$475,000 
+0
+-100,000
+21.1
+33.7
+375,000
+CoreLogic Public Records
+12/15/2025
+25362 N Highway 99
+Acampo, CA 95220
+6.30 miles W
+340,000
+349.79
+SACM#224069040;DOM 6
+Doc#58905
+ArmLth
+Cash;0
+s07/24;c06/24
+N;Res;A;Hwy;
++40,000
+Fee Simple
+34412 sf
++30,000
+N;Res;Pstrl
+0
+DT1;Bungalow
+0
+Q5
+0
+57
+0
+C5
+4
+2
+1.0
+0
+972
+0
+0sf
+Typical
+Wall/Window
++10,000
+None
+4dw
+0
+Porch/Patio
+0
+None
+0
+"Fixer"/Similar
+0
+$339,000 
+0
+80,000
+23.5
+23.5
+420,000
+CoreLogic Public Records
+12/15/2025
+25055 N Watkinson Rd
+Acampo, CA 95220
+0.46 miles E
+685,000
+503.68
+SACM#224079656;DOM 27
+Doc#80617
+ArmLth
+Conv;0
+s09/24;c08/24
+N;Rural;
+Fee Simple
+4.88 ac
+-30,000
+N;Pstrl;
+DT1;Ranch
+Q4
+53
+0
+C4
+-80,000
+-20,000
+6
+3
+1.1
+-5,000
+1,360
+-41,800
+0sf
+Typical
+FWA/CAC
+None
+2gd5dw
+-20,000
+Porch/Patio
+0
+Workshop
+-20,000
+Min. Superior
+-25,000
+$719,000 
+0
+-241,800
+35.3
+35.3
+443,200
+CoreLogic Public Records
+12/15/2025
+County Records, MLS
+County Records, MLS
+The Comparables used in this report appear to be typical, arms length 
+sales transactions. The neighborhoods are mainly owner occupied, with some investment properties. Comparable 5 had a prior nominal transfer, 
+which has no impact on marketability. Comparable 6 had a prior typical arms length sale, which is included as Comparable 1 is this report. The 
+property was updated between the sale of Comparable 1 and the listing of Comparable 6.
+See Attached Addenda, which includes the Reconciliation. The Sales Comparison approach is given the 
+most consideration, as it best represents the motivations of buyers and sellers in the market. The Cost and Income approaches were considered; 
+however, these approaches are not considered to be as reliable and/or applicable within this market (specifically including properties that are 
+generally similar to the subject), and have not been developed. Please see UAD dataset definitions for the adjustments in the grid and the 
+definitions therefore determined.
+385,000
+385,000
+See attached addenda.
+As Is - See attached addenda 
+for multiple Extraordinary Assumptions made in development of this report.
+385,000
+12/12/2025
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+SALES COMPARISON APPROACH
+RECONCILIATION
+There are
+comparable properties currently offered for sale in the subject neighborhood ranging in price from $
+to $
+.
+There are
+comparable sales in the subject neighborhood within the past twelve months ranging in sale price from $
+to $
+.
+FEATURE
+SUBJECT
+COMPARABLE SALE # 1
+COMPARABLE SALE # 2
+COMPARABLE SALE # 3
+Address
+Proximity to Subject
+Sale Price
+$
+$
+$
+$
+Sale Price/Gross Liv. Area
+$
+sq.ft. $
+sq.ft.
+$
+sq.ft.
+$
+sq.ft.
+Data Source(s)
+Verification Source(s)
+VALUE ADJUSTMENTS
+DESCRIPTION
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+Sales or Financing
+Concessions
+Date of Sale/Time
+Location
+Leasehold/Fee Simple
+Site
+View
+Design (Style)
+Quality of Construction
+Actual Age
+Condition
+Above Grade
+Total
+Bdrms.
+Baths
+Total
+Bdrms. Baths
+Total
+Bdrms.
+Baths
+Total
+Bdrms. Baths
+Room Count
+Gross Living Area
+sq.ft.
+sq.ft.
+sq.ft.
+sq.ft.
+Basement & Finished
+Rooms Below Grade
+Functional Utility
+Heating/Cooling
+Energy Efficient Items
+Garage/Carport
+Porch/Patio/Deck
+Net Adjustment (Total)
++
+-
++
+-
++
+-
+$
+$
+$
+Adjusted Sale Price
+of Comparables
+$
+$
+$
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+I
+did
+did not research the sale or transfer history of the subject property and comparable sales. If not, explain
+My research
+did
+did not reveal any prior sales or transfers of the subject property for the three years prior to the effective date of this appraisal.
+Data Source(s)
+My research
+did
+did not reveal any prior sales or transfers of the comparable sales for the year prior to the date of sale of the comparable sale.
+Data Source(s)
+Report the results of the research and analysis of the prior sale or transfer history of the subject property and comparable sales (report additional prior sales on page 3).
+ITEM
+SUBJECT
+COMPARABLE SALE #1
+COMPARABLE SALE #2
+COMPARABLE SALE #3
+Date of Prior Sale/Transfer
+Price of Prior Sale/Transfer
+Data Source(s)
+Effective Date of Data Source(s)
+Analysis of prior sale or transfer history of the subject property and comparable sales
+Summary of Sales Comparison Approach
+Indicated Value by Sales Comparison Approach $
+Indicated Value by: Sales Comparison Approach $
+Cost Approach (if developed) $
+Income Approach (if developed) $
+This appraisal is made
+"as is",
+subject to completion per plans and specifications on the basis of a hypothetical condition that the improvements have been
+completed,
+subject to the following repairs or alterations on the basis of a hypothetical condition that the repairs or alterations have been completed, or
+subject to the
+following required inspection based on the extraordinary assumption that the condition or deficiency does not require alteration or repair:
+Based on a complete visual inspection of the interior and exterior areas of the subject property, defined scope of work, statement of assumptions and limiting
+conditions, and appraiser's certification, my (our) opinion of the market value, as defined, of the real property that is the subject of this report is
+$
+, as of
+, which is the date of inspection and the effective date of this appraisal.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 2 of 6
+Fannie Mae Form 1004 March 2005
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+25126 N Jack Tone Rd
+Acampo, CA 95220
+300,000
+318.47
+N;Rural;
+Fee Simple
+3.03 ac
+N;Pstrl;
+DT1;Ranch
+Q4
+73
+C5
+5
+2
+1.0
+942
+0sf
+Typical
+FWA/CAC
+None
+2dw
+Porch/Deck
+Pool/Other
+Barn
+Updating
+"Fixer"/Dmgd.
+Listing Price
+N/A
+CoreLogic Public Records
+12/15/2025
+19497 E Collier Rd
+Clements, CA 95227
+3.96 miles E
+706,500
+489.60
+SACM#225074169;DOM 38
+Doc#65609
+ArmLth
+Conv;0
+s08/25;c07/25
+N;Rural;
+Fee Simple
+6.52 ac
+-30,000
+N;Pstrl;
+DT1;Ranch
+Q4
+61
+0
+C4
+-80,000
+-20,000
+6
+3
+3.0
+-20,000
+1,443
+-50,100
+0sf
+Typical
+FWA/CAC
+None
+2cp4dw
+0
+Porch/Deck
+Built-In
+-30,000
+Min. Superior
+-25,000
+$750,000 
+0
+-255,100
+36.1
+36.1
+451,400
+CoreLogic Public Records
+12/15/2025
+5860 E Jahant Rd
+Galt, CA 95632
+5.20 miles W
+638,800
+542.74
+SACM#225140072;DOM 6
+Exterior Inspection
+Listing
+c11/25
+N;Rural;
+Fee Simple
+1.00 ac
++30,000
+N;Pstrl;
+DT1;Ranch
+Q4
+60
+0
+C4
+-80,000
+5
+2
+2.0
+-10,000
+1,177
+-23,500
+0sf
+Typical
+FWA/CAC
+None
+2ga1cp
+-20,000
+Porch/Patio
+0
+Workshop
+-20,000
+Similar
+0
+$638,800 
+0
+-123,500
+19.3
+28.7
+515,300
+10/28/2025
+$0
+CoreLogic Public Records
+12/15/2025
+23707 N Graham Rd
+Acampo, CA 95220
+1.03 miles SW
+525,000
+512.20
+SACM#225143168;DOM 5
+Exterior Inspection
+Listing
+c11/25
+N;Rural;
+Fee Simple
+4.92 ac
+0
+N;Res;
+0
+DT1;Ranch
+Q4
+107
+0
+C3
+-80,000
++20,000
+4
+1
+1.0
+0
+1,025
+0
+0sf
+Typical
+Wall/Window
++10,000
+None
+2ga3cp
+-20,000
+Similar
+0
+None
+0
+Rec. Updating
+-40,000
+$525,000 
+0
+-110,000
+21.0
+32.4
+415,000
+07/25/2025
+$475,000
+CoreLogic Public Records
+12/15/2025
+4
+5
+6
+4
+5
+6
+See attached addenda.
+Form 1004UAD.(AC) - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+SALES COMPARISON APPROACH
+SALE HISTORY
+ANALYSIS / COMMENTS
+FEATURE
+SUBJECT
+COMPARABLE SALE #
+COMPARABLE SALE #
+COMPARABLE SALE #
+Address
+Proximity to Subject
+Sale Price
+$
+$
+$
+$
+Sale Price/Gross Liv. Area
+$
+sq.ft. $
+sq.ft.
+$
+sq.ft.
+$
+sq.ft.
+Data Source(s)
+Verification Source(s)
+VALUE ADJUSTMENTS
+DESCRIPTION
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+Sales or Financing
+Concessions
+Date of Sale/Time
+Location
+Leasehold/Fee Simple
+Site
+View
+Design (Style)
+Quality of Construction
+Actual Age
+Condition
+Above Grade
+Total
+Bdrms.
+Baths
+Total
+Bdrms. Baths
+Total
+Bdrms.
+Baths
+Total
+Bdrms. Baths
+Room Count
+Gross Living Area
+sq.ft.
+sq.ft.
+sq.ft.
+sq.ft.
+Basement & Finished
+Rooms Below Grade
+Functional Utility
+Heating/Cooling
+Energy Efficient Items
+Garage/Carport
+Porch/Patio/Deck
+Net Adjustment (Total)
++
+-
++
+-
++
+-
+$
+$
+$
+Adjusted Sale Price
+of Comparables
+$
+$
+$
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+Report the results of the research and analysis of the prior sale or transfer history of the subject property and comparable sales (report additional prior sales on page 3).
+ITEM
+SUBJECT
+COMPARABLE SALE #
+COMPARABLE SALE #
+COMPARABLE SALE #
+Date of Prior Sale/Transfer
+Price of Prior Sale/Transfer
+Data Source(s)
+Effective Date of Data Source(s)
+Analysis of prior sale or transfer history of the subject property and comparable sales
+Analysis/Comments
+Freddie Mac Form 70 March 2005
+Fannie Mae Form 1004 March 2005
+UAD Version 9/2011
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+To the best of my knowledge and belief, the inspection revealed no indication of significant physical damage to the property or needed 
+repairs due to and recent natural disaster.
+Digital signatures are used in this report, developed from an original signature.  Furthermore, the digital signature is created and held 
+by a third party who handles the security and creation for the signature for security reasons.  The signature is also password 
+protected.
+Per FNMA guidelines, this report includes the standardized the definitions of “neighborhood” and “market area.” Neighborhood is 
+defined as “a congruous group of complementary land uses” and market area is “the geographic region, for a subject property, from 
+which most demand comes and in which most of the competition is located.”
+See attached addenda.
+250,000
+20
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+ADDITIONAL COMMENTS
+COST APPROACH
+INCOME
+PUD INFORMATION
+COST APPROACH TO VALUE (not required by Fannie Mae)
+Provide adequate information for the lender/client to replicate the below cost figures and calculations.
+Support for the opinion of site value (summary of comparable land sales or other methods for estimating site value)
+ESTIMATED
+REPRODUCTION OR
+REPLACEMENT COST NEW
+Source of cost data
+Quality rating from cost service
+Effective date of cost data
+Comments on Cost Approach (gross living area calculations, depreciation, etc.)
+OPINION OF SITE VALUE
+=$
+DWELLING
+Sq.Ft. @ $
+=$
+Sq.Ft. @ $
+=$
+=$
+Garage/Carport
+Sq.Ft. @ $
+=$
+Total Estimate of Cost-New
+=$
+Less
+Physical
+Functional
+External
+Depreciation
+=$(
+)
+Depreciated Cost of Improvements
+=$
+"As-is" Value of Site Improvements
+=$
+INDICATED VALUE BY COST APPROACH
+=$
+Estimated Remaining Economic Life (HUD and VA only)
+Years
+INCOME APPROACH TO VALUE (not required by Fannie Mae)
+Estimated Monthly Market Rent $
+X  Gross Rent Multiplier
+= $
+Indicated Value by Income Approach
+Summary of Income Approach (including support for market rent and GRM)
+PROJECT INFORMATION FOR PUDs (if applicable)
+Is the developer/builder in control of the Homeowners' Association (HOA)?
+Yes
+No
+Unit type(s)
+Detached
+Attached
+Provide the following information for PUDs ONLY if the developer/builder is in control of the HOA and the subject property is an attached dwelling unit.
+Legal Name of Project
+Total number of phases
+Total number of units
+Total number of units sold
+Total number of units rented
+Total number of units for sale
+Data source(s)
+Was the project created by the conversion of existing building(s) into a PUD?
+Yes
+No If Yes, date of conversion.
+Does the project contain any multi-dwelling units?
+Yes
+No Data Source
+Are the units, common elements, and recreation facilities complete?
+Yes
+No If No, describe the status of completion.
+Are the common elements leased to or by the Homeowners' Association?
+Yes
+No If Yes, describe the rental terms and options.
+Describe common elements and recreational facilities.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 3 of 6
+Fannie Mae Form 1004 March 2005
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+This report form is designed to report an appraisal of a one-unit property or a one-unit property with an accessory unit;
+including
+a
+unit
+in
+a
+planned unit
+development
+(PUD). This
+report
+form
+is
+not
+designed
+to report
+an
+appraisal
+of
+a
+manufactured
+home
+or
+a
+unit
+in
+a
+condominium
+or
+cooperative
+project.
+This
+appraisal
+report
+is
+subject
+to
+the
+following
+scope
+of
+work,
+intended
+use,
+intended
+user,
+definition
+of
+market
+value,
+statement
+of
+assumptions
+and
+limiting
+conditions,
+and
+certifications.
+Modifications,
+additions,
+or
+deletions
+to
+the
+intended
+use,
+intended
+user,
+definition
+of
+market
+value,
+or
+assumptions
+and
+limiting
+conditions
+are
+not
+permitted.
+The
+appraiser
+may
+expand
+the
+scope
+of work to
+include
+any additional
+research
+or analysis
+necessary based
+on the
+complexity
+of
+this appraisal
+assignment.
+Modifications
+or
+deletions
+to
+the
+certifications
+are
+also
+not
+permitted.
+However,
+additional
+certifications
+that
+do
+not constitute material alterations to this appraisal report, such as those required by law or those related to the appraiser's
+continuing
+education
+or
+membership
+in
+an
+appraisal
+organization,
+are
+permitted.
+SCOPE OF WORK:
+The scope of work for this appraisal is defined by the complexity
+of this appraisal assignment and the
+reporting
+requirements
+of
+this
+appraisal
+report
+form,
+including
+the
+following
+definition
+of
+market
+value,
+statement
+of
+assumptions
+and
+limiting
+conditions,
+and
+certifications.
+The
+appraiser
+must,
+at
+a
+minimum:
+(1)
+perform
+a
+complete
+visual
+inspection of the interior and exterior areas of the subject property, (2) inspect the neighborhood, (3) inspect each of the
+comparable
+sales
+from
+at
+least
+the
+street,
+(4)
+research,
+verify,
+and
+analyze
+data
+from
+reliable
+public
+and/or
+private
+sources,
+and (5) report his or her analysis, opinions, and conclusions in this appraisal report.
+INTENDED USE:
+The intended use of this appraisal report is for the lender/client to evaluate the property that is the
+subject
+of
+this
+appraisal
+for
+a
+mortgage
+finance
+transaction.
+INTENDED USER:
+The intended user of this appraisal report is the lender/client.
+DEFINITION OF MARKET VALUE:
+The
+most
+probable
+price
+which
+a
+property
+should
+bring
+in
+a
+competitive
+and
+open
+market
+under
+all
+conditions
+requisite
+to
+a
+fair
+sale,
+the
+buyer
+and
+seller,
+each
+acting
+prudently,
+knowledgeably
+and
+assuming
+the price is not affected by undue stimulus. Implicit in this definition is the consummation of a sale as of a specified date and
+the passing of title from seller to buyer under conditions whereby: (1) buyer and seller are typically motivated; (2) both
+parties are well informed or well advised, and each acting in what he or she considers his or her own best interest; (3) a
+reasonable time is allowed for exposure in the open market; (4) payment is made in terms of cash in U. S. dollars or in terms
+of
+financial
+arrangements
+comparable
+thereto;
+and
+(5)
+the
+price
+represents
+the
+normal
+consideration
+for
+the
+property
+sold
+unaffected
+by
+special
+or
+creative
+financing
+or
+sales
+concessions*
+granted
+by
+anyone
+associated
+with
+the
+sale.
+*Adjustments
+to
+the
+comparables
+must
+be
+made
+for
+special
+or
+creative
+financing
+or
+sales
+concessions.
+No
+adjustments
+are
+necessary for those costs which are normally paid by sellers as a result of tradition or law in a market area; these costs are
+readily
+identifiable
+since
+the
+seller
+pays
+these
+costs
+in
+virtually
+all
+sales
+transactions.
+Special
+or
+creative
+financing
+adjustments
+can
+be
+made
+to
+the
+comparable
+property
+by
+comparisons
+to
+financing
+terms
+offered
+by
+a
+third
+party institutional
+lender that is not already involved in
+the property or transaction. Any adjustment should not be calculated on a mechanical
+dollar for dollar cost of the financing or concession
+but the
+dollar amount of any adjustment should approximate the market's
+reaction
+to
+the
+financing
+or
+concessions
+based
+on
+the
+appraiser's
+judgment.
+STATEMENT OF ASSUMPTIONS AND LIMITING CONDITIONS:
+The
+appraiser's
+certification
+in
+this
+report
+is
+subject
+to
+the
+following
+assumptions
+and
+limiting
+conditions:
+1.
+The appraiser will not be responsible for matters of a legal nature that affect either the property being appraised or the title
+to it, except
+for information that he or she became aware of during the research
+involved in performing this appraisal.
+The
+appraiser assumes that the title is good and marketable
+and will not render any opinions about the title.
+2.
+The
+appraiser
+has
+provided
+a
+sketch
+in
+this
+appraisal
+report
+to
+show
+the
+approximate
+dimensions
+of
+the
+improvements.
+The
+sketch
+is
+included
+only
+to
+assist
+the
+reader
+in
+visualizing
+the
+property
+and
+understanding
+the
+appraiser's
+determination
+of its size.
+3.
+The
+appraiser
+has
+examined
+the
+available
+flood
+maps
+that
+are
+provided
+by
+the
+Federal
+Emergency
+Management
+Agency
+(or other
+data sources) and has noted in
+this appraisal report
+whether
+any portion of the subject site is located in
+an
+identified
+Special
+Flood
+Hazard
+Area.
+Because
+the
+appraiser
+is
+not
+a
+surveyor,
+he
+or
+she
+makes
+no
+guarantees,
+express
+or
+implied,
+regarding
+this
+determination.
+4.
+The appraiser will not give testimony or appear in court because he or she made an appraisal of the property in question,
+unless
+specific
+arrangements
+to
+do
+so
+have
+been
+made
+beforehand,
+or
+as
+otherwise
+required
+by
+law.
+5.
+The
+appraiser
+has
+noted
+in
+this
+appraisal
+report
+any
+adverse
+conditions
+(such
+as
+needed
+repairs,
+deterioration,
+the
+presence
+of
+hazardous
+wastes,
+toxic
+substances,
+etc.)
+observed
+during
+the
+inspection
+of
+the
+subject
+property
+or
+that
+he
+or
+she
+became
+aware
+of
+during
+the
+research
+involved
+in
+performing
+the
+appraisal.
+Unless
+otherwise
+stated
+in
+this
+appraisal
+report,
+the
+appraiser
+has
+no
+knowledge
+of
+any
+hidden
+or
+unapparent
+physical
+deficiencies
+or
+adverse
+conditions
+of
+the
+property
+(such
+as,
+but
+not
+limited
+to,
+needed
+repairs,
+deterioration,
+the
+presence
+of
+hazardous
+wastes,
+toxic
+substances,
+adverse
+environmental
+conditions,
+etc.)
+that
+would
+make
+the
+property
+less
+valuable,
+and
+has
+assumed
+that
+there
+are
+no
+such
+conditions
+and
+makes
+no
+guarantees
+or
+warranties,
+express
+or
+implied.
+The
+appraiser
+will
+not
+be
+responsible
+for
+any
+such
+conditions
+that
+do
+exist
+or for
+any
+engineering
+or
+testing
+that
+might
+be
+required
+to
+discover
+whether
+such
+conditions
+exist.
+Because
+the
+appraiser
+is
+not
+an
+expert
+in
+the
+field
+of
+environmental
+hazards,
+this
+appraisal
+report
+must
+not
+be
+considered
+as
+an
+environmental
+assessment
+of
+the
+property.
+6.
+The appraiser has based his or her appraisal report and valuation conclusion for an appraisal that is subject to satisfactory
+completion,
+repairs,
+or
+alterations
+on
+the
+assumption
+that
+the
+completion,
+repairs,
+or
+alterations
+of
+the
+subject
+property
+will
+be
+performed
+in
+a
+professional
+manner.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 4 of 6
+Fannie Mae Form 1004 March 2005
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+APPRAISER'S CERTIFICATION:
+The Appraiser certifies and agrees that:
+1.
+I have, at a minimum, developed and reported this appraisal in accordance with the scope of work requirements stated in
+this
+appraisal
+report.
+2.
+I performed a
+complete
+visual inspection
+of the interior and exterior
+areas of the subject property. I reported the condition
+of
+the
+improvements
+in
+factual,
+specific
+terms.
+I
+identified
+and
+reported
+the
+physical
+deficiencies
+that
+could
+affect
+the
+livability,
+soundness,
+or
+structural
+integrity
+of
+the
+property.
+3.
+I
+performed
+this
+appraisal
+in
+accordance
+with
+the
+requirements
+of
+the
+Uniform
+Standards
+of
+Professional
+Appraisal
+Practice
+that
+were
+adopted
+and
+promulgated
+by
+the
+Appraisal
+Standards
+Board
+of
+The
+Appraisal
+Foundation
+and
+that
+were
+in
+place
+at
+the
+time
+this
+appraisal
+report
+was
+prepared.
+4.
+I developed my opinion of the market value of the real property that is the subject of this report based on the sales
+comparison
+approach
+to
+value.
+I
+have
+adequate
+comparable
+market
+data
+to
+develop
+a
+reliable
+sales
+comparison
+approach
+for this appraisal assignment.
+I further certify that I considered the cost and income approaches to value but did not develop
+them,
+unless
+otherwise
+indicated
+in
+this
+report.
+5.
+I
+researched,
+verified,
+analyzed,
+and
+reported
+on any
+current
+agreement
+for
+sale
+for
+the subject
+property, any
+offering for
+sale of the subject property in the twelve months prior to the effective date of this appraisal, and the prior sales of the subject
+property for a minimum of three years prior to the effective date of this appraisal, unless otherwise indicated in this report.
+6.
+I researched, verified, analyzed, and reported on the prior sales of the comparable sales for a minimum of one year prior
+to the date of sale of the comparable sale, unless otherwise indicated in this report.
+7.
+I selected and used comparable sales that are locationally, physically, and functionally the most similar to the subject property.
+8.
+I have not used comparable sales that were the result of combining a land sale with the contract purchase price of a home that
+has been built or will be built on the land.
+9.
+I have reported adjustments to the comparable sales that reflect the market's reaction to the differences between the subject
+property
+and
+the
+comparable
+sales.
+10.
+I verified, from a disinterested source, all information in this report that was provided by parties who have a financial interest in
+the sale or financing of the subject property.
+11.
+I
+have
+knowledge
+and
+experience
+in
+appraising
+this
+type
+of
+property
+in
+this
+market
+area.
+12.
+I am aware of, and have access to, the necessary and appropriate public and private data sources, such as multiple listing
+services, tax assessment records, public land records and other such data sources for the area in which the property is located.
+13.
+I
+obtained
+the
+information,
+estimates,
+and
+opinions
+furnished
+by
+other
+parties
+and
+expressed
+in
+this
+appraisal
+report
+from
+reliable
+sources
+that
+I
+believe
+to
+be
+true
+and
+correct.
+14.
+I have
+taken into consideration the factors that have
+an impact on value with respect to the subject neighborhood, subject
+property, and the proximity of the subject property to adverse influences in the development of my opinion of market value. I
+have noted in this appraisal report any adverse conditions (such as, but not limited to, needed repairs, deterioration, the
+presence
+of
+hazardous
+wastes,
+toxic
+substances,
+adverse
+environmental
+conditions,
+etc.)
+observed
+during
+the
+inspection
+of
+the
+subject property or that I became aware of during the research involved in performing this appraisal. I have considered these
+adverse conditions in my analysis of the property value, and have reported on the effect of the conditions on the value and
+marketability
+of
+the
+subject
+property.
+15.
+I have not knowingly withheld any significant information from this appraisal report and, to the best of my knowledge, all
+statements
+and
+information
+in
+this
+appraisal
+report
+are
+true
+and
+correct.
+16.
+I stated in
+this
+appraisal
+report my
+own personal,
+unbiased, and professional
+analysis, opinions, and conclusions,
+which
+are subject only to the assumptions and limiting conditions in this appraisal report.
+17.
+I have no present or prospective interest in the property that is the subject of this report, and I have no present or
+prospective personal interest or bias with respect to the participants in the transaction. I did not base, either partially or
+completely, my analysis and/or opinion of market value in this appraisal report on the race, color, religion, sex, age, marital
+status, handicap, familial status, or national origin of either the prospective owners or occupants of the subject property or of the
+present owners or occupants of the properties in the vicinity of the subject property or on any other basis prohibited by law.
+18.
+My
+employment
+and/or
+compensation
+for
+performing
+this
+appraisal
+or
+any
+future
+or
+anticipated
+appraisals
+was
+not
+conditioned
+on
+any
+agreement
+or understanding,
+written
+or
+otherwise,
+that
+I
+would
+report
+(or
+present
+analysis
+supporting)
+a
+predetermined
+specific
+value,
+a
+predetermined
+minimum
+value,
+a
+range
+or direction
+in
+value,
+a
+value
+that
+favors
+the
+cause
+of
+any party, or the attainment of a specific result or occurrence of a specific subsequent event (such as approval of a pending
+mortgage
+loan
+application).
+19.
+I personally prepared all conclusions and opinions about the real estate that were set forth in this appraisal report. If I
+relied
+on
+significant
+real
+property
+appraisal
+assistance
+from
+any
+individual or individuals
+in
+the
+performance
+of
+this
+appraisal
+or the preparation of this appraisal report, I have named such individual(s) and disclosed the specific tasks performed in this
+appraisal report. I certify that any individual so named is qualified to perform the tasks. I have not authorized anyone to make
+a change to any item in this appraisal report; therefore, any change made to this appraisal is unauthorized and I will take no
+responsibility
+for
+it.
+20.
+I identified the lender/client in this appraisal report who is the individual, organization, or agent for the organization that
+ordered
+and
+will
+receive
+this
+appraisal
+report.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 5 of 6
+Fannie Mae Form 1004 March 2005
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+esign.alamode.com/verify
+Serial:452C540F
+25-0335081
+Cameron Betts
+Betts Appraisal Services
+4910 Concord Rd
+Sacramento, CA 95820
+(916) 873-7137
+betts.appraisals@gmail.com
+12/15/2025
+12/12/2025
+3004142
+CA
+09/21/2026
+25126 N Jack Tone Rd
+Acampo, CA 95220
+385,000
+Equity Solutions USA
+United American Mortgage Corporation
+3198 Airport Loop Drive, Suite F, Costa Mesa, 
+CA 92626
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Uniform Residential Appraisal Report
+File #
+21.
+The lender/client may disclose or distribute this appraisal report to: the borrower; another lender at the request of the
+borrower;
+the
+mortgagee
+or
+its
+successors
+and
+assigns;
+mortgage
+insurers;
+government
+sponsored
+enterprises;
+other
+secondary
+market
+participants;
+data
+collection
+or
+reporting
+services;
+professional
+appraisal
+organizations;
+any
+department,
+agency,
+or instrumentality of the United States; and any state, the District of Columbia, or other jurisdictions; without having
+to
+obtain
+the
+appraiser's
+or
+supervisory
+appraiser's
+(if
+applicable)
+consent.
+Such
+consent
+must
+be
+obtained
+before
+this
+appraisal
+report may be disclosed or distributed to any other party (including, but not limited to, the public through advertising, public
+relations,
+news,
+sales,
+or
+other
+media).
+22.
+I am aware that any disclosure or distribution of this appraisal report by me or the lender/client may be subject to certain
+laws and regulations. Further, I am also subject to the provisions of the Uniform Standards of Professional
+Appraisal Practice
+that pertain to disclosure or distribution by me.
+23.
+The borrower, another lender at the request of the borrower, the mortgagee or its successors and assigns, mortgage
+insurers,
+government
+sponsored
+enterprises,
+and
+other
+secondary
+market
+participants
+may
+rely
+on
+this
+appraisal
+report
+as
+part
+of any mortgage finance transaction that involves any one or more of these parties.
+24.
+If this appraisal report was transmitted as an "electronic record" containing my "electronic signature," as those terms are
+defined in applicable federal and/or state laws (excluding audio and video recordings), or a facsimile transmission of this
+appraisal
+report
+containing
+a
+copy or representation
+of
+my
+signature,
+the
+appraisal
+report
+shall
+be
+as
+effective,
+enforceable
+and
+valid
+as
+if
+a
+paper
+version
+of
+this
+appraisal
+report
+were
+delivered
+containing
+my
+original
+hand
+written
+signature.
+25.
+Any
+intentional
+or
+negligent
+misrepresentation(s)
+contained
+in
+this
+appraisal
+report
+may
+result
+in
+civil
+liability
+and/or
+criminal
+penalties
+including,
+but
+not
+limited
+to,
+fine
+or
+imprisonment
+or
+both
+under
+the
+provisions
+of
+Title
+18,
+United
+States
+Code, Section
+1001, et seq., or similar state
+laws.
+SUPERVISORY APPRAISER'S CERTIFICATION:
+The
+Supervisory
+Appraiser
+certifies
+and
+agrees
+that:
+1.
+I directly supervised the appraiser for this appraisal assignment, have read the appraisal report, and agree with the appraiser's
+analysis,
+opinions,
+statements,
+conclusions,
+and
+the
+appraiser's
+certification.
+2.
+I accept full responsibility for the contents of this appraisal report including, but not limited to, the appraiser's analysis, opinions,
+statements,
+conclusions,
+and
+the
+appraiser's
+certification.
+3.
+The appraiser identified in this appraisal report is either a sub-contractor or an employee of the supervisory appraiser (or the
+appraisal firm), is qualified to perform this appraisal, and is acceptable to perform this appraisal under the applicable state law.
+4.
+This
+appraisal
+report
+complies
+with
+the
+Uniform
+Standards
+of
+Professional
+Appraisal
+Practice
+that
+were
+adopted
+and
+promulgated
+by
+the
+Appraisal
+Standards
+Board
+of
+The
+Appraisal
+Foundation
+and
+that
+were
+in
+place
+at
+the
+time
+this
+appraisal
+report
+was
+prepared.
+5.
+If this appraisal report was transmitted as an "electronic record" containing my "electronic signature," as those terms are
+defined in applicable federal and/or state laws
+(excluding audio and video
+recordings), or a facsimile
+transmission of this
+appraisal report containing a copy or representation of my signature, the appraisal report shall be as effective, enforceable and
+valid
+as
+if
+a
+paper
+version
+of
+this
+appraisal
+report
+were
+delivered
+containing
+my
+original
+hand
+written
+signature.
+APPRAISER
+Signature
+Name
+Company Name
+Company Address
+Telephone Number
+Email Address
+Date of Signature and Report
+Effective Date of Appraisal
+State Certification #
+or State License #
+or Other (describe)
+State #
+State
+Expiration Date of Certification or License
+ADDRESS OF PROPERTY APPRAISED
+APPRAISED VALUE OF SUBJECT PROPERTY $
+LENDER/CLIENT
+Name
+Company Name
+Company Address
+Email Address
+SUPERVISORY APPRAISER (ONLY IF REQUIRED)
+Signature
+Name
+Company Name
+Company Address
+Telephone Number
+Email Address
+Date of Signature
+State Certification #
+or State License #
+State
+Expiration Date of Certification or License
+SUBJECT PROPERTY
+Did not inspect subject property
+Did inspect exterior of subject property from street
+Date of Inspection
+Did inspect interior and exterior of subject property
+Date of Inspection
+COMPARABLE SALES
+Did not inspect exterior of comparable sales from street
+Did inspect exterior of comparable sales from street
+Date of Inspection
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 6 of 6
+Fannie Mae Form 1004 March 2005
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+• URAR: Borrower
+Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa.
+• URAR: Neighborhood - Description
+The subject is located within the census-designated place of Acampo, and is a rural neighborhood comprised primarily of single
+family residences, located within 5 miles of features typical for residential communities. These features include schools, parks,
+and business/commercial centers that cater to residential needs. The area consists of multiple subdivisions of homes of varying
+quality and condition, with the greatest degree of stylistic similarity among homes of similar ages, and within the same
+community. Homes generally similar to the subject in this area are of mixed ages (with an age range of 22-120 years), on typical
+lots of 0.5-8 acres, with less than 1,500 sf GLA typically, based upon the appraiser's inspection of the area.  Schools, shopping
+and community services are located an acceptable distance for within the market. Major employment is located primarily within
+the Metropolitan Sacramento area, City of Galt, and Cities of Lodi and Stockton, accessed via local streets and major
+highways/Interstates with average commuting times of under 60 minutes.
+One page 1 of this report, under Present Land Use %, the "Other" line item 45% refers to Vacant and Agricultural land.
+• URAR: Neighborhood - Market Conditions
+Low interest rates coupled with lack of inventory in previous market periods made it common for listings to generate multiple
+offers (this is especially true for homes in turn key condition and properties eligible for FHA, VA, and/or USDA financing);
+however, due in part to the increase in federal lending rates, this previous trend began to decline. In recent months, this decline
+has begun to reverse, with a greater number of properties receiving multiple offers.
+The indicated predominant price range is considered accurate and reflect the subjects overall market area. The subject and the
+comparables used reflect the lower range of the market due to being below 10% range of the median market price of $615,750.
+This is due to the subject and comparables being of generally less than typical quality and condition for the market. This is
+judged to have no adverse reaction on the marketability or market value of the subject.
+Data is taken from sales in the neighborhood over the last 18 month period with up to 1,500 sq ft GLA, with lots of between
+0.5-8 acres.
+ According to the market research for sales similar to the subject property in similar neighborhoods, the median comparable
+sales price from one year ago was $780,000, as of 6 months ago was $598,250, and as of the appraisal date is $525,000. The
+appraiser reviewed market trends for the neighborhood, including sales prices, listing prices, and price per square footage data,
+which indicate that the market is considered to be stabilizing overall. Any perceived decline is due primarily to the significantly
+limited number of sales over the prior 1 year period (with only 4 total sales), which can skew the data. Furthermore, the research
+indicates the housing supply is in a shortage, with an existing inventory supply available of under 1 month, and a median of 41
+days on the market.
+Exposure time is defined by USPAP as: the estimated length of time that a property interest being appraised would have been
+offered on the market prior to the hypothetical consummation of a sale at market value on the date of the appraisal. ( Exposure
+time is a retrospective opinion based on an analysis of past events assuming a competitive and open market.) Exposure time is
+determined to be approximately 1-80 days and is based on the data research of the market area. It is noted that it is not
+uncommon for properties to exceed this exposure time, for varying reasons (which may include location, property features,
+external factors, and/or other reasons), and the range of 1-80 days reflects what is most typical for the market.
+• URAR: Zoning Description
+The subject's zoning of AL-5 requires a minimum lot size of 5 acres. Multiple properties within the area are of a similar zoning,
+with a similar lot requirement. Sales of such properties, or with similar zoning discrepancies, from within the last 3 year period
+include: 25011 N Fuhrman Rd (MLS#225100985); 12301 E Jahant Rd (MLS#225103635); 17755 E Collier Rd
+(MLS#225040362); and 10090 E Collier Rd (MLS#224080937). This zoning is considered to be legal nonconforming, without
+any known or measurable impact on marketability.
+It cannot be verified by the appraiser if the property can be rebuilt if destroyed. This would require verification by the County of
+Sacramento Building Department. This report is completed with the Extraordinary Assumption that the  subject could be
+rebuilt if destroyed, based in part upon the appraiser's familiarity with the zoning and County of San Joaquin Building
+requirements. If this Extraordinary Assumption is disproved, it may impact assignment results.
+• URAR: Site - Highest and Best Use
+The appraiser has considered the four tests of Highest and Best Use, which include testing whether the current use is the most
+profitable, legally permissible, physically possible, and financially feasible. Based upon this analysis, the Highest and Best Use
+of the subject is determined to be as it currently exists, based primarily upon the zoning,  as well as the location, size, and
+accessibility of the subject. Given the nature of the subject real estate, my conclusions of highest and best use was based on
+logic and observed evidence. The improvements are substantially the highest and best use for the subject property: free
+standing, deeded, except for those items of depreciation described in the improvement section.
+• URAR: Site - Adverse Conditions or External Factors
+No apparent easements or encroachments noted except for normal utilities. Properties in the subject's neighborhood are similar
+in size and utility. The legal description, APN and flood hazard zone information have been verified through available data
+sources considered reliable though not guaranteed.
+The grading and drainage appear to be in conformance.The completed building and construction appear to be in conformance
+with the exhibits and specifications that were available to the appraiser at the time of the appraisal. There are no notable
+concerns or adverse conditions due to proximity to busy roads/highways, commercial structures, or any other non-residential
+feature.
+• URAR: Subject - Overall Condition of the Property
+The subject is a typical single family residence, with limited interior updating/upgrading, and overall features inferior to what is
+typical for the market area. The home is generally competitive within the market for homes of similar GLA, and with similar
+features. The property consists of the residence, and multiple outbuildings/sheds. Features of the residence include: older wood
+siding; an older composite roof (with some visible wear and tear); older, cosmetically damaged flooring; dated kitchen and
+bathroom features; older interior paint; suspended lighting; and other similar features. The sheds and storage structures on the
+property were not recently built, and all exhibit some degree of wear and tear due to age and use. The portion of the lot to the
+Serial# 452C540F
+esign.alamode.com/verify
+Supplemental Addendum
+Form TADD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+25-0335081
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+File No.
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+p
+p
+y
+y
+,
+g
+g
+p
+rear/east of the subject and barn is graded land, previously used for keeping livestock (per the agent).
+The publicly available County records do not indicate the presence of the residence. Per a staff member of the County of San
+Joaquin Office of the Assessor (reached by phone), internal records do indicate a residence, as well as the existing sheds and
+storage structures. Per the Office of the Assessor, the subject property has a recorded GLA of 640 sf, with an effective year built
+of 1952. This age is used within this report. The appraiser's measurements indicate a total GLA of 942 sf. The reason for this
+discrepancy is unknown; however, such discrepancies are not uncommon for homes of similar or older ages within the greater
+market area. This report is completed with the Extraordinary Assumption that the information provided by the Assessor
+is accurate, accessible by the property owner (or authorized party), and able to be replicated by a third party. If this
+Extraordinary Assumption is disproved, it may impact assignment results.
+Permit records for the subject structure, and all primary utilities (such as the well, septic, and propane systems) are not readily
+available or known. Public water and sanitary sewer systems are not available to the subject property, based upon a review of
+public water district information, and a review of historical sales within the subject's immediate market area. There are no
+immediately or readily visible or otherwise known concerns regarding the well and septic systems, which may include location,
+distance from the main residence, distance from other utilities, or similar concerns.  Per the listing agent, the septic system was
+recently treated, with recent access to the buried system visible in the disturbed soil behind the residence. This septic system
+access is within 15 feet of the residence. This report is completed with the Extraordinary Assumption that there are no
+concerns, issues, or risks associated with the existing well and septic systems. If this Extraordinary Assumption is
+disproved, it may impact assignment results. It is left to the lender to decide if any further action or inspection is
+required.
+No damage noted in this report requires repair. No cost to cures are noted, as these items are known to be cosmetic
+only.
+• URAR: Cost Approach - Support for the Opinion of Site Value
+Estimated site value based on appraisers knowledge of the subjects area and extraction of recent sales in the area.  Land value
+is considered typical for the area.
+• Reconciliation (Analysis/Comments)
+Overview:
+The subject is considered to be a typical single family residence, of C5 condition and Q4 quality for the market. Comparables
+have been selected based upon overall similarity to the subject. The primary variations between homes in this market are
+updating, GLA, bedroom and bathroom count, and location. A thorough search and review of sales was conducted (based upon
+the parameters noted in the Market Conditions commentary, as well as a review of sales outside of these ranges to ensure any
+similar sales are noted and considered), in order to include the most recent, similar, and otherwise necessary sales to develop
+clear and credible results. It was necessary to use a wide range of sales (in age, style, design, and location), in order to include
+sales similar overall to the subject. The appraiser has attempted to include the most recent, similar, and/or necessary sales that
+most clearly indicate the market for home similar to the subject.
+It was considered necessary to include a wide range of Comparables, which include those that: exceed 15% and 25% in net
+and/or gross adjustments; are older sales; are located over 1 mile from the subject; vary in condition and quality; vary in lot size
+and GLA; and vary in overall updating/features. This was done to include the most recent, similar, and otherwise relevant sales
+considered necessary to develop credible results.
+It is not considered possible to include any sales more recent than those included, as no such sales exist with the market area
+that merit inclusion in this report.
+Comparables:
+It is noted that there exists an extremely limited number of sales total within the greater market area, and specifically an
+extremely limited number of sales that can be considered as similar to the subject. Comparables 1 and 2 are semi-recent and
+older sales, respectively, and are included as the most recent and defensibly similar sales of homes with generally similar
+features, that are indicative of the market for homes similar to the subject. Comparable 1 is a semi-recent sale of a home with
+similar GLA, a slightly superior lot, a similar room count, of slightly superior overall condition. Comparable 2 is an older sale of a
+home in disrepair (marketed as a "fixer"), with similar GLA, a similar room count, and an inferior overall lot size, with a significant
+adverse location feature. Comparables 3 and 4 are semi-recent and significantly older sale, respectively, of homes located
+generally near the subject, that further bracket key features of the subject. Comparables 5 and 6 are listings,and are included to
+indicate current market trends. It is noted that Comparable 6 is a listing of a property, that a previous sale of which is used as
+Comparable 1 in this report.
+Methodology:
+A weighted mean methodology is used to develop an opinion of value. Most consideration is given to Comparables 1-2, due to
+being the most similar overall. Less consideration is given to Comparables 3-4, due to being  less similar overall than
+Comparables 1-2 (see above).  Minimal consideration is given to the pending listings, despite not having closed, as pending
+listings are considered to be indicators of current market activity.
+As noted, this sale is a non-arms length sale between parties with an existing relationship. The contract price is for less than
+market value which, as far as the appraiser has been made aware, is known to all parties involved.
+The appraiser is aware of the wide value range in the sales prices. It was necessary to use a range of sales to accurately
+represent the current, recent market for residences similar overall to the subject. The subject property is considered to be an
+adequately updated property, easily and quickly accessible from major access roads/highways. These features contribute to the
+value overall.  The subject is not considered to be over improved. It was necessary to exceed adjustment/distance guidelines in
+order to include sales similar to the subject.
+Adjustments:
+Adjustments are based upon a variety of data sets, including, but not limited to: paired sales, 12 month sales history of the
+neighborhood, the appraiser's familiarity with the features and the market, and market reaction to noted features. All adjustment
+figures are developed in paired sales analysis (using sales in this report), as well as a general review of the market reaction to
+such features within the greater market area. 
+Serial# 452C540F
+esign.alamode.com/verify
+Supplemental Addendum
+Form TADD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+25-0335081
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+File No.
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Concessions- Adjustments are only made to concessions if the sales price exceeds the listing price, as the credit to the buyer is
+considered to artificially inflate the final sales price as compared to the price that was intended to represent a reasonable price
+within the open market. As of August 13, 2024, in California, The California Association of Realtors (CAR) requires buyers to
+sign a buyer representation agreement, which informs the buyers of the three ways a buyer's agent can get paid for their
+services. This process has changed the manner in which concessions are paid and reported. The appraiser has attempted to
+contact both listing and buyers agents for sales with noted concessions, to verify all relevant information. In the event the
+appraiser is unable to contact the agent(s), no concessions are made, but that existence of concessions is considered by the
+appraiser. The concessions appear to have impacted the sales prices when above the listing price, elevating the price above
+what is typical for the market.
+Time- Time adjustments are based primarily upon the attached Analytics Addenda, and to a limited extend the 1004MC data
+(which measures the raw sales data of similar homes within given parameters). As the market has remained measurably stable
+over the last 18 month period, no adjustments are applied.
+Condition/Quality- The overall condition and quality of the homes are weighted in the appraiser's overall opinion of value. The
+differences in condition are adjusted for within the grid are primarily cosmetic features (such as flooring, bathroom and kitchen
+upgrades, interior paint, upgraded lighting, etc.). The adjustment support comes from paired sales within the grid
+(specifically, homes with similar updating compared again those with differing features), as well as a detailed review of the
+market area. It is noted that homes can have recent or greater than typical updating, and be of less than typical condition. For
+example, a home could have been updated 10 years prior, but then not adequately maintained, so that the overall condition of
+the home would be considered to be C4, while the interior does have generally recent updating.
+Condition/Updating Differences-  The Condition adjustment primarily reflects the overall maintenance of the property and
+property features, whereas the Updating line item reflects the range of interior and exterior updating and upgrading made to the
+property. As a theoretical example, a property that was remodeled 10 years prior, but not maintained, and with visible cosmetic
+damage / wear and tear, could merit a Condition rating of C4, but command a market premium for the interior upgrades. This is
+consistent throughout the report, and no duplicate adjustments have been applied.
+Age- No age adjustments are warranted at this time as the overall market preference appears to be for the condition, quality and
+amenities of the home, and not necessarily the age of the home. Per the appraiser's review and research, buyers typically
+consider at the overall age of items such as HVAC, roof, windows, flooring, appliances, and other similar features, but not
+necessarily the age of the structure. The level of interior updating/upgrading of a subject has the most impact on the
+consideration of age overall. Adjustments for mentioned items are made in the Condition, Quality, and Updating lines as
+applicable.
+Site- Lot sizes of between 1-4 acres are considered to be functionally similar, with similar utility. Adjustments are made based
+upon the surplus land of less than 1 acre, and exceeding 4 acres, based upon the market data available.
+Bathroom(s)- Fewer/additional half/full bathroom(s) in a home in this market. The adjustment is based on the buyer’s reaction to
+the contribution of half/full bathroom(s) and is supported by the costs to construct.
+Bedroom- Adjustments are only made to homes with greater than or less than  2 bedrooms, based upon the market reaction to
+having fewer and greater functional bedrooms despite similar GLA. No further bedroom adjustments were warranted.
+Solar- Unless clearly stated within the MLS or verified by the sales agent as having owned solar features, homes that have
+panels without clear ownership are considered to have leased paneling within this report. This is based upon the appraiser's
+experience with how this feature is marketed and listed within the MLS, and the market reaction to having owned solar paneling.
+There is no measurable impact, of benefit or adversely, due to the presence of owned or leased solar arrays.
+Garage(s)- Fewer/additional garage spaces. The adjustment is based on the buyer’s reaction to the contribution of the
+security/storage/parking space and is supported by the costs to construct and market data.
+Updating/Options- The differences in updating adjusted for within the grid are primarily cosmetic features (such as flooring,
+bathroom and kitchen upgrades, interior paint, upgraded lighting, etc.). The adjustment support comes from paired sales within
+the grid (specifically, homes with similar updating compared again those with differing features), as well as a detailed review of
+the market area.
+Shed/Outbuilding(s)- No line item adjustments are made for sheds or other similar structures, as such features are not
+considered to have a significant or measurable impact on marketability. These structures are considered in the overall opinion
+of value.
+Per Condition/Quality and Updating/Options Adjustments- It is understood that the market reaction to these features is
+subjective, and an exact "dollar-for-dollar" adjustment that reflects the intentions of every potential or actual buyer is not
+possible. The adjustment values made are based upon paired sales within this report (reviewed both before and after the
+application of other adjustments, to ensure the most accurate adjustment value), and are consistent with other sales reviewed
+within the market. It is noted that some sales do not command a typical market premium due to their updating, and some sales
+command a more than typical market premium despite a lack of updating, due to unknown and unforeseeable motivations of
+buyers.
+Well/Septic/Propane- All Comparables included in this report have similar well, septic, and propane/natural gas systems. These
+features have no measurable impact on marketability.
+• URAR: Additional Comments
+At the time of inspection, there was no noticeable damage to the subject property or market area due to any recent weather
+related disasters, floods or fires. There has been no effect on value or marketability of the subject.
+No value is given to any personal property, and not included in the appraised value. All utilities were on and functional at the
+time of the appraiser's inspection. CO/Smoke detectors are installed, and the hot water heater is double strapped.
+Serial# 452C540F
+esign.alamode.com/verify
+Supplemental Addendum
+Form TADD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+25-0335081
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+File No.
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Neighborhood
+Form SCNLGL - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PIC3X5.SR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Photo Page
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Subject Front
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+25126 N Jack Tone Rd
+300,000
+942
+5
+2
+1.0
+N;Rural;
+N;Pstrl;
+3.03 ac
+Q4
+73
+Subject Rear
+Subject Street
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PICINT15 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Interior Photos
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Driveway
+Subject Lot
+Subject Lot / Addtl. View
+Electrical Panel
+Hot Water Heater Closet
+Hot Water Heater / Strapped
+Covered Porch
+Entry
+Living Room
+Nook
+Damaged Flooring
+Dining Room
+Kitchen
+Kitchen / Addtl. View
+No Photo                           
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PICINT15 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Interior Photos
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Kitchen / Addtl. View
+Laundry Room
+Bedroom 1
+Bedroom 2
+Bathroom
+HVAC Vent
+CO Detector
+Smoke/CO Detector
+Smoke/CO Detector
+AC Unit
+Roof
+Septic Access (Buried)
+Well Pump
+Propane Tank
+No Photo                           
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PICINT15 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Interior Photos
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Shed #1
+Shed #1 Interior
+Storage #1
+Storage #1 Interior
+Storage #2
+Shed #2
+Shed #2 Interior
+Barn
+Barn Interior
+Barn Interior / Addtl. View
+Shed #2 (Locked)
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PIC3X5.CR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Comparable Photo Page
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Comparable 1
+Prox. to Subject
+Sale Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+23707 N Graham Rd
+1.03 miles SW
+475,000
+1,025
+3
+1
+1.0
+N;Rural;
+N;Pstrl;
+4.92 ac
+Q4
+107
+Comparable 2
+Prox. to Subject
+Sale Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+25362 N Highway 99
+6.30 miles W
+340,000
+972
+4
+2
+1.0
+N;Res;A;Hwy;
+N;Res;Pstrl
+34412 sf
+Q5
+57
+Comparable 3
+Prox. to Subject
+Sale Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+25055 N Watkinson Rd
+0.46 miles E
+685,000
+1,360
+6
+3
+1.1
+N;Rural;
+N;Pstrl;
+4.88 ac
+Q4
+53
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PIC3X5.CR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Comparable Photo Page
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Comparable 4
+Prox. to Subject
+Sale Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+19497 E Collier Rd
+3.96 miles E
+706,500
+1,443
+6
+3
+3.0
+N;Rural;
+N;Pstrl;
+6.52 ac
+Q4
+61
+Comparable 5
+Prox. to Subject
+Sale Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+5860 E Jahant Rd
+5.20 miles W
+638,800
+1,177
+5
+2
+2.0
+N;Rural;
+N;Pstrl;
+1.00 ac
+Q4
+60
+Comparable 6
+Prox. to Subject
+Sale Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+23707 N Graham Rd
+1.03 miles SW
+525,000
+1,025
+4
+1
+1.0
+N;Rural;
+N;Res;
+4.92 ac
+Q4
+107
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form PICSIX2 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Photograph Addendum
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+5860 E Jahant Rd
+Street Sign / View of Comparable Obstructed
+23707 N Graham Rd
+Private Access
+19497 E Collier Rd
+Street Sign / View of Comparable Obstructed
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Analytics Addendum
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+This analysis of prices in the subject market from 12-09-2022 to 09-18-2025 yields a price range of $457,880 to $721,849 for properties in 
+the subject market as of 12-12-2025.
+This analysis of the price per sq ft. in the subject market from 12-09-2022 to 09-18-2025 yields a range of $367/sf to $524/sf for properties 
+in the subject market as of 12-12-2025.
+Form PIC2TACHARTW_LT - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Analytics Addendum
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+For each month from 11-13-2022 to 12-12-2025 this chart shows the median price for both sales and listings in the subject market.
+For each month from 11-13-2022 to 12-12-2025 this chart shows the median price per square foot for both sales and listings in the subject 
+market.
+Form PIC2TACHARTW_LT - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Analytics Addendum
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+This analysis of listing prices in the subject market from 06-22-2022 to 11-17-2025 shows a range of $460,314 to $733,836 for a likely sale 
+on 12-12-2025.
+This analysis of listing price per square foot in the subject market from 06-22-2022 to 11-17-2025 shows a likely range of $376/sf  to $540/sf 
+ with a predicted value of $458/sf.
+Form PIC2TACHARTW_LT - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+esign.alamode.com/verify
+Serial:452C540F
+25-0335081
+25126 N Jack Tone Rd
+Acampo
+CA
+95220
+See attached addenda.
+1
+0.17
+2
+12.00
+$780,000
+47
+$612,500
+53
+94.55%
+2
+0.67
+0
+0.00
+$598,250
+73
+-
+-
+98.68%
+1
+0.33
+0
+0.00
+$525,000
+41
+-
+-
+95.63%
+The MetroList MLS reported no concessions between 12/12/2024 and 12/12/2025.
+The Market Conditions Addenda was completed with data from MetroList MLS with an effective date of 
+12/12/2025.
+The above data reflects the sales of single family residences from the 12 month period prior to the effective date of this report. See Market 
+Conditions commentary in attached addenda.
+Cameron Betts
+Betts Appraisal Services
+4910 Concord Rd, Sacramento, CA 95820
+3004142
+CA
+betts.appraisals@gmail.com
+Form 1004MC2 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File No.
+Market Conditions Addendum to the Appraisal Report
+MARKET RESEARCH & ANALYSIS
+CONDO/CO-OP PROJECTS
+APPRAISER
+The purpose of this addendum is to provide the lender/client with a clear and accurate understanding of the market trends and conditions prevalent in the subject
+neighborhood. This is a required addendum for all appraisal reports with an effective date on or after April 1, 2009.
+Property Address
+City
+State
+ZIP Code
+Borrower
+Instructions: The appraiser must use the information required on this form as the basis for his/her conclusions, and must provide support for those conclusions, regarding
+housing trends and overall market conditions as reported in the Neighborhood section of the appraisal report form. The appraiser must fill in all the information to the extent
+it is available and reliable and must provide analysis as indicated below. If any required data is unavailable or is considered unreliable, the appraiser must provide an
+explanation. It is recognized that not all data sources will be able to provide data for the shaded areas below; if it is available, however, the appraiser must include the data
+in the analysis. If data sources provide the required information as an average instead of the median, the appraiser should report the available figure and identify it as an
+average. Sales and listings must be properties that compete with the subject property, determined by applying the criteria that would be used by a prospective buyer of the
+subject property. The appraiser must explain any anomalies in the data, such as seasonal markets, new construction, foreclosures, etc.
+Inventory Analysis
+Prior 7–12 Months
+Prior 4–6 Months
+Current – 3 Months
+Overall Trend
+Median Sale & List Price, DOM, Sale/List %
+Prior 7–12 Months
+Prior 4–6 Months
+Current – 3 Months
+Total # of Comparable Sales (Settled)
+Absorption Rate (Total Sales/Months)
+Total # of Comparable Active Listings
+Months of Housing Supply (Total Listings/Ab.Rate)
+Median Comparable Sale Price
+Median Comparable Sales Days on Market
+Median Comparable List Price
+Median Comparable Listings Days on Market
+Median Sale Price as % of List Price
+Increasing
+Stable
+Declining
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Declining
+Stable
+Increasing
+Overall Trend
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Increasing
+Stable
+Declining
+Seller-(developer, builder, etc.)paid financial assistance prevalent?
+Yes
+No
+Declining
+Stable
+Increasing
+Explain in detail the seller concessions trends for the past 12 months (e.g., seller contributions increased from 3% to 5%, increasing use of buydowns, closing costs, condo
+fees, options, etc.).
+Are foreclosure sales (REO sales) a factor in the market?
+Yes
+No
+If yes, explain (including the trends in listings and sales of foreclosed properties).
+Cite data sources for above information.
+Summarize the above information as support for your conclusions in the Neighborhood section of the appraisal report form. If you used any additional information, such as
+an analysis of pending sales and/or expired and withdrawn listings, to formulate your conclusions, provide both an explanation and support for your conclusions.
+If the subject is a unit in a condominium or cooperative project , complete the following:
+Project Name:
+Subject Project Data
+Prior 7–12 Months
+Prior 4–6 Months
+Current – 3 Months
+Overall Trend
+Total # of Comparable Sales (Settled)
+Absorption Rate (Total Sales/Months)
+Months of Unit Supply (Total Listings/Ab.Rate)
+Total # of Active Comparable Listings
+Increasing
+Stable
+Declining
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Declining
+Stable
+Increasing
+Are foreclosure sales (REO sales) a factor in the project?
+Yes
+No
+If yes, indicate the number of REO listings and explain the trends in listings and sales of
+foreclosed properties.
+Summarize the above trends and address the impact on the subject unit and project.
+Signature
+Appraiser Name
+Company Name
+Company Address
+State License/Certification #
+State
+Email Address
+Signature
+Supervisory Appraiser Name
+Company Name
+Company Address
+State License/Certification #
+State
+Email Address
+Freddie Mac Form 71   March 2009
+Page 1 of 1
+Fannie Mae Form 1004MC   March 2009
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form MAP.PLAT - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Plat Map
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form SKT.BLDSKI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Building Sketch
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form MAP.AERIAL - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Aerial Map
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form MAP.LOC - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Location Map
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form MAP_LT.FLOOD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Flood Map
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+esign.alamode.com/verify
+Serial:452C540F
+Cameron Betts
+25-0335081
+See attached addenda.
+25126 N Jack Tone Rd
+Acampo
+San Joaquin
+CA
+95220
+United American Mortgage Corporation
+Clarification of Intended Use and Intended User: Lender/Client and assigns are intended users. The Intended Use is to  evaluate the property 
+that is the subject of this appraisal to for a mortgage transaction, subject to the stated Scope of Work, purpose of the appraisal, reporting 
+requirements of this appraisal report form, and Definition of Market Value.
+The appraiser is to provide an opinion of value, as of the effective date of this report, consistent with FNMA guidelines, and in 
+compliance to USPAP.
+The subject has not been publicly listed for sale within the last 12 month period, and has been offered between parties with an existing 
+relationship (neighbors).
+1-30 DOM
+Marketing time is defined as an opinion of the amount of time it might take to sell a real or personal property interest at the concluded 
+market value during the period immediately after the effective date of an appraisal, according to The Dictionary of Real Estate 
+Appraisal, 6th Ed. The estimate is based upon the listing times for similar properties within the current market.
+The sale includes the transfer of appliances. These appliances are considered to be personal property, and are given no consideration 
+or value.
+- This Appraisal Report is of the Appraisal Report type, and was prepared in accordance with the requirements of the Appraisal Report 
+option of USPAP Standards Rule 2-2(a).
+-  I have performed no services, as an appraiser or in any other capacity, regarding the property that is the subject of this report within 
+the three year period immediately preceding acceptance of this assignment.
+12/15/2025
+Cameron Betts
+Form FNCUCA - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+USPAP COMPLIANCE ADDENDUM
+File No:
+SUBJECT
+Borrower
+Property Address
+City
+County
+State
+Zip Code
+Lender/Client
+PURPOSE OF THE APPRAISAL
+SCOPE OF THE APPRAISAL
+REPORT OF THE PRIOR YEARS SALES HISTORY FOR THE SUBJECT PROPERTY
+Is the subject property currently listed?
+Yes
+No
+List Price $
+Has the property sold during the prior year?
+Yes
+No
+If yes, describe below:
+MARKETING TIME
+What is your estimate of marketing time for the subject property?
+Describe below the basis (rationale)for your estimate:
+NON-REAL PROPERTY TRANSFERS
+Does the transaction involve the transfer of personal property, fixtures, or intangibles that are not real property?
+Yes
+No
+If yes, provide description and valuation below:
+ADDITIONAL LIMITING CONDITIONS OR ADDITIONAL COMMENTS
+ADDITIONAL CERTIFICATION STATEMENTS OR ADDITIONAL COMMENTS
+Date:
+Appraiser(s):
+Date:
+Review Appraiser(s):
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+25-0335081
+Form UADDEFINE1A - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File No.
+UNIFORM APPRAISAL DATASET (UAD) DEFINITIONS ADDENDUM
+(Source: Fannie Mae UAD Appendix D: UAD Field-Specific Standardization Requirements)
+Condition Ratings and Definitions
+C1
+The improvements have been recently constructed and have not been previously occupied. The entire structure and all components are new
+and the dwelling features no physical depreciation.
+Note: Newly constructed improvements that feature recycled or previously used materials and/or components can be considered new dwellings
+provided that the dwelling is placed on a 100 percent new foundation and the recycled materials and the recycled components have been
+rehabilitated/remanufactured into like-new condition. Improvements that have not been previously occupied are not considered “new” if they
+have any significant physical depreciation (that is, newly constructed dwellings that have been vacant for an extended period of time without
+adequate maintenance or upkeep).
+C2
+The improvements feature no deferred maintenance, little or no physical depreciation, and require no repairs. Virtually all building components
+are new or have been recently repaired, refinished, or rehabilitated. All outdated components and finishes have been updated and/or replaced
+with components that meet current standards. Dwellings in this category are either almost new or have been recently completely renovated and
+are similar in condition to new construction.
+Note: The improvements represent a relatively new property that is well maintained with no deferred maintenance and little or no physical
+depreciation, or an older property that has been recently completely renovated.
+C3
+The improvements are well maintained and feature limited physical depreciation due to normal wear and tear. Some components, but not every
+major building component, may be updated or recently rehabilitated. The structure has been well maintained.
+Note: The improvement is in its first-cycle of replacing short-lived building components (appliances, floor coverings, HVAC, etc.) and is
+being well maintained. Its estimated effective age is less than its actual age. It also may reflect a property in which the majority of
+short-lived building components have been replaced but not to the level of a complete renovation.
+C4
+The improvements feature some minor deferred maintenance and physical deterioration due to normal wear and tear. The dwelling has been
+adequately maintained and requires only minimal repairs to building components/mechanical systems and cosmetic repairs. All major building
+components have been adequately maintained and are functionally adequate.
+Note: The estimated effective age may be close to or equal to its actual age. It reflects a property in which some of the short-lived building
+components have been replaced, and some short-lived building components are at or near the end of their physical life expectancy; however,
+they still function adequately. Most minor repairs have been addressed on an ongoing basis resulting in an adequately maintained property.
+C5
+The improvements feature obvious deferred maintenance and are in need of some significant repairs. Some building components need repairs,
+rehabilitation, or updating. The functional utility and overall livability is somewhat diminished due to condition, but the dwelling remains
+useable and functional as a residence.
+Note: Some significant repairs are needed to the improvements due to the lack of adequate maintenance. It reflects a property in which many
+of its short-lived building components are at the end of or have exceeded their physical life expectancy but remain functional.
+C6
+The improvements have substantial damage or deferred maintenance with deficiencies or defects that are severe enough to affect the safety,
+soundness, or structural integrity of the improvements. The improvements are in need of substantial repairs and rehabilitation, including many
+or most major components.
+Note: Substantial repairs are needed to the improvements due to the lack of adequate maintenance or property damage. It reflects a property
+with conditions severe enough to affect the safety, soundness, or structural integrity of the improvements.
+Quality Ratings and Definitions
+Q1
+Dwellings with this quality rating are usually unique structures that are individually designed by an architect for a specified user. Such
+residences typically are constructed from detailed architectural plans and specifications and feature an exceptionally high level of workmanship
+and exceptionally high-grade materials throughout the interior and exterior of the structure. The design features exceptionally high-quality
+exterior refinements and ornamentation, and exceptionally high-quality interior refinements. The workmanship, materials, and finishes
+throughout the dwelling are of exceptionally high quality.
+Q2
+Dwellings with this quality rating are often custom designed for construction on an individual property owner’s site. However, dwellings in
+this quality grade are also found in high-quality tract developments featuring residence constructed from individual plans or from highly
+modified or upgraded plans. The design features detailed, high quality exterior ornamentation, high-quality interior refinements, and detail. The
+workmanship, materials, and finishes throughout the dwelling are generally of high or very high quality.
+UAD Version 9/2011 (Updated 1/2014)
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form UADDEFINE1A - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+UNIFORM APPRAISAL DATASET (UAD) DEFINITIONS ADDENDUM
+(Source: Fannie Mae UAD Appendix D: UAD Field-Specific Standardization Requirements)
+Quality Ratings and Definitions (continued)
+Q3
+Dwellings with this quality rating are residences of higher quality built from individual or readily available designer plans in above-standard
+residential tract developments or on an individual property owner’s site. The design includes significant exterior ornamentation and interiors
+that are well finished. The workmanship exceeds acceptable standards and many materials and finishes throughout the dwelling have been
+upgraded from “stock” standards.
+Q4
+Dwellings with this quality rating meet or exceed the requirements of applicable building codes. Standard or modified standard building plans
+are utilized and the design includes adequate fenestration and some exterior ornamentation and interior refinements. Materials, workmanship,
+finish, and equipment are of stock or builder grade and may feature some upgrades.
+Q5
+Dwellings with this quality rating feature economy of construction and basic functionality as main considerations. Such dwellings feature a
+plain design using readily available or basic floor plans featuring minimal fenestration and basic finishes with minimal exterior ornamentation
+and limited interior detail. These dwellings meet minimum building codes and are constructed with inexpensive, stock materials
+with limited refinements and upgrades.
+Q6
+Dwellings with this quality rating are of basic quality and lower cost; some may not be suitable for year-round occupancy. Such dwellings
+are often built with simple plans or without plans, often utilizing the lowest quality building materials. Such dwellings are often built or
+expanded by persons who are professionally unskilled or possess only minimal construction skills. Electrical, plumbing, and other mechanical
+systems and equipment may be minimal or non-existent. Older dwellings may feature one or more substandard or non-conforming additions
+to the original structure
+Definitions of Not Updated, Updated, and Remodeled
+Not Updated
+Little or no updating or modernization. This description includes, but is not limited to, new homes.
+Residential properties of fifteen years of age or less often reflect an original condition with no updating, if no major
+components have been replaced or updated. Those over fifteen years of age are also considered not updated if the
+appliances, fixtures, and finishes are predominantly dated. An area that is ‘Not Updated’ may still be well maintained
+and fully functional, and this rating does not necessarily imply deferred maintenance or physical/functional deterioration.
+Updated
+The area of the home has been modified to meet current market expectations. These modifications
+are limited in terms of both scope and cost.
+An updated area of the home should have an improved look and feel, or functional utility. Changes that constitute
+updates include refurbishment and/or replacing components to meet existing market expectations. Updates do not
+include significant alterations to the existing structure.
+Remodeled
+Significant finish and/or structural changes have been made that increase utility and appeal through
+complete replacement and/or expansion.
+A remodeled area reflects fundamental changes that include multiple alterations. These alterations may include
+some or all of the following: replacement of a major component (cabinet(s), bathtub, or bathroom tile), relocation
+of plumbing/gas fixtures/appliances, significant structural alterations (relocating walls, and/or the addition of)
+square footage). This would include a complete gutting and rebuild.
+Explanation of Bathroom Count
+Three-quarter baths are counted as a full bath in all cases.  Quarter baths (baths that feature only a toilet) are not
+included in the bathroom count.  The number of full and half baths is reported by separating the two values using a
+period, where the full bath count is represented to the left of the period and the half bath count is represented to the
+right of the period.
+Example:
+3.2 indicates three full baths and two half baths.
+UAD Version 9/2011 (Updated 1/2014)
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Form UADDEFINE1A - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+UNIFORM APPRAISAL DATASET (UAD) DEFINITIONS ADDENDUM
+(Source: Fannie Mae UAD Appendix D: UAD Field-Specific Standardization Requirements)
+Abbreviations Used in Data Standardization Text
+Abbreviation
+Full Name
+Fields Where This Abbreviation May Appear
+A
+Adverse
+Location & View
+ac
+Acres
+Area, Site
+AdjPrk
+Adjacent to Park
+Location
+AdjPwr
+Adjacent to Power Lines
+Location
+ArmLth
+Arms Length Sale
+Sale or Financing Concessions
+AT
+Attached Structure
+Design (Style)
+B
+Beneficial
+Location & View
+ba
+Bathroom(s)
+Basement & Finished Rooms Below Grade
+br
+Bedroom
+Basement & Finished Rooms Below Grade
+BsyRd
+Busy Road
+Location
+c
+Contracted Date
+Date of Sale/Time
+Cash
+Cash
+Sale or Financing Concessions
+Comm
+Commercial Influence
+Location
+Conv
+Conventional
+Sale or Financing Concessions
+cp
+Carport
+Garage/Carport
+CrtOrd
+Court Ordered Sale
+Sale or Financing Concessions
+CtySky
+City View Skyline View
+View
+CtyStr
+City Street View
+View
+cv
+Covered
+Garage/Carport
+DOM
+Days On Market
+Data Sources
+DT
+Detached Structure
+Design (Style)
+dw
+Driveway
+Garage/Carport
+e
+Expiration Date
+Date of Sale/Time
+Estate
+Estate Sale
+Sale or Financing Concessions
+FHA
+Federal Housing Authority
+Sale or Financing Concessions
+g
+Garage
+Garage/Carport
+ga
+Attached Garage
+Garage/Carport
+gbi
+Built-in Garage
+Garage/Carport
+gd
+Detached Garage
+Garage/Carport
+GlfCse
+Golf Course
+Location
+Glfvw
+Golf Course View
+View
+GR
+Garden
+Design (Style)
+HR
+High Rise
+Design (Style)
+in
+Interior Only Stairs
+Basement & Finished Rooms Below Grade
+Ind
+Industrial
+Location & View
+Listing
+Listing
+Sale or Financing Concessions
+Lndfl
+Landfill
+Location
+LtdSght
+Limited Sight
+View
+MR
+Mid-rise
+Design (Style)
+Mtn
+Mountain View
+View
+N
+Neutral
+Location & View
+NonArm
+Non-Arms Length Sale
+Sale or Financing Concessions
+o
+Other
+Basement & Finished Rooms Below Grade
+O
+Other
+Design (Style)
+op
+Open
+Garage/Carport
+Prk
+Park View
+View
+Pstrl
+Pastoral View
+View
+PwrLn
+Power Lines
+View
+PubTrn
+Public Transportation
+Location
+Relo
+Relocation Sale
+Sale or Financing Concessions
+REO
+REO Sale
+Sale or Financing Concessions
+Res
+Residential
+Location & View
+RH
+USDA - Rural Housing
+Sale or Financing Concessions
+rr
+Recreational (Rec) Room
+Basement & Finished Rooms Below Grade
+RT
+Row or Townhouse
+Design (Style)
+s
+Settlement Date
+Date of Sale/Time
+SD
+Semi-detached Structure
+Design (Style)
+Short
+Short Sale
+Sale or Financing Concessions
+sf
+Square Feet
+Area, Site, Basement
+sqm
+Square Meters
+Area, Site
+Unk
+Unknown
+Date of Sale/Time
+VA
+Veterans Administration
+Sale or Financing Concessions
+w
+Withdrawn Date
+Date of Sale/Time
+wo
+Walk Out Basement
+Basement & Finished Rooms Below Grade
+Woods
+Woods View
+View
+Wtr
+Water View
+View
+WtrFr
+Water Frontage
+Location
+wu
+Walk Up Basement
+Basement & Finished Rooms Below Grade
+UAD Version 9/2011 (Updated 1/2014)
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Certification
+Form SCNLGL - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Serial# 452C540F
+esign.alamode.com/verify
+
+
+Serial# 452C540F
+esign.alamode.com/verify
+Errors & Omissions Insurance
+Form SCNLGL - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Serial# 452C540F
+esign.alamode.com/verify

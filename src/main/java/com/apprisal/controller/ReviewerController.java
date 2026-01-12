@@ -14,6 +14,8 @@ import org.springframework.lang.NonNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Controller for reviewer dashboard and batch review workflow.
@@ -27,17 +29,20 @@ public class ReviewerController {
     private final AuditLogService auditLogService;
     private final VerificationService verificationService;
     private final QCResultRepository qcResultRepository;
+    private final ObjectMapper objectMapper;
 
     public ReviewerController(DashboardService dashboardService,
             BatchService batchService,
             AuditLogService auditLogService,
             VerificationService verificationService,
-            QCResultRepository qcResultRepository) {
+            QCResultRepository qcResultRepository,
+            ObjectMapper objectMapper) {
         this.dashboardService = dashboardService;
         this.batchService = batchService;
         this.auditLogService = auditLogService;
         this.verificationService = verificationService;
         this.qcResultRepository = qcResultRepository;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/dashboard")
@@ -125,14 +130,40 @@ public class ReviewerController {
         QCResult qcResult = verificationService.getForVerification(qcResultId);
         // Get ALL rule results for full visibility (not just verification items)
         List<QCRuleResult> allRuleResults = verificationService.getAllRuleResults(qcResultId);
+        BatchFile batchFile = qcResult.getBatchFile();
 
         model.addAttribute("user", user);
         model.addAttribute("qcResult", qcResult);
-        model.addAttribute("batchFile", qcResult.getBatchFile());
+        model.addAttribute("batchFile", batchFile);
         model.addAttribute("allRuleResults", allRuleResults);
         model.addAttribute("currentPage", "verify");
 
+        // Extract page_index from OCR data for frontend mapping
+        String pageIndex = extractPageIndex(batchFile.getOcrData());
+        if (pageIndex != null) {
+            model.addAttribute("pageIndex", pageIndex);
+        }
+
         return "reviewer/verify-file";
+    }
+
+    /**
+     * Extract page_index from OCR JSON data for frontend navigation.
+     */
+    private String extractPageIndex(String ocrJson) {
+        if (ocrJson == null || ocrJson.isEmpty()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(ocrJson);
+            JsonNode pageIndex = root.get("page_index");
+            if (pageIndex != null) {
+                return pageIndex.toString();
+            }
+        } catch (Exception e) {
+            // Log and return null on parse error
+        }
+        return null;
     }
 
     /**

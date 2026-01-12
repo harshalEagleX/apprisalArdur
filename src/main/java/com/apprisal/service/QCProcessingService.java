@@ -158,6 +158,7 @@ public class QCProcessingService {
                         .appraisalValue(pr.getAppraisalValue())
                         .engagementValue(pr.getEngagementValue())
                         .build();
+
                 qcResult.addRuleResult(ruleResult);
             }
         }

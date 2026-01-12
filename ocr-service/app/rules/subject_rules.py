@@ -160,18 +160,61 @@ def validate_borrower_name(ctx: ValidationContext) -> RuleResult:
     rpt_borrower = ctx.report.subject.borrower.strip().upper()
     eng_borrower = ctx.engagement_letter.borrower_name.strip().upper()
     
-    # Exact match check
-    if rpt_borrower != eng_borrower:
+    # fuzzy match Logic
+    from difflib import SequenceMatcher
+    
+    # 1. Exact match (normalized)
+    if rpt_borrower == eng_borrower:
         return RuleResult(
             rule_id="S-2",
             rule_name="Borrower Name Validation",
-            status=RuleStatus.FAIL,
-            message=f"Borrower name mismatch. Report shows '{ctx.report.subject.borrower}' but order form shows '{ctx.engagement_letter.borrower_name}'.",
+            status=RuleStatus.PASS,
+            message="Borrower names match exactly."
+        )
+
+    # 2. Token Set Match (handles order, extra spaces)
+    def get_tokens(s):
+        # Remove punctuation and split
+        clean = re.sub(r'[^\w\s]', '', s)
+        return set(clean.split())
+        
+    rpt_tokens = get_tokens(rpt_borrower)
+    eng_tokens = get_tokens(eng_borrower)
+    
+    # Check similarity ratio
+    matcher = SequenceMatcher(None, rpt_borrower, eng_borrower)
+    similarity = matcher.ratio()
+    
+    # If high similarity (> 85%) or Token Subset (missing middle name), return WARNING/VERIFY instead of FAIL
+    is_subset = rpt_tokens.issubset(eng_tokens) or eng_tokens.issubset(rpt_tokens)
+    
+    if similarity > 0.85 or (is_subset and len(rpt_tokens) > 0 and len(eng_tokens) > 0):
+        # It's a match but with minor differences (typo or middle name)
+        status = RuleStatus.WARNING
+        msg_prefix = "Minor mismatch" if similarity > 0.85 else "Partial match (middle name/initial difference)"
+        
+        return RuleResult(
+            rule_id="S-2",
+            rule_name="Borrower Name Validation",
+            status=status,
+            message=f"{msg_prefix}: '{ctx.report.subject.borrower}' vs '{ctx.engagement_letter.borrower_name}'.",
             appraisal_value=str(ctx.report.subject.borrower),
             engagement_value=str(ctx.engagement_letter.borrower_name),
-            review_required=True,
-            details={"report": rpt_borrower, "engagement": eng_borrower}
+            review_required=True, # Still want human lookup
+            details={"report": rpt_borrower, "engagement": eng_borrower, "similarity": round(similarity, 2)}
         )
+    
+    # 3. Significant Mismatch -> FAIL
+    return RuleResult(
+        rule_id="S-2",
+        rule_name="Borrower Name Validation",
+        status=RuleStatus.FAIL,
+        message=f"Borrower name mismatch. Report shows '{ctx.report.subject.borrower}' but order form shows '{ctx.engagement_letter.borrower_name}'.",
+        appraisal_value=str(ctx.report.subject.borrower),
+        engagement_value=str(ctx.engagement_letter.borrower_name),
+        review_required=True,
+        details={"report": rpt_borrower, "engagement": eng_borrower, "similarity": round(similarity, 2)}
+    )
     
     # Check for co-borrower (if present in engagement but missing in report)
     # Note: This would require co-borrower field in EngagementLetter model

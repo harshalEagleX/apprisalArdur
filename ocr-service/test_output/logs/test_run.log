@@ -1,153 +1,170 @@
-2025-12-17 00:54:28 - OCRTest - INFO - ======================================================================
-2025-12-17 00:54:28 - OCRTest - INFO - OCR EXTRACTION AND QC RULES TEST
-2025-12-17 00:54:28 - OCRTest - INFO - Started: 2025-12-17T00:54:28.000864
-2025-12-17 00:54:28 - OCRTest - INFO - ======================================================================
-2025-12-17 00:54:28 - OCRTest - INFO - 
+2025-12-17 22:52:13 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:13 - OCRTest - INFO - OCR EXTRACTION AND QC RULES TEST - ALL FILES
+2025-12-17 22:52:13 - OCRTest - INFO - Started: 2025-12-17T22:52:13.039899
+2025-12-17 22:52:13 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:13 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:13 - OCRTest - INFO - TESTING: apprisal_002
+2025-12-17 22:52:13 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:13 - OCRTest - INFO -   Step 1: OCR Extraction...
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - EXTRACTING: apprisal_002.pdf
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2025-12-17 22:52:13 - OCRTest - INFO - Extraction time: 108ms
+2025-12-17 22:52:13 - OCRTest - INFO - Total pages: 34
+2025-12-17 22:52:13 - OCRTest - INFO - Total characters extracted: 98426
+2025-12-17 22:52:13 - OCRTest - INFO - Total words extracted: 13929
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - EXTRACTING: engagement_002.pdf
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2025-12-17 22:52:13 - OCRTest - INFO - Extraction time: 28ms
+2025-12-17 22:52:13 - OCRTest - INFO - Total pages: 10
+2025-12-17 22:52:13 - OCRTest - INFO - Total characters extracted: 29433
+2025-12-17 22:52:13 - OCRTest - INFO - Total words extracted: 4443
+2025-12-17 22:52:13 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/apprisal_002_appraisal.txt
+2025-12-17 22:52:13 - OCRTest - INFO -   Saved 98426 characters to apprisal_002_appraisal.txt
+2025-12-17 22:52:13 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/apprisal_002_engagement.txt
+2025-12-17 22:52:13 - OCRTest - INFO -   Saved 29433 characters to apprisal_002_engagement.txt
+2025-12-17 22:52:13 - OCRTest - INFO -   Step 2: Field Extraction...
+2025-12-17 22:52:13 - OCRTest - INFO - Extracting structured fields using ExtractionService...
+2025-12-17 22:52:13 - OCRTest - INFO - Extracted 11 appraisal fields and 7 engagement fields
+2025-12-17 22:52:13 - OCRTest - INFO -   Step 3: Building Validation Context...
+2025-12-17 22:52:13 - OCRTest - INFO - Building validation context...
+2025-12-17 22:52:13 - OCRTest - INFO - Validation context built successfully
+2025-12-17 22:52:13 - OCRTest - INFO -   Step 4: Executing QC Rules...
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - Executed 17 rules
+2025-12-17 22:52:13 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Address (Report)
+2025-12-17 22:52:13 - OCRTest - WARNING -   ⚠️  WARNING: Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
+2025-12-17 22:52:13 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: Map Reference is present. Census Tract not provided.
+2025-12-17 22:52:13 - OCRTest - WARNING -   ❌ FAIL: Occupant status is missing or blank.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
+2025-12-17 22:52:13 - OCRTest - WARNING -   ❌ FAIL: Please correct the lender's name so it reflects as: United American Mortgage Corporation
+2025-12-17 22:52:13 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Rights Appraised
+2025-12-17 22:52:13 - OCRTest - WARNING -   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2025-12-17 22:52:13 - OCRTest - WARNING -   ⚠️  WARNING: Did/Did Not Analyze Contract checkbox not detected. Please verify manually.
+2025-12-17 22:52:13 - OCRTest - WARNING -   ⚠️  WARNING: Contract Price not extracted from report. Please verify manually.
+2025-12-17 22:52:13 - OCRTest - WARNING -   ⚠️  WARNING: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: Financial assistance information is consistent.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
+2025-12-17 22:52:13 - OCRTest - INFO -   ✓ Completed: 7 PASS, 3 FAIL, 4 WARNING, 3 VERIFY
+2025-12-17 22:52:13 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:13 - OCRTest - INFO - TESTING: apprisal_003
+2025-12-17 22:52:13 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:13 - OCRTest - INFO -   Step 1: OCR Extraction...
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - EXTRACTING: apprisal_003.pdf
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2025-12-17 22:52:13 - OCRTest - INFO - Extraction time: 121ms
+2025-12-17 22:52:13 - OCRTest - INFO - Total pages: 45
+2025-12-17 22:52:13 - OCRTest - INFO - Total characters extracted: 114295
+2025-12-17 22:52:13 - OCRTest - INFO - Total words extracted: 16138
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - EXTRACTING: engagement_003.pdf
+2025-12-17 22:52:13 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:13 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2025-12-17 22:52:13 - OCRTest - INFO - Extraction time: 366ms
+2025-12-17 22:52:13 - OCRTest - INFO - Total pages: 10
+2025-12-17 22:52:13 - OCRTest - INFO - Total characters extracted: 29418
+2025-12-17 22:52:13 - OCRTest - INFO - Total words extracted: 4449
+2025-12-17 22:52:13 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/apprisal_003_appraisal.txt
+2025-12-17 22:52:13 - OCRTest - INFO -   Saved 114295 characters to apprisal_003_appraisal.txt
+2025-12-17 22:52:13 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/apprisal_003_engagement.txt
+2025-12-17 22:52:13 - OCRTest - INFO -   Saved 29418 characters to apprisal_003_engagement.txt
+2025-12-17 22:52:13 - OCRTest - INFO -   Step 2: Field Extraction...
+2025-12-17 22:52:13 - OCRTest - INFO - Extracting structured fields using ExtractionService...
+2025-12-17 22:52:14 - OCRTest - INFO - Extracted 11 appraisal fields and 6 engagement fields
+2025-12-17 22:52:14 - OCRTest - INFO -   Step 3: Building Validation Context...
+2025-12-17 22:52:14 - OCRTest - INFO - Building validation context...
+2025-12-17 22:52:14 - OCRTest - INFO - Validation context built successfully
+2025-12-17 22:52:14 - OCRTest - INFO -   Step 4: Executing QC Rules...
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - Executed 17 rules
+2025-12-17 22:52:14 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Address (Report)
+2025-12-17 22:52:14 - OCRTest - WARNING -   ❌ FAIL: Borrower name mismatch. Report shows 'secure a professional inspection of the property' but order form shows 'Jose Luis Arellano; Odilon Diaz'.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
+2025-12-17 22:52:14 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Map Reference and Census Tract are present and valid.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ❌ FAIL: Occupant status is missing or blank.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Lender/Client information matches engagement letter.
+2025-12-17 22:52:14 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Rights Appraised
+2025-12-17 22:52:14 - OCRTest - WARNING -   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Did/Did Not Analyze Contract checkbox not detected. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Contract Price not extracted from report. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✓ Completed: 7 PASS, 3 FAIL, 4 WARNING, 3 VERIFY
+2025-12-17 22:52:14 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:14 - OCRTest - INFO - TESTING: apprisal_004
+2025-12-17 22:52:14 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:14 - OCRTest - INFO -   Step 1: OCR Extraction...
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - EXTRACTING: apprisal_004.pdf
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2025-12-17 22:52:14 - OCRTest - INFO - Extraction time: 167ms
+2025-12-17 22:52:14 - OCRTest - INFO - Total pages: 30
+2025-12-17 22:52:14 - OCRTest - INFO - Total characters extracted: 67009
+2025-12-17 22:52:14 - OCRTest - INFO - Total words extracted: 10350
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - EXTRACTING: engagement_004.pdf
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2025-12-17 22:52:14 - OCRTest - INFO - Extraction time: 75ms
+2025-12-17 22:52:14 - OCRTest - INFO - Total pages: 10
+2025-12-17 22:52:14 - OCRTest - INFO - Total characters extracted: 29718
+2025-12-17 22:52:14 - OCRTest - INFO - Total words extracted: 4490
+2025-12-17 22:52:14 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/apprisal_004_appraisal.txt
+2025-12-17 22:52:14 - OCRTest - INFO -   Saved 67009 characters to apprisal_004_appraisal.txt
+2025-12-17 22:52:14 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/apprisal_004_engagement.txt
+2025-12-17 22:52:14 - OCRTest - INFO -   Saved 29718 characters to apprisal_004_engagement.txt
+2025-12-17 22:52:14 - OCRTest - INFO -   Step 2: Field Extraction...
+2025-12-17 22:52:14 - OCRTest - INFO - Extracting structured fields using ExtractionService...
+2025-12-17 22:52:14 - OCRTest - INFO - Extracted 14 appraisal fields and 6 engagement fields
+2025-12-17 22:52:14 - OCRTest - INFO -   Step 3: Building Validation Context...
+2025-12-17 22:52:14 - OCRTest - INFO - Building validation context...
+2025-12-17 22:52:14 - OCRTest - INFO - Validation context built successfully
+2025-12-17 22:52:14 - OCRTest - INFO -   Step 4: Executing QC Rules...
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+2025-12-17 22:52:14 - OCRTest - INFO - ============================================================
+2025-12-17 22:52:14 - OCRTest - INFO - Executed 17 rules
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Property address components match engagement letter.
+2025-12-17 22:52:14 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Borrower Name (Report)
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
+2025-12-17 22:52:14 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Map Reference and Census Tract are present and valid.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ❌ FAIL: Occupant status is missing or blank.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Lender/Client information matches engagement letter.
+2025-12-17 22:52:14 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Rights Appraised
+2025-12-17 22:52:14 - OCRTest - WARNING -   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Did/Did Not Analyze Contract checkbox not detected. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Contract Price not extracted from report. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - WARNING -   ⚠️  WARNING: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
+2025-12-17 22:52:14 - OCRTest - INFO -   ✓ Completed: 8 PASS, 2 FAIL, 4 WARNING, 3 VERIFY
+2025-12-17 22:52:14 - OCRTest - INFO - 
 ======================================================================
-2025-12-17 00:54:28 - OCRTest - INFO - STEP 1: OCR EXTRACTION
-2025-12-17 00:54:28 - OCRTest - INFO - ======================================================================
-2025-12-17 00:54:28 - OCRTest - INFO - ============================================================
-2025-12-17 00:54:28 - OCRTest - INFO - EXTRACTING: apprisal_002.pdf
-2025-12-17 00:54:28 - OCRTest - INFO - ============================================================
-2025-12-17 00:54:28 - OCRTest - INFO - Starting OCR extraction...
-2025-12-17 00:55:40 - OCRTest - INFO - Total pages: 34
-2025-12-17 00:55:40 - OCRTest - INFO - Extraction time: 72752ms
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 1: method=ExtractionMethod.TESSERACT, confidence=0.75, words=184
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 2: method=ExtractionMethod.TESSERACT, confidence=0.80, words=624
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 3: method=ExtractionMethod.TESSERACT, confidence=0.80, words=592
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 4: method=ExtractionMethod.TESSERACT, confidence=0.80, words=357
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 5: method=ExtractionMethod.TESSERACT, confidence=0.80, words=545
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 6: method=ExtractionMethod.TESSERACT, confidence=0.80, words=1098
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 7: method=ExtractionMethod.TESSERACT, confidence=0.80, words=1044
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 8: method=ExtractionMethod.TESSERACT, confidence=0.80, words=781
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 9: method=ExtractionMethod.TESSERACT, confidence=0.80, words=1186
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 10: method=ExtractionMethod.TESSERACT, confidence=0.80, words=1170
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 11: method=ExtractionMethod.TESSERACT, confidence=0.80, words=1119
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 12: method=ExtractionMethod.TESSERACT, confidence=0.60, words=97
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 13: method=ExtractionMethod.TESSERACT, confidence=0.70, words=270
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 14: method=ExtractionMethod.TESSERACT, confidence=0.70, words=134
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 15: method=ExtractionMethod.TESSERACT, confidence=0.70, words=123
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 16: method=ExtractionMethod.TESSERACT, confidence=0.70, words=143
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 17: method=ExtractionMethod.TESSERACT, confidence=0.70, words=313
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 18: method=ExtractionMethod.TESSERACT, confidence=0.60, words=274
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 19: method=ExtractionMethod.TESSERACT, confidence=0.75, words=74
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 20: method=ExtractionMethod.TESSERACT, confidence=0.80, words=220
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 21: method=ExtractionMethod.TESSERACT, confidence=0.75, words=178
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 22: method=ExtractionMethod.TESSERACT, confidence=0.80, words=248
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 23: method=ExtractionMethod.TESSERACT, confidence=0.80, words=808
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 24: method=ExtractionMethod.TESSERACT, confidence=0.50, words=599
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 25: method=ExtractionMethod.TESSERACT, confidence=0.65, words=140
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 26: method=ExtractionMethod.TESSERACT, confidence=0.70, words=296
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 27: method=ExtractionMethod.TESSERACT, confidence=0.75, words=579
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 28: method=ExtractionMethod.TESSERACT, confidence=0.70, words=221
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 29: method=ExtractionMethod.TESSERACT, confidence=0.80, words=431
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 30: method=ExtractionMethod.TESSERACT, confidence=0.70, words=791
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 31: method=ExtractionMethod.TESSERACT, confidence=0.70, words=621
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 32: method=ExtractionMethod.TESSERACT, confidence=0.35, words=128
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 33: method=ExtractionMethod.TESSERACT, confidence=0.55, words=70
-2025-12-17 00:55:40 - OCRTest - DEBUG -   Page 34: method=ExtractionMethod.TESSERACT, confidence=0.60, words=289
-2025-12-17 00:55:40 - OCRTest - INFO - Total characters extracted: 95313
-2025-12-17 00:55:40 - OCRTest - INFO - Total words extracted: 15747
-2025-12-17 00:55:40 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/appraisal_extracted_text.txt
-2025-12-17 00:55:40 - OCRTest - INFO -   Saved 95313 characters to appraisal_extracted_text.txt
-2025-12-17 00:55:40 - OCRTest - INFO - ============================================================
-2025-12-17 00:55:40 - OCRTest - INFO - EXTRACTING: engagement_002.pdf
-2025-12-17 00:55:40 - OCRTest - INFO - ============================================================
-2025-12-17 00:55:40 - OCRTest - INFO - Starting OCR extraction...
-2025-12-17 00:55:59 - OCRTest - INFO - Total pages: 10
-2025-12-17 00:55:59 - OCRTest - INFO - Extraction time: 18517ms
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 1: method=ExtractionMethod.TESSERACT, confidence=0.65, words=159
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 2: method=ExtractionMethod.TESSERACT, confidence=0.75, words=459
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 3: method=ExtractionMethod.TESSERACT, confidence=0.80, words=590
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 4: method=ExtractionMethod.TESSERACT, confidence=0.75, words=527
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 5: method=ExtractionMethod.TESSERACT, confidence=0.65, words=476
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 6: method=ExtractionMethod.TESSERACT, confidence=0.70, words=578
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 7: method=ExtractionMethod.TESSERACT, confidence=0.80, words=708
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 8: method=ExtractionMethod.TESSERACT, confidence=0.80, words=576
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 9: method=ExtractionMethod.TESSERACT, confidence=0.80, words=407
-2025-12-17 00:55:59 - OCRTest - DEBUG -   Page 10: method=ExtractionMethod.TESSERACT, confidence=0.50, words=7
-2025-12-17 00:55:59 - OCRTest - INFO - Total characters extracted: 29476
-2025-12-17 00:55:59 - OCRTest - INFO - Total words extracted: 4487
-2025-12-17 00:55:59 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/engagement_extracted_text.txt
-2025-12-17 00:55:59 - OCRTest - INFO -   Saved 29476 characters to engagement_extracted_text.txt
-2025-12-17 00:55:59 - OCRTest - INFO - 
-2025-12-17 00:55:59 - OCRTest - INFO - ======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - STEP 2: EXTRACT STRUCTURED FIELDS
-2025-12-17 00:55:59 - OCRTest - INFO - ======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - Extracting structured fields using ExtractionService...
-2025-12-17 00:55:59 - OCRTest - INFO - Extracted 21 appraisal fields and 7 engagement fields
-2025-12-17 00:55:59 - OCRTest - INFO - Saved extracted fields to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/extracted_fields.json
-2025-12-17 00:55:59 - OCRTest - DEBUG - Appraisal Fields:
-2025-12-17 00:55:59 - OCRTest - DEBUG -   property_address: 25126 N Jack Tone Rd
-2025-12-17 00:55:59 - OCRTest - DEBUG -   city: Acampo
-2025-12-17 00:55:59 - OCRTest - DEBUG -   state: CA
-2025-12-17 00:55:59 - OCRTest - DEBUG -   zip_code: 95220
-2025-12-17 00:55:59 - OCRTest - DEBUG -   county: of
-2025-12-17 00:55:59 - OCRTest - DEBUG -   borrower_name: Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa.
-2025-12-17 00:55:59 - OCRTest - DEBUG -   owner_of_public_record: to buyer under conditions whereby: (1) buyer and s
-2025-12-17 00:55:59 - OCRTest - DEBUG -   legal_description: SMALL FARMS TR MAP 6 PG 48 PART OF LOT 13
-2025-12-17 00:55:59 - OCRTest - DEBUG -   apn: 021-041-13 Tax Year 2024 R.E. Taxes $ 487
-2025-12-17 00:55:59 - OCRTest - DEBUG -   tax_year: 2024
-2025-12-17 00:55:59 - OCRTest - DEBUG -   re_taxes: 487.0
-2025-12-17 00:55:59 - OCRTest - DEBUG -   neighborhood_name: arenotapprasalfactors. CS
-2025-12-17 00:55:59 - OCRTest - DEBUG -   occupant: Tenant
-2025-12-17 00:55:59 - OCRTest - DEBUG -   lender_name: United American Mortgage Corporation
-2025-12-17 00:55:59 - OCRTest - DEBUG -   property_rights: Fee Simple
-2025-12-17 00:55:59 - OCRTest - DEBUG -   contract_price: 475000.0
-2025-12-17 00:55:59 - OCRTest - DEBUG -   is_seller_owner: True
-2025-12-17 00:55:59 - OCRTest - DEBUG -   has_financial_assistance: False
-2025-12-17 00:55:59 - OCRTest - DEBUG -   owner_record_data_source: County / Contract
-2025-12-17 00:55:59 - OCRTest - DEBUG -   offered_for_sale_12mo: True
-2025-12-17 00:55:59 - OCRTest - DEBUG -   data_source: -@ Are the units, common elements, and recreation facilities complete? ' | Yes | | No IfNo, describe the status of completion.
-2025-12-17 00:55:59 - OCRTest - DEBUG - Engagement Fields:
-2025-12-17 00:55:59 - OCRTest - DEBUG -   borrower_name: Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa
-2025-12-17 00:55:59 - OCRTest - DEBUG -   property_address: 25126 N Jack Tone Rd Acampo CA 95220 Property County: San Joaquin
-2025-12-17 00:55:59 - OCRTest - DEBUG -   lender_name: United American Mortgage Corporation
-2025-12-17 00:55:59 - OCRTest - DEBUG -   assignment_type: Purchase
-2025-12-17 00:55:59 - OCRTest - DEBUG -   city: Acampo
-2025-12-17 00:55:59 - OCRTest - DEBUG -   state: CA
-2025-12-17 00:55:59 - OCRTest - DEBUG -   zip_code: 95220
-2025-12-17 00:55:59 - OCRTest - INFO - 
-======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - STEP 3: BUILD VALIDATION CONTEXT
-2025-12-17 00:55:59 - OCRTest - INFO - ======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - Building validation context...
-2025-12-17 00:55:59 - OCRTest - INFO - Validation context built successfully
-2025-12-17 00:55:59 - OCRTest - INFO - 
-======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - STEP 4: EXECUTE QC RULES (S-1 to S-12, C-1 to C-5)
-2025-12-17 00:55:59 - OCRTest - INFO - ======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - ============================================================
-2025-12-17 00:55:59 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
-2025-12-17 00:55:59 - OCRTest - INFO - ============================================================
-2025-12-17 00:55:59 - OCRTest - INFO - Executed 17 rules
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Property address components match engagement letter.
-2025-12-17 00:55:59 - OCRTest - WARNING -   ❌ FAIL: Borrower name mismatch. Report shows 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa.' but order form shows 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Legal description and tax data are complete and valid.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'arenotapprasalfactors. CS' is provided.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Map Reference and Census Tract not provided (N/A for this report type).
-2025-12-17 00:55:59 - OCRTest - WARNING -   ⚠️  WARNING: Property is tenant-occupied. Please provide lease dates.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Lender/Client information matches engagement letter.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Property rights appraised: Fee Simple
-2025-12-17 00:55:59 - OCRTest - WARNING -   ⚠️  WARNING: Property was offered for sale in past 12 months. Missing: MLS Number, Days on Market (DOM), List Price, List Date.
-2025-12-17 00:55:59 - OCRTest - WARNING -   ⚠️  WARNING: Did/Did Not Analyze Contract checkbox not detected. Please verify manually.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Contract Price: $475,000.00
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Owner of record data source is provided.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Financial assistance information is consistent.
-2025-12-17 00:55:59 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
-2025-12-17 00:55:59 - OCRTest - INFO - Saved rule results to: rule_results.json
-2025-12-17 00:55:59 - OCRTest - INFO - 
-======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - TEST COMPLETED SUCCESSFULLY
-2025-12-17 00:55:59 - OCRTest - INFO - Output directory: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output
-2025-12-17 00:55:59 - OCRTest - INFO - ======================================================================
-2025-12-17 00:55:59 - OCRTest - INFO - Generated files:
-2025-12-17 00:55:59 - OCRTest - INFO -   1. /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/appraisal_extracted_text.txt
-2025-12-17 00:55:59 - OCRTest - INFO -   2. /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/engagement_extracted_text.txt
-2025-12-17 00:55:59 - OCRTest - INFO -   3. /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/extracted_fields.json
-2025-12-17 00:55:59 - OCRTest - INFO -   4. /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/rule_results.json
-2025-12-17 00:55:59 - OCRTest - INFO -   5. /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/logs/test_run.log
-2025-12-17 00:55:59 - OCRTest - INFO -   6. /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/logs/rule_results.log
+2025-12-17 22:52:14 - OCRTest - INFO - SUMMARY REPORT
+2025-12-17 22:52:14 - OCRTest - INFO - ======================================================================
+2025-12-17 22:52:14 - OCRTest - INFO - 
+Summary saved to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisal/ocr-service/test_output/test_summary.json
+2025-12-17 22:52:14 - OCRTest - INFO - TEST COMPLETED

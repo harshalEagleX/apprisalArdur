@@ -38,6 +38,7 @@ public class PythonRuleResult {
     private boolean reviewRequired;
 
     // Getters and Setters
+
     public String getRuleId() {
         return ruleId;
     }

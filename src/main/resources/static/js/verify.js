@@ -33,7 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update submit button state
     updateSubmitButton();
 
+    // PERFORMANCE: Initialize PDF navigation (lightweight event delegation)
+    initPdfNavigation();
+
     // Save scroll position on scroll
+
     const panelBody = document.querySelector('.panel-body');
     if (panelBody) {
         panelBody.addEventListener('scroll', debounce(() => {

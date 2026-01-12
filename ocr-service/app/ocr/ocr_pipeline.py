@@ -368,7 +368,9 @@ class OCRPipeline:
                 clean_image = self.preprocessor.preprocess_image(raw_image)
                 
                 # Run Tesseract on preprocessed image
-                text = self._tesseract_extract(image=clean_image, config='--psm 6')
+                # Use default config (PSM 4) or allow override
+                config = self.tesseract_config if hasattr(self, 'tesseract_config') else '--psm 4'
+                text = self._tesseract_extract(image=clean_image, config=config)
                 word_count = len(text.split())
                 
                 # Store results

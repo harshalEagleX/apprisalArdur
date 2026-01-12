@@ -127,28 +127,20 @@ class ImagePreprocessor:
         
         logger.debug(f"Preprocessing image: shape={image.shape}")
         
-        # Step 1: Grayscale conversion
+        # Step 1: Grayscale conversion (Always safe and required for Tesseract)
         gray = self.grayscale_convert(image)
         
-        # Step 2: Denoising
-        denoised = self.denoise_image(gray)
+        # REMOVED: Denoising (Unsafe - blurs small text)
+        # REMOVED: Thresholding (Unsafe - Tesseract handles it better internally)
+        # REMOVED: Table Line Removal (Unsafe - deletes text touching lines)
         
-        # Step 3: Binary thresholding
-        thresholded = self.apply_threshold(denoised)
-        
-        # Step 4: Table line removal (if enabled)
-        if self.enable_table_removal:
-            clean = self.remove_table_lines(thresholded)
-        else:
-            clean = thresholded
-        
-        # Step 5: Deskewing (optional - only if significant rotation detected)
-        angle = self.detect_skew(clean)
+        # Step 2: Deskewing (only if significant rotation detected)
+        angle = self.detect_skew(gray)  # Use grayscale for skew detection
         if abs(angle) > 0.5:  # Only deskew if angle > 0.5 degrees
             logger.debug(f"Detected skew angle: {angle:.2f}°")
-            deskewed = self.deskew_image(clean, angle)
+            deskewed = self.deskew_image(gray, angle)
         else:
-            deskewed = clean
+            deskewed = gray
         
         logger.debug(f"Preprocessing complete: input_shape={image.shape}, output_shape={deskewed.shape}")
         return deskewed

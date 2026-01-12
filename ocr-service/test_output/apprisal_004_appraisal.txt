@@ -1,0 +1,3734 @@
+============================================================
+EXTRACTED TEXT FROM: apprisal_004.pdf
+Extraction Date: 2025-12-17T22:52:14.322530
+Total Characters: 67009
+Total Words: 10350
+============================================================
+
+Eric M Glenn
+2025110386
+R25-000151
+4916 S Linder Ave
+Chicago
+IL
+60638
+Belen Guido Ballesteros
+Lohrer Ernest N Jr
+Cook
+PART W2W2 S09 T38N R13E 3P
+19091170310000
+2023
+2,066
+Stickney-Crane View Archer
+16984
+8208.00
+0
+0
+Everett Financial, Inc DBA Supreme Lending
+14801 Quorum Dr, Ste 300, Dallas, TX, 75254
+DOM 5;MRED#:12013260,List Price:$199,000,Status:EXP List Date:03/26/2024 Orig List
+Price:$199,000,Off Market:03/18/2025
+Arms length sale;The subject is being sold for $200,000 with $0 in concessions to the buyer
+200,000
+10/14/2025
+MRED/Contract
+$0;;
+68
+705
+315
+0
+155
+80
+80
+10
+5
+5
+NORTH:I55,SOUTH:63rd Street, EAST:Cicero Ave, WEST:Central Ave
+The subject's neighborhood consists of different sized houses on average city lots and appears to receive market
+acceptance.
+Current single family market trends are believed to be stable, with in similar sales listed on
+area market appear to be in balance.
+50X125
+6250 sf
+Rectangular
+N;Res;CtyStr
+R-1
+Residential Single-unit district
+Concrete
+Concrete
+X
+17031C0492J
+08/19/2008
+    No location adjustments or view adjustment is needed for the Subject or Comps proximity to external influences including powerlines, arterial
+roads, rail roads, parks/lakes, schools and other non residentials It is typical in this market to be within .1 miles of these.
+1
+Ranch
+1952
+20
+0
+0
+None/None
+Frame/C5
+Asphalt/C4
+None/None
+Dbl Hung/Cas/C3
+Yes/C3
+Yes/C3
+HW/Ct/Cpt/C5
+DW/C5
+Wd/Paint/C5
+CerTile/C5
+CerTile/C5
+GAS
+None
+0
+Rear
+None
+0
+Link
+None
+None
+2
+Concrete
+2
+0
+None
+5
+3
+1.0
+1,107
+No additional features.
+C5;No updates in the prior 15 years;Improvements
+are basically in C4 condition. Cosmetic repairs do exist throughout the dwelling.
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+SUBJECT
+CONTRACT
+NEIGHBORHOOD
+SITE
+IMPROVEMENTS
+The purpose of this summary appraisal report is to provide the lender/client with an accurate, and adequately supported, opinion of the market value of the subject property.
+Property Address
+City
+State
+Zip Code
+Borrower
+Owner of Public Record
+County
+Legal Description
+Assessor's Parcel #
+Tax Year
+R.E. Taxes $
+Neighborhood Name
+Map Reference
+Census Tract
+Occupant
+Owner
+Tenant
+Vacant
+Special Assessments $
+PUD
+HOA $
+per year
+per month
+Property Rights Appraised
+Fee Simple
+Leasehold
+Other (describe)
+Assignment Type
+Purchase Transaction
+Refinance Transaction
+Other (describe)
+Lender/Client
+Address
+Is the subject property currently offered for sale or has it been offered for sale in the twelve months prior to the effective date of this appraisal?
+Yes
+No
+Report data source(s) used, offering price(s), and date(s).
+I
+did
+did not analyze the contract for sale for the subject purchase transaction. Explain the results of the analysis of the contract for sale or why the analysis was not
+performed.
+Contract Price $
+Date of Contract
+Is the property seller the owner of public record?
+Yes
+No Data Source(s)
+Is there any financial assistance (loan charges, sale concessions, gift or downpayment assistance, etc.) to be paid by any party on behalf of the borrower?
+Yes
+No
+If Yes, report the total dollar amount and describe the items to be paid.
+Note: Race and the racial composition of the neighborhood are not appraisal factors.
+Neighborhood Characteristics
+Location
+Urban
+Suburban
+Rural
+Built-Up
+Over 75%
+25-75%
+Under 25%
+Growth
+Rapid
+Stable
+Slow
+One-Unit Housing Trends
+Property Values
+Increasing
+Stable
+Declining
+Demand/Supply
+Shortage
+In Balance
+Over Supply
+Marketing Time
+Under 3 mths
+3-6 mths
+Over 6 mths
+One-Unit Housing
+PRICE
+$ (000)
+AGE
+(yrs)
+Low
+High
+Pred.
+Present Land Use %
+One-Unit
+%
+2-4 Unit
+%
+Multi-Family
+%
+Commercial
+%
+Other
+%
+Neighborhood Boundaries
+Neighborhood Description
+Market Conditions (including support for the above conclusions)
+Dimensions
+Area
+Shape
+View
+Specific Zoning Classification
+Zoning Description
+Zoning Compliance
+Legal
+Legal Nonconforming (Grandfathered Use)
+No Zoning
+Illegal (describe)
+Is the highest and best use of subject property as improved (or as proposed per plans and specifications) the present use?
+Yes
+No
+If No, describe
+Utilities
+Public
+Other (describe)
+Public
+Other (describe)
+Electricity
+Gas
+Water
+Sanitary Sewer
+Off-site Improvements - Type
+Public
+Private
+Street
+Alley
+FEMA Special Flood Hazard Area
+Yes
+No
+FEMA Flood Zone
+FEMA Map #
+FEMA Map Date
+Are the utilities and off-site improvements typical for the market area?
+Yes
+No
+If No, describe
+Are there any adverse site conditions or external factors (easements, encroachments, environmental conditions, land uses, etc.)?
+Yes
+No
+If Yes, describe
+General Description
+Units
+One
+One with Accessory Unit
+# of Stories
+Type
+Det.
+Att.
+S-Det./End Unit
+Existing
+Proposed
+Under Const.
+Design (Style)
+Year Built
+Effective Age (Yrs)
+Foundation
+Concrete Slab
+Crawl Space
+Full Basement
+Partial Basement
+Basement Area
+sq.ft.
+Basement Finish
+%
+Outside Entry/Exit
+Sump Pump
+Evidence of
+Infestation
+Dampness
+Settlement
+Exterior Description
+materials/condition
+Foundation Walls
+Exterior Walls
+Roof Surface
+Gutters & Downspouts
+Window Type
+Storm Sash/Insulated
+Screens
+Interior
+materials/condition
+Floors
+Walls
+Trim/Finish
+Bath Floor
+Bath Wainscot
+Attic
+None
+Drop Stair
+Stairs
+Floor
+Scuttle
+Finished
+Heated
+Heating
+FWA
+HWBB
+Radiant
+Other
+Fuel
+Cooling
+Central Air Conditioning
+Individual
+Other
+Amenities
+Fireplace(s) #
+Patio/Deck
+Pool
+Woodstove(s) #
+Fence
+Porch
+Other
+Car Storage
+None
+Driveway
+# of Cars
+Driveway Surface
+Garage
+# of Cars
+Carport
+# of Cars
+Att.
+Det.
+Built-in
+Appliances
+Refrigerator
+Range/Oven
+Dishwasher
+Disposal
+Microwave
+Washer/Dryer
+Other (describe)
+Finished area above grade contains:
+Rooms
+Bedrooms
+Bath(s)
+Square Feet of Gross Living Area Above Grade
+Additional features (special energy efficient items, etc.).
+Describe the condition of the property (including needed repairs, deterioration, renovations, remodeling, etc.).
+Are there any physical deficiencies or adverse conditions that affect the livability, soundness, or structural integrity of the property?
+Yes
+No
+If Yes, describe
+Does the property generally conform to the neighborhood (functional utility, style, condition, use, construction, etc.)?
+Yes
+No
+If No, describe
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 1 of 6
+Fannie Mae Form 1004 March 2005
+
+
+2025110386
+R25-000151
+2
+215,000
+259,000
+7
+68,000
+295,000
+4916 S Linder Ave
+Chicago, IL 60638
+200,000
+180.67
+N;Res;
+Fee Simple
+6250 sf
+N;Res;CtyStr
+DT1;Ranch
+Q4
+73
+C5
+5
+3
+1.0
+1,107
+0sf
+Average
+GFA/None
+None Noted
+2gd2dw
+Patio
+MRED/Tax Records
+12/12/2025
+4747 S Lotus Ave
+Chicago, IL 60638
+0.22 miles NE
+175,000
+230.57
+MRED#:12180844;DOM 125
+MRED/Assessor
+ArmLth
+Conv;0
+s01/25;c12/24
+N;Res;
+Fee Simple
+3150 sf
+0
+N;Res;CtyStr
+DT1;Ranch
+Q4
+75
+0
+C4
+0
+3
+1
+1.0
+0
+759
++17,400
+0sf
+Average
+GFA/None
+None Noted
+1gd1dw
++2,500
+Patio
+19,900
+11.4
+11.4
+194,900
+MRED/Tax Records
+12/12/2025
+4439 S Lawler Ave
+Chicago, IL 60638
+0.84 miles NE
+190,000
+188.49
+MRED#:12499735;DOM 5
+MRED/Assessor
+ArmLth
+Conv;0
+s11/25;c10/25
+N;Res;
+Fee Simple
+7544 sf
+0
+N;Res;CtyStr
+DT1;Ranch
+Q4
+63
+0
+C5
+4
+2
+1.0
+0
+1,008
+0
+1008sf0sfin
+-8,000
+Average
+GFA/None
+None Noted
+None
++5,000
+Patio
+-3,000
+1.6
+6.8
+187,000
+MRED/Tax Records
+12/12/2025
+4930 S Luna Ave
+Chicago, IL 60638
+0.07 miles W
+225,000
+143.59
+MRED#:12205165;DOM 9
+MRED/Assessor
+ArmLth
+Conv;0
+s12/24;c11/24
+N;Res;
+Fee Simple
+3100 sf
+0
+N;Res;CtyStr
+DT1;Ranch
+Q4
+59
+0
+C4
+0
+5
+2
+1.0
+0
+1,567
+-23,000
+0sf
+Average
+GFA/CAC
+-2,000
+None Noted
+2gd2dw
+Patio
+-25,000
+11.1
+11.1
+200,000
+MRED/Tax Records
+12/12/2025
+MRED, PUBLIC RECORDS
+MRED, PUBLIC RECORDS
+There were no sales/transfers of the comparables#1- #3 within the past
+12 months.   The subject has been transferred/sold within the last 36 months .
+***PLEASE REFER TO ADDENDUM***
+200,000
+200,000
+313,398
+The income approach is appropriate for residential income property.  This approach is appropriate and was considered but not required by the client. The
+cost approach provides confirmation of value only.this approach is appropriate and was considered but not required by the client.  Market action of buyers
+and sellers are best analyzed by the sales comparison approach.  This approach, therefore, is given the greatest weight.
+200,000
+12/12/2025
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+SALES COMPARISON APPROACH
+RECONCILIATION
+There are
+comparable properties currently offered for sale in the subject neighborhood ranging in price from $
+to $
+.
+There are
+comparable sales in the subject neighborhood within the past twelve months ranging in sale price from $
+to $
+.
+FEATURE
+SUBJECT
+COMPARABLE SALE # 1
+COMPARABLE SALE # 2
+COMPARABLE SALE # 3
+Address
+Proximity to Subject
+Sale Price
+$
+$
+$
+$
+Sale Price/Gross Liv. Area
+$
+sq.ft. $
+sq.ft.
+$
+sq.ft.
+$
+sq.ft.
+Data Source(s)
+Verification Source(s)
+VALUE ADJUSTMENTS
+DESCRIPTION
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+Sales or Financing
+Concessions
+Date of Sale/Time
+Location
+Leasehold/Fee Simple
+Site
+View
+Design (Style)
+Quality of Construction
+Actual Age
+Condition
+Above Grade
+Total
+Bdrms.
+Baths
+Total
+Bdrms.
+Baths
+Total
+Bdrms.
+Baths
+Total
+Bdrms.
+Baths
+Room Count
+Gross Living Area
+sq.ft.
+sq.ft.
+sq.ft.
+sq.ft.
+Basement & Finished
+Rooms Below Grade
+Functional Utility
+Heating/Cooling
+Energy Efficient Items
+Garage/Carport
+Porch/Patio/Deck
+Net Adjustment (Total)
++
+-
++
+-
++
+-
+$
+$
+$
+Adjusted Sale Price
+of Comparables
+$
+$
+$
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+I
+did
+did not research the sale or transfer history of the subject property and comparable sales. If not, explain
+My research
+did
+did not reveal any prior sales or transfers of the subject property for the three years prior to the effective date of this appraisal.
+Data Source(s)
+My research
+did
+did not reveal any prior sales or transfers of the comparable sales for the year prior to the date of sale of the comparable sale.
+Data Source(s)
+Report the results of the research and analysis of the prior sale or transfer history of the subject property and comparable sales (report additional prior sales on page 3).
+ITEM
+SUBJECT
+COMPARABLE SALE #1
+COMPARABLE SALE #2
+COMPARABLE SALE #3
+Date of Prior Sale/Transfer
+Price of Prior Sale/Transfer
+Data Source(s)
+Effective Date of Data Source(s)
+Analysis of prior sale or transfer history of the subject property and comparable sales
+Summary of Sales Comparison Approach
+Indicated Value by Sales Comparison Approach $
+Indicated Value by: Sales Comparison Approach $
+Cost Approach (if developed) $
+Income Approach (if developed) $
+This appraisal is made
+"as is",
+subject to completion per plans and specifications on the basis of a hypothetical condition that the improvements have been
+completed,
+subject to the following repairs or alterations on the basis of a hypothetical condition that the repairs or alterations have been completed, or
+subject to the
+following required inspection based on the extraordinary assumption that the condition or deficiency does not require alteration or repair:
+Based on a complete visual inspection of the interior and exterior areas of the subject property, defined scope of work, statement of assumptions and limiting
+conditions, and appraiser's certification, my (our) opinion of the market value, as defined, of the real property that is the subject of this report is
+$
+, as of
+, which is the date of inspection and the effective date of this appraisal.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 2 of 6
+Fannie Mae Form 1004 March 2005
+
+
+2025110386
+R25-000151
+None
+.Estimated site value is based on recent sales
+Natl Bldg Manual
+Avg
+11/2025
+30,000
+1,107
+288.89
+319,801
+0
+140.00
+630
+95.00
+59,850
+379,651
+101,253
+101,253
+278,398
+5,000
+313,398
+20/75 =26.67% ACCRUED DEPRECIATION
+55
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+ADDITIONAL COMMENTS
+COST APPROACH
+INCOME
+PUD INFORMATION
+COST APPROACH TO VALUE (not required by Fannie Mae)
+Provide adequate information for the lender/client to replicate the below cost figures and calculations.
+Support for the opinion of site value (summary of comparable land sales or other methods for estimating site value)
+ESTIMATED
+REPRODUCTION OR
+REPLACEMENT COST NEW
+Source of cost data
+Quality rating from cost service
+Effective date of cost data
+Comments on Cost Approach (gross living area calculations, depreciation, etc.)
+OPINION OF SITE VALUE
+=$
+DWELLING
+Sq.Ft. @ $
+=$
+Sq.Ft. @ $
+=$
+=$
+Garage/Carport
+Sq.Ft. @ $
+=$
+Total Estimate of Cost-New
+=$
+Less
+Physical
+Functional
+External
+Depreciation
+=$(
+)
+Depreciated Cost of Improvements
+=$
+"As-is" Value of Site Improvements
+=$
+INDICATED VALUE BY COST APPROACH
+=$
+Estimated Remaining Economic Life (HUD and VA only)
+Years
+INCOME APPROACH TO VALUE (not required by Fannie Mae)
+Estimated Monthly Market Rent $
+X  Gross Rent Multiplier
+= $
+Indicated Value by Income Approach
+Summary of Income Approach (including support for market rent and GRM)
+PROJECT INFORMATION FOR PUDs (if applicable)
+Is the developer/builder in control of the Homeowners' Association (HOA)?
+Yes
+No
+Unit type(s)
+Detached
+Attached
+Provide the following information for PUDs ONLY if the developer/builder is in control of the HOA and the subject property is an attached dwelling unit.
+Legal Name of Project
+Total number of phases
+Total number of units
+Total number of units sold
+Total number of units rented
+Total number of units for sale
+Data source(s)
+Was the project created by the conversion of existing building(s) into a PUD?
+Yes
+No If Yes, date of conversion.
+Does the project contain any multi-dwelling units?
+Yes
+No Data Source
+Are the units, common elements, and recreation facilities complete?
+Yes
+No If No, describe the status of completion.
+Are the common elements leased to or by the Homeowners' Association?
+Yes
+No If Yes, describe the rental terms and options.
+Describe common elements and recreational facilities.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 3 of 6
+Fannie Mae Form 1004 March 2005
+
+
+2025110386
+R25-000151
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+This report form
+is designed
+to report an appraisal of
+a one-unit
+property or a
+one-unit
+property with an accessory
+unit;
+including
+a
+unit
+in
+a planned
+unit
+development
+(PUD).
+This report
+form
+is not
+designed to
+report
+an appraisal
+of
+a
+manufactured
+home
+or
+a
+unit
+in
+a
+condominium
+or
+cooperative
+project.
+This
+appraisal
+report
+is
+subject
+to
+the
+following
+scope
+of
+work,
+intended
+use,
+intended
+user,
+definition
+of
+market
+value,
+statement
+of
+assumptions
+and
+limiting
+conditions,
+and
+certifications.
+Modifications,
+additions,
+or
+deletions
+to
+the
+intended
+use,
+intended
+user,
+definition
+of
+market
+value,
+or
+assumptions
+and
+limiting
+conditions
+are
+not
+permitted.
+The
+appraiser
+may
+expand the scope
+of
+work to include
+any
+additional
+research
+or
+analysis necessary
+based on
+the
+complexity
+of
+this
+appraisal
+assignment.
+Modifications
+or
+deletions
+to
+the
+certifications
+are
+also
+not
+permitted.
+However,
+additional
+certifications
+that
+do
+not constitute
+material alterations to this appraisal report, such
+as those required
+by law or those related to the appraiser's
+continuing
+education
+or
+membership
+in
+an
+appraisal
+organization,
+are
+permitted.
+The scope
+of work for
+this appraisal is
+defined by
+the complexity
+of this appraisal assignment
+and the
+reporting
+requirements
+of
+this
+appraisal
+report
+form,
+including
+the
+following
+definition
+of
+market
+value,
+statement
+of
+assumptions
+and
+limiting
+conditions,
+and
+certifications.
+The
+appraiser
+must,
+at
+a
+minimum:
+(1)
+perform
+a
+complete
+visual
+inspection of the interior and exterior areas of the subject
+property, (2)
+inspect the neighborhood,
+(3) inspect each of the
+comparable
+sales
+from
+at
+least
+the street, (4)
+research,
+verify,
+and analyze
+data
+from
+reliable
+public
+and/or
+private
+sources,
+and (5) report his or her analysis, opinions, and conclusions
+in this appraisal report.
+The intended use
+of this appraisal report is for the lender/client to evaluate
+the property that is the
+subject
+of
+this
+appraisal
+for
+a
+mortgage
+finance
+transaction.
+The intended user of this appraisal report is the lender/client.
+The
+most
+probable
+price
+which
+a
+property
+should
+bring
+in
+a
+competitive
+and
+open
+market
+under
+all
+conditions
+requisite
+to
+a
+fair
+sale,
+the
+buyer
+and
+seller,
+each
+acting
+prudently,
+knowledgeably
+and
+assuming
+the price is not affected by undue stimulus. Implicit in this definition is the consummation of a sale as of a specified date and
+the passing of
+title from
+seller to buyer
+under
+conditions
+whereby: (1)
+buyer
+and seller are typically motivated;
+(2)
+both
+parties are well informed or well advised, and each acting in what he or she considers his or her own best interest; (3) a
+reasonable time is allowed for exposure in the open market; (4) payment is made in terms of cash in U. S. dollars or in terms
+of
+financial
+arrangements
+comparable
+thereto;
+and
+(5)
+the
+price
+represents
+the
+normal
+consideration
+for
+the
+property
+sold
+unaffected
+by
+special
+or
+creative
+financing
+or
+sales
+concessions*
+granted
+by
+anyone
+associated
+with
+the
+sale.
+*Adjustments
+to
+the
+comparables
+must
+be
+made
+for
+special
+or
+creative
+financing
+or
+sales
+concessions.
+No
+adjustments
+are
+necessary for those costs which are normally paid by sellers as a result of tradition or law in a market area; these costs are
+readily
+identifiable
+since
+the
+seller
+pays
+these
+costs
+in
+virtually
+all
+sales
+transactions.
+Special
+or
+creative
+financing
+adjustments
+can
+be
+made
+to
+the
+comparable
+property
+by
+comparisons
+to
+financing
+terms
+offered
+by
+a
+third
+party
+institutional
+lender that
+is not already involved
+in the property
+or transaction.
+Any
+adjustment
+should
+not be
+calculated
+on
+a mechanical
+dollar for
+dollar
+cost of the financing
+or concession
+but
+the dollar amount
+of any adjustment
+should
+approximate
+the market's
+reaction
+to
+the
+financing
+or
+concessions
+based
+on
+the
+appraiser's
+judgment.
+The
+appraiser's
+certification
+in
+this
+report
+is
+subject
+to
+the
+following
+assumptions
+and
+limiting
+conditions:
+1. The appraiser will not be responsible for matters of a legal nature that affect either the property being appraised or the title
+to it, except
+for information
+that he
+or she became
+aware of during
+the research involved
+in performing
+this appraisal.
+The
+appraiser assumes
+that the title
+is good
+and marketable and will not render any opinions
+about
+the title.
+2.
+The
+appraiser
+has
+provided
+a
+sketch
+in
+this
+appraisal
+report
+to
+show
+the
+approximate
+dimensions
+of
+the
+improvements.
+The
+sketch
+is
+included
+only
+to
+assist
+the
+reader
+in
+visualizing
+the
+property
+and
+understanding
+the
+appraiser's
+determination
+of its size.
+3. The
+appraiser
+has
+examined
+the
+available
+flood
+maps
+that
+are
+provided
+by
+the
+Federal
+Emergency
+Management
+Agency
+(or
+other data
+sources)
+and has noted
+in this appraisal
+report whether any
+portion
+of
+the subject
+site
+is located
+in
+an
+identified
+Special
+Flood
+Hazard
+Area.
+Because
+the
+appraiser
+is
+not
+a
+surveyor,
+he
+or
+she
+makes
+no
+guarantees,
+express
+or
+implied,
+regarding
+this
+determination.
+4. The appraiser will not give testimony or appear in court
+because he or she made an appraisal of the property in question,
+unless
+specific
+arrangements to
+do
+so
+have
+been
+made
+beforehand,
+or
+as
+otherwise
+required
+by
+law.
+5.
+The
+appraiser
+has
+noted
+in
+this
+appraisal
+report
+any
+adverse
+conditions
+(such
+as
+needed
+repairs,
+deterioration,
+the
+presence
+of
+hazardous
+wastes,
+toxic
+substances,
+etc.)
+observed
+during
+the
+inspection
+of
+the
+subject
+property
+or
+that
+he
+or
+she
+became
+aware
+of
+during
+the
+research
+involved
+in
+performing
+the
+appraisal.
+Unless
+otherwise
+stated
+in
+this
+appraisal
+report,
+the
+appraiser
+has
+no
+knowledge
+of
+any
+hidden
+or
+unapparent
+physical
+deficiencies
+or
+adverse
+conditions
+of
+the
+property
+(such
+as,
+but
+not
+limited
+to,
+needed
+repairs,
+deterioration,
+the
+presence
+of
+hazardous
+wastes,
+toxic
+substances,
+adverse
+environmental
+conditions,
+etc.)
+that
+would
+make
+the
+property
+less
+valuable,
+and
+has
+assumed
+that
+there
+are
+no
+such
+conditions
+and
+makes
+no
+guarantees
+or
+warranties,
+express
+or
+implied.
+The
+appraiser
+will
+not
+be
+responsible
+for
+any
+such
+conditions
+that
+do
+exist or
+for
+any
+engineering
+or testing
+that
+might be
+required
+to
+discover
+whether
+such
+conditions
+exist.
+Because
+the
+appraiser
+is
+not
+an
+expert in
+the
+field
+of
+environmental
+hazards,
+this
+appraisal
+report
+must
+not
+be
+considered
+as
+an
+environmental
+assessment
+of
+the
+property.
+6. The appraiser has based his or her appraisal report and valuation conclusion
+for an appraisal that is subject to satisfactory
+completion,
+repairs,
+or
+alterations
+on
+the
+assumption
+that
+the
+completion,
+repairs,
+or
+alterations
+of
+the
+subject
+property
+will
+be
+performed
+in
+a
+professional
+manner.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 4 of 6
+Fannie Mae Form 1004 March 2005
+
+
+2025110386
+R25-000151
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+The Appraiser certifies and agrees that:
+1.
+I have, at a minimum, developed and reported this appraisal in accordance
+with the scope of work requirements stated in
+this
+appraisal
+report.
+2.
+I performed
+a complete
+visual
+inspection
+of
+the interior and exterior areas of
+the subject
+property.
+I reported the condition
+of
+the
+improvements
+in
+factual,
+specific
+terms.
+I
+identified
+and
+reported
+the
+physical
+deficiencies
+that
+could
+affect
+the
+livability,
+soundness,
+or
+structural
+integrity
+of
+the
+property.
+3.
+I
+performed
+this
+appraisal
+in
+accordance
+with
+the
+requirements
+of
+the
+Uniform
+Standards
+of
+Professional
+Appraisal
+Practice
+that
+were
+adopted
+and
+promulgated
+by
+the
+Appraisal
+Standards
+Board
+of
+The
+Appraisal
+Foundation
+and
+that
+were
+in
+place
+at
+the
+time
+this
+appraisal
+report
+was
+prepared.
+4.
+I developed my opinion of the market value of the real property that is the subject of this report based on the sales
+comparison
+approach
+to
+value.
+I
+have
+adequate
+comparable
+market
+data
+to
+develop
+a
+reliable
+sales
+comparison
+approach
+for
+this appraisal assignment. I further
+certify that I considered
+the
+cost and income
+approaches
+to value
+but
+did not develop
+them,
+unless
+otherwise
+indicated
+in
+this
+report.
+5.
+I
+researched,
+verified,
+analyzed, and reported
+on
+any current
+agreement
+for
+sale for
+the subject
+property,
+any offering
+for
+sale of the subject property in the twelve months prior to the effective date of this appraisal, and the prior sales of the subject
+property for
+a minimum
+of three years prior to the effective date of this appraisal, unless otherwise indicated in
+this report.
+6. I researched, verified, analyzed, and reported on the prior sales of the comparable sales for
+a minimum
+of one year prior
+to the date
+of sale of the comparable
+sale, unless otherwise indicated
+in this
+report.
+7.
+I selected and used comparable sales that are locationally, physically, and functionally the most similar to the subject property.
+8.
+I have not used comparable sales that were the result of combining a land sale with the contract purchase price of a home that
+has been built or will be built on the land.
+9.
+I have reported adjustments to the comparable sales that reflect the market's reaction to the differences between the subject
+property
+and
+the
+comparable
+sales.
+10.
+I verified, from a disinterested source, all information in this report that was provided by parties who have a financial interest in
+the sale or financing of the subject property.
+11.
+I
+have
+knowledge
+and
+experience in
+appraising
+this
+type
+of
+property
+in
+this
+market
+area.
+12.
+I am aware of, and have access to, the necessary and appropriate public and private data sources, such as multiple listing
+services, tax assessment records, public land records and other such data sources for the area in which the property is located.
+13.
+I
+obtained
+the
+information,
+estimates,
+and
+opinions
+furnished
+by
+other
+parties
+and
+expressed
+in
+this
+appraisal
+report
+from
+reliable sources
+that
+I
+believe
+to
+be
+true
+and
+correct.
+14.
+I have taken into consideration
+the factors
+that have an impact
+on value
+with respect to the subject
+neighborhood,
+subject
+property, and the proximity of the subject
+property to adverse influences
+in the development of my opinion
+of market value.
+I
+have noted in this appraisal report any adverse conditions
+(such
+as, but
+not limited to, needed repairs, deterioration, the
+presence
+of
+hazardous
+wastes,
+toxic
+substances,
+adverse
+environmental
+conditions,
+etc.)
+observed
+during
+the
+inspection
+of
+the
+subject property or that I became aware of during
+the research involved in performing this appraisal. I have considered these
+adverse conditions in my analysis of the property value, and have reported on the effect of the conditions on the value and
+marketability
+of
+the
+subject
+property.
+15.
+I have not knowingly withheld any significant information from this appraisal report and, to the best of my knowledge, all
+statements
+and
+information
+in
+this
+appraisal
+report
+are
+true
+and
+correct.
+16. I
+stated in
+this
+appraisal report
+my
+own personal,
+unbiased,
+and professional
+analysis, opinions,
+and
+conclusions,
+which
+are subject only to the assumptions and limiting conditions in this appraisal report.
+17.
+I have no present or prospective interest in the property that is the subject of this report, and I have no present or
+prospective personal interest or bias with respect to the participants in the transaction. I did not base, either partially or
+completely, my analysis and/or opinion of market value in this appraisal report on the race, color, religion, sex, age, marital
+status, handicap, familial status, or national origin of either the prospective owners or occupants of the subject property or of the
+present owners or occupants of the properties in the vicinity of the subject property or on any other basis prohibited by law.
+18. My
+employment
+and/or
+compensation
+for
+performing
+this
+appraisal
+or
+any
+future
+or
+anticipated
+appraisals
+was
+not
+conditioned
+on
+any
+agreement
+or
+understanding,
+written
+or
+otherwise,
+that
+I
+would
+report
+(or
+present
+analysis
+supporting)
+a
+predetermined specific
+value,
+a
+predetermined minimum
+value,
+a
+range or
+direction
+in value,
+a
+value
+that favors
+the
+cause
+of
+any party, or the attainment of a specific result or occurrence of a specific subsequent event (such as approval of a pending
+mortgage
+loan
+application).
+19.
+I personally prepared all conclusions
+and opinions
+about the real estate that were set forth in this appraisal report. If I
+relied
+on significant
+real
+property
+appraisal
+assistance
+from
+any
+individual
+or
+individuals
+in
+the
+performance
+of
+this
+appraisal
+or the preparation of this appraisal report, I have named such
+individual(s)
+and disclosed
+the specific tasks performed
+in this
+appraisal report. I certify that any individual
+so named is qualified to perform the tasks. I have not authorized anyone to make
+a change to any item in this appraisal report; therefore, any change made to this appraisal is unauthorized and I will take no
+responsibility
+for
+it.
+20.
+I identified the lender/client in this appraisal report who is the individual,
+organization, or agent for the organization that
+ordered
+and
+will
+receive
+this
+appraisal
+report.
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 5 of 6
+Fannie Mae Form 1004 March 2005
+
+
+2025110386
+R25-000151
+Eric M Glenn
+Carolina Appraisal Group-Residential, LLC
+1107 Doyle St.
+Orangeburg, SC 29116
+803-534-5554
+orders@carolinaappraisalgroup.com
+12/15/2025
+12/12/2025
+556.002636
+IL
+09/30/2027
+4916 S Linder Ave
+Chicago, IL 60638
+200,000
+Equity Solutions
+Everett Financial, Inc DBA Supreme Lending
+14801 Quorum Dr, Ste 300, Dallas, TX, 75254
+Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+21.
+The lender/client may disclose
+or distribute
+this appraisal report to: the borrower; another lender at the request of the
+borrower;
+the
+mortgagee
+or
+its
+successors
+and
+assigns;
+mortgage
+insurers;
+government
+sponsored
+enterprises;
+other
+secondary
+market
+participants;
+data
+collection
+or
+reporting
+services;
+professional
+appraisal
+organizations;
+any
+department,
+agency, or instrumentality of the United States; and any
+state, the District of
+Columbia,
+or other jurisdictions;
+without
+having to
+obtain
+the
+appraiser's
+or
+supervisory
+appraiser's
+(if
+applicable)
+consent.
+Such
+consent
+must
+be
+obtained
+before
+this
+appraisal
+report may be disclosed or distributed to any other party (including, but not limited to, the public through advertising, public
+relations, news, sales,
+or
+other
+media).
+22.
+I am aware that any disclosure or distribution of this appraisal report by me or the lender/client may be subject to certain
+laws and regulations.
+Further, I
+am also
+subject
+to the provisions of the Uniform
+Standards of Professional
+Appraisal Practice
+that pertain to disclosure
+or distribution by me.
+23.
+The borrower, another lender at the request of the borrower, the mortgagee or its successors
+and assigns, mortgage
+insurers,
+government
+sponsored
+enterprises,
+and
+other
+secondary
+market
+participants
+may
+rely
+on
+this
+appraisal
+report
+as
+part
+of any mortgage finance transaction that involves any one or more of these parties.
+24.
+If this appraisal report was transmitted as an "electronic record" containing my "electronic signature," as those terms are
+defined in applicable
+federal and/or state laws (excluding audio and video recordings),
+or a facsimile
+transmission of this
+appraisal
+report
+containing
+a copy
+or
+representation
+of
+my
+signature,
+the
+appraisal
+report
+shall
+be
+as
+effective,
+enforceable
+and
+valid as
+if
+a
+paper
+version of
+this
+appraisal
+report
+were
+delivered
+containing
+my
+original
+hand
+written
+signature.
+25.
+Any
+intentional
+or
+negligent
+misrepresentation(s)
+contained
+in
+this
+appraisal
+report
+may
+result
+in
+civil
+liability
+and/or
+criminal
+penalties
+including,
+but
+not
+limited
+to,
+fine
+or
+imprisonment
+or
+both
+under
+the
+provisions
+of
+Title
+18,
+United
+States
+Code,
+Section 1001, et seq., or similar state laws.
+The
+Supervisory
+Appraiser
+certifies
+and
+agrees
+that:
+1.
+I directly supervised the appraiser for this appraisal assignment, have read the appraisal report, and agree with the appraiser's
+analysis,
+opinions,
+statements,
+conclusions,
+and
+the
+appraiser's
+certification.
+2.
+I accept full responsibility for the contents of this appraisal report including, but not limited to, the appraiser's analysis, opinions,
+statements,
+conclusions,
+and
+the
+appraiser's
+certification.
+3.
+The appraiser identified in this appraisal report is either a sub-contractor or an employee of the supervisory appraiser (or the
+appraisal firm), is qualified to perform this appraisal, and is acceptable to perform this appraisal under the applicable state law.
+4.
+This
+appraisal
+report
+complies
+with
+the
+Uniform
+Standards
+of
+Professional
+Appraisal
+Practice
+that
+were
+adopted
+and
+promulgated
+by
+the
+Appraisal
+Standards
+Board
+of
+The
+Appraisal
+Foundation
+and
+that
+were
+in
+place
+at
+the
+time
+this
+appraisal
+report
+was
+prepared.
+5.
+If this appraisal report was transmitted as an "electronic record" containing
+my "electronic signature," as those terms are
+defined in applicable
+federal
+and/or state
+laws (excluding
+audio
+and video recordings),
+or
+a
+facsimile
+transmission of
+this
+appraisal report containing a copy or representation of my signature, the appraisal report shall be as effective,
+enforceable and
+valid as
+if
+a
+paper
+version of
+this
+appraisal
+report
+were
+delivered
+containing
+my
+original
+hand
+written
+signature.
+Signature
+Name
+Company Name
+Company Address
+Telephone Number
+Email Address
+Date of Signature and Report
+Effective Date of Appraisal
+State Certification #
+or State License #
+or Other (describe)
+State #
+State
+Expiration Date of Certification or License
+ADDRESS OF PROPERTY APPRAISED
+APPRAISED VALUE OF SUBJECT PROPERTY $
+LENDER/CLIENT
+Name
+Company Name
+Company Address
+Email Address
+Signature
+Name
+Company Name
+Company Address
+Telephone Number
+Email Address
+Date of Signature
+State Certification #
+or State License #
+State
+Expiration Date of Certification or License
+SUBJECT PROPERTY
+Did not inspect subject property
+Did inspect exterior of subject property from street
+Date of Inspection
+Did inspect interior and exterior of subject property
+Date of Inspection
+COMPARABLE SALES
+Did not inspect exterior of comparable sales from street
+Did inspect exterior of comparable sales from street
+Date of Inspection
+Freddie Mac Form 70 March 2005
+UAD Version 9/2011
+Page 6 of 6
+Fannie Mae Form 1004 March 2005
+
+
+2025110386
+R25-000151
+4916 S Linder Ave
+Chicago, IL 60638
+200,000
+180.67
+N;Res;
+Fee Simple
+6250 sf
+N;Res;CtyStr
+DT1;Ranch
+Q4
+73
+C5
+5
+3
+1.0
+1,107
+0sf
+Average
+GFA/None
+None Noted
+2gd2dw
+Patio
+MRED/Tax Records
+12/12/2025
+4540 S Leclaire Ave
+Chicago, IL 60638
+0.68 miles NE
+226,500
+224.70
+MRED#:12466439;DOM 41
+MRED/Assessor
+REO
+0;0
+s11/25;c10/25
+N;Res;
+Fee Simple
+3750 sf
+0
+N;Res;CtyStr
+DT1;Ranch
+Q4
+69
+0
+C5
+5
+2
+1.0
+0
+1,008
+0
+1008sf0sfin
+-8,000
+Average
+GFA/None
+None Noted
+2gd2dw
+Patio
+-8,000
+3.5
+3.5
+218,500
+MRED/Tax Records
+12/12/2025
+4804 S Lamon Ave
+Chicago, IL 60638
+0.77 miles E
+215,000
+235.75
+MRED#:12523837;DOM 146
+MRED/Assessor
+Listing
+0;0
+Active
+N;Res;
+Fee Simple
+3870 sf
+0
+N;Res;CtyStr
+DT1;Ranch
+Q4
+70
+0
+C4
+0
+5
+3
+1.0
+912
++9,750
+0sf
+Average
+GFA/CAC
+-2,000
+None Noted
+2gd2dw
+Patio
+7,750
+3.6
+5.5
+222,750
+MRED/Tax Records
+12/12/2025
+4857 S Lorel Ave
+Chicago, IL 60638
+0.23 miles E
+259,000
+283.99
+MRED#:12516827;DOM 125
+MRED/Assessor
+Listing
+0;0
+Active
+N;Res;
+Fee Simple
+5053 sf
+0
+N;Res;CtyStr
+DT1;Ranch
+Q4
+68
+0
+C4
+0
+5
+3
+1.0
+912
++9,750
+0sf
+Average
+GFA/CAC
+-2,000
+None Noted
+2gd2dw
+Patio
+7,750
+3.0
+4.5
+266,750
+MRED/Tax Records
+12/12/2025
+4
+5
+6
+4
+5
+6
+There were no other additional sales/transfers  of comparables #4-#6
+within the past 12 months.
+Form 1004UAD.(AC) - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File #
+SALES COMPARISON APPROACH
+SALE HISTORY
+ANALYSIS / COMMENTS
+FEATURE
+SUBJECT
+COMPARABLE SALE #
+COMPARABLE SALE #
+COMPARABLE SALE #
+Address
+Proximity to Subject
+Sale Price
+$
+$
+$
+$
+Sale Price/Gross Liv. Area
+$
+sq.ft. $
+sq.ft.
+$
+sq.ft.
+$
+sq.ft.
+Data Source(s)
+Verification Source(s)
+VALUE ADJUSTMENTS
+DESCRIPTION
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+DESCRIPTION
++(-) $ Adjustment
+Sales or Financing
+Concessions
+Date of Sale/Time
+Location
+Leasehold/Fee Simple
+Site
+View
+Design (Style)
+Quality of Construction
+Actual Age
+Condition
+Above Grade
+Total
+Bdrms.
+Baths
+Total
+Bdrms.
+Baths
+Total
+Bdrms.
+Baths
+Total
+Bdrms.
+Baths
+Room Count
+Gross Living Area
+sq.ft.
+sq.ft.
+sq.ft.
+sq.ft.
+Basement & Finished
+Rooms Below Grade
+Functional Utility
+Heating/Cooling
+Energy Efficient Items
+Garage/Carport
+Porch/Patio/Deck
+Net Adjustment (Total)
++
+-
++
+-
++
+-
+$
+$
+$
+Adjusted Sale Price
+of Comparables
+$
+$
+$
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+Net Adj.
+%
+Gross Adj.
+%
+Report the results of the research and analysis of the prior sale or transfer history of the subject property and comparable sales (report additional prior sales on page 3).
+ITEM
+SUBJECT
+COMPARABLE SALE #
+COMPARABLE SALE #
+COMPARABLE SALE #
+Date of Prior Sale/Transfer
+Price of Prior Sale/Transfer
+Data Source(s)
+Effective Date of Data Source(s)
+Analysis of prior sale or transfer history of the subject property and comparable sales
+Analysis/Comments
+Freddie Mac Form 70 March 2005
+Fannie Mae Form 1004 March 2005
+UAD Version 9/2011
+
+
+Form PICPIX.SR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Subject Front
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Subject Rear
+Subject Street
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Subject Side
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Subject Side
+Subject Rear Yard
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Subject Rear
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Interior Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Living Room
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Living Room
+Living Room
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SIC - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Interior Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Living Room
+Sales Price
+Gross Building Area
+Age
+4916 S Linder Ave
+200,000
+73
+Bedroom
+ Bedroom
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Interior Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+ Bedroom
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+ Bathroom
+Bathroom
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Interior Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+ Hall
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Kitchen
+ Kitchen
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Interior Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+ Kitchen
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Kitchen
+Utility
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.SI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Subject Interior Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Laundry
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4916 S Linder Ave
+200,000
+1,107
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+6250 sf
+Q4
+73
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.CR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Comparable Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Comparable 1
+Prox. to Subject
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4747 S Lotus Ave
+0.22 miles NE
+175,000
+759
+3
+1
+1.0
+N;Res;
+N;Res;CtyStr
+3150 sf
+Q4
+75
+Comparable 2
+Prox. to Subject
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4439 S Lawler Ave
+0.84 miles NE
+190,000
+1,008
+4
+2
+1.0
+N;Res;
+N;Res;CtyStr
+7544 sf
+Q4
+63
+Comparable 3
+Prox. to Subject
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4930 S Luna Ave
+0.07 miles W
+225,000
+1,567
+5
+2
+1.0
+N;Res;
+N;Res;CtyStr
+3100 sf
+Q4
+59
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form PICPIX.CR - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Comparable Photo Page
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Comparable 4
+Prox. to Subject
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4540 S Leclaire Ave
+0.68 miles NE
+226,500
+1,008
+5
+2
+1.0
+N;Res;
+N;Res;CtyStr
+3750 sf
+Q4
+69
+Comparable 5
+Prox. to Subject
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4804 S Lamon Ave
+0.77 miles E
+215,000
+912
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+3870 sf
+Q4
+70
+Comparable 6
+Prox. to Subject
+Sales Price
+Gross Living Area
+Total Rooms
+Total Bedrooms
+Total Bathrooms
+Location
+View
+Site
+Quality
+Age
+4857 S Lorel Ave
+0.23 miles E
+259,000
+912
+5
+3
+1.0
+N;Res;
+N;Res;CtyStr
+5053 sf
+Q4
+68
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+2025110386
+R25-000151
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+3-6 months
+— The statements of fact contained in this report are true and correct.
+— The reported analyses, opinions, and conclusions are limited only by the reported assumptions and limiting conditions and are my personal, impartial, and unbiased
+professional analyses, opinions, and conclusions.
+— Unless otherwise indicated, I have no present or prospective interest in the property that is the subject of this report and no  personal interest with respect to the parties
+involved.
+— I have no bias with respect to the property that is the subject of this report or the parties involved with this assignment.
+— My engagement in this assignment was not contingent upon developing or reporting predetermined results.
+— My compensation for completing this assignment is not contingent upon the development or reporting of a predetermined value or direction in value that favors the cause of
+the client, the amount of the value opinion, the attainment of a stipulated result, or the occurrence of a subsequent event directly related to the intended use of this appraisal.
+— My analyses, opinions, and conclusions were developed, and this report has been prepared, in conformity with the Uniform Standards of Professional Appraisal Practice that
+were in effect at the time this report was prepared.
+— Unless otherwise indicated, I have made a personal inspection of the property that is the subject of this report.
+— Unless otherwise indicated, no one provided significant real property appraisal assistance to the person(s) signing this certification (if there are exceptions, the name of each
+individual providing significant real property appraisal assistance is stated elsewhere in this report).
+Eric M Glenn
+12/15/2025
+556.002636
+IL
+09/30/2027
+12/12/2025
+Form ID14AP - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File No.
+Borrower
+Property Address
+City
+County
+State
+Zip Code
+Lender
+This report was prepared in accordance with USPAP Standards Rule 2-2(a).
+This report was prepared in accordance with USPAP Standards Rule 2-2(b).
+My opinion of a reasonable exposure time for the subject property at the market value stated in this report is:
+I certify that, to the best of my knowledge and belief:
+I have NOT performed services, as an appraiser or in any other capacity, regarding the property that is the subject of this report within the
+three-year period immediately preceding acceptance of this assignment.
+I HAVE performed services, as an appraiser or in another capacity, regarding the property that is the subject of this report within the three-year
+period immediately preceding acceptance of this assignment. Those services are described in the comments below.
+APPRAISER:
+Signature:
+Name:
+Date Signed:
+State Certification #:
+or State License #:
+State:
+Expiration Date of Certification or License:
+Effective Date of Appraisal:
+SUPERVISORY APPRAISER: (only if required)
+Signature:
+Name:
+Date Signed:
+State Certification #:
+or State License #:
+State:
+Expiration Date of Certification or License:
+Supervisory Appraiser Inspection of Subject Property:
+Did Not
+Exterior-only from Street
+Interior and Exterior
+
+
+2025110386
+R25-000151
+Form UADDEFINE1 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File No.
+The improvements have been recently constructed and have not been previously occupied. The entire structure and all components are new
+and the dwelling features no physical depreciation.
+The improvements feature no deferred maintenance, little or no physical depreciation, and require no repairs. Virtually all building components
+are new or have been recently repaired, refinished, or rehabilitated. All outdated components and finishes have been updated and/or replaced
+with components that meet current standards. Dwellings in this category are either almost new or have been recently completely renovated and
+are similar in condition to new construction.
+The improvements are well maintained and feature limited physical depreciation due to normal wear and tear. Some components, but not every
+major building component, may be updated or recently rehabilitated. The structure has been well maintained.
+The improvements feature some minor deferred maintenance and physical deterioration due to normal wear and tear. The dwelling has been
+adequately maintained and requires only minimal repairs to building components/mechanical systems and cosmetic repairs. All major building
+components have been adequately maintained and are functionally adequate.
+The improvements feature obvious deferred maintenance and are in need of some significant repairs. Some building components need repairs,
+rehabilitation, or updating. The functional utility and overall livability is somewhat diminished due to condition, but the dwelling remains
+useable and functional as a residence.
+The improvements have substantial damage or deferred maintenance with deficiencies or defects that are severe enough to affect the safety,
+soundness, or structural integrity of the improvements. The improvements are in need of substantial repairs and rehabilitation, including many
+or most major components.
+Dwellings with this quality rating are usually unique structures that are individually designed by an architect for a specified user. Such
+residences typically are constructed from detailed architectural plans and specifications and feature an exceptionally high level of workmanship
+and exceptionally high-grade materials throughout the interior and exterior of the structure. The design features exceptionally high-quality
+exterior refinements and ornamentation, and exceptionally high-quality interior refinements. The workmanship, materials, and finishes
+throughout the dwelling are of exceptionally high quality.
+Dwellings with this quality rating are often custom designed for construction on an individual property owner’s site. However, dwellings in
+this quality grade are also found in high-quality tract developments featuring residence constructed from individual plans or from highly
+modified or upgraded plans. The design features detailed, high quality exterior ornamentation, high-quality interior refinements, and detail. The
+workmanship, materials, and finishes throughout the dwelling are generally of high or very high quality.
+UAD Version 9/2011 (Updated 4/2012)
+
+
+Form UADDEFINE1 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Dwellings with this quality rating are residences of higher quality built from individual or readily available designer plans in above-standard
+residential tract developments or on an individual property owner’s site. The design includes significant exterior ornamentation and interiors
+that are well finished. The workmanship exceeds acceptable standards and many materials and finishes throughout the dwelling have been
+upgraded from “stock” standards.
+Dwellings with this quality rating meet or exceed the requirements of applicable building codes. Standard or modified standard building plans
+are utilized and the design includes adequate fenestration and some exterior ornamentation and interior refinements. Materials, workmanship,
+finish, and equipment are of stock or builder grade and may feature some upgrades.
+Dwellings with this quality rating feature economy of construction and basic functionality as main considerations. Such dwellings feature a
+plain design using readily available or basic floor plans featuring minimal fenestration and basic finishes with minimal exterior ornamentation
+and limited interior detail. These dwellings meet minimum building codes and are constructed with inexpensive, stock materials
+with limited refinements and upgrades.
+Dwellings with this quality rating are of basic quality and lower cost; some may not be suitable for year-round occupancy. Such dwellings
+are often built with simple plans or without plans, often utilizing the lowest quality building materials. Such dwellings are often built or
+expanded by persons who are professionally unskilled or possess only minimal construction skills. Electrical, plumbing, and other mechanical
+systems and equipment may be minimal or non-existent. Older dwellings may feature one or more substandard or non-conforming additions
+to the original structure
+Residential properties of fifteen years of age or less often reflect an original condition with no updating, if no major
+components have been replaced or updated. Those over fifteen years of age are also considered not updated if the
+appliances, fixtures, and finishes are predominantly dated. An area that is ‘Not Updated’ may still be well maintained
+and fully functional, and this rating does not necessarily imply deferred maintenance or physical/functional deterioration.
+An updated area of the home should have an improved look and feel, or functional utility. Changes that constitute
+updates include refurbishment and/or replacing components to meet existing market expectations. Updates do not
+include significant alterations to the existing structure.
+A remodeled area reflects fundamental changes that include multiple alterations. These alterations may include
+some or all of the following: replacement of a major component (cabinet(s), bathtub, or bathroom tile), relocation
+of plumbing/gas fixtures/appliances, significant structural alterations (relocating walls, and/or the addition of)
+square footage). This would include a complete gutting and rebuild.
+Three-quarter baths are counted as a full bath in all cases.  Quarter baths (baths that feature only a toilet) are not
+included in the bathroom count.  The number of full and half baths is reported by separating the two values using a
+period, where the full bath count is represented to the left of the period and the half bath count is represented to the
+right of the period.
+3.2 indicates three full baths and two half baths.
+UAD Version 9/2011 (Updated 4/2012)
+
+
+Form UADDEFINE1 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+ac
+Acres
+Area, Site
+AdjPrk
+Adjacent to Park
+Location
+AdjPwr
+Adjacent to Power Lines
+Location
+A
+Adverse
+Location & View
+ArmLth
+Arms Length Sale
+Sale or Financing Concessions
+ba
+Bathroom(s)
+Basement & Finished Rooms Below Grade
+br
+Bedroom
+Basement & Finished Rooms Below Grade
+B
+Beneficial
+Location & View
+Cash
+Cash
+Sale or Financing Concessions
+CtySky
+City View Skyline View
+View
+CtyStr
+City Street View
+View
+Comm
+Commercial Influence
+Location
+c
+Contracted Date
+Date of Sale/Time
+Conv
+Conventional
+Sale or Financing Concessions
+CrtOrd
+Court Ordered Sale
+Sale or Financing Concessions
+DOM
+Days On Market
+Data Sources
+e
+Expiration Date
+Date of Sale/Time
+Estate
+Estate Sale
+Sale or Financing Concessions
+FHA
+Federal Housing Authority
+Sale or Financing Concessions
+GlfCse
+Golf Course
+Location
+Glfvw
+Golf Course View
+View
+Ind
+Industrial
+Location & View
+in
+Interior Only Stairs
+Basement & Finished Rooms Below Grade
+Lndfl
+Landfill
+Location
+LtdSght
+Limited Sight
+View
+Listing
+Listing
+Sale or Financing Concessions
+Mtn
+Mountain View
+View
+N
+Neutral
+Location & View
+NonArm
+Non-Arms Length Sale
+Sale or Financing Concessions
+BsyRd
+Busy Road
+Location
+o
+Other
+Basement & Finished Rooms Below Grade
+Prk
+Park View
+View
+Pstrl
+Pastoral View
+View
+PwrLn
+Power Lines
+View
+PubTrn
+Public Transportation
+Location
+rr
+Recreational (Rec) Room
+Basement & Finished Rooms Below Grade
+Relo
+Relocation Sale
+Sale or Financing Concessions
+REO
+REO Sale
+Sale or Financing Concessions
+Res
+Residential
+Location & View
+RH
+USDA - Rural Housing
+Sale or Financing Concessions
+s
+Settlement Date
+Date of Sale/Time
+Short
+Short Sale
+Sale or Financing Concessions
+sf
+Square Feet
+Area, Site, Basement
+sqm
+Square Meters
+Area, Site
+Unk
+Unknown
+Date of Sale/Time
+VA
+Veterans Administration
+Sale or Financing Concessions
+w
+Withdrawn Date
+Date of Sale/Time
+wo
+Walk Out Basement
+Basement & Finished Rooms Below Grade
+wu
+Walk Up Basement
+Basement & Finished Rooms Below Grade
+WtrFr
+Water Frontage
+Location
+Wtr
+Water View
+View
+Woods
+Woods View
+View
+UAD Version 9/2011 (Updated 4/2012)
+
+
+2025110386
+R25-000151
+4916 S Linder Ave
+Chicago
+IL
+60638
+Belen Guido Ballesteros
+4
+0.67
+2
+3.0
+ $260,887
+ 56
+$258,387
+54
+98.89
+2
+0.67
+2
+3.0
+$105,000
+33
+$206,331
+36
+100
+1
+0.33
+2
+6.1
+$295,000
+15
+$294,900
+20
+100
+In analyzing recent seller concessions for similar sales in the subject area, most sales
+contain no seller concessions while utilizing fha and conventional financing.
+The subject area has had a low rate of foreclosed sales.
+Data sources include the mls of northern illinois and county assessor.
+Overall the market trend for  similar homes is considered  to be stable.
+Eric M Glenn
+Carolina Appraisal Group-Residential, LLC
+1107 Doyle St., Orangeburg, SC 29116
+556.002636
+IL
+orders@carolinaappraisalgroup.com
+Form 1004MC2 - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+File No.
+Market Conditions Addendum to the Appraisal Report
+MARKET RESEARCH & ANALYSIS
+CONDO/CO-OP PROJECTS
+APPRAISER
+The purpose of this addendum is to provide the lender/client with a clear and accurate understanding of the market trends and conditions prevalent in the subject
+neighborhood. This is a required addendum for all appraisal reports with an effective date on or after April 1, 2009.
+Property Address
+City
+State
+ZIP Code
+Borrower
+Instructions: The appraiser must use the information required on this form as the basis for his/her conclusions, and must provide support for those conclusions, regarding
+housing trends and overall market conditions as reported in the Neighborhood section of the appraisal report form. The appraiser must fill in all the information to the extent
+it is available and reliable and must provide analysis as indicated below. If any required data is unavailable or is considered unreliable, the appraiser must provide an
+explanation. It is recognized that not all data sources will be able to provide data for the shaded areas below; if it is available, however, the appraiser must include the data
+in the analysis. If data sources provide the required information as an average instead of the median, the appraiser should report the available figure and identify it as an
+average. Sales and listings must be properties that compete with the subject property, determined by applying the criteria that would be used by a prospective buyer of the
+subject property. The appraiser must explain any anomalies in the data, such as seasonal markets, new construction, foreclosures, etc.
+Inventory Analysis
+Prior 7–12 Months
+Prior 4–6 Months
+Current – 3 Months
+Overall Trend
+Median Sale & List Price, DOM, Sale/List %
+Prior 7–12 Months
+Prior 4–6 Months
+Current – 3 Months
+Total # of Comparable Sales (Settled)
+Absorption Rate (Total Sales/Months)
+Total # of Comparable Active Listings
+Months of Housing Supply (Total Listings/Ab.Rate)
+Median Comparable Sale Price
+Median Comparable Sales Days on Market
+Median Comparable List Price
+Median Comparable Listings Days on Market
+Median Sale Price as % of List Price
+Increasing
+Stable
+Declining
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Declining
+Stable
+Increasing
+Overall Trend
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Increasing
+Stable
+Declining
+Seller-(developer, builder, etc.)paid financial assistance prevalent?
+Yes
+No
+Declining
+Stable
+Increasing
+Explain in detail the seller concessions trends for the past 12 months (e.g., seller contributions increased from 3% to 5%, increasing use of buydowns, closing costs, condo
+fees, options, etc.).
+Are foreclosure sales (REO sales) a factor in the market?
+Yes
+No
+If yes, explain (including the trends in listings and sales of foreclosed properties).
+Cite data sources for above information.
+Summarize the above information as support for your conclusions in the Neighborhood section of the appraisal report form. If you used any additional information, such as
+an analysis of pending sales and/or expired and withdrawn listings, to formulate your conclusions, provide both an explanation and support for your conclusions.
+If the subject is a unit in a condominium or cooperative project , complete the following:
+Project Name:
+Subject Project Data
+Prior 7–12 Months
+Prior 4–6 Months
+Current – 3 Months
+Overall Trend
+Total # of Comparable Sales (Settled)
+Absorption Rate (Total Sales/Months)
+Months of Unit Supply (Total Listings/Ab.Rate)
+Total # of Active Comparable Listings
+Increasing
+Stable
+Declining
+Increasing
+Stable
+Declining
+Declining
+Stable
+Increasing
+Declining
+Stable
+Increasing
+Are foreclosure sales (REO sales) a factor in the project?
+Yes
+No
+If yes, indicate the number of REO listings and explain the trends in listings and sales of
+foreclosed properties.
+Summarize the above trends and address the impact on the subject unit and project.
+Signature
+Appraiser Name
+Company Name
+Company Address
+State License/Certification #
+State
+Email Address
+Signature
+Supervisory Appraiser Name
+Company Name
+Company Address
+State License/Certification #
+State
+Email Address
+Freddie Mac Form 71   March 2009
+Page 1 of 1
+Fannie Mae Form 1004MC   March 2009
+
+
+SCOPE  OF WORK
+THE  SCOPE  OF  WORK  FOR  THIS  ASSIGNMENT  IS  IN  ACCORDANCE  WITH  THE  PRE-PRINTED  SCOPE
+CONTAINED WITHIN THE BODY OF THE FNMA (substitute-Freddie Mac) FORM 1004 CERTIFICATION.
+ANY SPECIFIC CLIENT REQUESTS THAT DIFFER FROM THE PRE-PRINTED SCOPE ARE DESCRIBED
+BELOW AND MAY SUPERSEDE THE PRE-PRINTED TEXT, BUT ARE IN THE APPRAISER'S OPINION,
+COMPLIANT WITH CURRENT USPAP REQUIREMENTS.
+COMMENT ON SUBJECT OBSERVATION
+THE SUBJECT PROPERTY IS IN OVERALL C5 CONDITION WITH REPAIRS NOTED.  ALL UTILITIES,
+INSTALLED APPLIANCES, LIGHTS , SMOKE/ CARBON MONOXIDE DETECTORS AND MECHANICALS WERE
+OFF AND NOT WORKING ORDER DURING TIME OF INSPECTION. NO PERSONAL PROPERTY WAS
+CONSIDERED IN THE ESTIMATE.
+llinois State Requirements - Section 1455.245
+"The comments by the licensed real estate appraiser contained within this appraisal report on
+the condition of the property do not address standards of practice as defined in the Home
+Inspector License Act [225 ILCS 441] and 68 Ill. Adm. Code 1410 and are not to be considered
+a home inspection or home inspection report."
+COMMENTS ON THE SALES COMPARISON APPROACH
+COMPARABLE SALE #1 IS A DATED SALE EXCEEDING SIX MONTHS BT SELECTED FOR ITS SIMILAR
+DESIGN/STYLE AND CONDITION.
+COMPARABLE #2 IS SELECTED FOR ITS LOCATION, FNCTIONAL UTILITY AND CONDITION.
+COMPARABLE SALE #3 IS A DATED SALE EXCEEDING SIX MONTHS BT SELECTED FOR ITS SIMILAR
+DESIGN/STYLE AND CONDITION.
+COMPARABLE #4 IS SELECTED FOR ITS SIMILAR DESIGN/STYLE, GROSS LIVING AREA AND
+CONDITION.
+COMPARABLE #5 AND COMPARABLE #6 ARE LOCAL LISTINGS.
+RECONCILIATION
+THE METHODOLOGY FOR DETERMINING ADJUSTMENT AMOUNT INCLUDES REVIEW AND SELECTION
+OF COMPARABLES AND PAIRED SALES ANALYSIS OF SELECTED COMPARABLES.
+COMPARABLES WERE ADJUSTED AS NECESSARY FOR THE VARIANCE IN THE
+BEDROOMS/BATHROOMS. A SEPARATE ADJUSTMENT WAS NOT REQUIRED FOR THE VARIANCE IN THE
+NUMBER OF ROOMS AS THAT WAS CONSIDERED IN THE ADJUSTMENT FOR THE GROSS LIVING AREA.
+GLA WAS AT $50.00/SQ FT (VARIANCE OVER 100 SQFT).  GARAGE SPACE ADJUSTMENT OF $2500 WERE
+PROVIDED.
+ALL SALES WERE WEIGHTED SPECIFICALLY TO THEIR SIMILARITY TO THE SUBJECT PROPERTY.
+EMPHASIS IS PLACED ON SALE #2 AND #3 FOR THEIR SIMILAR CONDITION AND LOCATION.
+NOT ALL ADJUSTMENTS IN THE SALES COMPARISON APPROACH CAN BE DIRECTLY EXTRACTED OR
+SUPPORTED BY THE AVAILABLE MARKET DATA WITH A HIGH DEGREE OF ACCURACY. SOME
+ADJUSTMENTS / CONCLUSIONS ABOUT THE MARKET VALUE RECONCILIATION HAVE AN ELEMENT OF
+SUBJECTIVITY AND PROFESSIONAL JUDGMENT WHICH THE APPRAISER HAS APPLIED BASED ON PRIOR
+OBSERVATIONS OF THE REACTIONS OF TYPICAL/KNOWLEDGEABLE BUYERS' AND SELLERS' IN THE
+MARKETPLACE. THIS METHOD IS A STANDARD AND WELL ACCEPTED PRACTICE WITHINTHE
+APPRAISAL INDUSTRY. ALL INTERESTED PARTIES ARE ENCOURAGED TO HAVE AN UNDERSTANDING
+OF BASIC VALUATION PRACTICES WHENAPPRAISING ATYPICAL OR COMPLEX PROPERTIES; OR WHERE
+THERE IS AN EXTREME ABSENCE OF LIKE ELEMENTS OF COMPARISON; OR IN INSTANCES WHERE THE
+MARKET DATA IS INCONSISTENT WITH WHICH TO DRAW BETTER SUPPORTED ADJUSTMENTS AND
+OVERALL VALUE CONCLUSIONS.
+Supplemental Addendum
+Form TADD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+R25-000151
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+File No.
+
+
+Appraising Residential Properties, 4th Edition, Appraisal Institute, Page 342, "Limitations of Paired
+Data Analysis" states:
+"...This brief discussion of paired data analysis may seem to suggest that identifying the effects of
+property differences from market data is a straightforward procedure that can produce accurate,
+complete mathematical results in all appraisals. Such an impression would be misleading. Appraisers
+develop an opinion of market value by applying their judgment to the analysis and interpretation of
+data. Paired data analysis is a tool that an appraiser can apply to market data in some
+circumstances. When used in conjunction with other analytical tools, this type of analysis supports
+and guides the appraiser's judgment, but it does not take its place. Perfect sets of comparables that
+vary in a single, identifiable respect are rarely found. Because properties that are sufficiently similar
+to the subject are usually limited in number, the decision to apply paired data analysis in a given
+situation is a matter of judgment. Often the sampling size may not be larger enough to
+provide a solid statistical foundation for the appraiser's conclusions."
+COMMENT ON SALE CONCESSION ADJUSTMENTS
+CONCESSIONS WITH THE SUBJECT NEIGHBORHOOD ARE COMMON/TYPICAL AND ARE WITHIN 3-5%
+OF THE SALES PRICE OR LESS AND ARE GENERALLY APPLIED TOWARDS PREPAID EXPENSES, LOSING
+COSTS
+COMMENT ON PREDOMINANT VALUE
+DUE TO THE IMPROVED CONDITION OF THE SUBJECT, THE EST VALUE EXCEEDS THE SUBJECT AREAS
+PREDOMINANT VALUE. THE SUBJECT IS NOT CONSIDERED TO BE AN OVERIMPROVEMENT.
+COMMENTS ON HIGHEST AND BEST USE
+THE SUBJECT AS IMPROVED IS A LEGALLY PERMISSIBLE USE BASED ON ITS CURRENT ZONING. THE
+LOT SIZE, SHAPE, PHYSICAL CONDITION AND LAND TO BUILDING RATIO ALLOW THE PRESENT
+STRUCTURE AND INDICATE A GOOD UTILIZATION OF THE IMPROVEMENTS. BASED UPON THE
+CURRENT MARKET CONDITIONS, THE PRESENT USE AS A SINGLE FAMILY RESIDENCE IS ITS
+FINANCIALLY FEASIBLE AND MAXIMALLY PRODUCTIVE USE. THE HIGHEST AND BEST USE IS ITS
+PRESENT USE.
+COMMENT ON DIGITAL PHOTOGRAPHS
+THIS REPORT CONTAINS DIGITAL PHOTO IMAGES OF THE SUBJECT AND COMPARABLE PROPERTIES.
+I/WE CERTIFY THAT THE DIGITAL PHOTO IMAGES CONTAINED IN THIS REPORT HAVE NOT BEEN
+EDITED OR ALTERED IN ANY WAY SO AS TO MISLEAD THE READER OF THIS REPORT.
+COMMENTS ON USE OF DIGITAL SIGNATURES
+THIS APPRAISAL REPORT CONTAINS DIGITAL SIGNATURES THAT MEET THE REQUIREMENTS OF THE
+UNIFORM STANDARDS OF PROFESSIONAL APPRAISAL PRACTICE (USPAP). THE SOFTWARE PROGRAM
+USED TO GENERATE THIS APPRAISAL REPORT CONTAINS A DIGITAL SIGNATURE SECURITY FEATURE
+WHICH UTILIZES PERSONAL PASSWORDS TO PROTECT DIGITAL SIGNATURES. EACH APPRAISER HAS
+SOLE PERSONALIZED CONTROL OF AFFIXING HIS/HER DIGITAL SIGNATURE TO A REPORT. THE
+APPRAISAL REPORT CAN NOT BE MODIFIED WITHOUT THE PERMISSION OF EVERY APPRAISER WHO
+HAS  SIGNED  THE  REPORT.  ELECTRONICALLY  AFFIXING  A  SIGNATURE  TO  A  REPORT  CARRIES  THE
+SAME  LEVEL  OF  AUTHENTICITY  AND  RESPONSIBILITY  AS  AN  INK  SIGNATURE  ON  A  PAPER  COPY
+REPORT.
+COMMENT ON ANSI STANDARDS FOR GLA CALCULATION
+The Appraiser utilized the Square Footage-Method for Calculating: ANSI Z765-2021 (American
+National Standards Institute)Measuring Standard for measuring, calculating, and reporting gross
+living area (GLA) and non- GLA areas of subject properties.
+Supplemental Addendum
+Form TADD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+R25-000151
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+File No.
+
+
+INTENDED USER
+THE INTENDED USER OF THIS APPRAISAL IS Everett Financial, Inc DBA Supreme Lending
+NO ADDITIONAL INTENDED USERS ARE IDENTIFIED BY THE APPRAISER.
+COMMENTS ON COMPENSATION
+THE APPRAISER WAS PAID $350.50 FOR THIS ASSIGNMENT BY EQUITY SOLUTIONS AMC.THE
+APPRAISAL MANAGEMENT COMPANY'S ILLINOIS REGISTRATION NUMBER IS 558.000238 AND IT
+EXPIRES ON 12/31/2026.
+Supplemental Addendum
+Form TADD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+R25-000151
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+File No.
+
+
+Form SKT.BLDSKI - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Building Sketch
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Borrower
+Lender/Client
+40'
+19.02'
+20.98'
+21'
+21'
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form MAP.LOC - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Aerial Map
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+Form MAP.LOC - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE
+Location Map
+Belen Guido Ballesteros
+4916 S Linder Ave
+Chicago
+Cook
+IL
+60638
+Everett Financial, Inc DBA Supreme Lending
+Borrower
+Lender/Client
+Property Address
+City
+County
+State
+Zip Code
+
+
+LICENSE
+Form SCNLGL - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE

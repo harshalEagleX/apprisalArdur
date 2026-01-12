@@ -9,9 +9,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link th:href="@{/css/main.css}" rel="stylesheet">
     <link th:href="@{/css/verify.css}" rel="stylesheet">
+    <link th:href="@{/css/verify-pdf-nav.css}" rel="stylesheet">
+    <!-- PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 
-<body class="verify-page">
+<body class="verify-page" th:data-file-id="${batchFile.id}">
+
     <div class="verify-layout">
         <!-- Header Bar -->
         <header class="verify-header">
@@ -36,13 +40,14 @@
                     <i class="bi bi-file-pdf" style="color: var(--color-error);"></i>
                     <span th:text="${batchFile.filename}">appraisal_001.pdf</span>
                 </div>
-                <div class="pdf-frame">
-                    <iframe th:src="@{/files/{id}(id=${batchFile.id})}" type="application/pdf" title="PDF Viewer">
-                        <p>Your browser does not support PDFs. <a th:href="@{/files/{id}(id=${batchFile.id})}">Download
-                                the PDF</a>.</p>
-                    </iframe>
+                <!-- PDF.js Viewer Container -->
+                <div id="pdfViewerContainer" class="pdf-frame" th:data-pdf-url="@{/files/{id}(id=${batchFile.id})}">
                 </div>
             </div>
+
+            <!-- Page Index Data for Frontend Mapping (hidden) -->
+            <script id="pageIndexData" type="application/json" th:if="${pageIndex}" th:utext="${pageIndex}"></script>
+
 
             <!-- Verification Panel -->
             <div class="verify-panel">
@@ -259,6 +264,20 @@
 
     <script th:src="@{/js/main.js}"></script>
     <script th:src="@{/js/verify.js}"></script>
+    <script th:src="@{/js/pdf-viewer.js}"></script>
+    <script th:src="@{/js/verify-pdf-nav.js}"></script>
+    <script th:inline="javascript">
+        // Initialize PDF viewer when page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            const container = document.getElementById('pdfViewerContainer');
+            if (container) {
+                const pdfUrl = container.dataset.pdfUrl;
+                if (pdfUrl) {
+                    await initPDFViewer(pdfUrl);
+                }
+            }
+        });
+    </script>
 </body>
 
 </html>

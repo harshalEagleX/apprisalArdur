@@ -1,0 +1,26 @@
+{
+  "appraisal_fields": {
+    "property_address": "4916 S Linder Ave",
+    "city": "Chicago",
+    "state": "IL",
+    "zip_code": "60638",
+    "county": "Legal Description",
+    "owner_of_public_record": "County",
+    "legal_description": "Assessor's Parcel #",
+    "apn": "Tax Year",
+    "neighborhood_name": "Map Reference",
+    "map_reference": "Census Tract",
+    "census_tract": "8208.00",
+    "lender_name": "to evaluate\nthe property that is the\nsubject\nof\nthis\nappraisal\nfor\na\nmortgage",
+    "owner_record_data_source": "used, offering price(s), and date(s).",
+    "data_source": "Are the units, common elements, and recreation facilities complete?"
+  },
+  "engagement_fields": {
+    "borrower_name": "Belen Guido Ballesteros",
+    "property_address": "4916 S Linder Ave Chicago IL 60638",
+    "assignment_type": "Purchase",
+    "city": "Chicago",
+    "state": "IL",
+    "zip_code": "60638"
+  }
+}

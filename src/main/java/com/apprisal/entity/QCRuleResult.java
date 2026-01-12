@@ -202,6 +202,7 @@ public class QCRuleResult {
     }
 
     // Builder pattern
+
     public static QCRuleResultBuilder builder() {
         return new QCRuleResultBuilder();
     }
@@ -220,6 +221,7 @@ public class QCRuleResult {
         private Boolean reviewRequired = false;
 
         public QCRuleResultBuilder qcResult(QCResult qcResult) {
+
             this.qcResult = qcResult;
             return this;
         }
@@ -275,6 +277,7 @@ public class QCRuleResult {
         }
 
         public QCRuleResult build() {
+
             QCRuleResult result = new QCRuleResult();
             result.qcResult = this.qcResult;
             result.ruleId = this.ruleId;

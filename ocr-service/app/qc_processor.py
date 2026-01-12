@@ -37,6 +37,7 @@ from app.models.difference_report import SubjectSectionExtract, ContractSectionE
 logger = logging.getLogger(__name__)
 
 
+
 class QCResultItem(BaseModel):
     """Individual rule result."""
     rule_id: str
@@ -49,6 +50,7 @@ class QCResultItem(BaseModel):
     appraisal_value: Optional[str] = None
     engagement_value: Optional[str] = None
     review_required: bool = False
+
 
 
 class QCResults(BaseModel):
@@ -317,6 +319,8 @@ class SmartQCProcessor:
                 engagement_value=result.engagement_value,
                 review_required=result.review_required
             ))
+
+
             
             # Collect action items from failed/skipped rules
             if result.action_item and result.status in [RuleStatus.FAIL, RuleStatus.SKIPPED, RuleStatus.WARNING]:

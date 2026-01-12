@@ -13,7 +13,7 @@ All extracted facts and differences are passed to Java for processing.
 
 import re
 import logging
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List, Any
 from datetime import datetime
 
 import fitz  # PyMuPDF
@@ -90,10 +90,23 @@ class ExtractionService:
             return report
         
         # Step 2: Extract Subject Section (S-1 to S-12)
-        report.subject_section = self._extract_subject_section(extracted_text)
+        report.subject_section = self.extract_subject_section(extracted_text, pdf_path)
         
-        # Step 3: Extract Contract Section (C-1 to C-5)
-        report.contract_section = self._extract_contract_section(extracted_text)
+        # RETRY LOGIC: If Property Address is missing and we used Text-First (pymupdf),
+        # it likely means the text layer is bad/garbage. Retry with Forced OCR.
+        if (not report.subject_section.property_address and report.extraction_method == "pymupdf"):
+            logger.warning("Critical field 'Property Address' missing after text extraction. Retrying with Forced Image OCR...")
+            
+            # Re-run extraction with forced OCR
+            extracted_text, total_pages = self._extract_from_pdf(pdf_path, force_ocr=True)
+            report.extraction_method = "ocr_retry"
+            
+            # Re-extract sections
+            report.subject_section = self.extract_subject_section(extracted_text, pdf_path)
+            report.contract_section = self._extract_contract_section(extracted_text)
+        else:
+            # Step 3: Extract Contract Section (only if we didn't just do it in retry)
+            report.contract_section = self._extract_contract_section(extracted_text)
         
         # Step 4: Parse engagement letter if provided
         if engagement_letter_text:
@@ -106,21 +119,73 @@ class ExtractionService:
         report.processing_time_ms = int((time.time() - start_time) * 1000)
         return report
     
-    def _extract_from_pdf(self, pdf_path: str) -> Tuple[str, int]:
-        """Extract text from PDF using PyMuPDF with optional preprocessing."""
+    def _extract_from_pdf(self, pdf_path: str, force_ocr: bool = False) -> Tuple[str, int]:
+        """
+        Extract text from PDF using a Text-First strategy.
+        
+        Args:
+            pdf_path: Path to PDF file
+            force_ocr: If True, bypass text check and force Image OCR (used for retry)
+            
+        Rule: "Never OCR text-based PDFs" (unless forced by retry logic)
+        1. Check each page for selectable text.
+        2. If text exists (>50 chars) AND not force_ocr, extract it directly.
+        3. Only use OCR for pages that are truly image-only OR if force_ocr=True.
+        """
         text_parts = []
         total_pages = 0
         
         try:
-            # Use preprocessing pipeline if available for better quality
-            result = self.ocr_pipeline.extract_with_preprocessing(pdf_path) if hasattr(self.ocr_pipeline, 'extract_with_preprocessing') else self.ocr_pipeline.extract_all_pages(pdf_path)
-            # Combine text
-            return self.ocr_pipeline.get_full_text(result.page_index), result.total_pages
+            doc = fitz.open(pdf_path)
+            total_pages = len(doc)
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                
+                # Step 1: Check for existing text
+                # We use "text" flag which preserves natural reading order
+                embedded_text = page.get_text("text")
+                
+                # Clean up text to check real content
+                clean_text = embedded_text.strip()
+                
+                # Heuristic: If we have > 50 characters, assume it's a text PDF
+                # This avoids OCR on pages that are just text-based forms
+                # BUT if force_ocr is True, we skip this check
+                if len(clean_text) > 50 and not force_ocr:
+                    logger.info(f"Page {page_num + 1}: Text detected ({len(clean_text)} chars). Skipping OCR.")
+                    text_parts.append(embedded_text)
+                else:
+                    # Step 2: Image-only page OR Forced Retry - use OCR
+                    reason = "Forced Retry" if force_ocr else f"Insufficient text ({len(clean_text)} chars)"
+                    logger.info(f"Page {page_num + 1}: {reason}. Using OCR.")
+                    
+                    # Use our OCR pipeline for this specific page
+                    # Note: We extract just this page to avoid reprocessing the whole doc if mixed
+                    try:
+                        # We need to extract this page visually. 
+                        # Using extraction_method="tesseract" logic from OCRPipeline
+                        # Since pipeline is page-agnostic in current design, we'll ask it to process this page
+                        # For now, we reuse the pipeline's internal methods if accessible, or just let it process
+                        # efficiently. Ideally, we'd have a method `process_single_page`.
+                        # As a fallback, we can use the pipeline on the whole doc if we must, but here we build parts.
+                        
+                        # Let's use the pipeline's page extraction logic directly
+                        page_text_obj = self.ocr_pipeline._extract_page(page, page_num + 1, force_image=True)
+                        text_parts.append(page_text_obj.text)
+                        
+                    except Exception as ocr_error:
+                        logger.error(f"OCR failed for page {page_num + 1}: {ocr_error}")
+                        # Fallback to whatever embedded text we had, even if empty
+                        text_parts.append(embedded_text)
+            
+            doc.close()
+            
+            return "\n\n".join(text_parts), total_pages
+            
         except Exception as e:
             logger.error(f"PDF extraction failed: {e}")
             raise
-        
-        return "\n\n".join(text_parts), total_pages
     
     def _parse_env(self, env_content: bytes) -> str:
         """Parse ENV file to extract text. Placeholder for future implementation."""
@@ -131,7 +196,7 @@ class ExtractionService:
     # Subject Section Extraction (S-1 to S-12)
     # =========================================================================
     
-    def extract_subject_section(self, text: str) -> SubjectSectionExtract:
+    def extract_subject_section(self, text: str, pdf_path: str = None) -> SubjectSectionExtract:
         """Extract facts from Subject Section."""
         subject = SubjectSectionExtract()
         
@@ -188,21 +253,94 @@ class ExtractionService:
             
         else:
              # Fallback to existing logic if simple line extraction fails
-             subject.property_address = self._extract_field(text, [
-                r"Property Address[:\s]+(?!City|State|Zip|County|Borrower|Lender|File)([^\n]+)",
-                r"Subject Property[:\s]+(?!City|State|Zip|County)([^\n]+)",
-             ])
+             # IMPROVED: Stricter pattern that searches for standard address formats
+             # (Number + Name + Suffix)
+             
+             # Pattern 1: Address with Street Suffix (Very High Confidence)
+             # e.g. "123 Main St", "456 North Avenue"
+             match_suffix = re.search(
+                r"Property Address[:\s]+(?![A-Za-z]+:).*?(\d+\s+[A-Za-z0-9\.\s]+(?:St|Ave|Rd|Blvd|Ln|Dr|Way|Ct|Pl|Cir|Hwy|Road|Street|Avenue|Drive|Terrace|Place|Court|Lane|Loop|Trail|Parkway)[a-z\.]*)", 
+                text, re.IGNORECASE | re.DOTALL
+             )
+             
+             # Pattern 2: Address starting with digits (High confidence)
+             match_digit = re.search(
+                r"Property Address[:\s]+(?![A-Za-z]+:)(\d+\s+[^\n]+)", 
+                text, re.IGNORECASE
+             )
+             
+             if match_suffix:
+                 subject.property_address = match_suffix.group(1).strip()
+                 # Clean up newlines if DOTALL captured them
+                 subject.property_address = subject.property_address.split('\n')[0].strip()
+             elif match_digit:
+                 subject.property_address = match_digit.group(1).strip()
+             else:
+                 # Pattern 3: General fallback but stop at known "next question" triggers
+                 subject.property_address = self._extract_field(text, [
+                    r"Property Address[:\s]+(?!City|State|Zip|County|Borrower|Lender|File)(.*?)(?=\s*City|\s*State|\s*Zip|\s*Borrower|\s*currently offered|\n)",
+                    r"Subject Property[:\s]+(?!City|State|Zip|County)(.*?)(?=\s*City|\s*State|\s*Zip|\n)",
+                 ])
+        
+        # Validate extracted address - reject gibberish
+        if subject.property_address and not self._validate_address(subject.property_address):
+            # Invalid address - clear it (will be flagged as VERIFY)
+            logger.warning(f"Invalid property address extracted: '{subject.property_address}' - rejecting")
+            subject.property_address = None
+            
+        # LAST RESORT: Heuristic Scan for "Orphan" Address
+        # In some digital PDFs (like total_report.pdf or appraisal_004), the values appear 
+        # at the very top of the text stream, disconnected from the "Property Address" label.
+        # We scan the first 2000 characters for a vertical address block.
+        if not subject.property_address:
+            orphan_data = self._scan_vertical_address_block(text[:2000])
+            if orphan_data.get('property_address'):
+                 subject.property_address = orphan_data['property_address']
+                 # Only override other fields if they were not found by standard extraction
+                 # (Standard extraction likely found nothing if address failed)
+                 subject.city = orphan_data.get('city') or subject.city
+                 subject.state = orphan_data.get('state') or subject.state
+                 subject.zip_code = orphan_data.get('zip_code') or subject.zip_code
+                 
+                 logger.info(f"Recovered property address via heuristic scan: '{subject.property_address}' "
+                             f"(City: {subject.city}, State: {subject.state}, Zip: {subject.zip_code})")
         
         subject.county = self._extract_field(text, [
             r"County[:\s]+([A-Za-z\s]+?)(?:\n|$)",
         ])
         
         # S-2: Borrower
+        # Field terminators to prevent capturing next field's content
+        BORROWER_TERMINATORS = r"(?=\s*Owner of Public Record|\s*County|\s*Legal|\s*Assessor|\s*APN|\n)"
+        
         subject.borrower_name = self._extract_field(text, [
+            # Pattern with terminators - stop before next field label
+            r"Borrower[:\s]+(?!Lender|Client|File|Property|Owner|See attached)([^:\n]+?)" + BORROWER_TERMINATORS,
+            r"BORROWER[:\s]+(?!LENDER|CLIENT)([^:\n]+?)" + BORROWER_TERMINATORS,
+            r"Borrower Name[:\s]+(?!Information)([^:\n]+?)" + BORROWER_TERMINATORS,
+            # Fallback: simple line extraction (for clean forms)
             r"Borrower[:\s]+(?!Lender|Client|File|Property|Owner)([^\n]+)",
-            r"BORROWER[:\s]+(?!LENDER|CLIENT)([^\n]+)",
-            r"Borrower Name[:\s]+(?!Information)([^\n]+)",
         ])
+        
+        # Check if borrower field says "See attached" - need to look in URAR addendum
+        if not subject.borrower_name or "see attached" in (subject.borrower_name or "").lower():
+            # Look for URAR: Borrower addendum section
+            addendum_match = re.search(
+                r"URAR:\s*Borrower\s*\n+([^\n]+)",
+                text, re.IGNORECASE
+            )
+            if addendum_match:
+                subject.borrower_name = addendum_match.group(1).strip()
+        
+        # Clean up borrower name - remove trailing noise
+        if subject.borrower_name:
+            # Remove "Owner of Public Record" if it got captured
+            subject.borrower_name = re.sub(
+                r'\s*Owner of Public Record.*$', '', 
+                subject.borrower_name, flags=re.IGNORECASE
+            ).strip()
+            # Remove trailing periods
+            subject.borrower_name = subject.borrower_name.rstrip('.')
         
         subject.co_borrower_name = self._extract_field(text, [
             r"Co-?Borrower[:\s]+([^\n]+)",
@@ -291,6 +429,14 @@ class ExtractionService:
             subject.occupant_status = "Tenant"
         elif re.search(rf"{check_pattern}\s*vacant|vacant\s*{check_pattern}", occupant_text):
             subject.occupant_status = "Vacant"
+        
+        # Fallback: Spatial Checkbox Detection (for disjointed digital PDFs)
+        if not subject.occupant_status and pdf_path:
+            # Look for checkmarks near these labels on Page 1 (index 0)
+            spatial_result = self._resolve_checkbox_spatial(pdf_path, 0, ["Owner", "Tenant", "Vacant"])
+            if spatial_result:
+                subject.occupant_status = spatial_result.title()
+                logger.info(f"Resolved S-7 Occupant Status via spatial check: {subject.occupant_status}")
         
         # S-8: Special Assessments
         special_str = self._extract_field(text, [
@@ -579,6 +725,17 @@ class ExtractionService:
         # Lender/Client - Extract from engagement letter
         # Format: "Client: United American Mortgage Corporation Client Address: ..."
         # Need to stop before "Client Address" or "Address"
+        
+        # Blacklist for known placeholder/template text
+        INVALID_LENDER_NAMES = [
+            "section of the signature area",
+            "see attached",
+            "n/a",
+            "none",
+            "to be determined",
+            "tbd",
+        ]
+        
         letter.lender_name = self._extract_field(text, [
             # Match "Client:" and capture until "Client Address" or newline
             r"Client[:\s]+([A-Za-z][A-Za-z\s]+(?:Corporation|Corp|Inc|LLC|Company|Co\.?|Bank|Mortgage|Credit Union)[A-Za-z\s]*)(?=\s+Client Address|\s*$|\n)",
@@ -588,12 +745,19 @@ class ExtractionService:
             r"Lender/?Client[:\s]+(?!Address)([A-Za-z][A-Za-z\s]+(?:Corporation|Corp|Inc|LLC|Company|Co\.?|Bank|Mortgage|Credit Union))",
         ])
         
-        # Clean up lender name - remove trailing noise
+        # Clean up and validate lender name
         if letter.lender_name:
             # Remove any "Client Address" that might have been captured
             letter.lender_name = re.sub(r'\s*Client Address.*$', '', letter.lender_name, flags=re.IGNORECASE).strip()
             # Remove trailing punctuation
             letter.lender_name = letter.lender_name.rstrip('.,;:')
+            
+            # Reject placeholder/invalid text
+            if letter.lender_name.lower().strip() in INVALID_LENDER_NAMES:
+                letter.lender_name = None
+            # Reject if too short (real lender names are typically longer)
+            elif len(letter.lender_name) < 5:
+                letter.lender_name = None
         
         letter.lender_address = self._extract_field(text, [
             r"Client Address[:\s]+([^\n]+)",
@@ -796,13 +960,171 @@ class ExtractionService:
         """Compile regex patterns for reuse."""
         return {}  # Patterns compiled on demand
     
-    def _extract_field(self, text: str, patterns: list) -> Optional[str]:
-        """Try multiple patterns and return first match."""
+    def _extract_field(self, text: str, patterns: List[str]) -> Optional[str]:
+        """Extract field using prioritized regex patterns."""
         for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match:
                 return match.group(1).strip()
         return None
+        
+    def _resolve_checkbox_spatial(self, pdf_path: str, page_num: int, candidates: List[str]) -> Optional[str]:
+        """
+        Spatially resolve which checkbox is selected on a given page.
+        
+        Args:
+            pdf_path: Path to PDF
+            page_num: 0-based page index
+            candidates: List of label strings to look for (e.g. ["Owner", "Tenant", "Vacant"])
+            
+        Returns:
+            The candidate string that has an 'X' checked next to it, or None.
+        """
+        try:
+            doc = fitz.open(pdf_path)
+            if page_num >= len(doc):
+                return None
+            page = doc[page_num]
+            
+            # Get all words with coordinates: (x0, y0, x1, y1, "word", block_no, line_no, word_no)
+            words = page.get_text("words")
+            
+            # Find candidate label locations
+            candidate_locs = {}
+            for cand in candidates:
+                cand_lower = cand.lower()
+                # Simple matching: find first word that matches candidate (approximate)
+                for w in words:
+                    if cand_lower in w[4].lower():
+                        # Store bbox: (x0, y0, x1, y1)
+                        candidate_locs[cand] = fitz.Rect(w[0], w[1], w[2], w[3])
+                        break # Found this candidate
+            
+            if not candidate_locs:
+                return None
+            
+            # Find all "X" marks
+            # We look for "X", "x", or sometimes specific glyphs if we knew them.
+            # We assume 'X' is a standalone word or very short string
+            x_marks = []
+            for w in words:
+                text = w[4].strip()
+                if text.lower() == 'x' or text == 'X':
+                    x_marks.append(fitz.Rect(w[0], w[1], w[2], w[3]))
+            
+            if not x_marks:
+                return None
+                
+            # Check proximity
+            # A checkmark for a label is usually:
+            # 1. To the LEFT of the label (within ~50 units)
+            # 2. Roughly on the same Y-axis (vertical center aligned)
+            
+            best_match = None
+            min_dist = float('inf')
+            
+            for cand, rect in candidate_locs.items():
+                cand_center_y = (rect.y0 + rect.y1) / 2
+                
+                for x_rect in x_marks:
+                    x_center_y = (x_rect.y0 + x_rect.y1) / 2
+                    
+                    # Vertical alignment check (allow small slack, e.g. 5-10 units)
+                    if abs(cand_center_y - x_center_y) < 10:
+                        # Horizontal check: X should be to the left, but close
+                        # x_rect.x1 (right edge of X) should be < rect.x0 (left edge of Label)
+                        # Distance gap
+                        dist = rect.x0 - x_rect.x1
+                        
+                        # Allow X to be slightly inside the label area too (overlapping) or just to left
+                        # Accept dist between -5 (overlap) and 60 (gap)
+                        if -5 <= dist <= 60:
+                            if dist < min_dist:
+                                min_dist = dist
+                                best_match = cand
+                                
+            return best_match
+            
+        except Exception as e:
+            logger.error(f"Spatial checkbox resolution failed: {e}")
+            return None
+    
+    def _validate_address(self, address: str) -> bool:
+        """Validate if a string looks like a real address."""
+        if not address or len(address) < 5:
+            return False
+            
+        # Must have at least one digit
+        if not re.search(r"\d", address):
+            return False
+            
+        # Should not contain "offered for sale" or "did not analyze"
+        if re.search(r"(?:offered for sale|did not analyze|appraisal report|property address)", address, re.IGNORECASE):
+            return False
+            
+        return True
+
+    def _scan_vertical_address_block(self, text_chunk: str) -> Dict[str, Optional[str]]:
+        """
+        Scan for a vertical address block (Street, City, State, Zip on separate lines).
+        Returns a dict with found components.
+        """
+        lines = text_chunk.split('\n')
+        result = {
+            'property_address': None,
+            'city': None,
+            'state': None,
+            'zip_code': None
+        }
+        
+        # Strict Regex for US Street Address
+        strict_addr_pattern = re.compile(
+            r"^\s*(\d+\s+[A-Za-z0-9\.\s]+(?:St|Ave|Rd|Blvd|Ln|Dr|Way|Ct|Pl|Cir|Hwy|Road|Street|Avenue|Drive|Terrace|Place|Court|Lane|Loop|Trail|Parkway))",
+            re.IGNORECASE
+        )
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Skip common non-address lines starting with digits
+            if re.match(r"^\d{4}$", line): continue # Year
+            if re.match(r"^\d+\.?\d*$", line): continue # Just numbers
+                
+            match = strict_addr_pattern.match(line)
+            if match and self._validate_address(match.group(1).strip()):
+                # Found Street Address
+                result['property_address'] = match.group(1).strip()
+                
+                # Look-ahead for City, State, Zip in the next 3 lines
+                # Pattern: Line i+1=City, i+2=State, i+3=Zip OR variations
+                lookahead_lines = lines[i+1:i+4]
+                
+                for next_line in lookahead_lines:
+                    next_line = next_line.strip()
+                    if not next_line: continue
+                    
+                    # Check for Zip Code (Strongest signal)
+                    if not result['zip_code'] and re.match(r"^\d{5}(?:-\d{4})?$", next_line):
+                        result['zip_code'] = next_line
+                        continue
+                        
+                    # Check for State (2-letter code)
+                    if not result['state'] and re.match(r"^[A-Z]{2}$", next_line, re.IGNORECASE):
+                        if next_line.upper() in ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"]:
+                            result['state'] = next_line.upper()
+                            continue
+                    
+                    # Check for City (Alpha text, usually title case, not "Subject" or "File")
+                    if not result['city'] and re.match(r"^[A-Za-z\s\.]+$", next_line):
+                        if len(next_line) > 2 and next_line.lower() not in ["subject", "contract", "neighborhood", "site", "improvements"]:
+                            result['city'] = next_line
+                            continue
+                            
+                return result
+        
+        return result
     
     def _parse_address_components(self, address: str) -> Dict:
         """Parse address into city, state, zip components."""

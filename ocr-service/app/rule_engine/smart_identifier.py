@@ -33,6 +33,7 @@ class RuleResult(BaseModel):
     review_required: bool = False  # True if human review is needed
 
 class SmartLogger:
+
     """
     A smart logging system that tracks rule execution and identifies
     areas where the rule engine needs improvement (e.g. missing data).

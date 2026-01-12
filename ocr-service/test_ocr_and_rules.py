@@ -84,12 +84,12 @@ def setup_logging(output_dir: Path) -> logging.Logger:
 # OCR EXTRACTION
 # ============================================================================
 
-def extract_pdf_text(pdf_path: str, logger: logging.Logger) -> tuple[str, ExtractionResult]:
+def extract_pdf_text(pdf_path: str, logger: logging.Logger) -> tuple[str, Any]:
     """
-    Extract text from PDF using OCR pipeline.
+    Extract text from PDF using ExtractionService logic (Text-First).
     
     Returns:
-        Tuple of (full_text, extraction_result)
+        Tuple of (full_text, extraction_result_placeholder)
     """
     logger.info(f"=" * 60)
     logger.info(f"EXTRACTING: {os.path.basename(pdf_path)}")
@@ -99,29 +99,33 @@ def extract_pdf_text(pdf_path: str, logger: logging.Logger) -> tuple[str, Extrac
         logger.error(f"File not found: {pdf_path}")
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
     
-    # Create OCR pipeline with forced image mode for better layout handling
-    pipeline = OCRPipeline(use_tesseract=True, use_cloud=False, force_image_ocr=True)
+    # Use ExtractionService to simulate actual production flow
+    from app.services.extraction_service import ExtractionService
+    service = ExtractionService()
     
-    # Extract all pages
-    logger.info("Starting OCR extraction...")
-    result = pipeline.extract_all_pages(pdf_path)
+    logger.info("Starting extraction using ExtractionService (Text-First)...")
+    start_time = datetime.now()
     
-    # Log extraction statistics
-    logger.info(f"Total pages: {result.total_pages}")
-    logger.info(f"Extraction time: {result.extraction_time_ms}ms")
+    # Call internal method _extract_from_pdf to get text
+    # Note: We don't get detailed page-by-page OCR stats here easily without modifying service,
+    # but we care about the TEXT result matching production.
+    full_text, total_pages = service._extract_from_pdf(pdf_path)
     
-    for page_detail in result.page_details:
-        logger.debug(f"  Page {page_detail.page_number}: "
-                    f"method={page_detail.method}, "
-                    f"confidence={page_detail.confidence:.2f}, "
-                    f"words={page_detail.word_count}")
+    duration = (datetime.now() - start_time).total_seconds() * 1000
+    logger.info(f"Extraction time: {duration:.0f}ms")
+    logger.info(f"Total pages: {total_pages}")
     
-    if result.warnings:
-        for warning in result.warnings:
-            logger.warning(f"  {warning}")
+    # Mock a result object to satisfy the test script interface
+    class MockResult:
+        def __init__(self, pages):
+            self.total_pages = pages
+            self.extraction_time_ms = 0
+            self.page_details = []
+            self.warnings = []
+            self.page_index = {}
+            
+    result = MockResult(total_pages)
     
-    # Get full text
-    full_text = pipeline.get_full_text(result.page_index)
     logger.info(f"Total characters extracted: {len(full_text)}")
     logger.info(f"Total words extracted: {len(full_text.split())}")
     
@@ -539,8 +543,8 @@ def run_all_rules(ctx: ValidationContext, logger: logging.Logger) -> list[RuleRe
                 logger.warning(f"  ❌ FAIL: {result.message}")
             elif result.status == RuleStatus.WARNING:
                 logger.warning(f"  ⚠️  WARNING: {result.message}")
-            elif result.status == RuleStatus.ERROR:
-                logger.error(f"  🔴 ERROR: {result.message}")
+            elif result.status == RuleStatus.VERIFY:
+                logger.warning(f"  🔍 VERIFY: {result.message}")
             elif result.status == RuleStatus.SKIPPED:
                 logger.info(f"  ⏭️  SKIPPED: {result.message}")
                 
@@ -551,133 +555,223 @@ def run_all_rules(ctx: ValidationContext, logger: logging.Logger) -> list[RuleRe
         return []
 
 
+
 # ============================================================================
 # MAIN TEST FUNCTION
 # ============================================================================
 
+def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path, logger) -> dict:
+    """
+    Run test for a single appraisal/engagement pair.
+    Returns test results summary.
+    """
+    test_name = appraisal_pdf.stem  # e.g., "apprisal_002"
+    
+    logger.info("=" * 70)
+    logger.info(f"TESTING: {test_name}")
+    logger.info("=" * 70)
+    
+    result = {
+        "test_name": test_name,
+        "appraisal_file": appraisal_pdf.name,
+        "engagement_file": engagement_pdf.name,
+        "ocr_success": False,
+        "rules_executed": 0,
+        "pass_count": 0,
+        "fail_count": 0,
+        "warning_count": 0,
+        "verify_count": 0,
+        "skipped_count": 0,
+        "errors": []
+    }
+    
+    try:
+        # STEP 1: OCR EXTRACTION
+        logger.info("  Step 1: OCR Extraction...")
+        appraisal_text, appraisal_result = extract_pdf_text(str(appraisal_pdf), logger)
+        engagement_text, engagement_result = extract_pdf_text(str(engagement_pdf), logger)
+        
+        result["ocr_success"] = True
+        result["appraisal_pages"] = appraisal_result.total_pages
+        result["appraisal_chars"] = len(appraisal_text)
+        result["engagement_pages"] = engagement_result.total_pages
+        result["engagement_chars"] = len(engagement_text)
+
+        
+        # Save extracted text
+        save_extracted_text(
+            appraisal_text,
+            output_dir / f"{test_name}_appraisal.txt",
+            appraisal_pdf.name,
+            logger
+        )
+        save_extracted_text(
+            engagement_text,
+            output_dir / f"{test_name}_engagement.txt",
+            engagement_pdf.name,
+            logger
+        )
+        
+        # STEP 2: FIELD EXTRACTION
+        logger.info("  Step 2: Field Extraction...")
+        extracted_data = extract_fields_from_text_new(appraisal_text, engagement_text, logger)
+        
+        # Save fields
+        with open(output_dir / f"{test_name}_fields.json", 'w', encoding='utf-8') as f:
+            json.dump(extracted_data, f, indent=2)
+        
+        # STEP 3: BUILD CONTEXT
+        logger.info("  Step 3: Building Validation Context...")
+        ctx = build_validation_context(
+            extracted_data['appraisal_fields'], 
+            extracted_data['engagement_fields'], 
+            logger
+        )
+        
+        # STEP 4: EXECUTE RULES
+        logger.info("  Step 4: Executing QC Rules...")
+        rules_results = run_all_rules(ctx, logger)
+        
+        # Count by status
+        for r in rules_results:
+            status = r.status.value if hasattr(r.status, 'value') else str(r.status)
+            if status == "PASS":
+                result["pass_count"] += 1
+            elif status == "FAIL":
+                result["fail_count"] += 1
+            elif status == "WARNING":
+                result["warning_count"] += 1
+            elif status == "VERIFY":
+                result["verify_count"] += 1
+            elif status == "SKIPPED":
+                result["skipped_count"] += 1
+        
+        result["rules_executed"] = len(rules_results)
+        
+        # Save rule results
+        results_json = [{
+            "rule_id": r.rule_id,
+            "rule_name": r.rule_name,
+            "status": r.status.value if hasattr(r.status, 'value') else str(r.status),
+            "message": r.message,
+        } for r in rules_results]
+        
+        with open(output_dir / f"{test_name}_rules.json", 'w') as f:
+            json.dump(results_json, f, indent=2)
+        
+        logger.info(f"  ✓ Completed: {result['pass_count']} PASS, {result['fail_count']} FAIL, "
+                    f"{result['warning_count']} WARNING, {result['verify_count']} VERIFY")
+        
+    except Exception as e:
+        result["errors"].append(str(e))
+        logger.exception(f"  ✗ Test failed: {e}")
+    
+    return result
+
+
 def run_test():
-    """Main test function."""
+    """Main test function - runs tests on all file pairs in testFile directory."""
     
     # Paths
     test_dir = Path(__file__).parent / "testFile"
     output_dir = Path(__file__).parent / "test_output"
     output_dir.mkdir(exist_ok=True)
     
-    appraisal_pdf = test_dir / "apprisal_002.pdf"
-    engagement_pdf = test_dir / "engagement_002.pdf"
-    
     # Setup logging
     logger = setup_logging(output_dir)
     
     logger.info("=" * 70)
-    logger.info("OCR EXTRACTION AND QC RULES TEST")
+    logger.info("OCR EXTRACTION AND QC RULES TEST - ALL FILES")
     logger.info(f"Started: {datetime.now().isoformat()}")
     logger.info("=" * 70)
     
-    try:
-        # =====================================================================
-        # STEP 1: OCR EXTRACTION
-        # =====================================================================
+    # Find all appraisal/engagement pairs
+    appraisal_files = sorted(test_dir.glob("apprisal_*.pdf"))
+    
+    all_results = []
+    
+    for appraisal_pdf in appraisal_files:
+        # Find matching engagement file
+        file_num = appraisal_pdf.stem.split("_")[-1]  # e.g., "002"
+        engagement_pdf = test_dir / f"engagement_{file_num}.pdf"
         
-        logger.info("\n" + "=" * 70)
-        logger.info("STEP 1: OCR EXTRACTION")
-        logger.info("=" * 70)
+        if not engagement_pdf.exists():
+            logger.warning(f"No matching engagement file for {appraisal_pdf.name}")
+            continue
         
-        # Extract appraisal PDF
-        appraisal_text, appraisal_result = extract_pdf_text(str(appraisal_pdf), logger)
-        save_extracted_text(
-            appraisal_text,
-            output_dir / "appraisal_extracted_text.txt",
-            "apprisal_002.pdf",
-            logger
-        )
-        
-        # Extract engagement letter PDF
-        engagement_text, engagement_result = extract_pdf_text(str(engagement_pdf), logger)
-        save_extracted_text(
-            engagement_text,
-            output_dir / "engagement_extracted_text.txt",
-            "engagement_002.pdf",
-            logger
-        )
-        
-        # =====================================================================
-        # STEP 2: FIELD EXTRACTION
-        # =====================================================================
-        # Extract fields using the actual ExtractionService
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("STEP 2: EXTRACT STRUCTURED FIELDS")
-        logger.info("=" * 70)
-        
-        extracted_data = extract_fields_from_text_new(appraisal_text, engagement_text, logger)
-        
-        # Save extracted fields to JSON for inspection
-        fields_json_path = output_dir / "extracted_fields.json"
-        with open(fields_json_path, 'w', encoding='utf-8') as f:
-            json.dump(extracted_data, f, indent=2)
-        logger.info(f"Saved extracted fields to: {fields_json_path}")
-        
-        # Debug: Log the extracted fields
-        logger.debug("Appraisal Fields:")
-        for key, value in extracted_data['appraisal_fields'].items():
-            logger.debug(f"  {key}: {value}")
-        
-        logger.debug("Engagement Fields:")
-        for key, value in extracted_data['engagement_fields'].items():
-            logger.debug(f"  {key}: {value}")
-        
-        logger.info("\n" + "=" * 70)
-        logger.info("STEP 3: BUILD VALIDATION CONTEXT")
-        logger.info("=" * 70)
-        
-        ctx = build_validation_context(extracted_data['appraisal_fields'], extracted_data['engagement_fields'], logger)
-        
-        # =====================================================================
-        # STEP 4: EXECUTE RULES
-        # =====================================================================
-        
-        logger.info("\n" + "=" * 70)
-        logger.info("STEP 4: EXECUTE QC RULES (S-1 to S-12, C-1 to C-5)")
-        logger.info("=" * 70)
-        
-        results = run_all_rules(ctx, logger)
-        
-        # Save results as JSON
-        results_json = []
-        for r in results:
-            results_json.append({
-                "rule_id": r.rule_id,
-                "rule_name": r.rule_name,
-                "status": r.status.value if hasattr(r.status, 'value') else str(r.status),
-                "message": r.message,
-                "details": r.details,
-            })
-        
-        with open(output_dir / "rule_results.json", 'w') as f:
-            json.dump(results_json, f, indent=2)
-        logger.info(f"Saved rule results to: rule_results.json")
-        
-        # =====================================================================
-        # COMPLETION
-        # =====================================================================
-        
-        logger.info("\n" + "=" * 70)
-        logger.info("TEST COMPLETED SUCCESSFULLY")
-        logger.info(f"Output directory: {output_dir}")
-        logger.info("=" * 70)
-        logger.info("Generated files:")
-        logger.info(f"  1. {output_dir / 'appraisal_extracted_text.txt'}")
-        logger.info(f"  2. {output_dir / 'engagement_extracted_text.txt'}")
-        logger.info(f"  3. {output_dir / 'extracted_fields.json'}")
-        logger.info(f"  4. {output_dir / 'rule_results.json'}")
-        logger.info(f"  5. {output_dir / 'logs' / 'test_run.log'}")
-        logger.info(f"  6. {output_dir / 'logs' / 'rule_results.log'}")
-        
-    except Exception as e:
-        logger.exception(f"Test failed with error: {e}")
-        raise
+        try:
+            result = run_single_test(appraisal_pdf, engagement_pdf, output_dir, logger)
+            all_results.append(result)
+        except Exception as e:
+            logger.exception(f"Fatal error testing {appraisal_pdf.name}: {e}")
+    
+    # =========================================================================
+    # SUMMARY REPORT
+    # =========================================================================
+    
+    logger.info("\n" + "=" * 70)
+    logger.info("SUMMARY REPORT")
+    logger.info("=" * 70)
+    
+    total_pass = sum(r["pass_count"] for r in all_results)
+    total_fail = sum(r["fail_count"] for r in all_results)
+    total_warning = sum(r["warning_count"] for r in all_results)
+    total_verify = sum(r["verify_count"] for r in all_results)
+    total_skipped = sum(r["skipped_count"] for r in all_results)
+    total_rules = sum(r["rules_executed"] for r in all_results)
+    
+    print("\n" + "=" * 70)
+    print("TEST RESULTS SUMMARY")
+    print("=" * 70)
+    
+    for r in all_results:
+        status = "✓ OK" if not r["errors"] else "✗ FAILED"
+        print(f"\n{r['test_name']}:")
+        print(f"  Status: {status}")
+        print(f"  OCR: {r.get('appraisal_pages', '?')} appraisal pages, "
+              f"{r.get('engagement_pages', '?')} engagement pages")
+        print(f"  Rules: {r['rules_executed']} executed")
+        print(f"    PASS: {r['pass_count']}")
+        print(f"    FAIL: {r['fail_count']}")
+        print(f"    WARNING: {r['warning_count']}")
+        print(f"    VERIFY: {r['verify_count']}")
+        print(f"    SKIPPED: {r['skipped_count']}")
+        if r["errors"]:
+            print(f"  Errors: {r['errors']}")
+    
+    print("\n" + "-" * 70)
+    print("TOTALS:")
+    print(f"  Files tested: {len(all_results)}")
+    print(f"  Total rules executed: {total_rules}")
+    print(f"  Total PASS: {total_pass}")
+    print(f"  Total FAIL: {total_fail}")
+    print(f"  Total WARNING: {total_warning}")
+    print(f"  Total VERIFY: {total_verify}")
+    print(f"  Total SKIPPED: {total_skipped}")
+    print("=" * 70)
+    
+    # Save summary to JSON
+    summary = {
+        "timestamp": datetime.now().isoformat(),
+        "files_tested": len(all_results),
+        "total_rules": total_rules,
+        "total_pass": total_pass,
+        "total_fail": total_fail,
+        "total_warning": total_warning,
+        "total_verify": total_verify,
+        "total_skipped": total_skipped,
+        "results": all_results
+    }
+    
+    with open(output_dir / "test_summary.json", 'w') as f:
+        json.dump(summary, f, indent=2)
+    
+    logger.info(f"\nSummary saved to: {output_dir / 'test_summary.json'}")
+    logger.info("TEST COMPLETED")
+    
+    return all_results
 
 
 if __name__ == "__main__":
     run_test()
+

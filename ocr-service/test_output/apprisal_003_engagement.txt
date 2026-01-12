@@ -1,0 +1,526 @@
+============================================================
+EXTRACTED TEXT FROM: engagement_003.pdf
+Extraction Date: 2025-12-17T22:52:13.869789
+Total Characters: 29418
+Total Words: 4449
+============================================================
+
+P : 248-579-9928
+.
+    E : information@esusa.net
+ 
+ 
+Order Information 
+ 
+Order Type:
+Residential Appraisal
+Order Number:
+ESCA-0016048
+ 
+Property Address:
+1313 Lake Drive Encinitas CA 92024   
+( Additional Resources ) 
+Property County:
+San Diego
+ 
+Order Priority:
+Rush
+ 
+UAD Report Needed:
+FALSE
+ 
+Property Type:
+Detached
+ 
+Year Built:
+N/A
+Occupied By:
+Investment
+ 
+Order Due Date:
+12/12/2025
+ 
+Lender on Report:
+LendSure Mortgage Corp
+ 
+Lender Address:
+12230 World Trade Dr, Suite 250 San Diego CA 92128
+ 
+Vendor:
+TROY WEBB
+Assigned On:
+12/5/2025 6:54:37 PM
+ 
+Vendor Company
+Name:
+WEBB APPRAISALS
+Vendor Mailing
+Address:
+1878 W PHILLIPS
+ROAD, SAN TAN
+VALLEY, AZ 84144
+ 
+Product:
+GPAR - 1007, Rush Fee
+ 
+Order Assignment
+Expiration Time:
+12/5/2025 10:54:01 PM (Eastern Standard Time)
+ 
+Loan Type:
+Jumbo
+Loan Number:
+15509830
+ 
+Transaction Type:
+Re-Finance
+Legal Description:
+N/A
+ 
+FHA Case Number:
+N/A
+ 
+Contact Person:
+Borrower
+ 
+AMC Reg. Number:
+1359
+ 
+Fee Details 
+ 
+Product:
+GPAR - 1007
+Vendor`s Fee:
+1750.00
+ 
+Additional Item 1:
+Rush Fee
+Vendor`s Fee:
+0.00
+ 
+Total Vendor's Fee:
+1750.00
+ 
+Technology Fee:
+-10.00
+ 
+‐
+
+
+Net Vendor's Fee:
+1740.00
+ 
+Borrower Information 
+ 
+Borrower Name:
+Jose Luis Arellano; Odilon Diaz
+ 
+Phone:
+N/A
+Work Phone:
+N/A
+ 
+Cell Phone:
+(760) 476-3635, (760) 473-6355
+Borrower Email:
+josea@ojgrowers.com;
+odilon@ojgrowers.com
+ 
+Equity Solutions USA Instructions
+AMC NAME.  Type “Equity Solutions USA” on the Name line in client section of the signature area.
+INTENDED USER AND INTENDED USE. In the report, type the intended user and intended use language required
+by FHA, VA, USDA/RD, etc. applicable for the assignment type.
+ 
+VALUATION INDEPENDENCE. 
+The valuation must be developed with independence, impartiality and objectivity. If the appraiser encounters any
+attempt to influence, coerce, or otherwise attempt to influence the development or reporting of the appraisal by
+anyone, they should immediately contact the Equity Solutions USA Appraisal Independence Hotline at 615-721-
+7067.
+Further, appraisers must be independent of the loan production and collection processes and have no direct,
+indirect, current, or prospective interest, financial or otherwise, in the property or transaction, regardless of whether
+such a conflict is discovered upon accepting the assignment or while performing the assignment.
+If the appraiser does not meet these independence requirements, the assignment must be declined or withdrawn
+from.
+The appraisal (analyses, methods, techniques, opinions, conclusions, value opinion, scope of work, and other
+development and reporting steps) must not be based partially or completely on:
+Race, color, religion, sex or gender, age, marital status, sexual orientation, handicap or disability, familial
+status, or national origin of either the prospective owners or occupants of the subject property or of the
+present owners or occupants of the properties in the vicinity of the subject property.
+Predetermined opinions and/or conclusions, such as the owner’s estimate of value or any other estimate of
+value provided by the lender/client, realtor, broker, owner or any other party related to the subject property or
+the related transaction.
+ 
+STOP AND NOTIFY EQUITY SOLUTIONS, USA IF…
+a fully signed contract was not attached to this order for Purchase appraisals, or you are provided
+other contracts by other parties for Purchase appraisals,
+plans, specs, materials lists have not been provided (for Proposed or Under-Construction
+appraisals),
+the wrong form was requested for the type of property that exists,
+the FHA Case # or VA number has not been provided (for FHA or VA orders),
+the subject cannot be rebuilt if destroyed, or the subject's improvement is illegal under zoning.
+the subject is in C5 or C6 condition, please stop all work and call us before moving forward with
+the report.
+Hawaiian Lava Zones :  If the subject property is located within lava zones 1 and 2, please stop all
+work and contact Equity Solutions
+Manufactured Homes: If the subject is a Manufactured Home that was built prior to June 15,1976 -
+please stop all work and contact Equity Solutions
+ 
+‐
+
+
+COMPENSATION TO APPRAISER.  By accepting this engagement letter, the appraiser agrees to the following
+payment terms and processes:
+Research the property prior to accepting the fee for the assignment. To request a fee change for special
+circumstances, communicate the request in the ValueLink appraisal management platform, providing the basis for
+the request. Equity Solutions USA will review the request in accordance with appropriate rules. Generally, fee
+increases will not be accepted after the property inspection.
+Other than required or allowed by rule or law, the vendor may not discuss or negotiate the fee with parties other
+than Equity Solutions USA.
+Payment will be made to the vendor by Equity Solutions USA by check (unless arranged for electronic ACH), within
+the payment timeframes agreed to in the vendor agreement: Following the date Vendor delivers to Equity Solutions
+USA the final completed report that meets requirements of the engagement, payment will be made to Vendor within a
+timeframe of 30 days or within a timeframe required or allowed by regulation, whichever timeframe is longer.
+Since Equity Solutions USA will be initiating an invoice on behalf of the vendor and issuing payment directly to the
+vendor, do not separately invoice Equity Solutions USA or the lender or attach an invoice to the report, unless this is
+contrary to state regulation.
+If the appraiser withdraws from an assignment prior to completion, an invoice for any work completed prior to the
+withdrawal must be submitted within 7 calendar days for review by Equity Solutions USA. Approval will be contingent
+upon the amount of work completed and the reason(s) cited by the appraiser for the withdrawal. For example, if the
+appraiser withdraws from a report due to competency issues and no work has been completed, no payment will be
+made.
+If the appraiser fails to deliver a completed report by the agreed upon due date without any prior communication
+that the report will be late, Equity Solutions USA may consider the assignment abandoned, cancel the assignment,
+and not provide compensation to the vendor.
+Equity Solutions USA reserves the right to cancel this agreement without payment to the vendor if the terms of this
+agreement, assignment conditions, or cited client requirements for the assignment are not met, including but not
+limited to:
+unresponsiveness to requests for updates
+failure to meet the due date and/or requirements of the assignment,
+failure and/or refusal to issue new report(s) addressing revision requests.
+ 
+DUE DATES, COMMUNICATION, DELIVERY, REVISIONS.
+DUE DATE
+The vendor agrees to upload the report by the Due Date.
+If your current workload prevents you from performing the service and uploading the completed report by the
+indicated time, inform Equity Solutions USA of the due date you can accommodate; do not accept the order if the
+due date is unrealistic for your schedule.
+For unforeseen delays out of your control, notify Equity Solutions USA on or prior to the due date; inform Equity
+Solutions USA of the unforeseen circumstances and the new date you will upload the report.
+ 
+COMMUNICATION and SERVICE LEVELS
+Do not proceed with the assignment until you accept the assignment through the ValueLink platform.
+Call to set the inspection with the borrower, real estate agent, or other cited access contact within 24 hours of
+accepting the assignment. Equity Solutions USA does not inform access contacts about the type of inspections/
+observations; when calling for the appointment, the vendor must describe to the access contacts the type of
+inspection involved (i.e., interior rooms, exterior, etc.). Equity Solutions does not set the appointment with the access
+contact.
+‐
+
+
+Notify Equity Solutions USA through the ValueLink platform:
+the date and time of the appointment when it is set with the access contact,
+that the inspection has been completed,
+any delays preventing delivery by the close of business on the agreed-upon due date (notify Equity Solutions
+USA on or before the due date),
+any delays preventing revisions to be completed within 24 hours.
+All communications between the appraiser and the client, including but not limited to schedule changes, delivery
+dates, issues, questions, revisions, engagement, etc., must be timely and made via the ValueLink platform or by
+calling Equity Solutions USA.
+Equity Solutions USA will not prevent the vendor from communicating with brokers, agents, real estate personnel,
+appropriate staff at city, state, or local departments, or other appropriate parties in the normal course of work to
+produce reliable and credible results.
+Name and Contact Method for questions, concerns, disputes, or other issues: communicate with the Equity
+Solutions USA staff via the ValueLink platform or by calling Equity Solutions USA. Orders are monitored by a team of
+appraisal management staff.
+DELIVERY/ FORMAT
+Appraisal reports, addenda, and other reports must be uploaded in client's approved format (ENV and/or XML), as
+applicable, through the ValueLink platform. Emailed PDFs, faxed, or hard copy report are not acceptable. Reports
+must be completed in UAD format, unless otherwise indicated.
+REVISIONS
+After delivery of the report by the vendor and based on screening processes of Equity Solutions USA and the
+lender, Equity Solutions USA may request 1) corrections; 2) clarifications; 3) consideration of additional property
+information or sales (including reconsiderations of value). Deliver a revised report within 24 hours, unless otherwise
+agreed upon. Follow state regulations related to revisions, as applicable.
+Regarding requests for the vendor to consider additional sales for inclusion as comps, if the additional sales are not
+used, provide an explanation for excluding those sales. Regarding revisions related to a new contract/amendment,
+see FAQ #153 in 2020-2021 USPAP.
+Charging additional fees to submit revised report(s) is not acceptable.
+ 
+LENDER REVISION REQUESTS: Equity Solutions does not provide additional fees for revisions requested by
+lenders; the requests are considered part of the appraisal process and are necessary to meet regulatory and
+underwriting requirements both prior to closing the loan, as well as during the post-closing process. 
+ 
+COMPETENCY.
+The appraiser certifies he/she will comply with applicable laws, regulations, assignment conditions, and scope of
+work, and he/she can complete the assignment in compliance with the Competency Rule of USPAP, including without
+limitation: -- is competent in appraising (or reviewing, as appropriate) the property type of the subject property and
+in the subject's area, and has access to appropriate data sources that are necessary for the assignment, property,
+and area, -- will decline the assignment if the appraiser is not competent for the assignment, and will immediately
+notify Equity Solutions USA if the appraiser determines he/she is not competent after accepting the assignment, and
+-- is aware that misrepresenting his/her competence may be subject to states’ mandatory reporting regulations by
+Equity Solutions USA.
+ 
+CONFIDENTIALITY.
+Appraiser shall not provide a copy of the report (including appraisal, appraisal review, or other reports) or disclose
+assignment results or other confidential information to any party other than the lender client and Equity Solutions
+USA, or as cited in and allowed by the Confidentiality section of the Ethics Rule of USPAP or state regulation.
+‐
+
+
+ 
+PANEL MANAGEMENT.
+Appraiser selection is based on work quality, communication, professionalism and conduct, timing, and the overall
+report. Contact the Equity Solutions USA order representative to inquire about panel status, business relationship,
+or panel management.
+ 
+GENERAL. 
+The appraisal report must be written; must be developed and reported in conformance with current USPAP, the
+applicable Guides and Handbooks, FIRREA, and other federal regulations applicable to the assignment type; and
+as applicable to the assignment type, must include data, photos, sketch, maps, required exhibits, sufficient
+summaries/ descriptions for an understandable and meaningful report, and other content applicable to the
+assignment type.
+Assignment Conditions depend on assignment type: FHA and USDA/RD: HUD Handbook 4000.1. USDA/RD
+(additional): USDA Lender Handbook 3555. Conventional: Fannie Mae and & Freddie Mac Selling/Servicer Guides.
+VA: VA Chapters.
+RE-ASSIGNMENT, SUB-CONTRACTING
+The assigned vendor may not re-assign or subcontract this order and must sign and certify the report.
+REGARDING TRAINEES
+If the type of assignment and regulations allow for the use of assistance from a trainee, the trainee’s name and the
+type of assistance must be disclosed in the report as required under the USPAP and applicable state regulations.
+The trainee may sign as Appraiser (with a supervisor appraiser signing as Supervisor Appraiser) only if the trainee-
+supervisor activity meets state regulations. The appraisers involved must meet the obligations pre-printed on the
+form that apply to their signatures.
+INCLUSIONS
+The vendor acknowledges that messages and documents communicated by Equity Solutions USA for this order,
+including the previously mutually accepted vendor agreement, are part of this engagement letter agreement and
+impact the development, reporting, and scope of the assignment, as well as the vendor's responsibilities. Refer to
+the full vendor agreement for additional details, terms, and conditions.
+ 
+CONDUCT AND PROFESSIONALISM.
+In addition to the professional and ethical rules of conduct promulgated by USPAP and conduct and professionalism
+expectations agreed to in the vendor agreement, Equity Solutions USA requires that all appraisers represent
+themselves with the highest degree of professionalism, which also reflects on Equity Solutions USA and the client.
+Equity Solutions USA do not tolerate or allow any theft or criminal activity, alcohol or drug use, illegal conduct or
+behavior, or inappropriate conversation with customers or related to the property or assignment.
+Equity Solutions USA expects that appraisers are punctual to appointments, respect the customer's property, act
+and communicate professionally, adhere to state, federal, and all applicable laws, rules, and regulations, and wear
+appropriate professional attire when completing assignments.
+Violations of the aforementioned terms is cause for removal from Equity Solutions USA’s panel of vendors available
+to receive assignments and may also be cause for reporting to state regulatory officials.
+ 
+INSPECTIONS, SKETCH.
+Inspections (sometimes referred to as “observations”) for appraisal assignments must meet or exceed requirements
+‐
+
+
+of the applicable form, Guides, and Handbooks. For assignments that may require physical inspection by an
+appraiser, a “virtual” inspection is not considered the same as a “physical” inspection.
+If discrepancies exist between the appraiser’s measurements of the dwelling and other sources (e.g., public record
+sketches, blueprints, etc.), provide a comment discussing the disparity. In this case, provide a comment as to what
+measuring standard you are adhering to for your measurements. Some states require the use of a specific
+standard.
+Sketch Requirements:  A floorplan sketch is required and must be software generated (not hand drawn) and
+indicate dimensions and calculations that support how the gross living area or gross building area was developed.
+ A sketch is required for all levels including unfinished and finished basement areas. The floor plan needs to include
+the following: floor level, room labeling, interior walls, doorways, staircases ,exterior/interior egress, and dimensions
+of all exterior walls. If the subject offers an accessory unit or guest cottage - the same requirements apply.  All
+exterior features (porch, patio, deck) are to be included on the sketch along with other exterior amenities that
+include barns, permanent sheds, and inground swimming pools.
+If the subject is in an apartment style condominium or cooperative unit, the sketch should indicate interior perimeter
+unit dimensions.
+"See Client Instructions for ANSI standard requirements."
+For FHA/USDA, include patios, porches, decks, and breezeways
+For appraisals that require a floorplan, (per the form, Guide, Handbook, etc.), include interior walls for atypical or
+functionally obsolete layouts.
+ 
+ACCESSORY UNITS (ADU's):
+1. Provide a description of the ADU physical characteristics and comment on access. (ADU must be accessible
+without going through the primary residence.)
+2. Report the gross living area of the accessory unit (ADU) separately from the primary dwelling.
+3. Comment on market acceptance of accessory units (ADUs) in the subject market.
+4. Comment on current occupancy of the accessory and if the accessory unit (ADU) can be legally rented.
+ 
+PHOTOGRAPHS, MAPS:
+Photos must be in focus. Minimum photos are indicated below; however, reports must include all photos required by
+applicable guides, handbooks, form instructions, and client- and product-specific engagement instructions.
+At minimum - assignments requiring interior inspections require color photographs of the front, the rear, the street
+view, the kitchen (with photos showing all cooking facilities), All bathrooms, all bedrooms, all living areas including
+foyer and laundry room, full basement including mechanicals/finished areas, and all garage interiors.  If the subject
+offers outbuildings or sheds that are permanently affixed - interior photos are required.  Subject photos to include all
+external beneficial/adverse influences, any recent renovations, any deterioration, and any health and safety issues.
+Please include all swimming pools as well.
+At minimum - assignments requiring exterior-only inspections require color photographs of front, street, any
+observable additional buildings and structures, and externalities.
+Additional photos required, as applicable to the property: repair and inspection items; examples of condition,
+deferred maintenance, updating, wear and tear; and any adverse or beneficial factors of the improvements, site,
+view, or location.
+For assignments where guides, handbooks, form instructions, etc. require appraiser to drive to the comparables,
+include color photos of the front of each comp sale, listing, pending. In these cases, if a comp photo cannot be
+collected (due to obstructions, people, etc.), cite the reason in the appraisal report, include a field photo of the
+street sign, and include an MLS photo of the comp.
+Photos for the assignment must be taken by appraiser unless the assignment is identified as a hybrid assignment
+(where another party takes the photographs without the appraiser) or identified as a desktop assignment requiring
+no photo collecting.
+‐
+
+
+Aerial Maps -- please include an aerial map of the subject and surrounding area with all reports.
+*** If the property is located in a Flood Zone - please be sure to attach a copy of the Flood Map with your final
+report. ***
+ 
+REQUIREMENTS and REMINDERS.
+Include a full legal description or attach a copy of the legal description within the addendum if the legal
+description is lengthy.
+If the property is in a FEMA DECLARED DISASTER AREA -- Please add commentary to the appraisal as to
+whether the subject property HAS been impacted by the disaster event - or if it HAS NOT been impacted by
+the disaster event.
+Include the estimated remaining economic life on all reports.
+Include highest and best use summary sentences (legal, physical, economic, or other factors), on page 3 or
+another text area for Appraisal Reports.
+Include the specific zoning classification and description (e.g., not simply "Residential" unless that is the
+zoning name).
+When disclosing an extraordinary assumption or hypothetical condition, include a statement that its use might
+affect assignment results.
+Include written analysis of the subject's current and within-12-month listings, options, and agreements of sale,
+and the subject’s within-3-year sales and transfers. Simply typing dates and amounts does not meet USPAP
+requirements. Explain how the listings, contracts, and sales relate to each other and their context with the
+value opinion.
+Disclose the reasonable exposure time for the subject’s value opinion, on page 3, another text area, or a
+USPAP addendum.
+Disclose prior services performed related to the subject property in the three years prior the acceptance of
+this assignment, in accordance with Standards Rule 2-3.
+Attach a copy of your State License/Certification to every appraisal report – on its own separate page.
+Please comment if any personal property was considered in the development of the opinion of value.
+Sales Over 6 Months Old:   Please provide an explanation on the use of sales over 6 months.
+If the subject is in a Suburban Area - please comment on the use of sales exceeding 1 mile and if the sales
+are in competing neighborhoods.
+If the subject is in an Urban Area - please comment on the use of sales exceeding 1/2 mile and if the sales
+are in competing neighborhoods.
+Smoke and CO Detectors:   Please comment if there are any applicable State or Local codes that
+require CO and/or Smoke Detectors.  If required, a photo must be included, or comment if Smoke
+and/or CO Detectors are not present.
+Properties served by Well and Septic: Provide commentary on the distance between the private well and
+septic. The well must be at least 50 ft. from septic tank, 100 ft. from septic drain field, and 10 ft. from property
+lines. Commentary needs to be specific to the FHA 4000.1 distance requirements. We recommend at time
+of appointment scheduling to inquire if the subject is served by well and septic and advise the
+point of contact you will need to determine the location of well and septic and to provide any
+available documents. Acceptable supporting documents can be obtained from the homeowner, local
+municipality, or the homeowners septic service provider.
+Solar panels: If the subject property features solar panels, please provide photos and comment as to
+whether the panels are Leased (considered personal property), Financed (collateral for another loan) or
+Owned by the homeowner . If the panels are Owned, please comment as to any contributory value.
+In the Sales Comparison section: If any comparable sale adjustments exceed a 10% line adjustment, 15%
+net adjustment or a 25 % gross adjustment - the client requires the appraiser to explain the rationale and
+reasoning behind the adjustments. Commentary needs to be comparable sale specific.
+ 
+DETAIL IN REPORTS.
+For “summary” Appraisal Reports, include enough detail consistent with the intended use and pursuant to the
+USPAP Appraisal Report option, to allow the user to understand the appraiser's opinions and conclusions of value
+and marketability. Include:
+comp search criteria, availability or scarcity of sales;
+unique or significant characteristics of the subject;
+‐
+
+
+reasoning for selecting comps (especially distant, over-6-month sales, sales dissimilar to the subject, large or
+numerous adjustments);
+information or charts in support of the market trend conclusion;
+adjustment support;
+disclosure and analysis of adverse and beneficial conditions and externalities.
+Unacceptable practices: merely stating “best sales used as comps.” Using inapplicable or meaningless boilerplate.
+Merely stating “a $ adjustment was made” without explaining the support or method. Listing a list of adjustment
+methods, you might have used. Merely citing “experience” on its own without explaining information or methods
+relied upon.
+For Appraisal Review Reports, explain your logic and reasoning for all disagreements with the work under review;
+and explain the support for your own methods, analyses, opinions, conclusions, information, and value opinion
+related to any disagreements or errors with the work under review.
+Unacceptable practices: Merely making a statement of disagreement with no detail or support for the disagreement
+(e.g., "Adjustments are too low", "GLA for comp X is not correct", "Comps are not the best", and other non-
+supported statements). Making comments about the appraiser, rather than about the appraisal report under review.
+For All FHA 203K & Homestyle Renovation assignments. Subject must be appraised subject-to all the items that
+are in the bid provided. Page 1 in the Improvements section should reflect all of subject's proposed improvements.
+The condition rating of subject should be the as-improved rating and the comps should have similar condition. Value
+must be the as-improved value per the 203K/Homestyle Renovation bid. Bid must be included in the report.
+ 
+ASSIGNMENTS THAT INCLUDE SHORT-TERM RENTAL DATA (STR):
+When accepting an assignment for a report that includes Short-Term Rental (STR) analysis we suggest
+that you have access to AirDNA, as the GSEs consider this to be a reliable data source for the formation
+of an opinion of value.
+Other considerations that can be used:
+Occupancy (Weekends and Seasonal trends)
+Management and Marketing Costs
+Maintenance and Cleaning Costs
+If applicable - Licensing Fees
+ If you are unable to meet the above requirements, please stop all work and contact Equity Solutions.
+ 
+ASSIGNMENTS INVOLVING NEW CONSTRUCTION:
+To ensure an accurate and compliant appraisal report please include the following data and documents as part of
+your appraisal report:
+1. Plans and Specifications: floor plans, elevations, and architectural drawings along with a description of
+materials and finishes.
+2. Site Information: Include information regarding public utilities, landscaping and/or site improvements.
+3. Construction Cost Estimates: If available, please include a copy of the builder’s cost breakdown or
+contract, including allowances for finished items.
+4. Comparable Sales:  Please supply comparable sales of recently completed similar new construction homes.
+If the subject is in a new sub-division or a PUD, the secondary market requires the following: at least one
+closed sale from the subject neighborhood (resale is preferable, if verifiable, and does not involve the subject
+builder), one closed comparable sale from outside the subject neighborhood.  Any remaining sale data can
+be from within or outside the subject sub-division or PUD.
+5.  If there are no closed sales in the subject-subdivision/PUD, and the subject is one of the first sales, it's
+permissible to utilize two pending sales in the subject sub-division.
+6. Appraisal Update and Completion Requirements: It is understood that the scope of work will include not
+only the initial appraisal report but the following additional components:
+Appraisal Update (Form 1004D ): This will involve providing an updated analysis to confirm any changes in market
+conditions, the GSE guidance allows for an updated analysis within 12-months prior to the effective date of the
+‐
+
+
+appraisal report.
+Completion Inspection (1004D for conventional loans): Once the subject property construction is completed,
+you will be responsible for conducting a final inspection to ensure that the property has been completed in
+accordance with the plans and specifications.
+ 
+GOVERNING LAW & JURISDICTION.
+The laws of the State of Michigan shall govern the interpretation and enforcement of this agreement.
+Please note that you will need to agree to the all of the following items in order to be considered an Independent
+Contractor:
+You have the right and freedom to work the hours that you deem necessary to perform this order that you
+have accepted from Equity Solutions USA.
+The way you perform the assignment is under your exclusive control.
+You will not be treated as an employee for state or federal tax purposes or for the purposes of workers’
+compensation or unemployment insurance.
+You may perform appraisals on behalf of yourself or for other firms and may market your services to others.
+You are responsible for your own “tools” for the job, such as computers, tablets, or software.
+You are responsible for your own training and continuing education.
+ 
+RECONSIDERATION OF VALUE REQUESTS:
+Fannie Mae, Freddie Mac and HUD/FHA have policies and procedures in place for borrower-initiated
+Reconsideration of Value requests. As part of Equity Solutions USA's commitment to compliance and customer
+service, we will require a response from you on this request.   When you receive our Reconsideration of Value
+Request - We kindly ask that you evaluate the information provided and provide a response addressing any
+additional sale data and pertinent details that may affect the original appraisal conclusion.
+Please be advised as part of Equity Solutions USA's company policy - that No additional fee will be offered/paid for
+any Reconsideration of Value requests. The ROV process is included as part of our appraisal services and all
+Reconsideration of Value requests must be submitted within this framework. 
+ 
+VENDOR ACCEPTANCE.
+By accepting this assignment, you represent and warrant your ability to comply with the terms and conditions
+outlined and referenced in the engagement letter.
+ 
+State Specific Instructions
+testTROY WEBB
+ 
+abc: Jose Luis Arellano; Odilon Diaz
+ 
+1313 Lake Drive
+   
+   
+ACKNOWLEDGED AND AGREED:
+Vendor:
+TROY WEBB
+Date:
+12/5/2025 7:20:08 PM
+ 
+‐
+
+

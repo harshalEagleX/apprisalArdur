@@ -102,7 +102,7 @@ OCR_CONFIG = {
     'tesseract_cmd': TESSERACT_CMD,
     'tessdata_prefix': TESSDATA_PREFIX if os.path.exists(TESSDATA_PREFIX) else None,
     'tesseract_lang': 'eng',  # English language
-    'tesseract_config': '--oem 3 --psm 6',  # LSTM engine, uniform block of text
+    'tesseract_config': '--oem 3 --psm 4',  # LSTM engine, single column of variable text (better for tables)
     
     # PDF processing settings
     'pdfinfo_cmd': PDFINFO_CMD,
