@@ -33,6 +33,7 @@ from app.rule_engine.engine import engine, RuleStatus, RuleResult
 import app.rules
 from app.services.extraction_service import extraction_service
 from app.models.difference_report import SubjectSectionExtract, ContractSectionExtract
+from app.extraction.layout_extractor import extract_urar_layout_fields
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +91,7 @@ class SmartQCProcessor:
     """
     
     def __init__(self, use_tesseract: bool = True, use_nlp_embeddings: bool = False):
-        self.ocr_pipeline = OCRPipeline(use_tesseract=use_tesseract, force_image_ocr=True)
-    def __init__(self, use_tesseract: bool = True, use_nlp_embeddings: bool = False):
-        # We now use extraction_service for OCR, but might still need pipeline for other tasks if any
-        self.ocr_pipeline = OCRPipeline(use_tesseract=use_tesseract, force_image_ocr=True)
+        self.ocr_pipeline = OCRPipeline(use_tesseract=use_tesseract, force_image_ocr=False)
         self.use_nlp_embeddings = use_nlp_embeddings
     
     def process_document(
@@ -101,6 +99,8 @@ class SmartQCProcessor:
         pdf_path: str,
         engagement_letter_text: Optional[str] = None,
         contract_text: Optional[str] = None,
+        full_text: Optional[str] = None,
+        extraction_result: Optional[ExtractionResult] = None,
     ) -> QCResults:
         """
         Process an appraisal PDF through the complete QC pipeline.
@@ -115,29 +115,48 @@ class SmartQCProcessor:
         """
         start_time = time.time()
         
-        # Step 1: OCR Extraction (Single Pass)
-        logger.info(f"Starting OCR extraction for: {pdf_path}")
-        extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
-        
-        if not extraction_result.page_index:
-            return QCResults(
-                success=False,
-                processing_time_ms=int((time.time() - start_time) * 1000),
-                total_pages=0,
-                extraction_method="none",
-                processing_warnings=["Failed to extract any text from PDF"]
-            )
+        if full_text is None:
+            logger.info(f"Starting OCR extraction for: {pdf_path}")
+            extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
             
-        full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
+            if not extraction_result.page_index:
+                return QCResults(
+                    success=False,
+                    processing_time_ms=int((time.time() - start_time) * 1000),
+                    total_pages=0,
+                    extraction_method="none",
+                    processing_warnings=["Failed to extract any text from PDF"]
+                )
+            
+            full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
+        else:
+            if extraction_result is None:
+                try:
+                    import fitz
+                    doc = fitz.open(pdf_path)
+                    total_pages = len(doc)
+                    doc.close()
+                except Exception:
+                    total_pages = 0
+                extraction_result = ExtractionResult(total_pages=total_pages)
 
         # Step 2: Multi-Source Extraction
         # Source A: Extraction Service (High Quality for Subject/Contract)
-        s_extract = extraction_service.extract_subject_section(full_text)
+        # Pass pdf_path to enable spatial fallback extraction where implemented.
+        s_extract = extraction_service.extract_subject_section(full_text, pdf_path=pdf_path)
         c_extract = extraction_service.extract_contract_section(full_text)
         
         # Source B: Advanced Parser (Legacy for Site/Improvements)
         from advanced_parser import extract_advanced_fields
         legacy_fields = extract_advanced_fields(full_text)
+
+        # Source C: Lightweight Layout Extractor (Text PDFs) for checkbox/table fields
+        try:
+            layout_fields = extract_urar_layout_fields(pdf_path, full_text=full_text)
+            if layout_fields:
+                legacy_fields.update(layout_fields)
+        except Exception as e:
+            logger.warning(f"Layout extraction failed: {e}")
 
         # Step 3: Map to AppraisalReportDomain Model
         report = self._map_extraction_to_report(s_extract, c_extract, legacy_fields)
@@ -166,7 +185,8 @@ class SmartQCProcessor:
         # Step 5: Create ValidationContext
         ctx = ValidationContext(
             report=report,
-            engagement_letter=engagement_letter
+            engagement_letter=engagement_letter,
+            addenda_text=full_text,
         )
         
         # Step 6: Execute rule engine
@@ -187,9 +207,15 @@ class SmartQCProcessor:
         self, 
         s: SubjectSectionExtract, 
         c: ContractSectionExtract,
-        legacy: Dict[str, Any]
+        legacy: dict,
     ) -> AppraisalReport:
         """Map extracted objects + legacy dict to AppraisalReport model."""
+        
+        def _legacy_first_non_null(*keys):
+            for k in keys:
+                if k in legacy and legacy.get(k) is not None:
+                    return legacy.get(k)
+            return None
         
         subject = SubjectSection(
             address=s.property_address,
@@ -243,17 +269,92 @@ class SmartQCProcessor:
         )
 
         # Populate legacy sections
+        neighborhood = NeighborhoodSection(
+            location=legacy.get("location"),
+            built_up=legacy.get("builtUp"),
+            growth_rate=legacy.get("growthRate"),
+            property_values=legacy.get("propertyValues"),
+            demand_supply=legacy.get("demandSupply"),
+            marketing_time=legacy.get("marketingTime"),
+            price_low=_legacy_first_non_null("priceLow", "price_low"),
+            price_high=_legacy_first_non_null("priceHigh", "price_high"),
+            predominant_price=_legacy_first_non_null("predominantPrice", "predominant_price"),
+            age_low=_legacy_first_non_null("ageLow", "age_low"),
+            age_high=_legacy_first_non_null("ageHigh", "age_high"),
+            predominant_age=_legacy_first_non_null("predominantAge", "predominant_age"),
+            land_use_one_unit=_legacy_first_non_null("landUseOneUnit", "land_use_one_unit"),
+            land_use_2_4_family=_legacy_first_non_null("landUse2_4Family", "landUse2_4", "land_use_2_4_family"),
+            land_use_multi_family=_legacy_first_non_null("landUseMultiFamily", "land_use_multi_family"),
+            land_use_commercial=_legacy_first_non_null("landUseCommercial", "land_use_commercial"),
+            land_use_industrial=_legacy_first_non_null("landUseIndustrial", "land_use_industrial"),
+            land_use_other=_legacy_first_non_null("landUseOther", "land_use_other"),
+            land_use_other_description=_legacy_first_non_null("landUseOtherDescription", "land_use_other_description"),
+            boundaries_description=legacy.get("neighborhoodBoundaries"),
+            description_commentary=legacy.get("neighborhoodDescription"),
+            market_conditions_comment=legacy.get("marketConditions"),
+        )
+
         site = SiteSection(
             dimensions=legacy.get("siteDimensions"),
             area=legacy.get("siteArea"),
             area_unit=legacy.get("siteAreaUnit"),
+            shape=legacy.get("siteShape"),
+            view=legacy.get("siteView"),
+            zoning_classification=legacy.get("zoningClassification"),
             zoning_compliance=legacy.get("zoningCompliance"),
             highest_and_best_use=legacy.get("highestAndBestUse"),
+            fema_flood_hazard=legacy.get("femaFloodHazard"),
+            fema_flood_zone=legacy.get("femaFloodZone") or legacy.get("fema_flood_zone"),
+            fema_map_number=legacy.get("femaMapNumber") or legacy.get("fema_map_number"),
+            fema_map_date=legacy.get("femaMapDate") or legacy.get("fema_map_date"),
+            utilities_typical=legacy.get("utilitiesTypical"),
+            adverse_site_conditions=legacy.get("adverseSiteConditions"),
         )
         
         improvements = ImprovementSection(
+            units_count=legacy.get("unitsCount") if legacy.get("unitsCount") is not None else 1,
+            stories=legacy.get("stories"),
+            improvement_type=legacy.get("improvementType"),
+            construction_status=legacy.get("constructionStatus"),
             design_style=legacy.get("designStyle"),
             year_built=legacy.get("yearBuilt"),
+            effective_age=legacy.get("effectiveAge"),
+
+            foundation=legacy.get("foundation"),
+            sump_pump=legacy.get("sumpPump"),
+            evidence_dampness=legacy.get("evidenceDampness"),
+            evidence_settlement=legacy.get("evidenceSettlement"),
+            evidence_infestation=legacy.get("evidenceInfestation"),
+
+            foundation_walls=legacy.get("foundationWalls"),
+            exterior_walls=legacy.get("exteriorWalls"),
+            roof_surface=legacy.get("roofSurface"),
+            gutters_downspouts=legacy.get("guttersDownspouts"),
+            window_type=legacy.get("windowType"),
+            storm_sash_screens=legacy.get("stormSashScreens"),
+
+            floors=legacy.get("floors"),
+            walls=legacy.get("walls"),
+            trim_finish=legacy.get("trimFinish"),
+            bath_floor=legacy.get("bathFloor"),
+            bath_wainscot=legacy.get("bathWainscot"),
+
+            car_storage=legacy.get("carStorage"),
+            driveway_surface=legacy.get("drivewaySurface"),
+
+            utilities_status=legacy.get("utilitiesStatus") or legacy.get("utilities_status"),
+
+            total_rooms=legacy.get("totalRooms") or legacy.get("total_rooms"),
+            bedrooms=legacy.get("bedrooms"),
+            baths=legacy.get("baths"),
+            gla=legacy.get("gla"),
+
+            additional_features=legacy.get("additionalFeatures") or legacy.get("additional_features"),
+
+            condition_rating=legacy.get("conditionRating"),
+            condition_commentary=legacy.get("conditionCommentary"),
+            adverse_conditions_affecting_livability=legacy.get("adverseConditionsAffectingLivability"),
+            conforms_to_neighborhood=legacy.get("conformsToNeighborhood"),
         )
         
         sales = SalesComparisonSection(
@@ -263,6 +364,7 @@ class SmartQCProcessor:
         return AppraisalReport(
             subject=subject,
             contract=contract,
+            neighborhood=neighborhood,
             site=site,
             improvements=improvements,
             sales_comparison=sales,
@@ -343,7 +445,7 @@ class SmartQCProcessor:
             total_rules=len(rule_results),
             passed=status_counts[RuleStatus.PASS],
             failed=status_counts[RuleStatus.FAIL],
-            verify=status_counts[RuleStatus.VERIFY] + status_counts[RuleStatus.WARNING],
+            verify=status_counts[RuleStatus.VERIFY],
             skipped=status_counts[RuleStatus.SKIPPED],
             system_errors=status_counts[RuleStatus.SYSTEM_ERROR],
             rule_results=qc_items,

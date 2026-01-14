@@ -169,6 +169,7 @@ def extract_fields_from_text_new(appraisal_text: str, engagement_text: str, logg
     
     # Convert to dict format (only include non-None values to match expected format)
     fields = {}
+    fields["_full_text"] = appraisal_text
     if subject.property_address: fields['property_address'] = subject.property_address
     if subject.city: fields['city'] = subject.city
     if subject.state: fields['state'] = subject.state
@@ -487,6 +488,7 @@ def build_validation_context(
     ctx = ValidationContext(
         report=report,
         engagement_letter=engagement,
+        addenda_text=appraisal_fields.get("_full_text"),
     )
     
     logger.info("Validation context built successfully")
@@ -535,18 +537,14 @@ def run_all_rules(ctx: ValidationContext, logger: logging.Logger) -> list[RuleRe
         results = engine.execute(ctx)
         logger.info(f"Executed {len(results)} rules")
         
-        # Log results
+        # Log results (3-status policy)
         for result in results:
             if result.status == RuleStatus.PASS:
                 logger.info(f"  ✅ PASS: {result.message}")
             elif result.status == RuleStatus.FAIL:
                 logger.warning(f"  ❌ FAIL: {result.message}")
-            elif result.status == RuleStatus.WARNING:
-                logger.warning(f"  ⚠️  WARNING: {result.message}")
-            elif result.status == RuleStatus.VERIFY:
+            else:
                 logger.warning(f"  🔍 VERIFY: {result.message}")
-            elif result.status == RuleStatus.SKIPPED:
-                logger.info(f"  ⏭️  SKIPPED: {result.message}")
                 
         return results
         
@@ -579,9 +577,7 @@ def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path,
         "rules_executed": 0,
         "pass_count": 0,
         "fail_count": 0,
-        "warning_count": 0,
         "verify_count": 0,
-        "skipped_count": 0,
         "errors": []
     }
     
@@ -639,14 +635,54 @@ def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path,
                 result["pass_count"] += 1
             elif status == "FAIL":
                 result["fail_count"] += 1
-            elif status == "WARNING":
-                result["warning_count"] += 1
-            elif status == "VERIFY":
+            else:
                 result["verify_count"] += 1
-            elif status == "SKIPPED":
-                result["skipped_count"] += 1
         
         result["rules_executed"] = len(rules_results)
+
+        # STEP 5: EXECUTE FULL QC PROCESSOR (includes layout extractor)
+        logger.info("  Step 5: Executing SmartQCProcessor (layout-aware)...")
+        try:
+            processor = SmartQCProcessor(use_tesseract=True)
+            qc_results = processor.process_document(
+                pdf_path=str(appraisal_pdf),
+                engagement_letter_text=engagement_text,
+                full_text=appraisal_text,
+            )
+
+            # Count statuses from QC processor
+            qc_counts = {
+                "PASS": 0,
+                "FAIL": 0,
+                "VERIFY": 0,
+                "SYSTEM_ERROR": 0,
+            }
+            for item in qc_results.rule_results:
+                if item.status in ("PASS", "FAIL"):
+                    qc_counts[item.status] = qc_counts.get(item.status, 0) + 1
+                else:
+                    qc_counts["VERIFY"] = qc_counts.get("VERIFY", 0) + 1
+
+            result["qc_processor"] = {
+                "total_rules": qc_results.total_rules,
+                "passed": qc_counts.get("PASS", 0),
+                "failed": qc_counts.get("FAIL", 0),
+                "verify": qc_counts.get("VERIFY", 0),
+                "system_errors": qc_counts.get("SYSTEM_ERROR", 0),
+            }
+
+            with open(output_dir / f"{test_name}_qc_processor_rules.json", 'w') as f:
+                json.dump([r.model_dump() for r in qc_results.rule_results], f, indent=2)
+
+            logger.info(
+                f"  ✓ QCProcessor: {result['qc_processor']['passed']} PASS, "
+                f"{result['qc_processor']['failed']} FAIL, "
+                f"{result['qc_processor']['verify']} VERIFY"
+            )
+
+        except Exception as e:
+            logger.exception(f"  ✗ SmartQCProcessor run failed: {e}")
+            result.setdefault("errors", []).append(f"SmartQCProcessor failed: {str(e)}")
         
         # Save rule results
         results_json = [{
@@ -660,7 +696,7 @@ def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path,
             json.dump(results_json, f, indent=2)
         
         logger.info(f"  ✓ Completed: {result['pass_count']} PASS, {result['fail_count']} FAIL, "
-                    f"{result['warning_count']} WARNING, {result['verify_count']} VERIFY")
+                    f"{result['verify_count']} VERIFY")
         
     except Exception as e:
         result["errors"].append(str(e))
@@ -715,10 +751,15 @@ def run_test():
     
     total_pass = sum(r["pass_count"] for r in all_results)
     total_fail = sum(r["fail_count"] for r in all_results)
-    total_warning = sum(r["warning_count"] for r in all_results)
     total_verify = sum(r["verify_count"] for r in all_results)
-    total_skipped = sum(r["skipped_count"] for r in all_results)
     total_rules = sum(r["rules_executed"] for r in all_results)
+
+    # QCProcessor totals (layout-aware)
+    qc_total_rules = sum((r.get("qc_processor") or {}).get("total_rules", 0) for r in all_results)
+    qc_total_pass = sum((r.get("qc_processor") or {}).get("passed", 0) for r in all_results)
+    qc_total_fail = sum((r.get("qc_processor") or {}).get("failed", 0) for r in all_results)
+    qc_total_verify = sum((r.get("qc_processor") or {}).get("verify", 0) for r in all_results)
+    qc_total_system_errors = sum((r.get("qc_processor") or {}).get("system_errors", 0) for r in all_results)
     
     print("\n" + "=" * 70)
     print("TEST RESULTS SUMMARY")
@@ -733,9 +774,16 @@ def run_test():
         print(f"  Rules: {r['rules_executed']} executed")
         print(f"    PASS: {r['pass_count']}")
         print(f"    FAIL: {r['fail_count']}")
-        print(f"    WARNING: {r['warning_count']}")
         print(f"    VERIFY: {r['verify_count']}")
-        print(f"    SKIPPED: {r['skipped_count']}")
+
+        if r.get("qc_processor"):
+            qp = r["qc_processor"]
+            print(f"  QCProcessor (layout-aware): {qp.get('total_rules', 0)} executed")
+            print(f"    PASS: {qp.get('passed', 0)}")
+            print(f"    FAIL: {qp.get('failed', 0)}")
+            print(f"    VERIFY: {qp.get('verify', 0)}")
+            if qp.get('system_errors', 0):
+                print(f"    SYSTEM_ERROR: {qp.get('system_errors', 0)}")
         if r["errors"]:
             print(f"  Errors: {r['errors']}")
     
@@ -745,9 +793,18 @@ def run_test():
     print(f"  Total rules executed: {total_rules}")
     print(f"  Total PASS: {total_pass}")
     print(f"  Total FAIL: {total_fail}")
-    print(f"  Total WARNING: {total_warning}")
     print(f"  Total VERIFY: {total_verify}")
-    print(f"  Total SKIPPED: {total_skipped}")
+    print("=" * 70)
+
+    print("\n" + "-" * 70)
+    print("QCProcessor TOTALS (layout-aware):")
+    print(f"  Files tested: {len(all_results)}")
+    print(f"  Total rules executed: {qc_total_rules}")
+    print(f"  Total PASS: {qc_total_pass}")
+    print(f"  Total FAIL: {qc_total_fail}")
+    print(f"  Total VERIFY: {qc_total_verify}")
+    if qc_total_system_errors:
+        print(f"  Total SYSTEM_ERROR: {qc_total_system_errors}")
     print("=" * 70)
     
     # Save summary to JSON
@@ -757,9 +814,7 @@ def run_test():
         "total_rules": total_rules,
         "total_pass": total_pass,
         "total_fail": total_fail,
-        "total_warning": total_warning,
         "total_verify": total_verify,
-        "total_skipped": total_skipped,
         "results": all_results
     }
     

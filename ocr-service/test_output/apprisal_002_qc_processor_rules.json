@@ -1,0 +1,538 @@
+[
+  {
+    "rule_id": "S-1",
+    "rule_name": "Property Address Validation",
+    "status": "VERIFY",
+    "message": "Missing required field: Property Address (Report)",
+    "action_item": "Verify field 'Property Address (Report)' manually in the document.",
+    "details": {
+      "field": "Property Address (Report)"
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "S-2",
+    "rule_name": "Borrower Name Validation",
+    "status": "VERIFY",
+    "message": "Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa\u037e Maria Victoria Hinojosa\u037e Victor Hugo Hinojosa'.",
+    "action_item": null,
+    "details": {
+      "report": "SUSANA HINOJOSA; MARIA VICTORIA HINOJOSA; VICTOR HINOJOSA",
+      "engagement": "SUSANA HINOJOSA\u037e MARIA VICTORIA HINOJOSA\u037e VICTOR HUGO HINOJOSA",
+      "similarity": 0.92
+    },
+    "appraisal_value": "Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa",
+    "engagement_value": "Susana Hinojosa\u037e Maria Victoria Hinojosa\u037e Victor Hugo Hinojosa",
+    "review_required": true
+  },
+  {
+    "rule_id": "S-3",
+    "rule_name": "Owner of Public Record",
+    "status": "PASS",
+    "message": "Owner of Public Record is present and valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "S-4",
+    "rule_name": "Legal Description and Taxes",
+    "status": "VERIFY",
+    "message": "Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes",
+    "action_item": "Verify field 'Missing Tax/Legal Fields: Tax Year, Real Estate Taxes' manually in the document.",
+    "details": {
+      "field": "Missing Tax/Legal Fields: Tax Year, Real Estate Taxes"
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "S-5",
+    "rule_name": "Neighborhood Name",
+    "status": "PASS",
+    "message": "Neighborhood name 'Map Reference' is provided.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "S-6",
+    "rule_name": "Map Reference and Census Tract",
+    "status": "PASS",
+    "message": "Map Reference is present. Census Tract not provided.",
+    "action_item": null,
+    "details": {
+      "warnings": [
+        "Census Tract not provided (may be N/A for this report type)."
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "S-7",
+    "rule_name": "Occupant Status",
+    "status": "PASS",
+    "message": "Occupant status 'Owner' is valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "S-8",
+    "rule_name": "Special Assessments",
+    "status": "VERIFY",
+    "message": "Missing required field: Special Assessments",
+    "action_item": "Verify field 'Special Assessments' manually in the document.",
+    "details": {
+      "field": "Special Assessments"
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "S-9",
+    "rule_name": "PUD and HOA",
+    "status": "PASS",
+    "message": "PUD/HOA information is consistent.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "S-10",
+    "rule_name": "Lender/Client Information",
+    "status": "FAIL",
+    "message": "Please correct the lender's name so it reflects as: United American Mortgage Corporation",
+    "action_item": null,
+    "details": {
+      "report": "to evaluate the property that is the\nsubject\nof\nthis\nappraisal\nfor\na\nmortgage",
+      "engagement": "United American Mortgage Corporation"
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "S-11",
+    "rule_name": "Property Rights Appraised",
+    "status": "VERIFY",
+    "message": "Missing required field: Property Rights Appraised",
+    "action_item": "Verify field 'Property Rights Appraised' manually in the document.",
+    "details": {
+      "field": "Property Rights Appraised"
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "S-12",
+    "rule_name": "Prior Listing/Sale History",
+    "status": "FAIL",
+    "message": "Prior sale/offered status (Yes/No) is not indicated in subject section.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "C-1",
+    "rule_name": "Contract Analysis Requirement",
+    "status": "FAIL",
+    "message": "Contract must be analyzed for purchase transactions. Please mark 'Did Analyze Contract'.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "C-2",
+    "rule_name": "Contract Price and Date",
+    "status": "VERIFY",
+    "message": "Contract Price not extracted from report. Please verify manually.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "C-3",
+    "rule_name": "Owner of Record Data Source",
+    "status": "VERIFY",
+    "message": "Is Seller Owner of Public Record checkbox not detected. Please verify manually.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "C-4",
+    "rule_name": "Financial Assistance",
+    "status": "PASS",
+    "message": "Financial assistance information is consistent.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "C-5",
+    "rule_name": "Personal Property Analysis",
+    "status": "VERIFY",
+    "message": "Personal property items are listed. Please explicitly state whether they contribute to value.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "N-1",
+    "rule_name": "Neighborhood Characteristics",
+    "status": "PASS",
+    "message": "Neighborhood characteristics are complete and valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "N-2",
+    "rule_name": "Housing Trends",
+    "status": "PASS",
+    "message": "Housing trends are complete and appear consistent.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "N-3",
+    "rule_name": "One-Unit Housing Price and Age",
+    "status": "PASS",
+    "message": "Price range ($340,000 - $780,000) and age range (22-120 years) are valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "N-4",
+    "rule_name": "Present Land Use",
+    "status": "PASS",
+    "message": "Present land use percentages are complete and sum to 100%.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "N-5",
+    "rule_name": "Neighborhood Boundaries",
+    "status": "PASS",
+    "message": "All four neighborhood boundaries (North, South, East, West) are properly described.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "N-6",
+    "rule_name": "Neighborhood Description",
+    "status": "PASS",
+    "message": "Neighborhood Description is complete and appears to be property-specific.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "N-7",
+    "rule_name": "Market Conditions",
+    "status": "PASS",
+    "message": "Market Conditions commentary is complete with substantive market analysis.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-1",
+    "rule_name": "Site Dimensions",
+    "status": "VERIFY",
+    "message": "Dimensions refers to Plat Map. Please ensure the subject is clearly marked on the provided map.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "ST-2",
+    "rule_name": "Site Area",
+    "status": "PASS",
+    "message": "Site area is 3.03 ac. Agricultural/Farm commentary was found in addenda.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-3",
+    "rule_name": "Site Shape",
+    "status": "PASS",
+    "message": "Site shape 'Rectangular' is provided.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-4",
+    "rule_name": "View",
+    "status": "PASS",
+    "message": "View 'N;Pstrl;' is UAD compliant.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-5",
+    "rule_name": "Zoning Classification and Compliance",
+    "status": "PASS",
+    "message": "Zoning AL-5 and compliance Legal are valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-6",
+    "rule_name": "Highest and Best Use",
+    "status": "PASS",
+    "message": "Existing use is marked as Highest and Best Use.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-7",
+    "rule_name": "Utilities and Off-Site Improvements",
+    "status": "PASS",
+    "message": "Utilities and off-site improvements are valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-8",
+    "rule_name": "FEMA Flood Hazard Area",
+    "status": "PASS",
+    "message": "FEMA Flood information is valid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-9",
+    "rule_name": "Utilities Typical for Market",
+    "status": "PASS",
+    "message": "Utilities Typical for Market responded correctly.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "ST-10",
+    "rule_name": "Adverse Site Conditions",
+    "status": "PASS",
+    "message": "Adverse Site Conditions responded correctly.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-1",
+    "rule_name": "General Description",
+    "status": "PASS",
+    "message": "General Description fields are completed.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-2",
+    "rule_name": "Foundation",
+    "status": "VERIFY",
+    "message": "Foundation fields are present. Verify Foundation matches Sales Comparison grid section.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "I-3",
+    "rule_name": "Exterior Description",
+    "status": "VERIFY",
+    "message": "Exterior Description fields are present. Verify values match Sales Comparison grid section.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "I-4",
+    "rule_name": "Interior Description",
+    "status": "PASS",
+    "message": "Interior Description fields are completed and car storage consistency checks passed.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-5",
+    "rule_name": "Utilities",
+    "status": "PASS",
+    "message": "Utilities status indicates whether utilities were ON/OFF at time of inspection.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-6",
+    "rule_name": "Appliances",
+    "status": "PASS",
+    "message": "Appliance field appears completed; verify only built-in items are included.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-7",
+    "rule_name": "Above Grade Room Count",
+    "status": "VERIFY",
+    "message": "Above-grade room count fields are present. Verify below-grade areas are excluded and counts match Sales Comparison grid.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "I-8",
+    "rule_name": "Additional Features",
+    "status": "PASS",
+    "message": "Additional features correctly states NONE.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-9",
+    "rule_name": "Property Condition Rating",
+    "status": "VERIFY",
+    "message": "Condition rating is UAD compliant. Verify rating matches photos/commentary and is supported by effective age.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "I-10",
+    "rule_name": "Adverse Conditions Affecting Livability",
+    "status": "PASS",
+    "message": "Adverse conditions affecting livability answered.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-11",
+    "rule_name": "Neighborhood Conformity",
+    "status": "PASS",
+    "message": "Neighborhood conformity answered.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-12",
+    "rule_name": "Additions to Subject",
+    "status": "PASS",
+    "message": "Additions presence was not detected.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "I-13",
+    "rule_name": "Security Bars",
+    "status": "PASS",
+    "message": "Security bars presence was not detected.",
+    "action_item": null,
+    "details": null,
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  }
+]

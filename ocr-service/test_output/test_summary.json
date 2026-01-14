@@ -1,63 +1,76 @@
 {
-  "timestamp": "2025-12-17T22:52:14.484037",
+  "timestamp": "2026-01-14T00:27:40.166683",
   "files_tested": 3,
-  "total_rules": 51,
-  "total_pass": 22,
-  "total_fail": 8,
-  "total_warning": 12,
-  "total_verify": 9,
-  "total_skipped": 0,
+  "total_rules": 141,
+  "total_pass": 37,
+  "total_fail": 28,
+  "total_verify": 76,
   "results": [
     {
       "test_name": "apprisal_002",
       "appraisal_file": "apprisal_002.pdf",
       "engagement_file": "engagement_002.pdf",
       "ocr_success": true,
-      "rules_executed": 17,
-      "pass_count": 7,
-      "fail_count": 3,
-      "warning_count": 4,
-      "verify_count": 3,
-      "skipped_count": 0,
+      "rules_executed": 47,
+      "pass_count": 12,
+      "fail_count": 10,
+      "verify_count": 25,
       "errors": [],
       "appraisal_pages": 34,
-      "appraisal_chars": 98426,
+      "appraisal_chars": 97031,
       "engagement_pages": 10,
-      "engagement_chars": 29433
+      "engagement_chars": 29433,
+      "qc_processor": {
+        "total_rules": 47,
+        "passed": 31,
+        "failed": 3,
+        "verify": 13,
+        "system_errors": 0
+      }
     },
     {
       "test_name": "apprisal_003",
       "appraisal_file": "apprisal_003.pdf",
       "engagement_file": "engagement_003.pdf",
       "ocr_success": true,
-      "rules_executed": 17,
-      "pass_count": 7,
-      "fail_count": 3,
-      "warning_count": 4,
-      "verify_count": 3,
-      "skipped_count": 0,
+      "rules_executed": 47,
+      "pass_count": 12,
+      "fail_count": 9,
+      "verify_count": 26,
       "errors": [],
       "appraisal_pages": 45,
-      "appraisal_chars": 114295,
+      "appraisal_chars": 112385,
       "engagement_pages": 10,
-      "engagement_chars": 29418
+      "engagement_chars": 29418,
+      "qc_processor": {
+        "total_rules": 47,
+        "passed": 30,
+        "failed": 3,
+        "verify": 14,
+        "system_errors": 0
+      }
     },
     {
       "test_name": "apprisal_004",
       "appraisal_file": "apprisal_004.pdf",
       "engagement_file": "engagement_004.pdf",
       "ocr_success": true,
-      "rules_executed": 17,
-      "pass_count": 8,
-      "fail_count": 2,
-      "warning_count": 4,
-      "verify_count": 3,
-      "skipped_count": 0,
+      "rules_executed": 47,
+      "pass_count": 13,
+      "fail_count": 9,
+      "verify_count": 25,
       "errors": [],
       "appraisal_pages": 30,
-      "appraisal_chars": 67009,
+      "appraisal_chars": 67000,
       "engagement_pages": 10,
-      "engagement_chars": 29718
+      "engagement_chars": 29718,
+      "qc_processor": {
+        "total_rules": 47,
+        "passed": 31,
+        "failed": 3,
+        "verify": 13,
+        "system_errors": 0
+      }
     }
   ]
 }

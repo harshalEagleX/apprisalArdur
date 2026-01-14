@@ -312,25 +312,41 @@ class ExtractionService:
         # S-2: Borrower
         # Field terminators to prevent capturing next field's content
         BORROWER_TERMINATORS = r"(?=\s*Owner of Public Record|\s*County|\s*Legal|\s*Assessor|\s*APN|\n)"
-        
-        subject.borrower_name = self._extract_field(text, [
-            # Pattern with terminators - stop before next field label
+
+        subject_block = text
+        subject_idx = re.search(r"(?m)^SUBJECT\s*$", text)
+        contract_idx = re.search(r"(?m)^CONTRACT\s*$", text)
+        if subject_idx and contract_idx and contract_idx.start() > subject_idx.end():
+            subject_block = text[subject_idx.end():contract_idx.start()]
+        else:
+            subject_block = text[:2500]
+
+        subject.borrower_name = self._extract_field(subject_block, [
             r"Borrower[:\s]+(?!Lender|Client|File|Property|Owner|See attached)([^:\n]+?)" + BORROWER_TERMINATORS,
             r"BORROWER[:\s]+(?!LENDER|CLIENT)([^:\n]+?)" + BORROWER_TERMINATORS,
             r"Borrower Name[:\s]+(?!Information)([^:\n]+?)" + BORROWER_TERMINATORS,
-            # Fallback: simple line extraction (for clean forms)
             r"Borrower[:\s]+(?!Lender|Client|File|Property|Owner)([^\n]+)",
         ])
-        
-        # Check if borrower field says "See attached" - need to look in URAR addendum
-        if not subject.borrower_name or "see attached" in (subject.borrower_name or "").lower():
-            # Look for URAR: Borrower addendum section
+
+        borrower_low = (subject.borrower_name or "").lower().strip()
+        invalid_borrower_phrases = [
+            "secure a professional inspection",
+            "evaluate the property",
+            "subject of this appraisal",
+            "for a mortgage",
+        ]
+        borrower_suspicious = any(p in borrower_low for p in invalid_borrower_phrases)
+
+        if (not subject.borrower_name) or ("see attached" in borrower_low) or borrower_suspicious:
             addendum_match = re.search(
-                r"URAR:\s*Borrower\s*\n+([^\n]+)",
-                text, re.IGNORECASE
+                r"(?is)(?:^|\n)\s*(?:[\-\*\u2022•]\s*)?URAR:\s*Borrower\s*\n+([\s\S]+?)(?=\n\s*(?:[\-\*\u2022•]\s*)?URAR:|\n\s*$)",
+                text,
+                re.IGNORECASE | re.MULTILINE,
             )
             if addendum_match:
-                subject.borrower_name = addendum_match.group(1).strip()
+                raw = re.sub(r"\s+", " ", addendum_match.group(1)).strip()
+                names = [n.strip(" .") for n in re.split(r"[;~]", raw) if n.strip()]
+                subject.borrower_name = "; ".join(names) if names else raw
         
         # Clean up borrower name - remove trailing noise
         if subject.borrower_name:
@@ -429,14 +445,28 @@ class ExtractionService:
             subject.occupant_status = "Tenant"
         elif re.search(rf"{check_pattern}\s*vacant|vacant\s*{check_pattern}", occupant_text):
             subject.occupant_status = "Vacant"
+
+        # Fallback: Look for explicit occupant tokens without checkbox marks.
+        if not subject.occupant_status:
+            m = re.search(r"(?is)\bOccupant\b[\s\S]{0,80}?\b(Owner\s*Occupied|Owner|Tenant|Vacant)\b", text, re.IGNORECASE)
+            if m:
+                v = re.sub(r"\s+", " ", m.group(1)).strip().lower()
+                if "tenant" in v:
+                    subject.occupant_status = "Tenant"
+                elif "vacant" in v:
+                    subject.occupant_status = "Vacant"
+                else:
+                    subject.occupant_status = "Owner"
         
         # Fallback: Spatial Checkbox Detection (for disjointed digital PDFs)
         if not subject.occupant_status and pdf_path:
-            # Look for checkmarks near these labels on Page 1 (index 0)
-            spatial_result = self._resolve_checkbox_spatial(pdf_path, 0, ["Owner", "Tenant", "Vacant"])
-            if spatial_result:
-                subject.occupant_status = spatial_result.title()
-                logger.info(f"Resolved S-7 Occupant Status via spatial check: {subject.occupant_status}")
+            # Look for checkmarks near these labels across first pages (occupancy block can shift).
+            for page_num in range(0, 4):
+                spatial_result = self._resolve_checkbox_spatial(pdf_path, page_num, ["Owner", "Tenant", "Vacant"])
+                if spatial_result:
+                    subject.occupant_status = spatial_result.title()
+                    logger.info(f"Resolved S-7 Occupant Status via spatial check: {subject.occupant_status}")
+                    break
         
         # S-8: Special Assessments
         special_str = self._extract_field(text, [

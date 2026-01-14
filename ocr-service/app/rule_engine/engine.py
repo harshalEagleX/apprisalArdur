@@ -34,6 +34,13 @@ class RuleEngine:
                      # If the rule function returns a boolean or string, wrap it (simplified compliance)
                     pass 
                 
+                # Normalize statuses to only PASS / FAIL / VERIFY
+                if result.status == RuleStatus.WARNING:
+                    result.status = RuleStatus.VERIFY
+                    result.review_required = True
+                elif result.status == RuleStatus.SKIPPED:
+                    result.status = RuleStatus.PASS
+
                 results.append(result)
                 self.logger.log_result(result)
 

@@ -8,7 +8,7 @@
   {
     "rule_id": "S-2",
     "rule_name": "Borrower Name Validation",
-    "status": "WARNING",
+    "status": "VERIFY",
     "message": "Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa\u037e Maria Victoria Hinojosa\u037e Victor Hugo Hinojosa'."
   },
   {
@@ -38,8 +38,8 @@
   {
     "rule_id": "S-7",
     "rule_name": "Occupant Status",
-    "status": "FAIL",
-    "message": "Occupant status is missing or blank."
+    "status": "PASS",
+    "message": "Occupant status 'Owner' is valid."
   },
   {
     "rule_id": "S-8",
@@ -74,19 +74,19 @@
   {
     "rule_id": "C-1",
     "rule_name": "Contract Analysis Requirement",
-    "status": "WARNING",
+    "status": "VERIFY",
     "message": "Did/Did Not Analyze Contract checkbox not detected. Please verify manually."
   },
   {
     "rule_id": "C-2",
     "rule_name": "Contract Price and Date",
-    "status": "WARNING",
+    "status": "VERIFY",
     "message": "Contract Price not extracted from report. Please verify manually."
   },
   {
     "rule_id": "C-3",
     "rule_name": "Owner of Record Data Source",
-    "status": "WARNING",
+    "status": "VERIFY",
     "message": "Is Seller Owner of Public Record checkbox not detected. Please verify manually."
   },
   {
@@ -100,5 +100,185 @@
     "rule_name": "Personal Property Analysis",
     "status": "PASS",
     "message": "Personal property analysis is complete."
+  },
+  {
+    "rule_id": "N-1",
+    "rule_name": "Neighborhood Characteristics",
+    "status": "FAIL",
+    "message": "In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise."
+  },
+  {
+    "rule_id": "N-2",
+    "rule_name": "Housing Trends",
+    "status": "FAIL",
+    "message": "In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise."
+  },
+  {
+    "rule_id": "N-3",
+    "rule_name": "One-Unit Housing Price and Age",
+    "status": "VERIFY",
+    "message": "Missing required field: Price Range (Low and/or High)"
+  },
+  {
+    "rule_id": "N-4",
+    "rule_name": "Present Land Use",
+    "status": "VERIFY",
+    "message": "Missing required field: Present Land Use percentages"
+  },
+  {
+    "rule_id": "N-5",
+    "rule_name": "Neighborhood Boundaries",
+    "status": "FAIL",
+    "message": "Must list the boundaries only; North, South, East, West, please correct"
+  },
+  {
+    "rule_id": "N-6",
+    "rule_name": "Neighborhood Description",
+    "status": "VERIFY",
+    "message": "Missing required field: Neighborhood Description"
+  },
+  {
+    "rule_id": "N-7",
+    "rule_name": "Market Conditions",
+    "status": "VERIFY",
+    "message": "Missing required field: Market Conditions"
+  },
+  {
+    "rule_id": "ST-1",
+    "rule_name": "Site Dimensions",
+    "status": "VERIFY",
+    "message": "Missing required field: Site Dimensions"
+  },
+  {
+    "rule_id": "ST-2",
+    "rule_name": "Site Area",
+    "status": "VERIFY",
+    "message": "Missing required field: Site Area"
+  },
+  {
+    "rule_id": "ST-3",
+    "rule_name": "Site Shape",
+    "status": "FAIL",
+    "message": "Site shape is missing."
+  },
+  {
+    "rule_id": "ST-4",
+    "rule_name": "View",
+    "status": "FAIL",
+    "message": "View is missing."
+  },
+  {
+    "rule_id": "ST-5",
+    "rule_name": "Zoning Classification and Compliance",
+    "status": "VERIFY",
+    "message": "Missing required field: Zoning Classification"
+  },
+  {
+    "rule_id": "ST-6",
+    "rule_name": "Highest and Best Use",
+    "status": "FAIL",
+    "message": "Highest and Best Use checkbox is not marked."
+  },
+  {
+    "rule_id": "ST-7",
+    "rule_name": "Utilities and Off-Site Improvements",
+    "status": "PASS",
+    "message": "Utilities and off-site improvements are valid."
+  },
+  {
+    "rule_id": "ST-8",
+    "rule_name": "FEMA Flood Hazard Area",
+    "status": "VERIFY",
+    "message": "Missing required field: FEMA Flood Hazard Area (Yes/No)"
+  },
+  {
+    "rule_id": "ST-9",
+    "rule_name": "Utilities Typical for Market",
+    "status": "FAIL",
+    "message": "Utilities Typical for Market Yes/No toggle is skipped."
+  },
+  {
+    "rule_id": "ST-10",
+    "rule_name": "Adverse Site Conditions",
+    "status": "FAIL",
+    "message": "Adverse Site Conditions Yes/No toggle is skipped."
+  },
+  {
+    "rule_id": "I-1",
+    "rule_name": "General Description",
+    "status": "VERIFY",
+    "message": "Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age"
+  },
+  {
+    "rule_id": "I-2",
+    "rule_name": "Foundation",
+    "status": "VERIFY",
+    "message": "Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation"
+  },
+  {
+    "rule_id": "I-3",
+    "rule_name": "Exterior Description",
+    "status": "VERIFY",
+    "message": "Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens"
+  },
+  {
+    "rule_id": "I-4",
+    "rule_name": "Interior Description",
+    "status": "VERIFY",
+    "message": "Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot"
+  },
+  {
+    "rule_id": "I-5",
+    "rule_name": "Utilities",
+    "status": "VERIFY",
+    "message": "Missing required field: Utilities status"
+  },
+  {
+    "rule_id": "I-6",
+    "rule_name": "Appliances",
+    "status": "PASS",
+    "message": "Appliance field appears completed; verify only built-in items are included."
+  },
+  {
+    "rule_id": "I-7",
+    "rule_name": "Above Grade Room Count",
+    "status": "VERIFY",
+    "message": "Missing required field: Total Rooms, Bedrooms, Baths, GLA"
+  },
+  {
+    "rule_id": "I-8",
+    "rule_name": "Additional Features",
+    "status": "VERIFY",
+    "message": "Missing required field: Additional features"
+  },
+  {
+    "rule_id": "I-9",
+    "rule_name": "Property Condition Rating",
+    "status": "VERIFY",
+    "message": "Missing required field: Condition of the Property (C1-C6)"
+  },
+  {
+    "rule_id": "I-10",
+    "rule_name": "Adverse Conditions Affecting Livability",
+    "status": "VERIFY",
+    "message": "Missing required field: Adverse conditions affecting livability (Yes/No)"
+  },
+  {
+    "rule_id": "I-11",
+    "rule_name": "Neighborhood Conformity",
+    "status": "VERIFY",
+    "message": "Missing required field: Does property conform to neighborhood? (Yes/No)"
+  },
+  {
+    "rule_id": "I-12",
+    "rule_name": "Additions to Subject",
+    "status": "PASS",
+    "message": "Additions presence was not detected."
+  },
+  {
+    "rule_id": "I-13",
+    "rule_name": "Security Bars",
+    "status": "PASS",
+    "message": "Security bars presence was not detected."
   }
 ]
