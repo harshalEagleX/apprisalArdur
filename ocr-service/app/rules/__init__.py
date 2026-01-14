@@ -23,4 +23,7 @@ from . import site_rules
 # Import Improvement Section Rules
 from . import improvement_rules
 
-__all__ = ['subject_rules', 'contract_rules', 'neighborhood_rules', 'site_rules', 'improvement_rules']
+# Import Sales Comparison Approach Rules
+from . import sales_comparison_rules
+
+__all__ = ['subject_rules', 'contract_rules', 'neighborhood_rules', 'site_rules', 'improvement_rules', 'sales_comparison_rules']

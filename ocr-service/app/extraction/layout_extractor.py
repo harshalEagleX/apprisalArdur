@@ -644,6 +644,290 @@ def extract_urar_improvements(pdf_path: str) -> Dict[str, object]:
     return data
 
 
+def extract_urar_sales_comparison(pdf_path: str, full_text: Optional[str] = None) -> Dict[str, object]:
+    data: Dict[str, object] = {}
+    doc = fitz.open(pdf_path)
+    try:
+        idx = _find_best_page_index(
+            doc,
+            must_patterns=[r"Sales\s+Comparison|Sales\s*Comp", r"Comparable"],
+            score_patterns=[r"Proximity", r"Sale\s+Price", r"Adjusted", r"Net\s+Adj", r"GLA"],
+            max_pages=min(len(doc), 30),
+        )
+        if idx is None:
+            return data
+
+        page = doc[idx]
+        words = _page_words(page)
+        lines = _cluster_words_into_lines(words, y_tol=2.8)
+        page_text = page.get_text("text") or ""
+
+        def _parse_int(raw: Optional[str]) -> Optional[int]:
+            if not raw:
+                return None
+            m = re.search(r"\d+", raw.replace(",", ""))
+            if not m:
+                return None
+            try:
+                return int(m.group(0))
+            except Exception:
+                return None
+
+        def _parse_money(raw: Optional[str]) -> Optional[float]:
+            if not raw:
+                return None
+            m = re.search(r"\$?\s*([\d,.]+)", raw)
+            if not m:
+                return None
+            try:
+                return float(m.group(1).replace(",", ""))
+            except Exception:
+                return None
+
+        def _parse_float(raw: Optional[str]) -> Optional[float]:
+            if not raw:
+                return None
+            m = re.search(r"([\d,.]+)", raw)
+            if not m:
+                return None
+            try:
+                return float(m.group(1).replace(",", ""))
+            except Exception:
+                return None
+
+        def _parse_int_from_text(raw: Optional[str]) -> Optional[int]:
+            if not raw:
+                return None
+            m = re.search(r"\d{1,4}", raw)
+            if not m:
+                return None
+            try:
+                return int(m.group(0))
+            except Exception:
+                return None
+
+        # Market Summary counts above the grid
+        sales_m = re.search(
+            r"(?is)#?\s*of\s*Comparable\s*Sales\s*within\s*12\s*Months\s*\n*\s*(\d{1,2})",
+            page_text,
+        )
+        listings_m = re.search(
+            r"(?is)#?\s*of\s*Comparable\s*Properties\s*Currently\s*Offered\s*\n*\s*(\d{1,2})",
+            page_text,
+        )
+
+        count_sales = _parse_int(sales_m.group(1)) if sales_m else None
+        count_listings = _parse_int(listings_m.group(1)) if listings_m else None
+
+        if count_sales is None:
+            count_sales = _parse_int(_extract_number_below_label(words, r"Sales", max_dy=26.0, max_dx=70.0))
+        if count_listings is None:
+            count_listings = _parse_int(_extract_number_below_label(words, r"Offered", max_dy=26.0, max_dx=90.0))
+
+        # Fallback: many PDFs leave the narrative blanks, but 1004MC tables include these totals.
+        if (count_sales is None or count_listings is None) and full_text:
+            # Try to parse from 1004MC style headings.
+            # Examples observed in extracted text:
+            #   Total # of Comparable Sales (Settled)
+            #   Total # of Comparable Active Listings
+            if count_sales is None:
+                m = re.search(
+                    r"(?is)Total\s*#\s*of\s*Comparable\s*Sales\s*\(Settled\)\s*(?:\n|\r|\s)+\s*(\d{1,4})\b",
+                    full_text,
+                )
+                if m:
+                    count_sales = _parse_int(m.group(1))
+            if count_listings is None:
+                m = re.search(
+                    r"(?is)Total\s*#\s*of\s*(?:Comparable\s*)?(?:Active\s*)?Listings\b[\s\S]{0,120}?(?:\n|\r|\s)+\s*(\d{1,4})\b",
+                    full_text,
+                )
+                if not m:
+                    m = re.search(
+                        r"(?is)Total\s*#\s*of\s*Comparable\s*Active\s*Listings\s*(?:\n|\r|\s)+\s*(\d{1,4})\b",
+                        full_text,
+                    )
+                if m:
+                    count_listings = _parse_int(m.group(1))
+
+        if count_sales is not None:
+            data["comparables_count_sales"] = count_sales
+        if count_listings is not None:
+            data["comparables_count_listings"] = count_listings
+
+        # Grid parsing (improved column detection)
+        # First, try to find column centers from Subject/Comparable headers
+        header_words = [w for w in words if re.search(r"\bSubject\b|\bComparable\b", w.text, re.IGNORECASE)]
+        col_centers: List[float] = []
+        for w in sorted(header_words, key=lambda x: x.cx):
+            if not col_centers or abs(w.cx - col_centers[-1]) > 35.0:
+                col_centers.append(w.cx)
+        
+        # Also look for numbered column headers (1-6) which are more reliable
+        number_words = [w for w in words if w.text in ['1', '2', '3', '4', '5', '6'] and w.cy < 200]
+        for w in sorted(number_words, key=lambda x: x.cx):
+            if not col_centers or abs(w.cx - col_centers[-1]) > 35.0:
+                col_centers.append(w.cx)
+        
+        # If we don't have enough columns, detect them from actual data positions
+        if len(col_centers) < 3:
+            # Look for common data patterns to identify columns
+            data_x_positions = []
+            for w in words:
+                # Focus on the grid area (y between 90-500)
+                if 90 < w.cy < 500 and len(w.text) > 1:
+                    # Skip obvious labels
+                    if w.text.lower() not in ['address', 'proximity', 'sale', 'price', 'date', 'location', 'view', 'design', 'style', 'quality', 'condition', 'age', 'gl', 'basement', 'heating', 'cooling', 'garage', 'porch', 'patio', 'deck', 'site', 'data', 'source', 'verification']:
+                        data_x_positions.append(w.cx)
+            
+            # Cluster x positions to find column centers
+            if data_x_positions:
+                data_x_positions.sort()
+                # Group nearby x positions (within 30 points)
+                clusters = []
+                current_cluster = [data_x_positions[0]]
+                for x in data_x_positions[1:]:
+                    if x - current_cluster[-1] < 30:
+                        current_cluster.append(x)
+                    else:
+                        clusters.append(current_cluster)
+                        current_cluster = [x]
+                clusters.append(current_cluster)
+                
+                # Use median of each cluster as column center
+                col_centers = [sum(cluster) / len(cluster) for cluster in clusters]
+        
+        # If still not enough columns, use defaults based on page width
+        if len(col_centers) < 3:
+            rect = page.rect
+            pw = float(rect.width)
+            # Typical URAR has Subject + 6 comparables
+            col_centers = [pw * 0.15, pw * 0.28, pw * 0.41, pw * 0.54, pw * 0.67, pw * 0.80, pw * 0.93]
+        
+        # Ensure we have exactly 7 columns (Subject + 6 comparables)
+        col_centers = col_centers[:7]
+        if len(col_centers) < 7:
+            # Add missing columns by spacing them evenly
+            last_x = col_centers[-1] if col_centers else 100
+            spacing = 100
+            while len(col_centers) < 7:
+                col_centers.append(last_x + spacing)
+                last_x += spacing
+
+        def _line_to_text(ln: List[Word]) -> str:
+            return " ".join([w.text for w in ln])
+
+        def _extract_row_values(label_re: str) -> List[Optional[str]]:
+            r = re.compile(label_re, re.IGNORECASE)
+            target_ln: Optional[List[Word]] = None
+            for ln in lines:
+                if r.search(_line_to_text(ln)):
+                    target_ln = ln
+                    break
+            
+            if not target_ln:
+                return [None for _ in range(len(col_centers))]
+
+            # Do not rely on word-level matches for multi-word labels (e.g., "Functional Utility").
+            # Instead, treat everything left of the first column as the label region.
+            # col_centers[0] corresponds to the Subject column.
+            first_col_boundary = (col_centers[0] - 18.0) if col_centers else 220.0
+            vals: List[List[str]] = [[] for _ in range(len(col_centers))]
+            for ww in target_ln:
+                if ww.cx < first_col_boundary:
+                    continue
+                best_j = min(range(len(col_centers)), key=lambda j: abs(ww.cx - col_centers[j]))
+                vals[best_j].append(ww.text)
+
+            out_row: List[Optional[str]] = []
+            for parts in vals:
+                s = " ".join(parts).strip()
+                out_row.append(s or None)
+            return out_row
+
+        def _is_listing_value(raw: Optional[str]) -> bool:
+            if not raw:
+                return False
+            low = raw.lower()
+            # Common UAD status tokens for listings/pending.
+            if re.search(r"\b(active|act|pending|pend|list|listing)\b", low):
+                return True
+            # Some exports use "DOM" fields for listings; treat these as a hint.
+            if re.search(r"\bdom\b", low) and not re.search(r"\bsd\b|\bco(e)?\b|\bsale\b", low):
+                return True
+            return False
+
+        address_row = _extract_row_values(r"\bAddress\b")
+        proximity_row = _extract_row_values(r"\bProximity\b")
+        sale_price_row = _extract_row_values(r"Sale\s+Price")
+        sale_financing_row = _extract_row_values(r"Sale\s+or\s+Financing\s+Concessions|Financing\s+Concessions")
+        sale_date_row = _extract_row_values(r"Sale\s+Date")
+        gla_row = _extract_row_values(r"\bGLA\b")
+        basement_row = _extract_row_values(r"Basement")
+        net_adj_row = _extract_row_values(r"Net\s+Adj")
+        adj_price_row = _extract_row_values(r"Adj(?:usted)?\s+Sale\s+Price")
+        data_source_row = _extract_row_values(r"Data\s+Source")
+        verification_source_row = _extract_row_values(r"Verification\s+Source")
+        leasehold_row = _extract_row_values(r"Leasehold|Fee\s+Simple")
+        quality_row = _extract_row_values(r"\bQuality\b")
+        condition_row = _extract_row_values(r"\bCondition\b")
+        age_row = _extract_row_values(r"Actual\s+Age|Age")
+        location_row = _extract_row_values(r"\bLocation\b")
+        view_row = _extract_row_values(r"\bView\b")
+        design_row = _extract_row_values(r"\bDesign\b|\bStyle\b")
+        functional_row = _extract_row_values(r"Functional\s+Utility")
+        heating_row = _extract_row_values(r"Heating\s*/\s*Cooling|Heating\s+Cooling|\bHeating\b")
+        garage_row = _extract_row_values(r"Garage")
+        porch_row = _extract_row_values(r"Porch|Patio|Deck")
+        site_size_row = _extract_row_values(r"\bSite\b")
+
+        comparables: List[Dict[str, object]] = []
+        for j in range(1, len(col_centers)):
+            raw_sale_date = sale_date_row[j]
+            raw_data_source = data_source_row[j]
+            raw_sale_price = sale_price_row[j]
+            is_listing = _is_listing_value(raw_sale_date) or _is_listing_value(raw_data_source)
+            if is_listing and raw_sale_price:
+                # If a listing price is reported in the Sale Price cell, treat it as the listing sale_price.
+                pass
+            comp: Dict[str, object] = {
+                "address": address_row[j],
+                "proximity": proximity_row[j],
+                "sale_price": _parse_money(raw_sale_price),
+                "sale_financing_concessions": sale_financing_row[j],
+                "sale_date": raw_sale_date,
+                "location_rating": (location_row[j].strip() if location_row[j] else None),
+                "leasehold_fee_simple": (leasehold_row[j].strip() if leasehold_row[j] else None),
+                "site_size": (site_size_row[j].strip() if site_size_row[j] else None),
+                "view": (view_row[j].strip() if view_row[j] else None),
+                "design_style": (design_row[j].strip() if design_row[j] else None),
+                "gla": _parse_float(gla_row[j]),
+                "basement_gla": _parse_float(basement_row[j]),
+                "heating_cooling": (heating_row[j].strip() if heating_row[j] else None),
+                "functional_utility": (functional_row[j].strip() if functional_row[j] else None),
+                "garage_carport": (garage_row[j].strip() if garage_row[j] else None),
+                "porch_patio_deck": (porch_row[j].strip() if porch_row[j] else None),
+                "net_adjustment": _parse_float(net_adj_row[j]),
+                "adjusted_sale_price": _parse_money(adj_price_row[j]),
+                "data_source": raw_data_source,
+                "verification_source": verification_source_row[j],
+                "quality_rating": (quality_row[j].strip() if quality_row[j] else None),
+                "condition_rating": (condition_row[j].strip() if condition_row[j] else None),
+                "actual_age": _parse_int_from_text(age_row[j]),
+                "is_listing": bool(is_listing),
+            }
+            if any(v not in (None, "") for v in comp.values() if not isinstance(v, bool)):
+                comparables.append(comp)
+
+        if comparables:
+            data["comparables"] = comparables
+
+    finally:
+        doc.close()
+
+    return data
+
+
 def _extract_line_after_header(lines: List[str], header: str, invalid_headers: List[str], max_lookahead: int = 6) -> Optional[str]:
     invalid = {h.strip().lower() for h in invalid_headers}
     header_l = header.strip().lower()
@@ -1247,4 +1531,5 @@ def extract_urar_layout_fields(pdf_path: str, full_text: Optional[str] = None) -
     out.update(extract_urar_neighborhood(pdf_path))
     out.update(extract_urar_site(pdf_path))
     out.update(extract_urar_improvements(pdf_path))
+    out.update(extract_urar_sales_comparison(pdf_path, full_text=full_text))
     return out

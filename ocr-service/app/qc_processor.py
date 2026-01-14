@@ -357,8 +357,47 @@ class SmartQCProcessor:
             conforms_to_neighborhood=legacy.get("conformsToNeighborhood"),
         )
         
+        comp_dicts = legacy.get("comparables") or []
+        comps: List[Comparable] = []
+        for c in comp_dicts:
+            if not isinstance(c, dict):
+                continue
+            comps.append(
+                Comparable(
+                    address=c.get("address"),
+                    proximity=c.get("proximity"),
+                    sale_price=c.get("sale_price"),
+                    sale_financing_concessions=c.get("sale_financing_concessions"),
+                    data_source=c.get("data_source"),
+                    verification_source=c.get("verification_source"),
+                    sale_date=c.get("sale_date"),
+                    location_rating=c.get("location_rating"),
+                    leasehold_fee_simple=c.get("leasehold_fee_simple"),
+                    site_size=c.get("site_size"),
+                    view=c.get("view"),
+                    design_style=c.get("design_style"),
+                    quality_rating=c.get("quality_rating"),
+                    actual_age=c.get("actual_age"),
+                    condition_rating=c.get("condition_rating"),
+                    functional_utility=c.get("functional_utility"),
+                    room_count_total=c.get("room_count_total"),
+                    room_count_bed=c.get("room_count_bed"),
+                    room_count_bath=c.get("room_count_bath"),
+                    gla=c.get("gla"),
+                    basement_gla=c.get("basement_gla"),
+                    heating_cooling=c.get("heating_cooling"),
+                    garage_carport=c.get("garage_carport"),
+                    porch_patio_deck=c.get("porch_patio_deck"),
+                    net_adjustment=c.get("net_adjustment"),
+                    adjusted_sale_price=c.get("adjusted_sale_price"),
+                    is_listing=bool(c.get("is_listing", False)),
+                )
+            )
+
         sales = SalesComparisonSection(
-            comparables_count_sales=legacy.get("comparableCount", 0),
+            comparables_count_sales=legacy.get("comparables_count_sales") or legacy.get("comparableCount"),
+            comparables_count_listings=legacy.get("comparables_count_listings"),
+            comparables=comps,
         )
 
         return AppraisalReport(

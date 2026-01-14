@@ -627,7 +627,11 @@ def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path,
         # STEP 4: EXECUTE RULES
         logger.info("  Step 4: Executing QC Rules...")
         rules_results = run_all_rules(ctx, logger)
-        
+
+        # Per-rule aggregation (engine-only, non layout-aware)
+        engine_rule_counts: Dict[str, Dict[str, int]] = {}
+        sca_engine_counts = {"PASS": 0, "FAIL": 0, "VERIFY": 0}
+
         # Count by status
         for r in rules_results:
             status = r.status.value if hasattr(r.status, 'value') else str(r.status)
@@ -637,8 +641,23 @@ def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path,
                 result["fail_count"] += 1
             else:
                 result["verify_count"] += 1
+
+            rid = getattr(r, "rule_id", None) or "UNKNOWN"
+            engine_rule_counts.setdefault(rid, {"PASS": 0, "FAIL": 0, "VERIFY": 0})
+            if status not in ("PASS", "FAIL"):
+                engine_rule_counts[rid]["VERIFY"] += 1
+            else:
+                engine_rule_counts[rid][status] += 1
+
+            if str(rid).upper().startswith("SCA-"):
+                if status not in ("PASS", "FAIL"):
+                    sca_engine_counts["VERIFY"] += 1
+                else:
+                    sca_engine_counts[status] += 1
         
         result["rules_executed"] = len(rules_results)
+        result["engine_rule_counts"] = engine_rule_counts
+        result["sca_engine_counts"] = sca_engine_counts
 
         # STEP 5: EXECUTE FULL QC PROCESSOR (includes layout extractor)
         logger.info("  Step 5: Executing SmartQCProcessor (layout-aware)...")
@@ -663,12 +682,31 @@ def run_single_test(appraisal_pdf: Path, engagement_pdf: Path, output_dir: Path,
                 else:
                     qc_counts["VERIFY"] = qc_counts.get("VERIFY", 0) + 1
 
+            # Per-rule aggregation (layout-aware)
+            qc_rule_counts: Dict[str, Dict[str, int]] = {}
+            sca_qc_counts = {"PASS": 0, "FAIL": 0, "VERIFY": 0}
+            for item in qc_results.rule_results:
+                rid = item.rule_id or "UNKNOWN"
+                qc_rule_counts.setdefault(rid, {"PASS": 0, "FAIL": 0, "VERIFY": 0})
+                if item.status not in ("PASS", "FAIL"):
+                    qc_rule_counts[rid]["VERIFY"] += 1
+                else:
+                    qc_rule_counts[rid][item.status] += 1
+
+                if str(rid).upper().startswith("SCA-"):
+                    if item.status not in ("PASS", "FAIL"):
+                        sca_qc_counts["VERIFY"] += 1
+                    else:
+                        sca_qc_counts[item.status] += 1
+
             result["qc_processor"] = {
                 "total_rules": qc_results.total_rules,
                 "passed": qc_counts.get("PASS", 0),
                 "failed": qc_counts.get("FAIL", 0),
                 "verify": qc_counts.get("VERIFY", 0),
                 "system_errors": qc_counts.get("SYSTEM_ERROR", 0),
+                "rule_counts": qc_rule_counts,
+                "sca_counts": sca_qc_counts,
             }
 
             with open(output_dir / f"{test_name}_qc_processor_rules.json", 'w') as f:
@@ -760,6 +798,32 @@ def run_test():
     qc_total_fail = sum((r.get("qc_processor") or {}).get("failed", 0) for r in all_results)
     qc_total_verify = sum((r.get("qc_processor") or {}).get("verify", 0) for r in all_results)
     qc_total_system_errors = sum((r.get("qc_processor") or {}).get("system_errors", 0) for r in all_results)
+
+    # Combined per-rule summaries across all documents
+    combined_engine_rule_counts: Dict[str, Dict[str, int]] = {}
+    combined_qc_rule_counts: Dict[str, Dict[str, int]] = {}
+    combined_sca_engine = {"PASS": 0, "FAIL": 0, "VERIFY": 0}
+    combined_sca_qc = {"PASS": 0, "FAIL": 0, "VERIFY": 0}
+
+    for r in all_results:
+        for rid, counts in (r.get("engine_rule_counts") or {}).items():
+            combined_engine_rule_counts.setdefault(rid, {"PASS": 0, "FAIL": 0, "VERIFY": 0})
+            for k in ("PASS", "FAIL", "VERIFY"):
+                combined_engine_rule_counts[rid][k] += int(counts.get(k, 0))
+
+        sca_ec = r.get("sca_engine_counts") or {}
+        for k in ("PASS", "FAIL", "VERIFY"):
+            combined_sca_engine[k] += int(sca_ec.get(k, 0))
+
+        qc = r.get("qc_processor") or {}
+        for rid, counts in (qc.get("rule_counts") or {}).items():
+            combined_qc_rule_counts.setdefault(rid, {"PASS": 0, "FAIL": 0, "VERIFY": 0})
+            for k in ("PASS", "FAIL", "VERIFY"):
+                combined_qc_rule_counts[rid][k] += int(counts.get(k, 0))
+
+        sca_qc = qc.get("sca_counts") or {}
+        for k in ("PASS", "FAIL", "VERIFY"):
+            combined_sca_qc[k] += int(sca_qc.get(k, 0))
     
     print("\n" + "=" * 70)
     print("TEST RESULTS SUMMARY")
@@ -806,6 +870,32 @@ def run_test():
     if qc_total_system_errors:
         print(f"  Total SYSTEM_ERROR: {qc_total_system_errors}")
     print("=" * 70)
+
+    def _sorted_rule_table(rule_counts: Dict[str, Dict[str, int]]) -> list[tuple[str, Dict[str, int]]]:
+        rows = []
+        for rid, c in rule_counts.items():
+            rows.append((rid, c))
+        rows.sort(key=lambda x: (-(x[1].get("FAIL", 0)), -(x[1].get("VERIFY", 0)), x[0]))
+        return rows
+
+    print("\n" + "-" * 70)
+    print("SCA RULES SUMMARY (engine-only):")
+    print(f"  PASS: {combined_sca_engine['PASS']}")
+    print(f"  FAIL: {combined_sca_engine['FAIL']}")
+    print(f"  VERIFY: {combined_sca_engine['VERIFY']}")
+
+    print("\n" + "-" * 70)
+    print("SCA RULES SUMMARY (QCProcessor layout-aware):")
+    print(f"  PASS: {combined_sca_qc['PASS']}")
+    print(f"  FAIL: {combined_sca_qc['FAIL']}")
+    print(f"  VERIFY: {combined_sca_qc['VERIFY']}")
+
+    print("\n" + "-" * 70)
+    print("TOP RULE FAILURES (QCProcessor layout-aware):")
+    for rid, c in _sorted_rule_table(combined_qc_rule_counts)[:20]:
+        if c.get("FAIL", 0) <= 0:
+            continue
+        print(f"  {rid}: FAIL {c.get('FAIL', 0)} | VERIFY {c.get('VERIFY', 0)} | PASS {c.get('PASS', 0)}")
     
     # Save summary to JSON
     summary = {
@@ -815,7 +905,13 @@ def run_test():
         "total_pass": total_pass,
         "total_fail": total_fail,
         "total_verify": total_verify,
-        "results": all_results
+        "results": all_results,
+        "combined": {
+            "engine_rule_counts": combined_engine_rule_counts,
+            "qc_rule_counts": combined_qc_rule_counts,
+            "sca_engine_counts": combined_sca_engine,
+            "sca_qc_counts": combined_sca_qc,
+        },
     }
     
     with open(output_dir / "test_summary.json", 'w') as f:

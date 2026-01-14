@@ -1,31 +1,785 @@
 {
-  "timestamp": "2026-01-14T00:27:40.166683",
+  "timestamp": "2026-01-14T12:25:33.660349",
   "files_tested": 3,
-  "total_rules": 141,
-  "total_pass": 37,
+  "total_rules": 222,
+  "total_pass": 92,
   "total_fail": 28,
-  "total_verify": 76,
+  "total_verify": 102,
   "results": [
     {
       "test_name": "apprisal_002",
       "appraisal_file": "apprisal_002.pdf",
       "engagement_file": "engagement_002.pdf",
       "ocr_success": true,
-      "rules_executed": 47,
-      "pass_count": 12,
+      "rules_executed": 74,
+      "pass_count": 30,
       "fail_count": 10,
-      "verify_count": 25,
+      "verify_count": 34,
       "errors": [],
       "appraisal_pages": 34,
-      "appraisal_chars": 97031,
+      "appraisal_chars": 98426,
       "engagement_pages": 10,
       "engagement_chars": 29433,
+      "engine_rule_counts": {
+        "S-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-3": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-8": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-9": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-10": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "S-11": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-12": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "C-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-4": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "C-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "N-1": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-2": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-5": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-6": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-7": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-3": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-4": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-5": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-6": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "ST-8": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-9": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-10": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "I-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-5": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "I-7": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-8": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-9": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-10": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-11": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-12": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "I-13": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-4": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-8": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-9": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-10": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-11": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-12": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-13": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-14": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-15": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-16": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-17": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-18": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-19": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-20": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-21": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-22": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-23": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-24": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-25": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-26": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-27": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        }
+      },
+      "sca_engine_counts": {
+        "PASS": 18,
+        "FAIL": 0,
+        "VERIFY": 9
+      },
       "qc_processor": {
-        "total_rules": 47,
-        "passed": 31,
-        "failed": 3,
-        "verify": 13,
-        "system_errors": 0
+        "total_rules": 74,
+        "passed": 32,
+        "failed": 4,
+        "verify": 38,
+        "system_errors": 0,
+        "rule_counts": {
+          "S-1": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-8": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-9": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-10": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "S-11": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-12": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "C-1": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "C-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "C-5": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "N-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-1": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "ST-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-8": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-9": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-10": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-7": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-8": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-9": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-10": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-11": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-12": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-13": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "SCA-1": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "SCA-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "SCA-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-5": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-6": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-7": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-8": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-9": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-10": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-11": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-12": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-13": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-14": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-15": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-16": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-17": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-18": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-19": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-20": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-21": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-22": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-23": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-24": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-25": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-26": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-27": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          }
+        },
+        "sca_counts": {
+          "PASS": 1,
+          "FAIL": 1,
+          "VERIFY": 25
+        }
       }
     },
     {
@@ -33,21 +787,775 @@
       "appraisal_file": "apprisal_003.pdf",
       "engagement_file": "engagement_003.pdf",
       "ocr_success": true,
-      "rules_executed": 47,
-      "pass_count": 12,
+      "rules_executed": 74,
+      "pass_count": 30,
       "fail_count": 9,
-      "verify_count": 26,
+      "verify_count": 35,
       "errors": [],
       "appraisal_pages": 45,
-      "appraisal_chars": 112385,
+      "appraisal_chars": 114295,
       "engagement_pages": 10,
       "engagement_chars": 29418,
+      "engine_rule_counts": {
+        "S-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-3": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-8": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-9": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-10": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-11": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-12": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "C-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "N-1": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-2": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-5": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-6": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-7": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-3": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-4": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-5": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-6": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "ST-8": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-9": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-10": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "I-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-5": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "I-7": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-8": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-9": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-10": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-11": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-12": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "I-13": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-4": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-8": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-9": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-10": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-11": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-12": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-13": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-14": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-15": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-16": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-17": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-18": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-19": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-20": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-21": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-22": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-23": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-24": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-25": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-26": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-27": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        }
+      },
+      "sca_engine_counts": {
+        "PASS": 18,
+        "FAIL": 0,
+        "VERIFY": 9
+      },
       "qc_processor": {
-        "total_rules": 47,
-        "passed": 30,
-        "failed": 3,
-        "verify": 14,
-        "system_errors": 0
+        "total_rules": 74,
+        "passed": 31,
+        "failed": 4,
+        "verify": 39,
+        "system_errors": 0,
+        "rule_counts": {
+          "S-1": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-8": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-9": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-10": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "S-11": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-12": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "C-1": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "C-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-5": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "N-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-1": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "ST-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-8": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-9": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-10": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-7": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-8": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-9": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-10": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-11": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-12": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-13": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "SCA-1": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "SCA-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "SCA-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-5": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-6": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-7": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-8": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-9": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-10": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-11": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-12": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-13": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-14": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-15": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-16": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-17": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-18": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-19": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-20": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-21": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-22": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-23": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-24": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-25": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-26": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-27": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          }
+        },
+        "sca_counts": {
+          "PASS": 1,
+          "FAIL": 1,
+          "VERIFY": 25
+        }
       }
     },
     {
@@ -55,22 +1563,1532 @@
       "appraisal_file": "apprisal_004.pdf",
       "engagement_file": "engagement_004.pdf",
       "ocr_success": true,
-      "rules_executed": 47,
-      "pass_count": 13,
+      "rules_executed": 74,
+      "pass_count": 32,
       "fail_count": 9,
-      "verify_count": 25,
+      "verify_count": 33,
       "errors": [],
       "appraisal_pages": 30,
-      "appraisal_chars": 67000,
+      "appraisal_chars": 67009,
       "engagement_pages": 10,
       "engagement_chars": 29718,
+      "engine_rule_counts": {
+        "S-1": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-3": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-8": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-9": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-10": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "S-11": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "S-12": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "C-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "C-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "N-1": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-2": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-5": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "N-6": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "N-7": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-3": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-4": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-5": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-6": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "ST-8": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "ST-9": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "ST-10": {
+          "PASS": 0,
+          "FAIL": 1,
+          "VERIFY": 0
+        },
+        "I-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-3": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-4": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-5": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "I-7": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-8": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-9": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-10": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-11": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "I-12": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "I-13": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-1": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-2": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-3": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-4": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-5": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-6": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-7": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-8": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-9": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-10": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-11": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-12": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-13": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-14": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-15": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-16": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-17": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-18": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-19": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-20": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-21": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-22": {
+          "PASS": 1,
+          "FAIL": 0,
+          "VERIFY": 0
+        },
+        "SCA-23": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-24": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-25": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-26": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        },
+        "SCA-27": {
+          "PASS": 0,
+          "FAIL": 0,
+          "VERIFY": 1
+        }
+      },
+      "sca_engine_counts": {
+        "PASS": 19,
+        "FAIL": 0,
+        "VERIFY": 8
+      },
       "qc_processor": {
-        "total_rules": 47,
-        "passed": 31,
-        "failed": 3,
-        "verify": 13,
-        "system_errors": 0
+        "total_rules": 74,
+        "passed": 32,
+        "failed": 4,
+        "verify": 38,
+        "system_errors": 0,
+        "rule_counts": {
+          "S-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-8": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-9": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "S-10": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "S-11": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "S-12": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "C-1": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "C-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "C-5": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "N-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "N-6": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "N-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-3": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-7": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-8": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-9": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "ST-10": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-1": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-2": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-4": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-5": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-6": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-7": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-8": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-9": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "I-10": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-11": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-12": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "I-13": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "SCA-1": {
+            "PASS": 0,
+            "FAIL": 1,
+            "VERIFY": 0
+          },
+          "SCA-2": {
+            "PASS": 1,
+            "FAIL": 0,
+            "VERIFY": 0
+          },
+          "SCA-3": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-4": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-5": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-6": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-7": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-8": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-9": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-10": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-11": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-12": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-13": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-14": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-15": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-16": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-17": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-18": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-19": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-20": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-21": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-22": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-23": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-24": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-25": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-26": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          },
+          "SCA-27": {
+            "PASS": 0,
+            "FAIL": 0,
+            "VERIFY": 1
+          }
+        },
+        "sca_counts": {
+          "PASS": 1,
+          "FAIL": 1,
+          "VERIFY": 25
+        }
       }
     }
-  ]
+  ],
+  "combined": {
+    "engine_rule_counts": {
+      "S-1": {
+        "PASS": 1,
+        "FAIL": 0,
+        "VERIFY": 2
+      },
+      "S-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-3": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-4": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-6": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-7": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-8": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-9": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-10": {
+        "PASS": 2,
+        "FAIL": 1,
+        "VERIFY": 0
+      },
+      "S-11": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-12": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "C-1": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "C-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "C-3": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "C-4": {
+        "PASS": 1,
+        "FAIL": 0,
+        "VERIFY": 2
+      },
+      "C-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "N-1": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "N-2": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "N-3": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "N-4": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "N-5": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "N-6": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "N-7": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "ST-1": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "ST-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "ST-3": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "ST-4": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "ST-5": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "ST-6": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "ST-7": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-8": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "ST-9": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "ST-10": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "I-1": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-3": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-4": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-5": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-6": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-7": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-8": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-9": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-10": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-11": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-12": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-13": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-1": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-3": {
+        "PASS": 1,
+        "FAIL": 0,
+        "VERIFY": 2
+      },
+      "SCA-4": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-6": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-7": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-8": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-9": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-10": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-11": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-12": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-13": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-14": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-15": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-16": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-17": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-18": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-19": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-20": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-21": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-22": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-23": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-24": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-25": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-26": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-27": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      }
+    },
+    "qc_rule_counts": {
+      "S-1": {
+        "PASS": 1,
+        "FAIL": 0,
+        "VERIFY": 2
+      },
+      "S-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-3": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-4": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-6": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-7": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-8": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-9": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "S-10": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "S-11": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "S-12": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "C-1": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "C-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "C-3": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "C-4": {
+        "PASS": 1,
+        "FAIL": 0,
+        "VERIFY": 2
+      },
+      "C-5": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "N-1": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "N-2": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "N-3": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "N-4": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "N-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "N-6": {
+        "PASS": 2,
+        "FAIL": 0,
+        "VERIFY": 1
+      },
+      "N-7": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-1": {
+        "PASS": 1,
+        "FAIL": 0,
+        "VERIFY": 2
+      },
+      "ST-2": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-3": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-4": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-6": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-7": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-8": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-9": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "ST-10": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-1": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-2": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-3": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-4": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-5": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-6": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-7": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-8": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-9": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "I-10": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-11": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-12": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "I-13": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-1": {
+        "PASS": 0,
+        "FAIL": 3,
+        "VERIFY": 0
+      },
+      "SCA-2": {
+        "PASS": 3,
+        "FAIL": 0,
+        "VERIFY": 0
+      },
+      "SCA-3": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-4": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-5": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-6": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-7": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-8": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-9": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-10": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-11": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-12": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-13": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-14": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-15": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-16": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-17": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-18": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-19": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-20": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-21": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-22": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-23": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-24": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-25": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-26": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      },
+      "SCA-27": {
+        "PASS": 0,
+        "FAIL": 0,
+        "VERIFY": 3
+      }
+    },
+    "sca_engine_counts": {
+      "PASS": 55,
+      "FAIL": 0,
+      "VERIFY": 26
+    },
+    "sca_qc_counts": {
+      "PASS": 3,
+      "FAIL": 3,
+      "VERIFY": 75
+    }
+  }
 }

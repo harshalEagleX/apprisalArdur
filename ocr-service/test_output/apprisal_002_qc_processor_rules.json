@@ -534,5 +534,436 @@
     "appraisal_value": null,
     "engagement_value": null,
     "review_required": false
+  },
+  {
+    "rule_id": "SCA-1",
+    "rule_name": "Comparable Market Summary",
+    "status": "FAIL",
+    "message": "The '# Listings' / '# Sales' market summary counts above the Sales Comparison grid are inconsistent with the comparables shown in the grid.",
+    "action_item": "Update the market summary counts above the grid so they are consistent with the comparables provided.",
+    "details": {
+      "summary_sales_within_12_months": 4,
+      "summary_listings_currently_offered": 1,
+      "grid_sales": 4,
+      "grid_listings": 2
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-2",
+    "rule_name": "Comparables Required",
+    "status": "PASS",
+    "message": "Comparable minimums satisfied (Sales: 4, Listings: 2).",
+    "action_item": null,
+    "details": {
+      "grid_sales": 4,
+      "grid_listings": 2
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": false
+  },
+  {
+    "rule_id": "SCA-3",
+    "rule_name": "Address (Subject and Comparables)",
+    "status": "VERIFY",
+    "message": "Missing required field: Subject Address",
+    "action_item": "Verify field 'Subject Address' manually in the document.",
+    "details": {
+      "field": "Subject Address"
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-4",
+    "rule_name": "Proximity to Subject",
+    "status": "VERIFY",
+    "message": "Proximity to subject is missing for one or more comparables; please provide proximity (minimum 0.01 miles with direction) or verify map support.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_proximity": [
+        1,
+        2,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-5",
+    "rule_name": "Data Sources",
+    "status": "VERIFY",
+    "message": "Data Source(s) are missing for one or more comparables. Please provide specific MLS name/MLS# and DOM (or Unk with commentary).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_data_source": [
+        1,
+        2,
+        3
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-6",
+    "rule_name": "Verification Sources",
+    "status": "VERIFY",
+    "message": "Verification Source(s) are missing for one or more closed comparable sales; please provide a full specific source name (e.g., County Assessor Tax Card).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_verification_source": [
+        1,
+        2,
+        3,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-7",
+    "rule_name": "Sale or Financing Concessions",
+    "status": "VERIFY",
+    "message": "Sale/financing/concessions field is missing for one or more comparables; please correct or comment (and add '0' where no adjustment is applied for UAD compliance).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_sale_financing_concessions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-8",
+    "rule_name": "Date of Sale/Time Adjustment",
+    "status": "VERIFY",
+    "message": "Sale date is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_sale_date": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-9",
+    "rule_name": "Location Rating",
+    "status": "VERIFY",
+    "message": "Location rating is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_location_rating": [
+        1,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-10",
+    "rule_name": "Leasehold/Fee Simple",
+    "status": "VERIFY",
+    "message": "Leasehold/Fee Simple field is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_leasehold_fee_simple": [
+        1,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-11",
+    "rule_name": "Site",
+    "status": "VERIFY",
+    "message": "Site size is missing for one or more comparables; please provide with proper units (SF if <1 acre, acreage if >=1 acre).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_site_size": [
+        1,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-12",
+    "rule_name": "View",
+    "status": "VERIFY",
+    "message": "View field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_view": [
+        1,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-13",
+    "rule_name": "Design (Style)",
+    "status": "VERIFY",
+    "message": "Design/Style field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_design_style": [
+        1,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-14",
+    "rule_name": "Quality of Construction",
+    "status": "VERIFY",
+    "message": "Quality rating (Q1-Q6) is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_quality_rating": [
+        2,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-15",
+    "rule_name": "Actual Age",
+    "status": "VERIFY",
+    "message": "Actual age is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_actual_age": [
+        2,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-16",
+    "rule_name": "Condition",
+    "status": "VERIFY",
+    "message": "Condition rating (C1-C6) is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_condition_rating": [
+        2,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-17",
+    "rule_name": "Above Grade Room Count and GLA",
+    "status": "VERIFY",
+    "message": "GLA is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_gla": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-18",
+    "rule_name": "Basement & Finished Rooms Below Grade",
+    "status": "VERIFY",
+    "message": "Basement/below-grade data is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_basement_gla": [
+        2,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-19",
+    "rule_name": "Functional Utility",
+    "status": "VERIFY",
+    "message": "Functional utility field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_functional_utility": [
+        1,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-20",
+    "rule_name": "Heating/Cooling",
+    "status": "VERIFY",
+    "message": "Heating/Cooling field is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_heating_cooling": [
+        1,
+        3,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-21",
+    "rule_name": "Garage/Carport",
+    "status": "VERIFY",
+    "message": "Garage/Carport data is missing for one or more comparables; please correct or comment.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_garage_carport": [
+        1,
+        4,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-22",
+    "rule_name": "Porch/Patio/Deck",
+    "status": "VERIFY",
+    "message": "Porch/Patio/Deck field is missing for one or more comparables; please correct or comment (or explicitly state 'None').",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "missing_porch_patio_deck": [
+        1,
+        3,
+        5
+      ]
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-23",
+    "rule_name": "Listing Comparables",
+    "status": "VERIFY",
+    "message": "Listing comparable(s) detected. Please verify list-to-sales price ratio adjustment is applied or explain why not warranted.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {
+      "listing_comparables_detected": 2
+    },
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-24",
+    "rule_name": "Unique Design Properties",
+    "status": "VERIFY",
+    "message": "Verify if the subject has unique characteristics (green/log home/1-bedroom/ADU/etc.). If so, include similar comparables or explain in detail why not available.",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {},
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-25",
+    "rule_name": "New Construction",
+    "status": "VERIFY",
+    "message": "Verify if the subject is new construction. If yes, provide at least one comparable from the competing development (or explain alternatives if not available).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {},
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-26",
+    "rule_name": "Square Footage",
+    "status": "VERIFY",
+    "message": "Verify below-grade square footage is not included in GLA unless necessary, and that all comps reflect the same methodology (MLS/public records limitations).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {},
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
+  },
+  {
+    "rule_id": "SCA-27",
+    "rule_name": "Comparable Photos",
+    "status": "VERIFY",
+    "message": "Verify comparable photos meet loan requirements (MLS photos acceptable for conventional with drive-by commentary; FHA requires drive-by photos).",
+    "action_item": "Please verify/correct the Sales Comparison grid field(s) and add commentary where required.",
+    "details": {},
+    "appraisal_value": null,
+    "engagement_value": null,
+    "review_required": true
   }
 ]

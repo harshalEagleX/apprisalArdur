@@ -280,5 +280,167 @@
     "rule_name": "Security Bars",
     "status": "PASS",
     "message": "Security bars presence was not detected."
+  },
+  {
+    "rule_id": "SCA-1",
+    "rule_name": "Comparable Market Summary",
+    "status": "VERIFY",
+    "message": "Missing required field: # of Comparable Sales within 12 Months"
+  },
+  {
+    "rule_id": "SCA-2",
+    "rule_name": "Comparables Required",
+    "status": "VERIFY",
+    "message": "Missing required field: Sales Comparison Grid Comparables"
+  },
+  {
+    "rule_id": "SCA-3",
+    "rule_name": "Address (Subject and Comparables)",
+    "status": "PASS",
+    "message": "Subject and comparable addresses are present."
+  },
+  {
+    "rule_id": "SCA-4",
+    "rule_name": "Proximity to Subject",
+    "status": "PASS",
+    "message": "Proximity appears present and plausibly UAD formatted for all extracted comparables."
+  },
+  {
+    "rule_id": "SCA-5",
+    "rule_name": "Data Sources",
+    "status": "PASS",
+    "message": "Data Source(s) appear present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-6",
+    "rule_name": "Verification Sources",
+    "status": "PASS",
+    "message": "Verification Source(s) appear present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-7",
+    "rule_name": "Sale or Financing Concessions",
+    "status": "PASS",
+    "message": "Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable."
+  },
+  {
+    "rule_id": "SCA-8",
+    "rule_name": "Date of Sale/Time Adjustment",
+    "status": "PASS",
+    "message": "Sale date appears present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-9",
+    "rule_name": "Location Rating",
+    "status": "PASS",
+    "message": "Location ratings appear present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-10",
+    "rule_name": "Leasehold/Fee Simple",
+    "status": "PASS",
+    "message": "Leasehold/Fee Simple fields appear present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-11",
+    "rule_name": "Site",
+    "status": "PASS",
+    "message": "Site sizes appear present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-12",
+    "rule_name": "View",
+    "status": "PASS",
+    "message": "View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable."
+  },
+  {
+    "rule_id": "SCA-13",
+    "rule_name": "Design (Style)",
+    "status": "PASS",
+    "message": "Design/Style fields appear present for extracted comparables; verify UAD formatting manually."
+  },
+  {
+    "rule_id": "SCA-14",
+    "rule_name": "Quality of Construction",
+    "status": "PASS",
+    "message": "Quality ratings appear UAD compliant for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-15",
+    "rule_name": "Actual Age",
+    "status": "PASS",
+    "message": "Actual age appears present for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-16",
+    "rule_name": "Condition",
+    "status": "PASS",
+    "message": "Condition ratings appear UAD compliant for extracted comparables."
+  },
+  {
+    "rule_id": "SCA-17",
+    "rule_name": "Above Grade Room Count and GLA",
+    "status": "VERIFY",
+    "message": "Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually."
+  },
+  {
+    "rule_id": "SCA-18",
+    "rule_name": "Basement & Finished Rooms Below Grade",
+    "status": "PASS",
+    "message": "Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually."
+  },
+  {
+    "rule_id": "SCA-19",
+    "rule_name": "Functional Utility",
+    "status": "PASS",
+    "message": "Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required."
+  },
+  {
+    "rule_id": "SCA-20",
+    "rule_name": "Heating/Cooling",
+    "status": "PASS",
+    "message": "Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information."
+  },
+  {
+    "rule_id": "SCA-21",
+    "rule_name": "Garage/Carport",
+    "status": "PASS",
+    "message": "Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually."
+  },
+  {
+    "rule_id": "SCA-22",
+    "rule_name": "Porch/Patio/Deck",
+    "status": "PASS",
+    "message": "Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'."
+  },
+  {
+    "rule_id": "SCA-23",
+    "rule_name": "Listing Comparables",
+    "status": "VERIFY",
+    "message": "No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted."
+  },
+  {
+    "rule_id": "SCA-24",
+    "rule_name": "Unique Design Properties",
+    "status": "VERIFY",
+    "message": "Verify if the subject has unique characteristics (green/log home/1-bedroom/ADU/etc.). If so, include similar comparables or explain in detail why not available."
+  },
+  {
+    "rule_id": "SCA-25",
+    "rule_name": "New Construction",
+    "status": "VERIFY",
+    "message": "Verify if the subject is new construction. If yes, provide at least one comparable from the competing development (or explain alternatives if not available)."
+  },
+  {
+    "rule_id": "SCA-26",
+    "rule_name": "Square Footage",
+    "status": "VERIFY",
+    "message": "Verify below-grade square footage is not included in GLA unless necessary, and that all comps reflect the same methodology (MLS/public records limitations)."
+  },
+  {
+    "rule_id": "SCA-27",
+    "rule_name": "Comparable Photos",
+    "status": "VERIFY",
+    "message": "Verify comparable photos meet loan requirements (MLS photos acceptable for conventional with drive-by commentary; FHA requires drive-by photos)."
   }
 ]

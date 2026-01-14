@@ -1,7 +1,7 @@
 ============================================================
 EXTRACTED TEXT FROM: apprisal_004.pdf
-Extraction Date: 2026-01-14T00:27:39.597461
-Total Characters: 67000
+Extraction Date: 2026-01-14T12:25:32.979920
+Total Characters: 67009
 Total Words: 10350
 ============================================================
 
@@ -24,7 +24,7 @@ Stickney-Crane View Archer
 8208.00
 0
 0
-Everett Financial, Inc DBA Supreme Lend
+Everett Financial, Inc DBA Supreme Lending
 14801 Quorum Dr, Ste 300, Dallas, TX, 75254
 DOM 5;MRED#:12013260,List Price:$199,000,Status:EXP List Date:03/26/2024 Orig List
 Price:$199,000,Off Market:03/18/2025
@@ -59,7 +59,7 @@ Concrete
 X
 17031C0492J
 08/19/2008
-   No location adjustments or view adjustment is needed for the Subject or Comps proximity to external influences including powerlines, arterial
+    No location adjustments or view adjustment is needed for the Subject or Comps proximity to external influences including powerlines, arterial
 roads, rail roads, parks/lakes, schools and other non residentials It is typical in this market to be within .1 miles of these.
 1
 Ranch
@@ -2745,7 +2745,7 @@ Cook
 IL
 60638
 Everett Financial, Inc DBA Supreme Lending
-Hall
+ Hall
 Sales Price
 Gross Living Area
 Total Rooms
@@ -2768,7 +2768,7 @@ N;Res;CtyStr
 Q4
 73
 Kitchen
-Kitchen
+ Kitchen
 Borrower
 Lender/Client
 Property Address
@@ -2787,7 +2787,7 @@ Cook
 IL
 60638
 Everett Financial, Inc DBA Supreme Lending
-Kitchen
+ Kitchen
 Sales Price
 Gross Living Area
 Total Rooms
@@ -3350,8 +3350,8 @@ Belen Guido Ballesteros
 0.67
 2
 3.0
-$260,887
-56
+ $260,887
+ 56
 $258,387
 54
 98.89
