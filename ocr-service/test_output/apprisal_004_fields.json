@@ -13,7 +13,8 @@
     "map_reference": "Census Tract",
     "census_tract": "8208.00",
     "occupant": "Owner",
-    "lender_name": "to evaluate\nthe property that is the\nsubject\nof\nthis\nappraisal\nfor\na\nmortgage",
+    "lender_name": "Name\nCompany Name\nCompany Address\nEmail Address\nSignature\nName\nCompany Name\nCompany",
+    "did_analyze_contract": true,
     "owner_record_data_source": "used, offering price(s), and date(s).",
     "data_source": "Are the units, common elements, and recreation facilities complete?"
   },

@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-01-14T12:25:33.660349",
+  "timestamp": "2026-01-17T09:48:58.086091",
   "files_tested": 3,
   "total_rules": 222,
-  "total_pass": 92,
-  "total_fail": 28,
-  "total_verify": 102,
+  "total_pass": 105,
+  "total_fail": 27,
+  "total_verify": 90,
   "results": [
     {
       "test_name": "apprisal_002",
@@ -12,9 +12,9 @@
       "engagement_file": "engagement_002.pdf",
       "ocr_success": true,
       "rules_executed": 74,
-      "pass_count": 30,
-      "fail_count": 10,
-      "verify_count": 34,
+      "pass_count": 35,
+      "fail_count": 9,
+      "verify_count": 30,
       "errors": [],
       "appraisal_pages": 34,
       "appraisal_chars": 98426,
@@ -77,8 +77,8 @@
           "VERIFY": 1
         },
         "S-12": {
-          "PASS": 0,
-          "FAIL": 1,
+          "PASS": 1,
+          "FAIL": 0,
           "VERIFY": 0
         },
         "C-1": {
@@ -372,36 +372,36 @@
           "VERIFY": 1
         },
         "SCA-24": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-25": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-26": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-27": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         }
       },
       "sca_engine_counts": {
-        "PASS": 18,
+        "PASS": 22,
         "FAIL": 0,
-        "VERIFY": 9
+        "VERIFY": 5
       },
       "qc_processor": {
         "total_rules": 74,
-        "passed": 32,
-        "failed": 4,
-        "verify": 38,
+        "passed": 37,
+        "failed": 2,
+        "verify": 35,
         "system_errors": 0,
         "rule_counts": {
           "S-1": {
@@ -460,14 +460,14 @@
             "VERIFY": 1
           },
           "S-12": {
-            "PASS": 0,
-            "FAIL": 1,
+            "PASS": 1,
+            "FAIL": 0,
             "VERIFY": 0
           },
           "C-1": {
             "PASS": 0,
-            "FAIL": 1,
-            "VERIFY": 0
+            "FAIL": 0,
+            "VERIFY": 1
           },
           "C-2": {
             "PASS": 0,
@@ -755,30 +755,30 @@
             "VERIFY": 1
           },
           "SCA-24": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-25": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-26": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-27": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           }
         },
         "sca_counts": {
-          "PASS": 1,
+          "PASS": 5,
           "FAIL": 1,
-          "VERIFY": 25
+          "VERIFY": 21
         }
       }
     },
@@ -788,9 +788,9 @@
       "engagement_file": "engagement_003.pdf",
       "ocr_success": true,
       "rules_executed": 74,
-      "pass_count": 30,
+      "pass_count": 34,
       "fail_count": 9,
-      "verify_count": 35,
+      "verify_count": 31,
       "errors": [],
       "appraisal_pages": 45,
       "appraisal_chars": 114295,
@@ -1148,36 +1148,36 @@
           "VERIFY": 1
         },
         "SCA-24": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-25": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-26": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-27": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         }
       },
       "sca_engine_counts": {
-        "PASS": 18,
+        "PASS": 22,
         "FAIL": 0,
-        "VERIFY": 9
+        "VERIFY": 5
       },
       "qc_processor": {
         "total_rules": 74,
-        "passed": 31,
-        "failed": 4,
-        "verify": 39,
+        "passed": 34,
+        "failed": 3,
+        "verify": 37,
         "system_errors": 0,
         "rule_counts": {
           "S-1": {
@@ -1242,8 +1242,8 @@
           },
           "C-1": {
             "PASS": 0,
-            "FAIL": 1,
-            "VERIFY": 0
+            "FAIL": 0,
+            "VERIFY": 1
           },
           "C-2": {
             "PASS": 0,
@@ -1531,19 +1531,19 @@
             "VERIFY": 1
           },
           "SCA-24": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-25": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-26": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-27": {
             "PASS": 0,
@@ -1552,9 +1552,9 @@
           }
         },
         "sca_counts": {
-          "PASS": 1,
+          "PASS": 4,
           "FAIL": 1,
-          "VERIFY": 25
+          "VERIFY": 22
         }
       }
     },
@@ -1564,9 +1564,9 @@
       "engagement_file": "engagement_004.pdf",
       "ocr_success": true,
       "rules_executed": 74,
-      "pass_count": 32,
+      "pass_count": 36,
       "fail_count": 9,
-      "verify_count": 33,
+      "verify_count": 29,
       "errors": [],
       "appraisal_pages": 30,
       "appraisal_chars": 67009,
@@ -1924,36 +1924,36 @@
           "VERIFY": 1
         },
         "SCA-24": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-25": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-26": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         },
         "SCA-27": {
-          "PASS": 0,
+          "PASS": 1,
           "FAIL": 0,
-          "VERIFY": 1
+          "VERIFY": 0
         }
       },
       "sca_engine_counts": {
-        "PASS": 19,
+        "PASS": 23,
         "FAIL": 0,
-        "VERIFY": 8
+        "VERIFY": 4
       },
       "qc_processor": {
         "total_rules": 74,
-        "passed": 32,
+        "passed": 35,
         "failed": 4,
-        "verify": 38,
+        "verify": 35,
         "system_errors": 0,
         "rule_counts": {
           "S-1": {
@@ -2018,8 +2018,8 @@
           },
           "C-1": {
             "PASS": 0,
-            "FAIL": 1,
-            "VERIFY": 0
+            "FAIL": 0,
+            "VERIFY": 1
           },
           "C-2": {
             "PASS": 0,
@@ -2112,8 +2112,8 @@
             "VERIFY": 0
           },
           "ST-8": {
-            "PASS": 1,
-            "FAIL": 0,
+            "PASS": 0,
+            "FAIL": 1,
             "VERIFY": 0
           },
           "ST-9": {
@@ -2307,30 +2307,30 @@
             "VERIFY": 1
           },
           "SCA-24": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-25": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-26": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           },
           "SCA-27": {
-            "PASS": 0,
+            "PASS": 1,
             "FAIL": 0,
-            "VERIFY": 1
+            "VERIFY": 0
           }
         },
         "sca_counts": {
-          "PASS": 1,
+          "PASS": 5,
           "FAIL": 1,
-          "VERIFY": 25
+          "VERIFY": 21
         }
       }
     }
@@ -2393,8 +2393,8 @@
         "VERIFY": 3
       },
       "S-12": {
-        "PASS": 0,
-        "FAIL": 3,
+        "PASS": 1,
+        "FAIL": 2,
         "VERIFY": 0
       },
       "C-1": {
@@ -2688,24 +2688,24 @@
         "VERIFY": 3
       },
       "SCA-24": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       },
       "SCA-25": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       },
       "SCA-26": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       },
       "SCA-27": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       }
     },
     "qc_rule_counts": {
@@ -2765,14 +2765,14 @@
         "VERIFY": 3
       },
       "S-12": {
-        "PASS": 0,
-        "FAIL": 3,
+        "PASS": 1,
+        "FAIL": 2,
         "VERIFY": 0
       },
       "C-1": {
         "PASS": 0,
-        "FAIL": 3,
-        "VERIFY": 0
+        "FAIL": 0,
+        "VERIFY": 3
       },
       "C-2": {
         "PASS": 0,
@@ -2865,8 +2865,8 @@
         "VERIFY": 0
       },
       "ST-8": {
-        "PASS": 3,
-        "FAIL": 0,
+        "PASS": 2,
+        "FAIL": 1,
         "VERIFY": 0
       },
       "ST-9": {
@@ -3060,35 +3060,35 @@
         "VERIFY": 3
       },
       "SCA-24": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       },
       "SCA-25": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       },
       "SCA-26": {
-        "PASS": 0,
+        "PASS": 3,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 0
       },
       "SCA-27": {
-        "PASS": 0,
+        "PASS": 2,
         "FAIL": 0,
-        "VERIFY": 3
+        "VERIFY": 1
       }
     },
     "sca_engine_counts": {
-      "PASS": 55,
+      "PASS": 67,
       "FAIL": 0,
-      "VERIFY": 26
+      "VERIFY": 14
     },
     "sca_qc_counts": {
-      "PASS": 3,
+      "PASS": 14,
       "FAIL": 3,
-      "VERIFY": 75
+      "VERIFY": 64
     }
   }
 }

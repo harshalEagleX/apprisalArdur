@@ -44,14 +44,20 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
         )
     
     # For Purchase transactions
-    # If checkbox state is unknown (not detected), return WARNING not ERROR
+    # If checkbox state is unknown (not detected), check if we have analysis commentary
     if ctx.report.contract.did_analyze_contract is None:
-        return RuleResult(
-            rule_id="C-1",
-            rule_name="Contract Analysis Requirement",
-            status=RuleStatus.WARNING,
-            message="Did/Did Not Analyze Contract checkbox not detected. Please verify manually."
-        )
+        # If we have substantial analysis commentary, infer that contract was analyzed
+        comment = ctx.report.contract.contract_analysis_comment or ""
+        if len(comment.strip()) >= 20:
+            # Commentary exists - infer contract was analyzed
+            ctx.report.contract.did_analyze_contract = True
+        else:
+            return RuleResult(
+                rule_id="C-1",
+                rule_name="Contract Analysis Requirement",
+                status=RuleStatus.VERIFY,
+                message="Did/Did Not Analyze Contract checkbox not detected. Please verify manually."
+            )
     
     if ctx.report.contract.did_analyze_contract is False:
         return RuleResult(

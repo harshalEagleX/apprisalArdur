@@ -200,11 +200,15 @@ class ExtractionService:
         """Extract facts from Subject Section."""
         subject = SubjectSectionExtract()
         
+        # Keep original text for header fields that might appear before the form title
+        # (e.g. Lender, File #, Prior Sale Data often appearing in header/top of stream)
+        full_text = text
+        
         # IMPORTANT: Only extract from the actual report section, not table of contents
         # Find the "Uniform Residential Appraisal Report" header and extract from there
         report_start = re.search(r"Uniform Residential Appraisal Report", text, re.IGNORECASE)
         if report_start:
-            # Work with text starting from the report header
+            # Work with text starting from the report header for main body fields
             text = text[report_start.start():]
         
          
@@ -496,10 +500,44 @@ class ExtractionService:
         # Need to stop before "Address" and remove prefix characters like "—"
         subject.lender_name = self._extract_field(text, [
             # Capture company name, stop before "Address"
-            r"Lender/?Client[\s—:-]+([A-Za-z][A-Za-z\s]+(?:Corporation|Corp|Inc|LLC|Company|Co\.?|Bank|Mortgage|Credit Union))(?:\s+Address|$|\n)",
-            # Fallback: just capture until Address keyword
-            r"Lender/?Client[\s—:-]+([^A]+)(?:Address|\n)",
+            r"(?m)^Lender/?Client[\s—:-]+([A-Za-z][A-Za-z\s]+(?:Corporation|Corp|Inc|LLC|Company|Co\.?|Bank|Mortgage|Credit Union))(?:\s+Address|$|\n)",
+            # Case insensitive with colon
+            r"Lender/?Client[:\s]+([^\n]+?)(?:\s+Address|\n)",
         ])
+        
+        # Validation: Rejection common false positives (like "provide the lender/client with...")
+        if subject.lender_name:
+            ln_lower = subject.lender_name.lower()
+            if "provide the" in ln_lower or "accurate" in ln_lower or "purpose of" in ln_lower:
+                subject.lender_name = None
+
+        
+        
+        # Fallback: Search for standalone lender entity line if not found above
+        if not subject.lender_name:
+            # Try searching in FULL text (header area) using the entity pattern
+            # Look for lines ending in common entity types...
+            entity_pattern = r"(?m)^([A-Za-z0-9\s]+(?:Corporation|Corp\.?|Inc\.?|LLC|Company|Co\.?|Bank|Mortgage|Credit Union|Lending|Funding|Services))(?:\s+Address)?$"
+            
+            # Search in full_text to catch header info
+            matches = list(re.finditer(entity_pattern, full_text))
+            for m in matches:
+                candidate = m.group(1).strip()
+                # Skip if it's typical unrelated text
+                if "appraisal" in candidate.lower() or "report" in candidate.lower() or "form" in candidate.lower():
+                    continue
+                # If we found something that looks like a lender and likely hasn't been used for other fields
+                if candidate not in (subject.borrower_name or ""):
+                    subject.lender_name = candidate
+                    # Check if next line is address
+                    next_line_start = m.end()
+                    next_line_match = re.search(r"\n+(.+?)\n", full_text[next_line_start:])
+                    if next_line_match:
+                         # Heuristic: address usually starts with digits
+                         potential_addr = next_line_match.group(1).strip()
+                         if re.match(r"\d+\s+[A-Za-z]", potential_addr):
+                             subject.lender_address = potential_addr
+                    break
         
         # Clean up lender name - remove leading/trailing noise
         if subject.lender_name:
@@ -525,60 +563,73 @@ class ExtractionService:
             subject.property_rights = "De Minimis PUD"
         
         # S-12: Prior Listing/Sale History - Checkbox Detection
-        # OCR formats can be:
-        #   "x Yes | | No" (x before Yes = Yes checked)
-        #   "| | Yes x No" (x before No = No checked)
-        #   ">< Yes | | No" (>< is filled checkbox)
-        #   "[X] Yes [ ] No" or similar
-        
-        # Look for the specific question text and nearby checkbox indicators
-        prior_sale_match = re.search(
-            r"offered for sale.*?(?:in the twelve months|12 months).*?\?"
-            r".*?(x|X|><|\[x\]|\[X\])\s*(Yes|No)",
-            text, re.IGNORECASE | re.DOTALL
-        )
-        
-        if prior_sale_match:
-            answer = prior_sale_match.group(2).upper()
-            subject.offered_for_sale_12mo = (answer == "YES")
-        else:
-            # Try alternative pattern: checkbox symbol directly before Yes/No
-            yes_checked = re.search(r"(x|X|><|\[x\]|\[X\])\s*Yes\s*\|?\s*\|?\s*No", text)
-            no_checked = re.search(r"Yes\s*\|?\s*\|?\s*(x|X|><|\[x\]|\[X\])\s*No", text)
+        # Try finding in truncated text first, then full_text
+        for search_text in [text, full_text]:
+            if subject.offered_for_sale_12mo is not None:
+                break
+                
+            # Look for the specific question text and nearby checkbox indicators
+            prior_sale_match = re.search(
+                r"offered for sale.*?(?:in the twelve months|12 months).*?\?"
+                r".*?(x|X|><|\[x\]|\[X\])\s*(Yes|No)",
+                search_text, re.IGNORECASE | re.DOTALL
+            )
             
-            if yes_checked:
-                subject.offered_for_sale_12mo = True
-            elif no_checked:
-                subject.offered_for_sale_12mo = False
-            # else: remains None (not detected)
+            if prior_sale_match:
+                answer = prior_sale_match.group(2).upper()
+                subject.offered_for_sale_12mo = (answer == "YES")
+            else:
+                # Try alternative pattern: checkbox symbol directly before Yes/No
+                yes_checked = re.search(r"(x|X|><|\[x\]|\[X\])\s*Yes\s*\|?\s*\|?\s*No", search_text)
+                no_checked = re.search(r"Yes\s*\|?\s*\|?\s*(x|X|><|\[x\]|\[X\])\s*No", search_text)
+                
+                if yes_checked:
+                    subject.offered_for_sale_12mo = True
+                elif no_checked:
+                    subject.offered_for_sale_12mo = False
+                else:
+                    # Fallback: Inference from commentary (e.g. "subject has not been publicly listed")
+                    # This often appears in header section, so checking search_text (which includes full_text in 2nd loop)
+                    if re.search(r"not\s+(?:been\s+)?(?:publicly\s+)?listed", search_text, re.IGNORECASE):
+                        subject.offered_for_sale_12mo = False
+                    elif re.search(r"DOM\s+0", search_text):
+                         # If DOM is explicit 0, likely not listed
+                         subject.offered_for_sale_12mo = False
+
         
-        subject.data_source = self._extract_field(text, [
-            r"Data Source[s]?[:\s]+([^\n]+)",
-        ])
+        # Data Sources and DOM (search in full_text if not found in text)
+        if not subject.data_source:
+             subject.data_source = self._extract_field(full_text, [
+                r"Data Source[s]?[:\s]+([^\n]+)",
+            ])
+             
+        if not subject.mls_number:
+            subject.mls_number = self._extract_field(full_text, [
+                r"MLS[:\s#]+([A-Z0-9]+)",
+            ])
+
+        if not subject.days_on_market:
+            dom_str = self._extract_field(full_text, [
+                r"DOM[:\s]+(\d+)",
+                r"Days on Market[:\s]+(\d+)",
+            ])
+            if dom_str:
+                try:
+                    subject.days_on_market = int(dom_str)
+                except ValueError:
+                    pass
         
-        subject.mls_number = self._extract_field(text, [
-            r"MLS[:\s#]+([A-Z0-9]+)",
-        ])
+        if not subject.list_price:
+            list_price_str = self._extract_field(full_text, [
+                r"List(?:ing)? Price[:\s]*\$?([\d,]+)",
+            ])
+            if list_price_str:
+                subject.list_price = self._parse_money(list_price_str)
         
-        dom_str = self._extract_field(text, [
-            r"DOM[:\s]+(\d+)",
-            r"Days on Market[:\s]+(\d+)",
-        ])
-        if dom_str:
-            try:
-                subject.days_on_market = int(dom_str)
-            except ValueError:
-                pass
-        
-        list_price_str = self._extract_field(text, [
-            r"List(?:ing)? Price[:\s]*\$?([\d,]+)",
-        ])
-        if list_price_str:
-            subject.list_price = self._parse_money(list_price_str)
-        
-        subject.list_date = self._extract_field(text, [
-            r"List(?:ing)? Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
-        ])
+        if not subject.list_date:
+            subject.list_date = self._extract_field(full_text, [
+                r"List(?:ing)? Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
+            ])
         
         return subject
     
@@ -607,16 +658,37 @@ class ExtractionService:
             contract.assignment_type = "Refinance"
         
         # Did analyze contract
+        # The form template text contains BOTH "did" and "did not analyze" as labels.
+        # We need to look for actual checkbox marks or inference from content.
         check_pattern = r"(?:\[x\]|\[X\]|X|><|\]X|X\[|x)"
-        if re.search(rf"{check_pattern}\s*did\s*analyze|did\s*analyze\s*{check_pattern}", text_lower) and not "did not" in text_lower:
+        
+        # First, try explicit checkbox detection
+        did_check = re.search(rf"{check_pattern}\s*did(?!\s*not)\b", text_lower)
+        did_not_check = re.search(rf"{check_pattern}\s*did\s+not\b", text_lower)
+        
+        if did_check and not did_not_check:
             contract.did_analyze_contract = True
-        elif re.search(rf"{check_pattern}\s*did not\s*analyze|did not\s*analyze\s*{check_pattern}", text_lower):
+        elif did_not_check and not did_check:
             contract.did_analyze_contract = False
-        # Fallback for missing boolean boxes (text search)
-        elif "did not analyze" in text_lower:
-             contract.did_analyze_contract = False
-        elif "did analyze" in text_lower or "i did analyze" in text_lower:
-             contract.did_analyze_contract = True
+        else:
+            # Fallback: infer from presence of actual analysis content
+            # If we see typical analysis phrases, the contract was analyzed
+            analysis_indicators = [
+                r"per the appraiser'?s review",
+                r"contract is a?n? typical",
+                r"arms[\s-]?length",
+                r"non[\s-]?arms[\s-]?length",
+                r"purchase price of \$",
+                r"contract date of \d",
+                r"the appraiser did analyze",
+                r"sale type",
+                r"sale between",
+            ]
+            has_analysis = any(re.search(pat, text_lower) for pat in analysis_indicators)
+            
+            if has_analysis:
+                contract.did_analyze_contract = True
+            # Don't set to False just because form template contains "did not analyze"
         
         # Sale type
         sale_types = ["Arms-Length", "Non Arms-Length", "REO", "Short Sale", "Court Ordered"]
@@ -625,6 +697,18 @@ class ExtractionService:
             if re.search(rf"{check_pattern}\s*{sale_type}|{sale_type}\s*{check_pattern}", text, re.I):
                 contract.sale_type = sale_type
                 break
+        
+        # Extract Contract Analysis Commentary
+        # Look for text following "Explain the results of the analysis..." until the next field (Contract Price)
+        contract.contract_analysis_comment = self._extract_field(text, [
+            r"Explain the results of the analysis.*?performed\.?\s*(.*?)(?=\s*Contract Price|\s*Date of Contract|\s*Is the property seller)",
+            r"analysis of the contract for sale.*?performed\.?\s*(.*?)(?=\s*Contract Price|\s*Date of Contract)",
+        ])
+        # Clean up commentary
+        if contract.contract_analysis_comment:
+             # Remove common noise/labels if captured
+             contract.contract_analysis_comment = re.sub(r"Contract Price[:\s]*\$?[\d,]+", "", contract.contract_analysis_comment).strip()
+
         
         # C-2: Contract Price and Date
         price_str = self._extract_field(text, [

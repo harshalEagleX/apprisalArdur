@@ -9,9 +9,11 @@
     "neighborhood_name": "Map Reference",
     "map_reference": "Census Tract",
     "occupant": "Owner",
-    "lender_name": "to evaluate the property that is the\nsubject\nof\nthis\nappraisal\nfor\na\nmortgage",
+    "lender_name": "Name\nCompany Name\nCompany",
+    "did_analyze_contract": true,
     "has_financial_assistance": false,
     "owner_record_data_source": "used, offering price(s), and date(s).",
+    "offered_for_sale_12mo": false,
     "data_source": "Are the units, common elements, and recreation facilities complete?"
   },
   "engagement_fields": {

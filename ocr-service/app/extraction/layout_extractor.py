@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import fitz
 import numpy as np
@@ -922,10 +922,226 @@ def extract_urar_sales_comparison(pdf_path: str, full_text: Optional[str] = None
         if comparables:
             data["comparables"] = comparables
 
+        # FALLBACK: If layout extraction yielded few/no comparables, try text-based parsing
+        if len(comparables) < 3 and full_text:
+            text_result = _extract_comps_from_text_v2(full_text)
+            text_comps = text_result.get("comparables", [])
+            text_subj = text_result.get("subject")
+            
+            if len(text_comps) > len(comparables):
+                data["comparables"] = text_comps
+                comparables = text_comps
+                
+            if text_subj and not data.get("subject_comparable"):
+                 # Manually construct Subject Comparable object or dict
+                 # The model expects a Comparable-like structure or dict
+                 data["subject_comparable"] = text_subj
+
     finally:
         doc.close()
 
     return data
+
+
+def _extract_comps_from_text(full_text: str) -> List[Dict[str, object]]:
+    """
+    Extract comparables from column-major ordered text using pattern matching.
+    
+    This handles the case where PDF text extraction returns data in column order
+    rather than row order, making layout-based extraction fail.
+    
+    Pattern recognition for UAD-formatted appraisals:
+    - Address: "12345 Street Name" followed by "City, ST Zip"
+    - Proximity: "X.XX miles Direction"
+    - Prices: 6-digit numbers
+    - Data Sources: "MLS#XXXXX;DOM XX" or "SACM#XXXXX;DOM XX"
+    - Quality/Condition: Q1-Q6, C1-C6
+    - Location/View: "N;Rural;" or "A;Res;" format
+    """
+    comparables: List[Dict[str, object]] = []
+    if not full_text:
+        return comparables
+    
+    lines = full_text.splitlines()
+    
+    # Find comparable blocks by looking for proximity patterns (X.XX miles Direction)
+    # This is the most reliable indicator of a comparable entry
+    proximity_pattern = re.compile(r'^(\d+\.?\d*)\s+miles?\s+([NSEW]{1,2})$', re.IGNORECASE)
+    address_pattern = re.compile(r'^(\d+\s+[NSEW]?\s*[\w\s]+(?:Rd|St|Dr|Ave|Ln|Way|Ct|Blvd|Road|Street|Drive|Avenue|Lane|Court|Highway|Hwy))$', re.IGNORECASE)
+    
+    # UAD patterns
+    data_source_pattern = re.compile(r'^([A-Z]{2,6}#\d{5,};?DOM\s*\d+|[A-Z]{2,6}#\d{5,})$', re.IGNORECASE)
+    verification_pattern = re.compile(r'^(Doc#\d+|County\s+Records|MLS|Tax\s+Records)', re.IGNORECASE)
+    quality_pattern = re.compile(r'^Q[1-6]$', re.IGNORECASE)
+    condition_pattern = re.compile(r'^C[1-6]$', re.IGNORECASE)
+    location_view_pattern = re.compile(r'^[AN];[A-Za-z]+;?(?:[A-Za-z]+;?)*$')
+    design_pattern = re.compile(r'^DT\d;[A-Za-z]+$', re.IGNORECASE)
+    fee_simple_pattern = re.compile(r'^(Fee\s+Simple|Leasehold)$', re.IGNORECASE)
+    site_size_pattern = re.compile(r'^(\d+\.?\d*)\s*(ac|sf|sqft)$', re.IGNORECASE)
+    sale_date_pattern = re.compile(r'^[sc]\d{2}/\d{2};?[sc]?\d{2}/?\d{2}$', re.IGNORECASE)
+    price_pattern = re.compile(r'^\$?(\d{2,3}(?:,\d{3})+|\d{5,})$')
+    
+    # Scan for comparable blocks
+    i = 0
+    while i < len(lines) - 20:
+        line = lines[i].strip()
+        
+        # Look for proximity indicator (marks start of comp data after address)
+        prox_match = proximity_pattern.match(line)
+        if prox_match:
+            # Found a proximity line, extract the comparable
+            comp: Dict[str, object] = {}
+            
+            # Proximity
+            comp["proximity"] = f"{prox_match.group(1)} miles {prox_match.group(2)}"
+            
+            # Look back for address (usually 1-2 lines before)
+            for j in range(max(0, i-3), i):
+                addr_line = lines[j].strip()
+                if address_pattern.match(addr_line):
+                    next_line = lines[j+1].strip() if j+1 < i else ""
+                    # Check if next line is city, state zip
+                    if re.match(r'^[A-Za-z\s]+,?\s*[A-Z]{2}\s*\d{5}', next_line, re.IGNORECASE):
+                        comp["address"] = f"{addr_line}, {next_line}"
+                    else:
+                        comp["address"] = addr_line
+                    break
+            
+            # Look ahead for other fields (up to 50 lines)
+            prices_found = []
+            for j in range(i+1, min(i+50, len(lines))):
+                val = lines[j].strip()
+                if not val:
+                    continue
+                    
+                # Stop if we hit another proximity (next comp)
+                if proximity_pattern.match(val):
+                    break
+                
+                # Data Source
+                if data_source_pattern.match(val) and "data_source" not in comp:
+                    comp["data_source"] = val
+                    continue
+                
+                # Verification Source
+                if verification_pattern.match(val) and "verification_source" not in comp:
+                    comp["verification_source"] = val
+                    continue
+                
+                # Quality Rating
+                if quality_pattern.match(val) and "quality_rating" not in comp:
+                    comp["quality_rating"] = val.upper()
+                    continue
+                
+                # Condition Rating
+                if condition_pattern.match(val) and "condition_rating" not in comp:
+                    comp["condition_rating"] = val.upper()
+                    continue
+                
+                # Location Rating (N;Rural; format)
+                if location_view_pattern.match(val):
+                    if "location_rating" not in comp:
+                        comp["location_rating"] = val
+                    elif "view" not in comp:
+                        comp["view"] = val
+                    continue
+                
+                # Design Style (DT1;Ranch format)
+                if design_pattern.match(val) and "design_style" not in comp:
+                    comp["design_style"] = val
+                    continue
+                
+                # Fee Simple / Leasehold
+                if fee_simple_pattern.match(val) and "leasehold_fee_simple" not in comp:
+                    comp["leasehold_fee_simple"] = val
+                    continue
+                
+                # Site Size
+                sz_match = site_size_pattern.match(val)
+                if sz_match and "site_size" not in comp:
+                    comp["site_size"] = val
+                    continue
+                
+                # Sale Date (s07/25;c06/25 format)
+                if sale_date_pattern.match(val) and "sale_date" not in comp:
+                    comp["sale_date"] = val
+                    continue
+                
+                # Prices (collect multiple, first is sale price)
+                price_match = price_pattern.match(val)
+                if price_match:
+                    try:
+                        p = float(price_match.group(1).replace(",", ""))
+                        if p >= 50000:  # Reasonable house price
+                            prices_found.append(p)
+                    except ValueError:
+                        pass
+                    continue
+                
+                # GLA (3-4 digit number that's not a price)
+                if re.match(r'^(\d{3,4})$', val) and "gla" not in comp:
+                    try:
+                        gla_val = int(val)
+                        if 400 <= gla_val <= 9999:  # Reasonable GLA range
+                            comp["gla"] = float(gla_val)
+                    except ValueError:
+                        pass
+                    continue
+                
+                # Age (1-3 digit number)
+                if re.match(r'^(\d{1,3})$', val) and "actual_age" not in comp:
+                    try:
+                        age_val = int(val)
+                        if 0 <= age_val <= 200:  # Reasonable age
+                            comp["actual_age"] = age_val
+                    except ValueError:
+                        pass
+                    continue
+                
+                # Functional Utility (Typical, Average, etc.)
+                if re.match(r'^(Typical|Average|Fair|Poor|Good)$', val, re.IGNORECASE) and "functional_utility" not in comp:
+                    comp["functional_utility"] = val
+                    continue
+                
+                # Heating/Cooling (FWA/CAC, Wall/Window, etc.)
+                if re.match(r'^(FWA|Wall|Central|None)[/,]?(CAC|Window|Other|None)?$', val, re.IGNORECASE) and "heating_cooling" not in comp:
+                    comp["heating_cooling"] = val
+                    continue
+                
+                # Garage/Carport (2ga3cp, 2dw, etc.)
+                if re.match(r'^\d+[gdc][awp](\d+[gdc][awp])?$', val, re.IGNORECASE) and "garage_carport" not in comp:
+                    comp["garage_carport"] = val
+                    continue
+                
+                # Porch/Patio/Deck
+                if re.match(r'^(Porch|Patio|Deck|None)[/,]?(Porch|Patio|Deck|None)?$', val, re.IGNORECASE) and "porch_patio_deck" not in comp:
+                    comp["porch_patio_deck"] = val
+                    continue
+            
+            # Assign prices
+            if prices_found:
+                comp["sale_price"] = prices_found[0]
+                if len(prices_found) > 1:
+                    # Last price is usually adjusted sale price
+                    comp["adjusted_sale_price"] = prices_found[-1]
+            
+            # Check if this looks like a listing (active/pending in data source or no sale date with "s")
+            is_listing = False
+            if comp.get("data_source"):
+                ds_lower = str(comp["data_source"]).lower()
+                if "active" in ds_lower or "pend" in ds_lower or "list" in ds_lower:
+                    is_listing = True
+            if comp.get("sale_date") and not str(comp["sale_date"]).lower().startswith("s"):
+                is_listing = True
+            comp["is_listing"] = is_listing
+            
+            # Only add if we have at least some useful data
+            if comp.get("address") or comp.get("sale_price") or comp.get("quality_rating"):
+                comparables.append(comp)
+        
+        i += 1
+    
+    return comparables
 
 
 def _extract_line_after_header(lines: List[str], header: str, invalid_headers: List[str], max_lookahead: int = 6) -> Optional[str]:
@@ -1374,13 +1590,17 @@ def extract_urar_site(pdf_path: str) -> Dict[str, object]:
             data["femaFloodHazard"] = fema
 
         # FEMA details can be blank on the form if "No" is selected; only required when Yes.
-        # Extract from the page text stream (more stable than bbox parsing for this block).
+        # Extract from the page text stream
         txt = page.get_text("text") or ""
-        zone_m = re.search(r"(?mi)FEMA\s+Flood\s+Zone\s*\n*\s*([A-Za-z0-9\-]+)", txt)
+        
+        # Zone: prevent matching "FEMA", "Map", "Date"
+        # Match alphanumeric value that isn't a header keyword
+        zone_m = re.search(r"(?mi)FEMA\s+Flood\s+Zone\s*\n*\s*(?!FEMA|Map|Date)([A-Za-z0-9\-]+)", txt)
         if zone_m:
             data["femaFloodZone"] = zone_m.group(1).strip()
 
-        map_m = re.search(r"(?mi)FEMA\s+Map\s*#\s*\n*\s*([A-Za-z0-9\-]+)", txt)
+        # Map #: prevent matching "FEMA", "Date"
+        map_m = re.search(r"(?mi)FEMA\s+Map\s*#\s*\n*\s*(?!FEMA|Date)([A-Za-z0-9\-]+)", txt)
         if map_m:
             data["femaMapNumber"] = map_m.group(1).strip()
 
@@ -1533,3 +1753,307 @@ def extract_urar_layout_fields(pdf_path: str, full_text: Optional[str] = None) -
     out.update(extract_urar_improvements(pdf_path))
     out.update(extract_urar_sales_comparison(pdf_path, full_text=full_text))
     return out
+
+def _extract_comps_from_text_v2(full_text: str) -> Dict[str, Any]:
+    """
+    Extract comparables from column-major ordered text using pattern matching.
+    V2: Robust implementation using Proximity Anchors.
+    Returns dictionary with 'subject' and 'comparables' list.
+    """
+    import re
+    result = {"subject": None, "comparables": []}
+    comparables: List[Dict[str, object]] = []
+    if not full_text:
+        return result
+    
+    # 1. Find all Proximity indicators. These are robust anchors for Comparables.
+    # Pattern: "1.03 miles SW", "0.46 miles E", etc.
+    proximity_iter = re.finditer(r'(?i)(\d+\.?\d*)\s+miles?\s+([NSEW]{1,2})', full_text)
+    
+    comp_matches = []
+    for m in proximity_iter:
+        comp_matches.append({
+            "start": m.start(),
+            "end": m.end(),
+            "proximity_text": m.group(0),
+            "distance": float(m.group(1))
+        })
+        
+    if not comp_matches:
+        return result
+
+    # --- Subject Extraction (Before first comp) ---
+    # The Subject appears before the first proximity match.
+    # We look for address and price in the block 0 to first_match.start
+    subject_block_end = comp_matches[0]["start"]
+    # Be careful not to go back too far into header, but we want the Subject column
+    # Look for last address pattern before the first comp
+    subject_text = full_text[max(0, subject_block_end - 1500):subject_block_end]
+    
+    # Find address pattern in subject text (City, ST Zip)
+    subj_city_match = re.search(r'([A-Za-z\s\.]+),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)', subject_text, re.MULTILINE)
+    if subj_city_match:
+        city_st_zip = subj_city_match.group(0).strip()
+        cs_start_rel = subj_city_match.start()
+        street_candidate_text = subject_text[:cs_start_rel].strip()
+        street_lines = [L for L in street_candidate_text.split('\n') if L.strip()]
+        if street_lines:
+             street_addr = street_lines[-1].strip()
+             result["subject"] = {"address": f"{street_addr}, {city_st_zip}"}
+             
+             # Look for Subject Price (usually follows address or is nearby)
+             # Search somewhat after the address
+             subj_data_text = subject_text[cs_start_rel:] 
+             price_matches = re.finditer(r'(?:\$)?\s?(\d{1,3}(?:,\d{3})+)', subj_data_text)
+             for pm in price_matches:
+                 val_str = pm.group(1).replace(",", "")
+                 try:
+                     val = float(val_str)
+                     if val > 50000:
+                         result["subject"]["sale_price"] = val
+                         break
+                 except: continue
+
+    # 2. For each proximity match, look backwards for the Address and forwards for Data
+    for i, match in enumerate(comp_matches):
+        comp = {}
+        comp["proximity"] = match["proximity_text"]
+        comp["proximity_to_subject"] = match["proximity_text"]
+        
+        # --- Address Extraction ---
+        # Look backwards from proximity start up to 300 chars
+        search_start = max(0, match["start"] - 300)
+        preceding_text = full_text[search_start:match["start"]]
+        
+        # Heuristic: Find the last "City, ST Zip" pattern
+        city_state_match = re.search(r'([A-Za-z\s\.]+),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)', preceding_text, re.MULTILINE)
+        
+        if city_state_match:
+            city_st_zip = city_state_match.group(0).strip()
+            cs_start_rel = city_state_match.start()
+            street_candidate_text = preceding_text[:cs_start_rel].strip()
+            street_lines = [L for L in street_candidate_text.split('\n') if L.strip()]
+            if street_lines:
+                street_addr = street_lines[-1].strip()
+                if len(street_addr) < 5 and len(street_lines) > 1:
+                     street_addr = f"{street_lines[-2].strip()} {street_addr}"
+                comp["address"] = f"{street_addr}, {city_st_zip}"
+            else:
+                comp["address"] = city_st_zip
+        else:
+            lines = [L for L in preceding_text.split('\n') if L.strip()]
+            if lines:
+                comp["address"] = lines[-1].strip()
+            else:
+                comp["address"] = "Unknown Address"
+
+        # --- Data Extraction ---
+        next_start = comp_matches[i+1]["start"] if i < len(comp_matches) - 1 else len(full_text)
+        block_end = min(next_start, match["end"] + 2000)
+        block_text = full_text[match["end"]:block_end]
+        
+
+        
+        # 1. Sale Price
+        price_matches = re.finditer(r'(?:\$)?\s?(\d{1,3}(?:,\d{3})+)', block_text)
+        for pm in price_matches:
+            val_str = pm.group(1).replace(",", "")
+            try:
+                val = float(val_str)
+                if val > 50000:
+                    comp["sale_price"] = val
+                    break
+            except:
+                continue
+                
+        # 2. Data Source / DOM
+        ds_match = re.search(r'(?i)(DOM\s*\d+|MLS\s*#?\s*[\dA-Z]+|(?:SACM|METROLIST)[\s#]+[\dA-Z]+|Public Records|Tax Records)', block_text)
+        if ds_match:
+            full_ds_match = re.search(r'(?i)([A-Z0-9]{2,}\s*#\s*[\d]+\s*;\s*DOM\s*\d+)', block_text)
+            if full_ds_match:
+                comp["data_source"] = full_ds_match.group(1)
+            else:
+                comp["data_source"] = ds_match.group(0)
+            
+        # 3. Date of Sale
+        date_match = re.search(r'(?i)[sc]\d{2}/\d{2};?[sc]?\d{2}/?\d{2}', block_text)
+        if date_match:
+            comp["sale_date"] = date_match.group(0)
+        
+        # 4. GLA
+        gla_match = re.search(r'(?i)(\d{1,3}(?:,\d{3})*)\s*(?:sq\.?\s*ft\.?|sf|sqft)', block_text)
+        if gla_match:
+             try:
+                 comp["gla"] = float(gla_match.group(1).replace(",", ""))
+             except: pass
+
+        # 5. Verification Source (SCA-6) - "Doc#...", "MLS", "Public Records" (start of line)
+        verif_match = re.search(r'(?im)^(Doc#\d+|County\s+Records|MLS|Tax\s+Records|Public\s+Record[s]?)', block_text)
+        if verif_match:
+            comp["verification_source"] = verif_match.group(0)
+
+        # 6. Sale/Financing Concessions (SCA-7) - "Private;0", "Conv;2000"
+        sales_conc_match = re.search(r'(?i)(ArmLth|REO|Short\s+Sale|Court|Estate|Relo|NonArms)\s*\n\s*([A-Za-z]+;[\d,]+)', block_text)
+        if sales_conc_match:
+             # This captures sale type + financing line below it often
+             pass # Logic tricky with multiline. Try detecting "Civ;0" or "FHA;3000" style
+        
+        simple_conc_match = re.search(r'(?i)(Cash|Conv|FHA|VA|Private|Seller|Unk);([\d,]+)', block_text)
+        if simple_conc_match:
+            comp["sale_financing_concessions"] = simple_conc_match.group(0)
+
+        # 7. Leasehold/Fee Simple (SCA-10)
+        fee_match = re.search(r'(?i)(Fee\s+Simple|Leasehold)', block_text)
+        if fee_match:
+            comp["leasehold_fee_simple"] = fee_match.group(0)
+
+        # 8. Site Size (SCA-11) - "4.92 ac" or "5000 sf"
+        site_match = re.search(r'(?i)(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(ac|sf|sqft)', block_text)
+        if site_match:
+            comp["site_size"] = site_match.group(0)
+
+        # 9. View (SCA-12) - "N;Pstrl;" or "B;Wtr;"
+        view_match = re.search(r'(?im)^([NB];[A-Za-z]+;?)$', block_text)
+        if view_match:
+            comp["view"] = view_match.group(0) # Careful, might be location
+
+        # 10. Location (SCA-9) - "N;Rural;" or "A;Res;"
+        # Distinguish view vs location: Location usually comes first? 
+        # Heuristic: Location often starts with N, A, B. View starts with N, B, C.
+        # Often indistinguishable without position.
+        # Let's try capturing all "X;Y" patterns and heuristic assignment
+        nv_matches = re.findall(r'(?im)^([NAB];[A-Za-z]+(?:;[A-Za-z]+)*;?)$', block_text)
+        if len(nv_matches) >= 2:
+            comp["location_rating"] = nv_matches[0] # First one usually Location
+            comp["view"] = nv_matches[1]           # Second one usually View
+        elif len(nv_matches) == 1:
+            # If only one, assume location if Rural/Res, View if Pstrl/Woods
+            val = nv_matches[0].lower()
+            if "res" in val or "rural" in val or "sub" in val:
+                comp["location_rating"] = nv_matches[0]
+            else:
+                comp["view"] = nv_matches[0]
+
+        # 11. Design Style (SCA-13) - "DT1;Ranch"
+        design_match = re.search(r'(?i)(DT\d;[A-Za-z]+)', block_text)
+        if design_match:
+            comp["design_style"] = design_match.group(0)
+            
+        # 12. Quality (SCA-14) / Condition (SCA-16)
+        q_match = re.search(r'(?i)\b(Q[1-6])\b', block_text)
+        c_match = re.search(r'(?i)\b(C[1-6])\b', block_text)
+        if q_match: comp["quality_rating"] = q_match.group(0)
+        if c_match: comp["condition_rating"] = c_match.group(0)
+        
+        # 13. Actual Age (SCA-15) - standalone number, tricky.
+        # Often between Q/C or near design.
+        
+        # 14. Basement (SCA-18) - "0sf" or "1000sf" or "Total ... Basement"
+        # Often "0sf" is found.
+        # 14. Basement (SCA-18)
+        bsmt_matches = re.findall(r'(?i)(\d+)\s*sf\s*(?:\n|Total)?', block_text)
+        if bsmt_matches:
+             valid_bsmts = []
+             for b in bsmt_matches:
+                 try:
+                     val = float(b)
+                     if val < 5000: 
+                         valid_bsmts.append(val)
+                 except: pass
+             if valid_bsmts:
+                 comp["basement_gla"] = valid_bsmts[-1]
+
+        # 15. Functional Utility (SCA-19)
+        func_match = re.search(r'(?i)\b(Typical|Average|Good|Fair|Poor|Typ|Avg|Gd)\b', block_text)
+        if func_match:
+            val = func_match.group(0)
+            if val.lower() == "typ": val = "Typical"
+            if val.lower() == "avg": val = "Average"
+            if val.lower() == "gd": val = "Good"
+            comp["functional_utility"] = val
+
+        # Check for Listing (SCA-23)
+        # If Sale Date has "Active", "Pending", "Listing"
+        sale_date_val = comp.get("sale_date", "")
+        data_source_val = comp.get("data_source", "")
+        is_lst = False
+        if re.search(r'(?i)(Active|Pending|Listing|Current|Exp|Wth)', sale_date_val):
+            is_lst = True
+        if re.search(r'(?i)(Active|Pending|Listing)', data_source_val):
+            is_lst = True
+        comp["is_listing"] = is_lst
+
+        # 16. Heating/Cooling (SCA-20)
+        hc_match = re.search(r'(?i)\b(FWA|Wall|Central|None|Space|Radiant)[/,](CAC|Window|None|Central|Evap)\b', block_text)
+        if hc_match:
+             comp["heating_cooling"] = hc_match.group(0)
+        else:
+             # Try simpler standalone
+             hc_simple = re.search(r'(?im)^(Wall/Window|FWA/CAC|Central/Central|Central|FWA|Wall|Window)$', block_text)
+             if hc_simple:
+                 comp["heating_cooling"] = hc_simple.group(0)
+
+        # 17. Garage/Carport (SCA-21)
+        # Use findall to avoid matching an earlier "None" (e.g. from cooling)
+        gar_matches = re.findall(r'(?i)(\d+(?:ga|gd|cp|dw)\d*(?:ga|gd|cp|dw)?|None)', block_text)
+        if gar_matches:
+            # Prefer match with digits
+            best_gar = "None"
+            for g in gar_matches:
+                if re.search(r'\d', g):
+                    best_gar = g
+                    break
+                if g.lower() == "none" and best_gar == "None":
+                    best_gar = "None" 
+            
+            best_gar = best_gar.replace("gd", "ga")
+            comp["garage_carport"] = best_gar
+            
+        # 18. Porch/Patio/Deck (SCA-22)
+        # Allow combos "Porch/Patio" or single "Porch", "Deck" if appearing in expected slot (bottom of text usually)
+        # We look for specific keywords
+        ppd_match = re.search(r'(?i)(Porch|Patio|Deck|Stoop|Terrace|Balcony)[/,](Porch|Patio|Deck|Stoop|Terrace|Balcony)', block_text)
+        if ppd_match:
+            comp["porch_patio_deck"] = ppd_match.group(0)
+        else:
+            # Single items? Careful of "No Patio" etc.
+            ppd_simple = re.search(r'(?im)^(Porch|Patio|Deck|Stoop|Terrace|Balcony)$', block_text)
+            if ppd_simple:
+                comp["porch_patio_deck"] = ppd_simple.group(0)
+
+        comparables.append(comp)
+        
+    # Dedup comparables based on normalized address prefix
+    # Merge strategy: If duplicate found, fill in missing fields in the existing one.
+    unique_comps_map = {} 
+    unique_comps_list = []
+
+    for c in comparables:
+        a = c.get("address", "").lower()
+        a = re.sub(r'^\d{1,2}/\d{1,2}/\d{4}\s*', '', a)
+        norm_a = re.sub(r'[^a-z0-9]', '', a)
+        key = norm_a[:12]
+        
+        # Check if we already have this key (partial match)
+        found_key = None
+        for k in unique_comps_map:
+            if k.startswith(key) or key.startswith(k):
+                if len(key) > 4:
+                    found_key = k
+                    break
+        
+        if found_key:
+            # Merge: update existing if new one has data where existing is empty
+            existing = unique_comps_map[found_key]
+            for k, v in c.items():
+                if v and not existing.get(k):
+                    existing[k] = v
+                elif k == "sale_price" and v and (not existing.get(k) or existing.get(k) == 0):
+                     existing[k] = v
+        else:
+            unique_comps_map[key] = c
+            unique_comps_list.append(c) # Keep order
+            
+    result["comparables"] = unique_comps_list
+    
+    return result

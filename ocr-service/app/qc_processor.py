@@ -394,10 +394,27 @@ class SmartQCProcessor:
                 )
             )
 
+        subj_comp_data = legacy.get("subject_comparable")
+        subject_comp = None
+        if subj_comp_data and isinstance(subj_comp_data, dict):
+             subject_comp = Comparable(
+                address=subj_comp_data.get("address"),
+                sale_price=subj_comp_data.get("sale_price"),
+                site_size=subj_comp_data.get("site_size"),
+                quality_rating=subj_comp_data.get("quality_rating"),
+                actual_age=subj_comp_data.get("actual_age"),
+                condition_rating=subj_comp_data.get("condition_rating"),
+                room_count_total=subj_comp_data.get("room_count_total"),
+                room_count_bed=subj_comp_data.get("room_count_bed"),
+                room_count_bath=subj_comp_data.get("room_count_bath"),
+                gla=subj_comp_data.get("gla"),
+             )
+
         sales = SalesComparisonSection(
             comparables_count_sales=legacy.get("comparables_count_sales") or legacy.get("comparableCount"),
             comparables_count_listings=legacy.get("comparables_count_listings"),
             comparables=comps,
+            subject_comparable=subject_comp,
         )
 
         return AppraisalReport(

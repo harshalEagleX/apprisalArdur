@@ -1,0 +1,1162 @@
+2026-01-17 09:27:12,336 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: ======================================================================
+2026-01-17 09:27:12,339 - OCRTest - INFO - ======================================================================
+INFO: OCR EXTRACTION AND QC RULES TEST - ALL FILES
+2026-01-17 09:27:12,340 - OCRTest - INFO - OCR EXTRACTION AND QC RULES TEST - ALL FILES
+INFO: Started: 2026-01-17T09:27:12.340088
+2026-01-17 09:27:12,340 - OCRTest - INFO - Started: 2026-01-17T09:27:12.340088
+INFO: ======================================================================
+2026-01-17 09:27:12,340 - OCRTest - INFO - ======================================================================
+INFO: ======================================================================
+2026-01-17 09:27:12,340 - OCRTest - INFO - ======================================================================
+INFO: TESTING: apprisal_002
+2026-01-17 09:27:12,340 - OCRTest - INFO - TESTING: apprisal_002
+INFO: ======================================================================
+2026-01-17 09:27:12,340 - OCRTest - INFO - ======================================================================
+INFO:   Step 1: OCR Extraction...
+2026-01-17 09:27:12,340 - OCRTest - INFO -   Step 1: OCR Extraction...
+INFO: ============================================================
+2026-01-17 09:27:12,340 - OCRTest - INFO - ============================================================
+INFO: EXTRACTING: apprisal_002.pdf
+2026-01-17 09:27:12,340 - OCRTest - INFO - EXTRACTING: apprisal_002.pdf
+INFO: ============================================================
+2026-01-17 09:27:12,340 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:12,340 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:12,340 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:12,373 - app.services.extraction_service - INFO - Page 1: Text detected (8351 chars). Skipping OCR.
+2026-01-17 09:27:12,382 - app.services.extraction_service - INFO - Page 2: Text detected (6266 chars). Skipping OCR.
+2026-01-17 09:27:12,387 - app.services.extraction_service - INFO - Page 3: Text detected (6113 chars). Skipping OCR.
+2026-01-17 09:27:12,390 - app.services.extraction_service - INFO - Page 4: Text detected (3204 chars). Skipping OCR.
+2026-01-17 09:27:12,393 - app.services.extraction_service - INFO - Page 5: Text detected (3193 chars). Skipping OCR.
+2026-01-17 09:27:12,398 - app.services.extraction_service - INFO - Page 6: Text detected (7028 chars). Skipping OCR.
+2026-01-17 09:27:12,403 - app.services.extraction_service - INFO - Page 7: Text detected (6539 chars). Skipping OCR.
+2026-01-17 09:27:12,409 - app.services.extraction_service - INFO - Page 8: Text detected (5388 chars). Skipping OCR.
+2026-01-17 09:27:12,416 - app.services.extraction_service - INFO - Page 9: Text detected (7657 chars). Skipping OCR.
+2026-01-17 09:27:12,422 - app.services.extraction_service - INFO - Page 10: Text detected (7394 chars). Skipping OCR.
+2026-01-17 09:27:12,427 - app.services.extraction_service - INFO - Page 11: Text detected (7229 chars). Skipping OCR.
+2026-01-17 09:27:12,428 - app.services.extraction_service - INFO - Page 12: Text detected (172 chars). Skipping OCR.
+2026-01-17 09:27:12,428 - app.services.extraction_service - INFO - Page 13: Text detected (575 chars). Skipping OCR.
+2026-01-17 09:27:12,429 - app.services.extraction_service - INFO - Page 14: Text detected (600 chars). Skipping OCR.
+2026-01-17 09:27:12,430 - app.services.extraction_service - INFO - Page 15: Text detected (569 chars). Skipping OCR.
+2026-01-17 09:27:12,431 - app.services.extraction_service - INFO - Page 16: Text detected (508 chars). Skipping OCR.
+2026-01-17 09:27:12,432 - app.services.extraction_service - INFO - Page 17: Text detected (1025 chars). Skipping OCR.
+2026-01-17 09:27:12,434 - app.services.extraction_service - INFO - Page 18: Text detected (1013 chars). Skipping OCR.
+2026-01-17 09:27:12,436 - app.services.extraction_service - INFO - Page 19: Text detected (512 chars). Skipping OCR.
+2026-01-17 09:27:12,436 - app.services.extraction_service - INFO - Page 20: Text detected (722 chars). Skipping OCR.
+2026-01-17 09:27:12,437 - app.services.extraction_service - INFO - Page 21: Text detected (639 chars). Skipping OCR.
+2026-01-17 09:27:12,438 - app.services.extraction_service - INFO - Page 22: Text detected (698 chars). Skipping OCR.
+2026-01-17 09:27:12,443 - app.services.extraction_service - INFO - Page 23: Text detected (5145 chars). Skipping OCR.
+2026-01-17 09:27:12,444 - app.services.extraction_service - INFO - Page 24: Text detected (345 chars). Skipping OCR.
+2026-01-17 09:27:12,444 - app.services.extraction_service - INFO - Page 25: Text detected (354 chars). Skipping OCR.
+2026-01-17 09:27:12,445 - app.services.extraction_service - INFO - Page 26: Text detected (349 chars). Skipping OCR.
+2026-01-17 09:27:12,445 - app.services.extraction_service - INFO - Page 27: Text detected (348 chars). Skipping OCR.
+2026-01-17 09:27:12,446 - app.services.extraction_service - INFO - Page 28: Text detected (350 chars). Skipping OCR.
+2026-01-17 09:27:12,449 - app.services.extraction_service - INFO - Page 29: Text detected (2819 chars). Skipping OCR.
+2026-01-17 09:27:12,454 - app.services.extraction_service - INFO - Page 30: Text detected (5588 chars). Skipping OCR.
+2026-01-17 09:27:12,458 - app.services.extraction_service - INFO - Page 31: Text detected (4345 chars). Skipping OCR.
+2026-01-17 09:27:12,461 - app.services.extraction_service - INFO - Page 32: Text detected (2927 chars). Skipping OCR.
+2026-01-17 09:27:12,461 - app.services.extraction_service - INFO - Page 33: Text detected (173 chars). Skipping OCR.
+2026-01-17 09:27:12,462 - app.services.extraction_service - INFO - Page 34: Text detected (188 chars). Skipping OCR.
+INFO: Extraction time: 122ms
+2026-01-17 09:27:12,462 - OCRTest - INFO - Extraction time: 122ms
+INFO: Total pages: 34
+2026-01-17 09:27:12,462 - OCRTest - INFO - Total pages: 34
+INFO: Total characters extracted: 98426
+2026-01-17 09:27:12,462 - OCRTest - INFO - Total characters extracted: 98426
+INFO: Total words extracted: 13929
+2026-01-17 09:27:12,463 - OCRTest - INFO - Total words extracted: 13929
+INFO: ============================================================
+2026-01-17 09:27:12,463 - OCRTest - INFO - ============================================================
+INFO: EXTRACTING: engagement_002.pdf
+2026-01-17 09:27:12,463 - OCRTest - INFO - EXTRACTING: engagement_002.pdf
+INFO: ============================================================
+2026-01-17 09:27:12,463 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:12,463 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:12,463 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:12,469 - app.services.extraction_service - INFO - Page 1: Text detected (1141 chars). Skipping OCR.
+2026-01-17 09:27:12,472 - app.services.extraction_service - INFO - Page 2: Text detected (2960 chars). Skipping OCR.
+2026-01-17 09:27:12,476 - app.services.extraction_service - INFO - Page 3: Text detected (3706 chars). Skipping OCR.
+2026-01-17 09:27:12,479 - app.services.extraction_service - INFO - Page 4: Text detected (3529 chars). Skipping OCR.
+2026-01-17 09:27:12,481 - app.services.extraction_service - INFO - Page 5: Text detected (3325 chars). Skipping OCR.
+2026-01-17 09:27:12,485 - app.services.extraction_service - INFO - Page 6: Text detected (3983 chars). Skipping OCR.
+2026-01-17 09:27:12,488 - app.services.extraction_service - INFO - Page 7: Text detected (4286 chars). Skipping OCR.
+2026-01-17 09:27:12,492 - app.services.extraction_service - INFO - Page 8: Text detected (3819 chars). Skipping OCR.
+2026-01-17 09:27:12,494 - app.services.extraction_service - INFO - Page 9: Text detected (2600 chars). Skipping OCR.
+2026-01-17 09:27:12,494 - app.services.extraction_service - INFO - Page 10: Text detected (52 chars). Skipping OCR.
+INFO: Extraction time: 31ms
+2026-01-17 09:27:12,494 - OCRTest - INFO - Extraction time: 31ms
+INFO: Total pages: 10
+2026-01-17 09:27:12,494 - OCRTest - INFO - Total pages: 10
+INFO: Total characters extracted: 29433
+2026-01-17 09:27:12,494 - OCRTest - INFO - Total characters extracted: 29433
+INFO: Total words extracted: 4443
+2026-01-17 09:27:12,494 - OCRTest - INFO - Total words extracted: 4443
+INFO: Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_002_appraisal.txt
+2026-01-17 09:27:12,494 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_002_appraisal.txt
+INFO:   Saved 98426 characters to apprisal_002_appraisal.txt
+2026-01-17 09:27:12,495 - OCRTest - INFO -   Saved 98426 characters to apprisal_002_appraisal.txt
+INFO: Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_002_engagement.txt
+2026-01-17 09:27:12,495 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_002_engagement.txt
+INFO:   Saved 29433 characters to apprisal_002_engagement.txt
+2026-01-17 09:27:12,496 - OCRTest - INFO -   Saved 29433 characters to apprisal_002_engagement.txt
+INFO:   Step 2: Field Extraction...
+2026-01-17 09:27:12,496 - OCRTest - INFO -   Step 2: Field Extraction...
+INFO: Extracting structured fields using ExtractionService...
+2026-01-17 09:27:12,496 - OCRTest - INFO - Extracting structured fields using ExtractionService...
+2026-01-17 09:27:12,496 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+2026-01-17 09:27:12,498 - app.services.extraction_service - WARNING - Invalid property address extracted: '000' - rejecting
+INFO: Extracted 15 appraisal fields and 7 engagement fields
+2026-01-17 09:27:12,673 - OCRTest - INFO - Extracted 15 appraisal fields and 7 engagement fields
+INFO:   Step 3: Building Validation Context...
+2026-01-17 09:27:12,674 - OCRTest - INFO -   Step 3: Building Validation Context...
+INFO: Building validation context...
+2026-01-17 09:27:12,674 - OCRTest - INFO - Building validation context...
+INFO: Validation context built successfully
+2026-01-17 09:27:12,675 - OCRTest - INFO - Validation context built successfully
+INFO:   Step 4: Executing QC Rules...
+2026-01-17 09:27:12,675 - OCRTest - INFO -   Step 4: Executing QC Rules...
+INFO: ============================================================
+2026-01-17 09:27:12,675 - OCRTest - INFO - ============================================================
+INFO: EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+2026-01-17 09:27:12,675 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+INFO: ============================================================
+2026-01-17 09:27:12,675 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule S-1 VERIFY: Missing required field: Property Address (Report)
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule S-2 VERIFY: Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule S-4 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule S-10 FAIL: Please correct the lender's name so it reflects as: United American Mortgage Corporation
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule S-11 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule C-1 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule C-2 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule C-3 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule N-1 FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule N-2 FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule N-3 VERIFY: Missing required field: Price Range (Low and/or High)
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule N-4 VERIFY: Missing required field: Present Land Use percentages
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule N-5 FAIL: Must list the boundaries only; North, South, East, West, please correct
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule N-6 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule N-7 VERIFY: Missing required field: Market Conditions
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule ST-1 VERIFY: Missing required field: Site Dimensions
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule ST-2 VERIFY: Missing required field: Site Area
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule ST-3 FAIL: Site shape is missing.
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule ST-4 FAIL: View is missing.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule ST-5 VERIFY: Missing required field: Zoning Classification
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule ST-6 FAIL: Highest and Best Use checkbox is not marked.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule ST-8 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule ST-9 FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+2026-01-17 09:27:12,676 - SmartIdentifier - INFO - Rule ST-10 FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-1 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-2 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-3 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-4 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-5 VERIFY: Missing required field: Utilities status
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-7 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-8 VERIFY: Missing required field: Additional features
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-9 VERIFY: Missing required field: Condition of the Property (C1-C6)
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-10 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule I-11 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule SCA-1 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule SCA-2 VERIFY: Missing required field: Sales Comparison Grid Comparables
+2026-01-17 09:27:12,676 - SmartIdentifier - WARNING - Rule SCA-3 VERIFY: Missing required field: Subject Address
+2026-01-17 09:27:12,677 - SmartIdentifier - WARNING - Rule SCA-17 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+2026-01-17 09:27:12,677 - SmartIdentifier - WARNING - Rule SCA-23 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+INFO: Executed 74 rules
+2026-01-17 09:27:12,677 - OCRTest - INFO - Executed 74 rules
+WARNING:   🔍 VERIFY: Missing required field: Property Address (Report)
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Address (Report)
+WARNING:   🔍 VERIFY: Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.
+INFO:   ✅ PASS: Owner of Public Record is present and valid.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
+WARNING:   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+INFO:   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+INFO:   ✅ PASS: Map Reference is present. Census Tract not provided.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Map Reference is present. Census Tract not provided.
+INFO:   ✅ PASS: Occupant status 'Owner' is valid.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Occupant status 'Owner' is valid.
+INFO:   ✅ PASS: Special assessments are properly documented.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
+INFO:   ✅ PASS: PUD/HOA information is consistent.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
+WARNING:   ❌ FAIL: Please correct the lender's name so it reflects as: United American Mortgage Corporation
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: Please correct the lender's name so it reflects as: United American Mortgage Corporation
+WARNING:   🔍 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Rights Appraised
+INFO:   ✅ PASS: Prior listing/sale history is complete with data sources.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Prior listing/sale history is complete with data sources.
+WARNING:   🔍 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+WARNING:   🔍 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Contract Price not extracted from report. Please verify manually.
+WARNING:   🔍 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+INFO:   ✅ PASS: Financial assistance information is consistent.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Financial assistance information is consistent.
+INFO:   ✅ PASS: Personal property analysis is complete.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
+WARNING:   ❌ FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+WARNING:   ❌ FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+WARNING:   🔍 VERIFY: Missing required field: Price Range (Low and/or High)
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Price Range (Low and/or High)
+WARNING:   🔍 VERIFY: Missing required field: Present Land Use percentages
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Present Land Use percentages
+WARNING:   ❌ FAIL: Must list the boundaries only; North, South, East, West, please correct
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: Must list the boundaries only; North, South, East, West, please correct
+WARNING:   🔍 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Neighborhood Description
+WARNING:   🔍 VERIFY: Missing required field: Market Conditions
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Market Conditions
+WARNING:   🔍 VERIFY: Missing required field: Site Dimensions
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Site Dimensions
+WARNING:   🔍 VERIFY: Missing required field: Site Area
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Site Area
+WARNING:   ❌ FAIL: Site shape is missing.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: Site shape is missing.
+WARNING:   ❌ FAIL: View is missing.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: View is missing.
+WARNING:   🔍 VERIFY: Missing required field: Zoning Classification
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Zoning Classification
+WARNING:   ❌ FAIL: Highest and Best Use checkbox is not marked.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: Highest and Best Use checkbox is not marked.
+INFO:   ✅ PASS: Utilities and off-site improvements are valid.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Utilities and off-site improvements are valid.
+WARNING:   🔍 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+WARNING:   ❌ FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+WARNING:   ❌ FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   ❌ FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+WARNING:   🔍 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+WARNING:   🔍 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+WARNING:   🔍 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+WARNING:   🔍 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+WARNING:   🔍 VERIFY: Missing required field: Utilities status
+2026-01-17 09:27:12,677 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Utilities status
+INFO:   ✅ PASS: Appliance field appears completed; verify only built-in items are included.
+2026-01-17 09:27:12,677 - OCRTest - INFO -   ✅ PASS: Appliance field appears completed; verify only built-in items are included.
+WARNING:   🔍 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+WARNING:   🔍 VERIFY: Missing required field: Additional features
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Additional features
+WARNING:   🔍 VERIFY: Missing required field: Condition of the Property (C1-C6)
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Condition of the Property (C1-C6)
+WARNING:   🔍 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+WARNING:   🔍 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+INFO:   ✅ PASS: Additions presence was not detected.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Additions presence was not detected.
+INFO:   ✅ PASS: Security bars presence was not detected.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Security bars presence was not detected.
+WARNING:   🔍 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+WARNING:   🔍 VERIFY: Missing required field: Sales Comparison Grid Comparables
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Sales Comparison Grid Comparables
+WARNING:   🔍 VERIFY: Missing required field: Subject Address
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Subject Address
+INFO:   ✅ PASS: Proximity appears present and plausibly UAD formatted for all extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Proximity appears present and plausibly UAD formatted for all extracted comparables.
+INFO:   ✅ PASS: Data Source(s) appear present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Data Source(s) appear present for extracted comparables.
+INFO:   ✅ PASS: Verification Source(s) appear present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Verification Source(s) appear present for extracted comparables.
+INFO:   ✅ PASS: Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable.
+INFO:   ✅ PASS: Sale date appears present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Sale date appears present for extracted comparables.
+INFO:   ✅ PASS: Location ratings appear present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Location ratings appear present for extracted comparables.
+INFO:   ✅ PASS: Leasehold/Fee Simple fields appear present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Leasehold/Fee Simple fields appear present for extracted comparables.
+INFO:   ✅ PASS: Site sizes appear present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Site sizes appear present for extracted comparables.
+INFO:   ✅ PASS: View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable.
+INFO:   ✅ PASS: Design/Style fields appear present for extracted comparables; verify UAD formatting manually.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Design/Style fields appear present for extracted comparables; verify UAD formatting manually.
+INFO:   ✅ PASS: Quality ratings appear UAD compliant for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Quality ratings appear UAD compliant for extracted comparables.
+INFO:   ✅ PASS: Actual age appears present for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Actual age appears present for extracted comparables.
+INFO:   ✅ PASS: Condition ratings appear UAD compliant for extracted comparables.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Condition ratings appear UAD compliant for extracted comparables.
+WARNING:   🔍 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+INFO:   ✅ PASS: Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually.
+INFO:   ✅ PASS: Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required.
+INFO:   ✅ PASS: Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information.
+INFO:   ✅ PASS: Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually.
+INFO:   ✅ PASS: Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'.
+WARNING:   🔍 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+2026-01-17 09:27:12,678 - OCRTest - WARNING -   🔍 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+INFO:   ✅ PASS: No unique design characteristics (green/log/ADU) detected for subject.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: No unique design characteristics (green/log/ADU) detected for subject.
+INFO:   ✅ PASS: Subject is not identified as new construction (year built not extracted or older).
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Subject is not identified as new construction (year built not extracted or older).
+INFO:   ✅ PASS: Review of square footage methodology requires manual check of basement/GLA separation.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Review of square footage methodology requires manual check of basement/GLA separation.
+INFO:   ✅ PASS: Comparable photos verification requires manual review of images.
+2026-01-17 09:27:12,678 - OCRTest - INFO -   ✅ PASS: Comparable photos verification requires manual review of images.
+INFO:   Step 5: Executing SmartQCProcessor (layout-aware)...
+2026-01-17 09:27:12,678 - OCRTest - INFO -   Step 5: Executing SmartQCProcessor (layout-aware)...
+2026-01-17 09:27:12,680 - app.services.extraction_service - WARNING - Invalid property address extracted: '000' - rejecting
+2026-01-17 09:27:13,255 - app.qc_processor - INFO - Executing rule engine
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule S-1 VERIFY: Missing required field: Property Address (Report)
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule S-2 VERIFY: Minor mismatch: 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hinojosa' vs 'Susana Hinojosa; Maria Victoria Hinojosa; Victor Hugo Hinojosa'.
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule S-4 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule S-8 VERIFY: Missing required field: Special Assessments
+2026-01-17 09:27:13,256 - SmartIdentifier - INFO - Rule S-10 FAIL: Please correct the lender's name so it reflects as: United American Mortgage Corporation
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule S-11 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule C-1 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule C-2 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule C-3 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule C-5 VERIFY: Personal property items are listed. Please explicitly state whether they contribute to value.
+2026-01-17 09:27:13,256 - SmartIdentifier - WARNING - Rule ST-1 VERIFY: Dimensions refers to Plat Map. Please ensure the subject is clearly marked on the provided map.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule I-2 VERIFY: Foundation fields are present. Verify Foundation matches Sales Comparison grid section.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule I-3 VERIFY: Exterior Description fields are present. Verify values match Sales Comparison grid section.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule I-7 VERIFY: Above-grade room count fields are present. Verify below-grade areas are excluded and counts match Sales Comparison grid.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule I-9 VERIFY: Condition rating is UAD compliant. Verify rating matches photos/commentary and is supported by effective age.
+2026-01-17 09:27:13,257 - SmartIdentifier - INFO - Rule SCA-1 FAIL: The '# Listings' / '# Sales' market summary counts above the Sales Comparison grid are inconsistent with the comparables shown in the grid.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-3 VERIFY: Missing required field: Subject Address
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-4 VERIFY: Proximity to subject is missing for one or more comparables; please provide proximity (minimum 0.01 miles with direction) or verify map support.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-5 VERIFY: Data Source(s) are missing for one or more comparables. Please provide specific MLS name/MLS# and DOM (or Unk with commentary).
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-6 VERIFY: Verification Source(s) are missing for one or more closed comparable sales; please provide a full specific source name (e.g., County Assessor Tax Card).
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-7 VERIFY: Sale/financing/concessions field is missing for one or more comparables; please correct or comment (and add '0' where no adjustment is applied for UAD compliance).
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-8 VERIFY: Sale date is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-9 VERIFY: Location rating is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-10 VERIFY: Leasehold/Fee Simple field is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-11 VERIFY: Site size is missing for one or more comparables; please provide with proper units (SF if <1 acre, acreage if >=1 acre).
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-12 VERIFY: View field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-13 VERIFY: Design/Style field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-14 VERIFY: Quality rating (Q1-Q6) is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-15 VERIFY: Actual age is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-16 VERIFY: Condition rating (C1-C6) is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-17 VERIFY: GLA is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-18 VERIFY: Basement/below-grade data is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-19 VERIFY: Functional utility field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-20 VERIFY: Heating/Cooling field is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-21 VERIFY: Garage/Carport data is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-22 VERIFY: Porch/Patio/Deck field is missing for one or more comparables; please correct or comment (or explicitly state 'None').
+2026-01-17 09:27:13,257 - SmartIdentifier - WARNING - Rule SCA-23 VERIFY: Listing comparable(s) detected. Please verify list-to-sales price ratio adjustment is applied or explain why not warranted.
+INFO:   ✓ QCProcessor: 37 PASS, 2 FAIL, 35 VERIFY
+2026-01-17 09:27:13,259 - OCRTest - INFO -   ✓ QCProcessor: 37 PASS, 2 FAIL, 35 VERIFY
+INFO:   ✓ Completed: 35 PASS, 9 FAIL, 30 VERIFY
+2026-01-17 09:27:13,259 - OCRTest - INFO -   ✓ Completed: 35 PASS, 9 FAIL, 30 VERIFY
+INFO: ======================================================================
+2026-01-17 09:27:13,259 - OCRTest - INFO - ======================================================================
+INFO: TESTING: apprisal_003
+2026-01-17 09:27:13,259 - OCRTest - INFO - TESTING: apprisal_003
+INFO: ======================================================================
+2026-01-17 09:27:13,259 - OCRTest - INFO - ======================================================================
+INFO:   Step 1: OCR Extraction...
+2026-01-17 09:27:13,259 - OCRTest - INFO -   Step 1: OCR Extraction...
+INFO: ============================================================
+2026-01-17 09:27:13,259 - OCRTest - INFO - ============================================================
+INFO: EXTRACTING: apprisal_003.pdf
+2026-01-17 09:27:13,259 - OCRTest - INFO - EXTRACTING: apprisal_003.pdf
+INFO: ============================================================
+2026-01-17 09:27:13,259 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:13,259 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:13,260 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:13,263 - app.services.extraction_service - INFO - Page 1: Text detected (389 chars). Skipping OCR.
+2026-01-17 09:27:13,271 - app.services.extraction_service - INFO - Page 2: Text detected (10367 chars). Skipping OCR.
+2026-01-17 09:27:13,279 - app.services.extraction_service - INFO - Page 3: Text detected (5845 chars). Skipping OCR.
+2026-01-17 09:27:13,283 - app.services.extraction_service - INFO - Page 4: Text detected (5083 chars). Skipping OCR.
+2026-01-17 09:27:13,285 - app.services.extraction_service - INFO - Page 5: Text detected (2332 chars). Skipping OCR.
+2026-01-17 09:27:13,287 - app.services.extraction_service - INFO - Page 6: Text detected (2390 chars). Skipping OCR.
+2026-01-17 09:27:13,292 - app.services.extraction_service - INFO - Page 7: Text detected (6951 chars). Skipping OCR.
+2026-01-17 09:27:13,296 - app.services.extraction_service - INFO - Page 8: Text detected (6462 chars). Skipping OCR.
+2026-01-17 09:27:13,300 - app.services.extraction_service - INFO - Page 9: Text detected (5248 chars). Skipping OCR.
+2026-01-17 09:27:13,306 - app.services.extraction_service - INFO - Page 10: Text detected (5359 chars). Skipping OCR.
+2026-01-17 09:27:13,310 - app.services.extraction_service - INFO - Page 11: Text detected (6522 chars). Skipping OCR.
+2026-01-17 09:27:13,314 - app.services.extraction_service - INFO - Page 12: Text detected (4969 chars). Skipping OCR.
+2026-01-17 09:27:13,317 - app.services.extraction_service - INFO - Page 13: Text detected (3546 chars). Skipping OCR.
+2026-01-17 09:27:13,320 - app.services.extraction_service - INFO - Page 14: Text detected (3933 chars). Skipping OCR.
+2026-01-17 09:27:13,324 - app.services.extraction_service - INFO - Page 15: Text detected (5021 chars). Skipping OCR.
+2026-01-17 09:27:13,326 - app.services.extraction_service - INFO - Page 16: Text detected (3819 chars). Skipping OCR.
+2026-01-17 09:27:13,328 - app.services.extraction_service - INFO - Page 17: Text detected (2693 chars). Skipping OCR.
+2026-01-17 09:27:13,333 - app.services.extraction_service - INFO - Page 18: Text detected (6345 chars). Skipping OCR.
+2026-01-17 09:27:13,333 - app.services.extraction_service - INFO - Page 19: Text detected (253 chars). Skipping OCR.
+2026-01-17 09:27:13,334 - app.services.extraction_service - INFO - Page 20: Text detected (254 chars). Skipping OCR.
+2026-01-17 09:27:13,334 - app.services.extraction_service - INFO - Page 21: Text detected (250 chars). Skipping OCR.
+2026-01-17 09:27:13,337 - app.services.extraction_service - INFO - Page 22: Text detected (836 chars). Skipping OCR.
+2026-01-17 09:27:13,338 - app.services.extraction_service - INFO - Page 23: Text detected (474 chars). Skipping OCR.
+2026-01-17 09:27:13,338 - app.services.extraction_service - INFO - Page 24: Text detected (467 chars). Skipping OCR.
+2026-01-17 09:27:13,339 - app.services.extraction_service - INFO - Page 25: Text detected (306 chars). Skipping OCR.
+2026-01-17 09:27:13,339 - app.services.extraction_service - INFO - Page 26: Text detected (329 chars). Skipping OCR.
+2026-01-17 09:27:13,340 - app.services.extraction_service - INFO - Page 27: Text detected (295 chars). Skipping OCR.
+2026-01-17 09:27:13,340 - app.services.extraction_service - INFO - Page 28: Text detected (115 chars). Skipping OCR.
+2026-01-17 09:27:13,340 - app.services.extraction_service - INFO - Page 29: Text detected (115 chars). Skipping OCR.
+2026-01-17 09:27:13,340 - app.services.extraction_service - INFO - Page 30: Text detected (95 chars). Skipping OCR.
+2026-01-17 09:27:13,340 - app.services.extraction_service - INFO - Page 31: Text detected (103 chars). Skipping OCR.
+2026-01-17 09:27:13,340 - app.services.extraction_service - INFO - Page 32: Text detected (103 chars). Skipping OCR.
+2026-01-17 09:27:13,341 - app.services.extraction_service - INFO - Page 33: Text detected (719 chars). Skipping OCR.
+2026-01-17 09:27:13,342 - app.services.extraction_service - INFO - Page 34: Text detected (710 chars). Skipping OCR.
+2026-01-17 09:27:13,342 - app.services.extraction_service - INFO - Page 35: Text detected (900 chars). Skipping OCR.
+2026-01-17 09:27:13,343 - app.services.extraction_service - INFO - Page 36: Text detected (551 chars). Skipping OCR.
+2026-01-17 09:27:13,344 - app.services.extraction_service - INFO - Page 37: Text detected (920 chars). Skipping OCR.
+2026-01-17 09:27:13,344 - app.services.extraction_service - INFO - Page 38: Text detected (746 chars). Skipping OCR.
+2026-01-17 09:27:13,349 - app.services.extraction_service - INFO - Page 39: Text detected (5511 chars). Skipping OCR.
+2026-01-17 09:27:13,352 - app.services.extraction_service - INFO - Page 40: Text detected (4261 chars). Skipping OCR.
+2026-01-17 09:27:13,354 - app.services.extraction_service - INFO - Page 41: Text detected (2843 chars). Skipping OCR.
+2026-01-17 09:27:13,358 - app.services.extraction_service - INFO - Page 42: Text detected (4456 chars). Skipping OCR.
+2026-01-17 09:27:13,359 - app.services.extraction_service - INFO - Page 43: Text detected (1084 chars). Skipping OCR.
+2026-01-17 09:27:13,359 - app.services.extraction_service - INFO - Page 44: Text detected (107 chars). Skipping OCR.
+2026-01-17 09:27:13,359 - app.services.extraction_service - INFO - Page 45: Text detected (85 chars). Skipping OCR.
+INFO: Extraction time: 100ms
+2026-01-17 09:27:13,360 - OCRTest - INFO - Extraction time: 100ms
+INFO: Total pages: 45
+2026-01-17 09:27:13,360 - OCRTest - INFO - Total pages: 45
+INFO: Total characters extracted: 114295
+2026-01-17 09:27:13,360 - OCRTest - INFO - Total characters extracted: 114295
+INFO: Total words extracted: 16138
+2026-01-17 09:27:13,360 - OCRTest - INFO - Total words extracted: 16138
+INFO: ============================================================
+2026-01-17 09:27:13,360 - OCRTest - INFO - ============================================================
+INFO: EXTRACTING: engagement_003.pdf
+2026-01-17 09:27:13,360 - OCRTest - INFO - EXTRACTING: engagement_003.pdf
+INFO: ============================================================
+2026-01-17 09:27:13,360 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:13,361 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:13,361 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:13,364 - app.services.extraction_service - INFO - Page 1: Text detected (1120 chars). Skipping OCR.
+2026-01-17 09:27:13,366 - app.services.extraction_service - INFO - Page 2: Text detected (3016 chars). Skipping OCR.
+2026-01-17 09:27:13,370 - app.services.extraction_service - INFO - Page 3: Text detected (3715 chars). Skipping OCR.
+2026-01-17 09:27:13,372 - app.services.extraction_service - INFO - Page 4: Text detected (3748 chars). Skipping OCR.
+2026-01-17 09:27:13,375 - app.services.extraction_service - INFO - Page 5: Text detected (3229 chars). Skipping OCR.
+2026-01-17 09:27:13,378 - app.services.extraction_service - INFO - Page 6: Text detected (4096 chars). Skipping OCR.
+2026-01-17 09:27:13,381 - app.services.extraction_service - INFO - Page 7: Text detected (4150 chars). Skipping OCR.
+2026-01-17 09:27:13,384 - app.services.extraction_service - INFO - Page 8: Text detected (3933 chars). Skipping OCR.
+2026-01-17 09:27:13,386 - app.services.extraction_service - INFO - Page 9: Text detected (2382 chars). Skipping OCR.
+2026-01-17 09:27:13,386 - app.services.extraction_service - INFO - Page 10: Insufficient text (1 chars). Using OCR.
+INFO: Extraction time: 288ms
+2026-01-17 09:27:13,648 - OCRTest - INFO - Extraction time: 288ms
+INFO: Total pages: 10
+2026-01-17 09:27:13,649 - OCRTest - INFO - Total pages: 10
+INFO: Total characters extracted: 29418
+2026-01-17 09:27:13,649 - OCRTest - INFO - Total characters extracted: 29418
+INFO: Total words extracted: 4449
+2026-01-17 09:27:13,649 - OCRTest - INFO - Total words extracted: 4449
+INFO: Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_003_appraisal.txt
+2026-01-17 09:27:13,649 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_003_appraisal.txt
+INFO:   Saved 114295 characters to apprisal_003_appraisal.txt
+2026-01-17 09:27:13,650 - OCRTest - INFO -   Saved 114295 characters to apprisal_003_appraisal.txt
+INFO: Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_003_engagement.txt
+2026-01-17 09:27:13,650 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_003_engagement.txt
+INFO:   Saved 29418 characters to apprisal_003_engagement.txt
+2026-01-17 09:27:13,650 - OCRTest - INFO -   Saved 29418 characters to apprisal_003_engagement.txt
+INFO:   Step 2: Field Extraction...
+2026-01-17 09:27:13,650 - OCRTest - INFO -   Step 2: Field Extraction...
+INFO: Extracting structured fields using ExtractionService...
+2026-01-17 09:27:13,650 - OCRTest - INFO - Extracting structured fields using ExtractionService...
+2026-01-17 09:27:13,650 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+2026-01-17 09:27:13,652 - app.services.extraction_service - WARNING - Invalid property address extracted: '000' - rejecting
+INFO: Extracted 13 appraisal fields and 6 engagement fields
+2026-01-17 09:27:13,937 - OCRTest - INFO - Extracted 13 appraisal fields and 6 engagement fields
+INFO:   Step 3: Building Validation Context...
+2026-01-17 09:27:13,938 - OCRTest - INFO -   Step 3: Building Validation Context...
+INFO: Building validation context...
+2026-01-17 09:27:13,938 - OCRTest - INFO - Building validation context...
+INFO: Validation context built successfully
+2026-01-17 09:27:13,938 - OCRTest - INFO - Validation context built successfully
+INFO:   Step 4: Executing QC Rules...
+2026-01-17 09:27:13,938 - OCRTest - INFO -   Step 4: Executing QC Rules...
+INFO: ============================================================
+2026-01-17 09:27:13,938 - OCRTest - INFO - ============================================================
+INFO: EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+2026-01-17 09:27:13,938 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+INFO: ============================================================
+2026-01-17 09:27:13,938 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule S-1 VERIFY: Missing required field: Property Address (Report)
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule S-2 VERIFY: Missing required field: Borrower Name (Report)
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule S-4 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule S-11 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule S-12 FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule C-1 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule C-2 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule C-3 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule C-4 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule N-1 FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule N-2 FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule N-3 VERIFY: Missing required field: Price Range (Low and/or High)
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule N-4 VERIFY: Missing required field: Present Land Use percentages
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule N-5 FAIL: Must list the boundaries only; North, South, East, West, please correct
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule N-6 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule N-7 VERIFY: Missing required field: Market Conditions
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule ST-1 VERIFY: Missing required field: Site Dimensions
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule ST-2 VERIFY: Missing required field: Site Area
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule ST-3 FAIL: Site shape is missing.
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule ST-4 FAIL: View is missing.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule ST-5 VERIFY: Missing required field: Zoning Classification
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule ST-6 FAIL: Highest and Best Use checkbox is not marked.
+2026-01-17 09:27:13,938 - SmartIdentifier - WARNING - Rule ST-8 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule ST-9 FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+2026-01-17 09:27:13,938 - SmartIdentifier - INFO - Rule ST-10 FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-1 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-2 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-3 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-4 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-5 VERIFY: Missing required field: Utilities status
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-7 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-8 VERIFY: Missing required field: Additional features
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-9 VERIFY: Missing required field: Condition of the Property (C1-C6)
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-10 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule I-11 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule SCA-1 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule SCA-2 VERIFY: Missing required field: Sales Comparison Grid Comparables
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule SCA-3 VERIFY: Missing required field: Subject Address
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule SCA-17 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+2026-01-17 09:27:13,939 - SmartIdentifier - WARNING - Rule SCA-23 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+INFO: Executed 74 rules
+2026-01-17 09:27:13,939 - OCRTest - INFO - Executed 74 rules
+WARNING:   🔍 VERIFY: Missing required field: Property Address (Report)
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Address (Report)
+WARNING:   🔍 VERIFY: Missing required field: Borrower Name (Report)
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Borrower Name (Report)
+INFO:   ✅ PASS: Owner of Public Record is present and valid.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
+WARNING:   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+INFO:   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+INFO:   ✅ PASS: Map Reference and Census Tract are present and valid.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Map Reference and Census Tract are present and valid.
+INFO:   ✅ PASS: Occupant status 'Owner' is valid.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Occupant status 'Owner' is valid.
+INFO:   ✅ PASS: Special assessments are properly documented.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
+INFO:   ✅ PASS: PUD/HOA information is consistent.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
+INFO:   ✅ PASS: Lender/Client information matches engagement letter.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Lender/Client information matches engagement letter.
+WARNING:   🔍 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Rights Appraised
+WARNING:   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+WARNING:   🔍 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+WARNING:   🔍 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Contract Price not extracted from report. Please verify manually.
+WARNING:   🔍 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+WARNING:   🔍 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+INFO:   ✅ PASS: Personal property analysis is complete.
+2026-01-17 09:27:13,939 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
+WARNING:   ❌ FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+WARNING:   ❌ FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+WARNING:   🔍 VERIFY: Missing required field: Price Range (Low and/or High)
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Price Range (Low and/or High)
+WARNING:   🔍 VERIFY: Missing required field: Present Land Use percentages
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Present Land Use percentages
+WARNING:   ❌ FAIL: Must list the boundaries only; North, South, East, West, please correct
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: Must list the boundaries only; North, South, East, West, please correct
+WARNING:   🔍 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Neighborhood Description
+WARNING:   🔍 VERIFY: Missing required field: Market Conditions
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Market Conditions
+WARNING:   🔍 VERIFY: Missing required field: Site Dimensions
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Site Dimensions
+WARNING:   🔍 VERIFY: Missing required field: Site Area
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Site Area
+WARNING:   ❌ FAIL: Site shape is missing.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: Site shape is missing.
+WARNING:   ❌ FAIL: View is missing.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: View is missing.
+WARNING:   🔍 VERIFY: Missing required field: Zoning Classification
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Zoning Classification
+WARNING:   ❌ FAIL: Highest and Best Use checkbox is not marked.
+2026-01-17 09:27:13,939 - OCRTest - WARNING -   ❌ FAIL: Highest and Best Use checkbox is not marked.
+INFO:   ✅ PASS: Utilities and off-site improvements are valid.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Utilities and off-site improvements are valid.
+WARNING:   🔍 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+WARNING:   ❌ FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   ❌ FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+WARNING:   ❌ FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   ❌ FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+WARNING:   🔍 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+WARNING:   🔍 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+WARNING:   🔍 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+WARNING:   🔍 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+WARNING:   🔍 VERIFY: Missing required field: Utilities status
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Utilities status
+INFO:   ✅ PASS: Appliance field appears completed; verify only built-in items are included.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Appliance field appears completed; verify only built-in items are included.
+WARNING:   🔍 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+WARNING:   🔍 VERIFY: Missing required field: Additional features
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Additional features
+WARNING:   🔍 VERIFY: Missing required field: Condition of the Property (C1-C6)
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Condition of the Property (C1-C6)
+WARNING:   🔍 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+WARNING:   🔍 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+INFO:   ✅ PASS: Additions presence was not detected.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Additions presence was not detected.
+INFO:   ✅ PASS: Security bars presence was not detected.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Security bars presence was not detected.
+WARNING:   🔍 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+WARNING:   🔍 VERIFY: Missing required field: Sales Comparison Grid Comparables
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Sales Comparison Grid Comparables
+WARNING:   🔍 VERIFY: Missing required field: Subject Address
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Subject Address
+INFO:   ✅ PASS: Proximity appears present and plausibly UAD formatted for all extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Proximity appears present and plausibly UAD formatted for all extracted comparables.
+INFO:   ✅ PASS: Data Source(s) appear present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Data Source(s) appear present for extracted comparables.
+INFO:   ✅ PASS: Verification Source(s) appear present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Verification Source(s) appear present for extracted comparables.
+INFO:   ✅ PASS: Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable.
+INFO:   ✅ PASS: Sale date appears present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Sale date appears present for extracted comparables.
+INFO:   ✅ PASS: Location ratings appear present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Location ratings appear present for extracted comparables.
+INFO:   ✅ PASS: Leasehold/Fee Simple fields appear present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Leasehold/Fee Simple fields appear present for extracted comparables.
+INFO:   ✅ PASS: Site sizes appear present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Site sizes appear present for extracted comparables.
+INFO:   ✅ PASS: View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable.
+INFO:   ✅ PASS: Design/Style fields appear present for extracted comparables; verify UAD formatting manually.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Design/Style fields appear present for extracted comparables; verify UAD formatting manually.
+INFO:   ✅ PASS: Quality ratings appear UAD compliant for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Quality ratings appear UAD compliant for extracted comparables.
+INFO:   ✅ PASS: Actual age appears present for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Actual age appears present for extracted comparables.
+INFO:   ✅ PASS: Condition ratings appear UAD compliant for extracted comparables.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Condition ratings appear UAD compliant for extracted comparables.
+WARNING:   🔍 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+INFO:   ✅ PASS: Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually.
+INFO:   ✅ PASS: Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required.
+INFO:   ✅ PASS: Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information.
+INFO:   ✅ PASS: Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually.
+INFO:   ✅ PASS: Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'.
+WARNING:   🔍 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+2026-01-17 09:27:13,940 - OCRTest - WARNING -   🔍 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+INFO:   ✅ PASS: No unique design characteristics (green/log/ADU) detected for subject.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: No unique design characteristics (green/log/ADU) detected for subject.
+INFO:   ✅ PASS: Subject is not identified as new construction (year built not extracted or older).
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Subject is not identified as new construction (year built not extracted or older).
+INFO:   ✅ PASS: Review of square footage methodology requires manual check of basement/GLA separation.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Review of square footage methodology requires manual check of basement/GLA separation.
+INFO:   ✅ PASS: Comparable photos verification requires manual review of images.
+2026-01-17 09:27:13,940 - OCRTest - INFO -   ✅ PASS: Comparable photos verification requires manual review of images.
+INFO:   Step 5: Executing SmartQCProcessor (layout-aware)...
+2026-01-17 09:27:13,941 - OCRTest - INFO -   Step 5: Executing SmartQCProcessor (layout-aware)...
+2026-01-17 09:27:13,943 - app.services.extraction_service - WARNING - Invalid property address extracted: '000' - rejecting
+2026-01-17 09:27:14,595 - app.qc_processor - INFO - Executing rule engine
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule S-1 VERIFY: Missing required field: Property Address (Report)
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule S-2 VERIFY: Missing required field: Borrower Name (Report)
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule S-4 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule S-8 VERIFY: Missing required field: Special Assessments
+2026-01-17 09:27:14,596 - SmartIdentifier - INFO - Rule S-10 FAIL: Please correct the lender's address so it reflects as: 12230 World Trade Dr, Suite 250 San Diego CA 92128
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule S-11 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:14,596 - SmartIdentifier - INFO - Rule S-12 FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule C-1 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule C-2 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule C-3 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule C-4 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule C-5 VERIFY: Personal property items are listed. Please explicitly state whether they contribute to value.
+2026-01-17 09:27:14,596 - SmartIdentifier - WARNING - Rule ST-1 VERIFY: Dimensions refers to Plat Map. Please ensure the subject is clearly marked on the provided map.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule I-2 VERIFY: Foundation fields are present. Verify Foundation matches Sales Comparison grid section.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule I-3 VERIFY: Exterior Description fields are present. Verify values match Sales Comparison grid section.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule I-7 VERIFY: Above-grade room count fields are present. Verify below-grade areas are excluded and counts match Sales Comparison grid.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule I-9 VERIFY: Condition rating is UAD compliant. Verify rating matches photos/commentary and is supported by effective age.
+2026-01-17 09:27:14,597 - SmartIdentifier - INFO - Rule SCA-1 FAIL: The '# Listings' / '# Sales' market summary counts above the Sales Comparison grid are inconsistent with the comparables shown in the grid.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-3 VERIFY: Missing required field: Subject Address
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-4 VERIFY: Proximity to subject is missing for one or more comparables; please provide proximity (minimum 0.01 miles with direction) or verify map support.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-5 VERIFY: Data Source(s) are missing for one or more comparables. Please provide specific MLS name/MLS# and DOM (or Unk with commentary).
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-6 VERIFY: Verification Source(s) are missing for one or more closed comparable sales; please provide a full specific source name (e.g., County Assessor Tax Card).
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-7 VERIFY: Sale/financing/concessions field is missing for one or more comparables; please correct or comment (and add '0' where no adjustment is applied for UAD compliance).
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-8 VERIFY: Sale date is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-9 VERIFY: Location rating is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-10 VERIFY: Leasehold/Fee Simple field is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-11 VERIFY: Site size is missing for one or more comparables; please provide with proper units (SF if <1 acre, acreage if >=1 acre).
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-12 VERIFY: View field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-13 VERIFY: Design/Style field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-14 VERIFY: Quality rating (Q1-Q6) is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-15 VERIFY: Actual age is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-16 VERIFY: Condition rating (C1-C6) is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-17 VERIFY: GLA is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-18 VERIFY: Basement/below-grade data is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-19 VERIFY: Functional utility field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-20 VERIFY: Heating/Cooling field is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-21 VERIFY: Garage/Carport data is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-22 VERIFY: Porch/Patio/Deck field is missing for one or more comparables; please correct or comment (or explicitly state 'None').
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-23 VERIFY: Listing comparable(s) detected. Please verify list-to-sales price ratio adjustment is applied or explain why not warranted.
+2026-01-17 09:27:14,597 - SmartIdentifier - WARNING - Rule SCA-27 VERIFY: Comparables cite MLS as data source. Verify if photos are originals or MLS (which require explanation/justification).
+INFO:   ✓ QCProcessor: 34 PASS, 3 FAIL, 37 VERIFY
+2026-01-17 09:27:14,599 - OCRTest - INFO -   ✓ QCProcessor: 34 PASS, 3 FAIL, 37 VERIFY
+INFO:   ✓ Completed: 34 PASS, 9 FAIL, 31 VERIFY
+2026-01-17 09:27:14,599 - OCRTest - INFO -   ✓ Completed: 34 PASS, 9 FAIL, 31 VERIFY
+INFO: ======================================================================
+2026-01-17 09:27:14,599 - OCRTest - INFO - ======================================================================
+INFO: TESTING: apprisal_004
+2026-01-17 09:27:14,599 - OCRTest - INFO - TESTING: apprisal_004
+INFO: ======================================================================
+2026-01-17 09:27:14,599 - OCRTest - INFO - ======================================================================
+INFO:   Step 1: OCR Extraction...
+2026-01-17 09:27:14,599 - OCRTest - INFO -   Step 1: OCR Extraction...
+INFO: ============================================================
+2026-01-17 09:27:14,599 - OCRTest - INFO - ============================================================
+INFO: EXTRACTING: apprisal_004.pdf
+2026-01-17 09:27:14,599 - OCRTest - INFO - EXTRACTING: apprisal_004.pdf
+INFO: ============================================================
+2026-01-17 09:27:14,599 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:14,600 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:14,600 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:14,611 - app.services.extraction_service - INFO - Page 1: Text detected (6228 chars). Skipping OCR.
+2026-01-17 09:27:14,615 - app.services.extraction_service - INFO - Page 2: Text detected (5227 chars). Skipping OCR.
+2026-01-17 09:27:14,617 - app.services.extraction_service - INFO - Page 3: Text detected (2477 chars). Skipping OCR.
+2026-01-17 09:27:14,622 - app.services.extraction_service - INFO - Page 4: Text detected (6796 chars). Skipping OCR.
+2026-01-17 09:27:14,627 - app.services.extraction_service - INFO - Page 5: Text detected (6402 chars). Skipping OCR.
+2026-01-17 09:27:14,631 - app.services.extraction_service - INFO - Page 6: Text detected (5158 chars). Skipping OCR.
+2026-01-17 09:27:14,634 - app.services.extraction_service - INFO - Page 7: Text detected (2844 chars). Skipping OCR.
+2026-01-17 09:27:14,635 - app.services.extraction_service - INFO - Page 8: Text detected (491 chars). Skipping OCR.
+2026-01-17 09:27:14,635 - app.services.extraction_service - INFO - Page 9: Text detected (493 chars). Skipping OCR.
+2026-01-17 09:27:14,636 - app.services.extraction_service - INFO - Page 10: Text detected (462 chars). Skipping OCR.
+2026-01-17 09:27:14,636 - app.services.extraction_service - INFO - Page 11: Text detected (494 chars). Skipping OCR.
+2026-01-17 09:27:14,636 - app.services.extraction_service - INFO - Page 12: Text detected (375 chars). Skipping OCR.
+2026-01-17 09:27:14,637 - app.services.extraction_service - INFO - Page 13: Text detected (486 chars). Skipping OCR.
+2026-01-17 09:27:14,637 - app.services.extraction_service - INFO - Page 14: Text detected (481 chars). Skipping OCR.
+2026-01-17 09:27:14,638 - app.services.extraction_service - INFO - Page 15: Text detected (483 chars). Skipping OCR.
+2026-01-17 09:27:14,639 - app.services.extraction_service - INFO - Page 16: Text detected (466 chars). Skipping OCR.
+2026-01-17 09:27:14,639 - app.services.extraction_service - INFO - Page 17: Text detected (934 chars). Skipping OCR.
+2026-01-17 09:27:14,640 - app.services.extraction_service - INFO - Page 18: Text detected (934 chars). Skipping OCR.
+2026-01-17 09:27:14,643 - app.services.extraction_service - INFO - Page 19: Text detected (3259 chars). Skipping OCR.
+2026-01-17 09:27:14,646 - app.services.extraction_service - INFO - Page 20: Text detected (3173 chars). Skipping OCR.
+2026-01-17 09:27:14,648 - app.services.extraction_service - INFO - Page 21: Text detected (3564 chars). Skipping OCR.
+2026-01-17 09:27:14,650 - app.services.extraction_service - INFO - Page 22: Text detected (2108 chars). Skipping OCR.
+2026-01-17 09:27:14,654 - app.services.extraction_service - INFO - Page 23: Text detected (5056 chars). Skipping OCR.
+2026-01-17 09:27:14,657 - app.services.extraction_service - INFO - Page 24: Text detected (3351 chars). Skipping OCR.
+2026-01-17 09:27:14,660 - app.services.extraction_service - INFO - Page 25: Text detected (3622 chars). Skipping OCR.
+2026-01-17 09:27:14,660 - app.services.extraction_service - INFO - Page 26: Text detected (655 chars). Skipping OCR.
+2026-01-17 09:27:14,661 - app.services.extraction_service - INFO - Page 27: Text detected (295 chars). Skipping OCR.
+2026-01-17 09:27:14,661 - app.services.extraction_service - INFO - Page 28: Text detected (261 chars). Skipping OCR.
+2026-01-17 09:27:14,662 - app.services.extraction_service - INFO - Page 29: Text detected (263 chars). Skipping OCR.
+2026-01-17 09:27:14,662 - app.services.extraction_service - INFO - Page 30: Text detected (83 chars). Skipping OCR.
+INFO: Extraction time: 62ms
+2026-01-17 09:27:14,662 - OCRTest - INFO - Extraction time: 62ms
+INFO: Total pages: 30
+2026-01-17 09:27:14,662 - OCRTest - INFO - Total pages: 30
+INFO: Total characters extracted: 67009
+2026-01-17 09:27:14,662 - OCRTest - INFO - Total characters extracted: 67009
+INFO: Total words extracted: 10350
+2026-01-17 09:27:14,663 - OCRTest - INFO - Total words extracted: 10350
+INFO: ============================================================
+2026-01-17 09:27:14,663 - OCRTest - INFO - ============================================================
+INFO: EXTRACTING: engagement_004.pdf
+2026-01-17 09:27:14,663 - OCRTest - INFO - EXTRACTING: engagement_004.pdf
+INFO: ============================================================
+2026-01-17 09:27:14,663 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:14,663 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+INFO: Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:14,663 - OCRTest - INFO - Starting extraction using ExtractionService (Text-First)...
+2026-01-17 09:27:14,666 - app.services.extraction_service - INFO - Page 1: Text detected (1233 chars). Skipping OCR.
+2026-01-17 09:27:14,668 - app.services.extraction_service - INFO - Page 2: Text detected (2920 chars). Skipping OCR.
+2026-01-17 09:27:14,672 - app.services.extraction_service - INFO - Page 3: Text detected (3715 chars). Skipping OCR.
+2026-01-17 09:27:14,674 - app.services.extraction_service - INFO - Page 4: Text detected (3748 chars). Skipping OCR.
+2026-01-17 09:27:14,677 - app.services.extraction_service - INFO - Page 5: Text detected (3229 chars). Skipping OCR.
+2026-01-17 09:27:14,680 - app.services.extraction_service - INFO - Page 6: Text detected (4096 chars). Skipping OCR.
+2026-01-17 09:27:14,683 - app.services.extraction_service - INFO - Page 7: Text detected (4150 chars). Skipping OCR.
+2026-01-17 09:27:14,686 - app.services.extraction_service - INFO - Page 8: Text detected (3933 chars). Skipping OCR.
+2026-01-17 09:27:14,688 - app.services.extraction_service - INFO - Page 9: Text detected (2580 chars). Skipping OCR.
+2026-01-17 09:27:14,688 - app.services.extraction_service - INFO - Page 10: Text detected (76 chars). Skipping OCR.
+INFO: Extraction time: 25ms
+2026-01-17 09:27:14,688 - OCRTest - INFO - Extraction time: 25ms
+INFO: Total pages: 10
+2026-01-17 09:27:14,688 - OCRTest - INFO - Total pages: 10
+INFO: Total characters extracted: 29718
+2026-01-17 09:27:14,688 - OCRTest - INFO - Total characters extracted: 29718
+INFO: Total words extracted: 4490
+2026-01-17 09:27:14,688 - OCRTest - INFO - Total words extracted: 4490
+INFO: Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_004_appraisal.txt
+2026-01-17 09:27:14,688 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_004_appraisal.txt
+INFO:   Saved 67009 characters to apprisal_004_appraisal.txt
+2026-01-17 09:27:14,689 - OCRTest - INFO -   Saved 67009 characters to apprisal_004_appraisal.txt
+INFO: Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_004_engagement.txt
+2026-01-17 09:27:14,689 - OCRTest - INFO - Saving extracted text to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/apprisal_004_engagement.txt
+INFO:   Saved 29718 characters to apprisal_004_engagement.txt
+2026-01-17 09:27:14,690 - OCRTest - INFO -   Saved 29718 characters to apprisal_004_engagement.txt
+INFO:   Step 2: Field Extraction...
+2026-01-17 09:27:14,690 - OCRTest - INFO -   Step 2: Field Extraction...
+INFO: Extracting structured fields using ExtractionService...
+2026-01-17 09:27:14,690 - OCRTest - INFO - Extracting structured fields using ExtractionService...
+2026-01-17 09:27:14,690 - app.ocr.ocr_pipeline - INFO - Image preprocessing enabled for OCR
+2026-01-17 09:27:14,691 - app.services.extraction_service - WARNING - Invalid property address extracted: '000' - rejecting
+2026-01-17 09:27:14,692 - app.services.extraction_service - INFO - Recovered property address via heuristic scan: '4916 S Linder Ave' (City: Chicago, State: IL, Zip: 60638)
+INFO: Extracted 17 appraisal fields and 6 engagement fields
+2026-01-17 09:27:14,877 - OCRTest - INFO - Extracted 17 appraisal fields and 6 engagement fields
+INFO:   Step 3: Building Validation Context...
+2026-01-17 09:27:14,877 - OCRTest - INFO -   Step 3: Building Validation Context...
+INFO: Building validation context...
+2026-01-17 09:27:14,877 - OCRTest - INFO - Building validation context...
+INFO: Validation context built successfully
+2026-01-17 09:27:14,877 - OCRTest - INFO - Validation context built successfully
+INFO:   Step 4: Executing QC Rules...
+2026-01-17 09:27:14,877 - OCRTest - INFO -   Step 4: Executing QC Rules...
+INFO: ============================================================
+2026-01-17 09:27:14,877 - OCRTest - INFO - ============================================================
+INFO: EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+2026-01-17 09:27:14,877 - OCRTest - INFO - EXECUTING QC RULES (S-1 to S-12, C-1 to C-5)
+INFO: ============================================================
+2026-01-17 09:27:14,877 - OCRTest - INFO - ============================================================
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule S-2 VERIFY: Missing required field: Borrower Name (Report)
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule S-4 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule S-11 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule S-12 FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule C-1 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule C-2 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule C-3 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule C-4 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule N-1 FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule N-2 FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule N-3 VERIFY: Missing required field: Price Range (Low and/or High)
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule N-4 VERIFY: Missing required field: Present Land Use percentages
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule N-5 FAIL: Must list the boundaries only; North, South, East, West, please correct
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule N-6 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule N-7 VERIFY: Missing required field: Market Conditions
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule ST-1 VERIFY: Missing required field: Site Dimensions
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule ST-2 VERIFY: Missing required field: Site Area
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule ST-3 FAIL: Site shape is missing.
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule ST-4 FAIL: View is missing.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule ST-5 VERIFY: Missing required field: Zoning Classification
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule ST-6 FAIL: Highest and Best Use checkbox is not marked.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule ST-8 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule ST-9 FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+2026-01-17 09:27:14,878 - SmartIdentifier - INFO - Rule ST-10 FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-1 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-2 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-3 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-4 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-5 VERIFY: Missing required field: Utilities status
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-7 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-8 VERIFY: Missing required field: Additional features
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-9 VERIFY: Missing required field: Condition of the Property (C1-C6)
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-10 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule I-11 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule SCA-1 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule SCA-2 VERIFY: Missing required field: Sales Comparison Grid Comparables
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule SCA-17 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+2026-01-17 09:27:14,878 - SmartIdentifier - WARNING - Rule SCA-23 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+INFO: Executed 74 rules
+2026-01-17 09:27:14,878 - OCRTest - INFO - Executed 74 rules
+INFO:   ✅ PASS: Property address components match engagement letter.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Property address components match engagement letter.
+WARNING:   🔍 VERIFY: Missing required field: Borrower Name (Report)
+2026-01-17 09:27:14,878 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Borrower Name (Report)
+INFO:   ✅ PASS: Owner of Public Record is present and valid.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Owner of Public Record is present and valid.
+WARNING:   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:14,878 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+INFO:   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Neighborhood name 'Map Reference' is provided.
+INFO:   ✅ PASS: Map Reference and Census Tract are present and valid.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Map Reference and Census Tract are present and valid.
+INFO:   ✅ PASS: Occupant status 'Owner' is valid.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Occupant status 'Owner' is valid.
+INFO:   ✅ PASS: Special assessments are properly documented.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Special assessments are properly documented.
+INFO:   ✅ PASS: PUD/HOA information is consistent.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: PUD/HOA information is consistent.
+INFO:   ✅ PASS: Lender/Client information matches engagement letter.
+2026-01-17 09:27:14,878 - OCRTest - INFO -   ✅ PASS: Lender/Client information matches engagement letter.
+WARNING:   🔍 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:14,878 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Property Rights Appraised
+WARNING:   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+WARNING:   🔍 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+WARNING:   🔍 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Contract Price not extracted from report. Please verify manually.
+WARNING:   🔍 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+WARNING:   🔍 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+INFO:   ✅ PASS: Personal property analysis is complete.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Personal property analysis is complete.
+WARNING:   ❌ FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: In the neighborhood section, checkbox is missing for Location (Urban/Suburban/Rural), Built-Up (Over 75%/25-75%/Under 25%), Growth (Rapid/Stable/Slow), please revise.
+WARNING:   ❌ FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: In the neighborhood section, the following trends are missing: Property Values (Increasing/Stable/Declining), Demand/Supply, Marketing Time. Please revise.
+WARNING:   🔍 VERIFY: Missing required field: Price Range (Low and/or High)
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Price Range (Low and/or High)
+WARNING:   🔍 VERIFY: Missing required field: Present Land Use percentages
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Present Land Use percentages
+WARNING:   ❌ FAIL: Must list the boundaries only; North, South, East, West, please correct
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: Must list the boundaries only; North, South, East, West, please correct
+WARNING:   🔍 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Neighborhood Description
+WARNING:   🔍 VERIFY: Missing required field: Market Conditions
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Market Conditions
+WARNING:   🔍 VERIFY: Missing required field: Site Dimensions
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Site Dimensions
+WARNING:   🔍 VERIFY: Missing required field: Site Area
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Site Area
+WARNING:   ❌ FAIL: Site shape is missing.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: Site shape is missing.
+WARNING:   ❌ FAIL: View is missing.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: View is missing.
+WARNING:   🔍 VERIFY: Missing required field: Zoning Classification
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Zoning Classification
+WARNING:   ❌ FAIL: Highest and Best Use checkbox is not marked.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: Highest and Best Use checkbox is not marked.
+INFO:   ✅ PASS: Utilities and off-site improvements are valid.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Utilities and off-site improvements are valid.
+WARNING:   🔍 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: FEMA Flood Hazard Area (Yes/No)
+WARNING:   ❌ FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: Utilities Typical for Market Yes/No toggle is skipped.
+WARNING:   ❌ FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   ❌ FAIL: Adverse Site Conditions Yes/No toggle is skipped.
+WARNING:   🔍 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Stories, Type, Existing/Proposed/Under Construction, Design Style, Year Built, Effective Age
+WARNING:   🔍 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Foundation, Evidence of Dampness, Evidence of Settlement, Evidence of Infestation
+WARNING:   🔍 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Foundation Walls, Exterior Walls, Roof Surface, Gutters & Downspouts, Window Type, Storm Sash/Screens
+WARNING:   🔍 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Floors, Walls, Trim/Finish, Bath Floor, Bath Wainscot
+WARNING:   🔍 VERIFY: Missing required field: Utilities status
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Utilities status
+INFO:   ✅ PASS: Appliance field appears completed; verify only built-in items are included.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Appliance field appears completed; verify only built-in items are included.
+WARNING:   🔍 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Total Rooms, Bedrooms, Baths, GLA
+WARNING:   🔍 VERIFY: Missing required field: Additional features
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Additional features
+WARNING:   🔍 VERIFY: Missing required field: Condition of the Property (C1-C6)
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Condition of the Property (C1-C6)
+WARNING:   🔍 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Adverse conditions affecting livability (Yes/No)
+WARNING:   🔍 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Does property conform to neighborhood? (Yes/No)
+INFO:   ✅ PASS: Additions presence was not detected.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Additions presence was not detected.
+INFO:   ✅ PASS: Security bars presence was not detected.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Security bars presence was not detected.
+WARNING:   🔍 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: # of Comparable Sales within 12 Months
+WARNING:   🔍 VERIFY: Missing required field: Sales Comparison Grid Comparables
+2026-01-17 09:27:14,879 - OCRTest - WARNING -   🔍 VERIFY: Missing required field: Sales Comparison Grid Comparables
+INFO:   ✅ PASS: Subject and comparable addresses are present.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Subject and comparable addresses are present.
+INFO:   ✅ PASS: Proximity appears present and plausibly UAD formatted for all extracted comparables.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Proximity appears present and plausibly UAD formatted for all extracted comparables.
+INFO:   ✅ PASS: Data Source(s) appear present for extracted comparables.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Data Source(s) appear present for extracted comparables.
+INFO:   ✅ PASS: Verification Source(s) appear present for extracted comparables.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Verification Source(s) appear present for extracted comparables.
+INFO:   ✅ PASS: Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Sale/financing/concessions fields appear present for extracted comparables; verify adjustment direction and '0' entries where applicable.
+INFO:   ✅ PASS: Sale date appears present for extracted comparables.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Sale date appears present for extracted comparables.
+INFO:   ✅ PASS: Location ratings appear present for extracted comparables.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Location ratings appear present for extracted comparables.
+INFO:   ✅ PASS: Leasehold/Fee Simple fields appear present for extracted comparables.
+2026-01-17 09:27:14,879 - OCRTest - INFO -   ✅ PASS: Leasehold/Fee Simple fields appear present for extracted comparables.
+INFO:   ✅ PASS: Site sizes appear present for extracted comparables.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Site sizes appear present for extracted comparables.
+INFO:   ✅ PASS: View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: View fields appear present for extracted comparables; verify UAD formatting and '0' entries where applicable.
+INFO:   ✅ PASS: Design/Style fields appear present for extracted comparables; verify UAD formatting manually.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Design/Style fields appear present for extracted comparables; verify UAD formatting manually.
+INFO:   ✅ PASS: Quality ratings appear UAD compliant for extracted comparables.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Quality ratings appear UAD compliant for extracted comparables.
+INFO:   ✅ PASS: Actual age appears present for extracted comparables.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Actual age appears present for extracted comparables.
+INFO:   ✅ PASS: Condition ratings appear UAD compliant for extracted comparables.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Condition ratings appear UAD compliant for extracted comparables.
+WARNING:   🔍 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+2026-01-17 09:27:14,880 - OCRTest - WARNING -   🔍 VERIFY: Subject GLA/room counts not extracted to cross-check against the grid/sketch. Please verify manually.
+INFO:   ✅ PASS: Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Basement/below-grade fields appear present for extracted comparables; verify exit type/UAD formatting manually.
+INFO:   ✅ PASS: Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Functional utility fields appear present for extracted comparables; verify adjustments and commentary where required.
+INFO:   ✅ PASS: Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Heating/Cooling fields appear present for extracted comparables; verify they match Page 1 information.
+INFO:   ✅ PASS: Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Garage/Carport fields appear present for extracted comparables; verify UAD formatting manually.
+INFO:   ✅ PASS: Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Porch/Patio/Deck fields appear present for extracted comparables; verify they match Page 1 or state 'None'.
+WARNING:   🔍 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+2026-01-17 09:27:14,880 - OCRTest - WARNING -   🔍 VERIFY: No listing comparables were detected in extracted grid data. Please verify at least two competing listings/pending sales are provided or explain why not warranted.
+INFO:   ✅ PASS: No unique design characteristics (green/log/ADU) detected for subject.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: No unique design characteristics (green/log/ADU) detected for subject.
+INFO:   ✅ PASS: Subject is not identified as new construction (year built not extracted or older).
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Subject is not identified as new construction (year built not extracted or older).
+INFO:   ✅ PASS: Review of square footage methodology requires manual check of basement/GLA separation.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Review of square footage methodology requires manual check of basement/GLA separation.
+INFO:   ✅ PASS: Comparable photos verification requires manual review of images.
+2026-01-17 09:27:14,880 - OCRTest - INFO -   ✅ PASS: Comparable photos verification requires manual review of images.
+INFO:   Step 5: Executing SmartQCProcessor (layout-aware)...
+2026-01-17 09:27:14,880 - OCRTest - INFO -   Step 5: Executing SmartQCProcessor (layout-aware)...
+2026-01-17 09:27:14,882 - app.services.extraction_service - WARNING - Invalid property address extracted: '000' - rejecting
+2026-01-17 09:27:14,882 - app.services.extraction_service - INFO - Recovered property address via heuristic scan: '4916 S Linder Ave' (City: Chicago, State: IL, Zip: 60638)
+2026-01-17 09:27:15,344 - app.qc_processor - INFO - Executing rule engine
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule S-2 VERIFY: Missing required field: Borrower Name (Report)
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule S-4 VERIFY: Missing required field: Missing Tax/Legal Fields: Tax Year, Real Estate Taxes
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule S-8 VERIFY: Missing required field: Special Assessments
+2026-01-17 09:27:15,344 - SmartIdentifier - INFO - Rule S-10 FAIL: Please correct the lender's address so it reflects as: 14801 Quorum Dr, Ste 300 Dallas TX 75254
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule S-11 VERIFY: Missing required field: Property Rights Appraised
+2026-01-17 09:27:15,344 - SmartIdentifier - INFO - Rule S-12 FAIL: Prior sale/offered status (Yes/No) is not indicated in subject section.
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule C-1 VERIFY: Appraiser must provide detailed reasoning and analysis of the contract including sale type and results.
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule C-2 VERIFY: Contract Price not extracted from report. Please verify manually.
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule C-3 VERIFY: Is Seller Owner of Public Record checkbox not detected. Please verify manually.
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule C-4 VERIFY: Financial Assistance checkbox (Yes/No) not detected. Please verify manually.
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule C-5 VERIFY: Personal property items are listed. Please explicitly state whether they contribute to value.
+2026-01-17 09:27:15,344 - SmartIdentifier - WARNING - Rule N-6 VERIFY: Missing required field: Neighborhood Description
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule I-2 VERIFY: Foundation fields are present. Verify Foundation matches Sales Comparison grid section.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule I-3 VERIFY: Exterior Description fields are present. Verify values match Sales Comparison grid section.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule I-7 VERIFY: Above-grade room count fields are present. Verify below-grade areas are excluded and counts match Sales Comparison grid.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule I-9 VERIFY: Condition rating is UAD compliant. Verify rating matches photos/commentary and is supported by effective age.
+2026-01-17 09:27:15,345 - SmartIdentifier - INFO - Rule SCA-1 FAIL: The '# Listings' / '# Sales' market summary counts above the Sales Comparison grid are inconsistent with the comparables shown in the grid.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-3 VERIFY: Comparable address is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-4 VERIFY: Proximity to subject is missing for one or more comparables; please provide proximity (minimum 0.01 miles with direction) or verify map support.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-5 VERIFY: Data Source(s) are missing for one or more comparables. Please provide specific MLS name/MLS# and DOM (or Unk with commentary).
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-6 VERIFY: Verification Source(s) are missing for one or more closed comparable sales; please provide a full specific source name (e.g., County Assessor Tax Card).
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-7 VERIFY: Sale/financing/concessions field is missing for one or more comparables; please correct or comment (and add '0' where no adjustment is applied for UAD compliance).
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-8 VERIFY: Sale date is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-9 VERIFY: Location rating is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-10 VERIFY: Leasehold/Fee Simple field is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-11 VERIFY: Site size is missing for one or more comparables; please provide with proper units (SF if <1 acre, acreage if >=1 acre).
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-12 VERIFY: View field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-13 VERIFY: Design/Style field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-14 VERIFY: Quality rating (Q1-Q6) is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-15 VERIFY: Actual age is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-16 VERIFY: Condition rating (C1-C6) is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-17 VERIFY: GLA is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-18 VERIFY: Basement/below-grade data is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-19 VERIFY: Functional utility field is missing for one or more comparables; please correct or comment. If no adjustment is applied for differences, enter '0' for UAD compliance.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-20 VERIFY: Heating/Cooling field is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-21 VERIFY: Garage/Carport data is missing for one or more comparables; please correct or comment.
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-22 VERIFY: Porch/Patio/Deck field is missing for one or more comparables; please correct or comment (or explicitly state 'None').
+2026-01-17 09:27:15,345 - SmartIdentifier - WARNING - Rule SCA-23 VERIFY: Listing comparable(s) detected. Please verify list-to-sales price ratio adjustment is applied or explain why not warranted.
+INFO:   ✓ QCProcessor: 36 PASS, 3 FAIL, 35 VERIFY
+2026-01-17 09:27:15,346 - OCRTest - INFO -   ✓ QCProcessor: 36 PASS, 3 FAIL, 35 VERIFY
+INFO:   ✓ Completed: 36 PASS, 9 FAIL, 29 VERIFY
+2026-01-17 09:27:15,347 - OCRTest - INFO -   ✓ Completed: 36 PASS, 9 FAIL, 29 VERIFY
+INFO: 
+======================================================================
+2026-01-17 09:27:15,347 - OCRTest - INFO - 
+======================================================================
+INFO: SUMMARY REPORT
+2026-01-17 09:27:15,347 - OCRTest - INFO - SUMMARY REPORT
+INFO: ======================================================================
+2026-01-17 09:27:15,347 - OCRTest - INFO - ======================================================================
+
+======================================================================
+TEST RESULTS SUMMARY
+======================================================================
+
+apprisal_002:
+  Status: ✓ OK
+  OCR: 34 appraisal pages, 10 engagement pages
+  Rules: 74 executed
+    PASS: 35
+    FAIL: 9
+    VERIFY: 30
+  QCProcessor (layout-aware): 74 executed
+    PASS: 37
+    FAIL: 2
+    VERIFY: 35
+
+apprisal_003:
+  Status: ✓ OK
+  OCR: 45 appraisal pages, 10 engagement pages
+  Rules: 74 executed
+    PASS: 34
+    FAIL: 9
+    VERIFY: 31
+  QCProcessor (layout-aware): 74 executed
+    PASS: 34
+    FAIL: 3
+    VERIFY: 37
+
+apprisal_004:
+  Status: ✓ OK
+  OCR: 30 appraisal pages, 10 engagement pages
+  Rules: 74 executed
+    PASS: 36
+    FAIL: 9
+    VERIFY: 29
+  QCProcessor (layout-aware): 74 executed
+    PASS: 36
+    FAIL: 3
+    VERIFY: 35
+
+----------------------------------------------------------------------
+TOTALS:
+  Files tested: 3
+  Total rules executed: 222
+  Total PASS: 105
+  Total FAIL: 27
+  Total VERIFY: 90
+======================================================================
+
+----------------------------------------------------------------------
+QCProcessor TOTALS (layout-aware):
+  Files tested: 3
+  Total rules executed: 222
+  Total PASS: 107
+  Total FAIL: 8
+  Total VERIFY: 107
+======================================================================
+
+----------------------------------------------------------------------
+SCA RULES SUMMARY (engine-only):
+  PASS: 67
+  FAIL: 0
+  VERIFY: 14
+
+----------------------------------------------------------------------
+SCA RULES SUMMARY (QCProcessor layout-aware):
+  PASS: 14
+  FAIL: 3
+  VERIFY: 64
+
+----------------------------------------------------------------------
+TOP RULE FAILURES (QCProcessor layout-aware):
+  S-10: FAIL 3 | VERIFY 0 | PASS 0
+  SCA-1: FAIL 3 | VERIFY 0 | PASS 0
+  S-12: FAIL 2 | VERIFY 0 | PASS 1
+INFO: 
+Summary saved to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/test_summary.json
+2026-01-17 09:27:15,349 - OCRTest - INFO - 
+Summary saved to: /Users/harshalsmac/WORK/ardur/ardurApprisal/apprisalArdur/ocr-service/test_output/test_summary.json
+INFO: TEST COMPLETED
+2026-01-17 09:27:15,349 - OCRTest - INFO - TEST COMPLETED
