@@ -31,3 +31,27 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+logs/
+*.log
+
+# DB
+*.sqlite3
+
+# Uploads (VERY IMPORTANT)
+uploads/
+ocr-service/uploads/
+
+# ZIP
+*.zip
+
+# Env
+.env
