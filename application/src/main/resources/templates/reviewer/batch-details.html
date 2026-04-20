@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Batch Review')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-reviewer}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header">
+                <div class="flex justify-between items-center"
+                    style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div>
+                        <h1 class="page-title">Batch Review</h1>
+                        <p class="page-subtitle" th:text="'Batch: ' + ${batch.parentBatchId}">Batch: BATCH_001</p>
+                    </div>
+                    <a th:href="@{/reviewer/batches}" class="btn btn-secondary">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        Back to Batches
+                    </a>
+                </div>
+            </header>
+
+            <div class="page-content">
+                <!-- Alerts -->
+                <div th:if="${success}" class="alert alert-success animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span th:text="${success}">Success message</span>
+                </div>
+                <div th:if="${error}" class="alert alert-error animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span th:text="${error}">Error message</span>
+                </div>
+
+                <!-- Batch Info Card -->
+                <div class="card mb-xl">
+                    <div class="card-header">
+                        <h3 class="card-title">Batch Information</h3>
+                        <span class="badge"
+                            th:classappend="${batch.status.name() == 'COMPLETED'} ? 'badge-success' : (${batch.status.name() == 'IN_REVIEW'} ? 'badge-warning' : 'badge-info')"
+                            th:text="${batch.status}">STATUS</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-grid">
+                            <div>
+                                <div class="text-muted text-sm">Client</div>
+                                <div class="font-medium" th:text="${batch.client.name}">Client Name</div>
+                            </div>
+                            <div>
+                                <div class="text-muted text-sm">Total Files</div>
+                                <div class="font-medium" th:text="${batch.files.size()}">0</div>
+                            </div>
+                            <div>
+                                <div class="text-muted text-sm">Created</div>
+                                <div class="font-medium"
+                                    th:text="${#temporals.format(batch.createdAt, 'MMM dd, yyyy HH:mm')}">Jan 01, 2025
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-muted text-sm">Last Updated</div>
+                                <div class="font-medium"
+                                    th:text="${#temporals.format(batch.updatedAt, 'MMM dd, yyyy HH:mm')}">Jan 01, 2025
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="flex gap-md" style="display: flex; gap: 16px;">
+                            <form th:if="${batch.status.name() == 'REVIEW_PENDING'}"
+                                th:action="@{/reviewer/batches/{id}/start(id=${batch.id})}" method="post">
+                                <button type="submit" class="btn btn-primary">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Start Review
+                                </button>
+                            </form>
+                            <form th:if="${batch.status.name() == 'IN_REVIEW'}"
+                                th:action="@{/reviewer/batches/{id}/complete(id=${batch.id})}" method="post"
+                                data-confirm="Are you sure you want to mark this batch as completed?">
+                                <button type="submit" class="btn btn-primary">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Complete Review
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Files List -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Files to Review</h3>
+                        <span class="badge badge-neutral"
+                            th:text="${#lists.size(qcResults)} + ' files need verification'">0 files</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Type</th>
+                                    <th>QC Decision</th>
+                                    <th>Items to Review</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="qcResult : ${qcResults}">
+                                    <td>
+                                        <div class="flex items-center gap-sm"
+                                            style="display: flex; align-items: center; gap: 8px;">
+                                            <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24" style="opacity: 0.5;">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <span th:text="${qcResult.batchFile.filename}">document.pdf</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${qcResult.batchFile.fileType.name() == 'APPRAISAL'} ? 'badge-info' : 'badge-neutral'"
+                                            th:text="${qcResult.batchFile.fileType}">APPRAISAL</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${qcResult.qcDecision.name() == 'AUTO_PASS'} ? 'badge-success' : (${qcResult.qcDecision.name() == 'AUTO_FAIL'} ? 'badge-error' : 'badge-warning')"
+                                            th:text="${qcResult.qcDecision}">TO_VERIFY</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted"
+                                            th:text="${qcResult.verifyCount + qcResult.warningCount + qcResult.failedCount} + ' items'">3
+                                            items</span>
+                                    </td>
+                                    <td>
+                                        <a th:if="${qcResult.qcDecision.name() == 'TO_VERIFY' && qcResult.finalDecision == null}"
+                                            th:href="@{/reviewer/verify/{id}(id=${qcResult.id})}"
+                                            class="btn btn-primary btn-sm">
+                                            <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                            </svg>
+                                            Verify
+                                        </a>
+                                        <span th:if="${qcResult.finalDecision != null}" class="badge badge-success">
+                                            Reviewed
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr th:if="${#lists.isEmpty(qcResults)}">
+                                    <td colspan="5" class="text-center text-muted">No files requiring verification in
+                                        this batch</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>

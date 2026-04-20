@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Batch Details')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-client}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="page-title" th:text="${batch.parentBatchId}">BATCH_001</h1>
+                        <p class="page-subtitle"
+                            th:text="'Uploaded on ' + ${#temporals.format(batch.createdAt, 'MMMM dd, yyyy HH:mm')}">
+                            Uploaded on Jan 01, 2025</p>
+                    </div>
+                    <a th:href="@{/client/batches}" class="btn btn-secondary">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        Back to Batches
+                    </a>
+                </div>
+            </header>
+
+            <div class="page-content">
+                <!-- Status Card -->
+                <div class="card mb-lg">
+                    <div class="card-body">
+                        <div class="batch-status-header">
+                            <div class="batch-status-info">
+                                <span class="badge badge-lg" id="batchStatusBadge"
+                                    th:classappend="${batch.status.name() == 'COMPLETED'} ? 'badge-success' : (${batch.status.name().contains('ERROR') || batch.status.name().contains('FAILED')} ? 'badge-error' : (${batch.status.name().contains('REVIEW')} ? 'badge-warning' : 'badge-info'))"
+                                    th:text="${batch.status}">STATUS</span>
+                                <span class="text-muted ml-md"
+                                    th:text="'Last updated: ' + ${#temporals.format(batch.updatedAt, 'HH:mm')}">12:00</span>
+                            </div>
+                            <div class="batch-actions" th:if="${batch.status.name() == 'COMPLETED'}">
+                                <button class="btn btn-primary btn-sm">
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Download Report
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="mt-lg" th:if="${batch.files != null && !batch.files.isEmpty()}">
+                            <div class="flex justify-between mb-sm">
+                                <span class="text-sm text-muted">Processing Progress</span>
+                                <span class="text-sm"
+                                    th:text="${completedFiles} + '/' + ${batch.files.size()} + ' files'">0/0
+                                    files</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-bar-fill" id="batchProgress"
+                                    th:style="'width: ' + (${batch.files.size() > 0} ? ${(completedFiles * 100) / batch.files.size()} : 0) + '%'">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stat-grid mb-lg">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Files</div>
+                        <div class="stat-value" th:text="${batch.files.size()}">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Appraisal Files</div>
+                        <div class="stat-value" th:text="${appraisalCount}">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Engagement Files</div>
+                        <div class="stat-value" th:text="${engagementCount}">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Completed</div>
+                        <div class="stat-value" style="color: var(--color-success);" th:text="${completedFiles}">0</div>
+                    </div>
+                </div>
+
+                <!-- Files Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Files</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Type</th>
+                                    <th>Size</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="file : ${batch.files}">
+                                    <td>
+                                        <div class="flex items-center gap-sm">
+                                            <svg width="16" height="16" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24" class="text-muted">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <span th:text="${file.filename}">document.pdf</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-neutral" th:text="${file.fileType}">TYPE</span>
+                                    </td>
+                                    <td class="text-muted"
+                                        th:text="${#numbers.formatDecimal(file.fileSize / 1024.0, 1, 1)} + ' KB'">0 KB
+                                    </td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${file.status.name() == 'COMPLETED'} ? 'badge-success' : (${file.status.name() == 'ERROR'} ? 'badge-error' : (${file.status.name() == 'PROCESSING'} ? 'badge-warning' : 'badge-info'))"
+                                            th:text="${file.status}">STATUS</span>
+                                    </td>
+                                </tr>
+                                <tr th:if="${batch.files.isEmpty()}">
+                                    <td colspan="4" class="text-center text-muted">No files in this batch</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <style>
+        .batch-status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .batch-status-info {
+            display: flex;
+            align-items: center;
+        }
+
+        .badge-lg {
+            font-size: var(--font-size-sm);
+            padding: var(--spacing-sm) var(--spacing-md);
+        }
+
+        .ml-md {
+            margin-left: var(--spacing-md);
+        }
+    </style>
+
+    <script src="/js/main.js"></script>
+    <script th:inline="javascript">
+        // Real-time status polling
+        const batchId = /*[[${batch.id}]]*/ 0;
+        if (batchId && document.getElementById('batchStatusBadge')) {
+            Pages.batchStatus(batchId);
+        }
+    </script>
+</body>
+
+</html>

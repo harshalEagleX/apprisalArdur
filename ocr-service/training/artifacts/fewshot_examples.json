@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-04-08T11:12:12.272433",
+  "count": 1,
+  "examples": [
+    {
+      "field": "borrower_name",
+      "bad_extraction": "John",
+      "correct_answer": "John A Doe",
+      "pattern_learned": "When model said 'John', correct was 'John A Doe'",
+      "created_at": "2026-04-08T11:07:58.991389"
+    }
+  ]
+}

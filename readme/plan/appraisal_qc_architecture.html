@@ -1,0 +1,227 @@
+
+<style>
+.tb{padding:6px 14px;font-size:13px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer}
+.tb.on{background:var(--color-background-secondary);color:var(--color-text-primary);font-weight:500}
+.pc{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px;min-width:0}
+.pt{font-size:11px;font-weight:500;padding:2px 10px;border-radius:99px;display:inline-block;margin-bottom:8px}
+.pi{font-size:12px;color:var(--color-text-secondary);padding:4px 0;border-bottom:0.5px solid var(--color-border-tertiary);line-height:1.5}
+.pi:last-child{border-bottom:none}
+.cr{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--border-radius-md);margin-bottom:8px;border:0.5px solid var(--color-border-tertiary)}
+.csc{width:52px;min-width:52px;height:52px;border-radius:var(--border-radius-md);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;text-align:center;line-height:1.3}
+</style>
+
+<div style="display:flex;gap:6px;margin-bottom:18px">
+  <button class="tb on" onclick="sw('arch',this)">Architecture</button>
+  <button class="tb" onclick="sw('loop',this)">Learning loop</button>
+  <button class="tb" onclick="sw('plan',this)">Roadmap</button>
+</div>
+
+<div id="t-arch">
+<svg width="100%" viewBox="0 0 680 660" role="img">
+<title>Appraisal QC system architecture</title>
+<desc>Flow from client upload through Python OCR fact extraction, optional local Ollama assist, Java rule decisions, reviewer workflow, and a feedback loop that updates rules over time without external AI APIs.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+<g class="node c-gray" onclick="sendPrompt('Explain the different ways to trigger batch processing — client upload, admin trigger, and API — in the appraisal platform.')">
+  <rect x="230" y="40" width="220" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="62" text-anchor="middle" dominant-baseline="central">Client / admin</text>
+</g>
+
+<line x1="340" y1="84" x2="340" y2="120" class="arr" marker-end="url(#arrow)"/>
+
+<g class="node c-gray" onclick="sendPrompt('What should BatchService and FileMatchingService validate and how should missing or mismatched files be handled?')">
+  <rect x="195" y="120" width="290" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="141" text-anchor="middle" dominant-baseline="central">Batch &amp; file service</text>
+  <text class="ts" x="340" y="160" text-anchor="middle" dominant-baseline="central">Extract · validate · match files</text>
+</g>
+
+<path d="M260,176 L260,196 L237,196 L237,215" fill="none" stroke="var(--b)" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M420,176 L420,200 L495,200 L495,215" fill="none" stroke="var(--t)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+<text class="ts" x="457" y="190" text-anchor="middle">low conf.</text>
+
+<g class="node c-teal" onclick="sendPrompt('What exactly should Python /qc/extract return, and what business logic should it NOT contain? No rules, only facts.')">
+  <rect x="125" y="215" width="224" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="237" y="236" text-anchor="middle" dominant-baseline="central">Python /qc/extract</text>
+  <text class="ts" x="237" y="255" text-anchor="middle" dominant-baseline="central">Facts + confidence only</text>
+</g>
+
+<g class="node c-purple" onclick="sendPrompt('How should Ollama be used for low-confidence field suggestions while Java remains the only place that makes QC decisions?')">
+  <rect x="395" y="215" width="200" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="495" y="236" text-anchor="middle" dominant-baseline="central">Local Ollama assist</text>
+  <text class="ts" x="495" y="255" text-anchor="middle" dominant-baseline="central">Suggest only, never decide</text>
+</g>
+
+<path d="M237,271 L237,292 L320,292 L320,310" fill="none" stroke="var(--b)" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M495,271 L495,292 L360,292 L360,310" fill="none" stroke="var(--t)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+
+<g class="node c-blue" onclick="sendPrompt('Show me the Java AppraisalRule interface with code(), applies(), and evaluate() methods, and example SubjectRules implementation.')">
+  <rect x="195" y="310" width="290" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="331" text-anchor="middle" dominant-baseline="central">Spring Boot rule engine</text>
+  <text class="ts" x="340" y="350" text-anchor="middle" dominant-baseline="central">Deterministic, version-controlled</text>
+</g>
+
+<line x1="340" y1="366" x2="340" y2="400" class="arr" marker-end="url(#arrow)"/>
+
+<g class="node c-gray" onclick="sendPrompt('What fields should the QC results entity store for confidence scoring, rule results, and reviewer workflow support?')">
+  <rect x="215" y="400" width="250" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="421" text-anchor="middle" dominant-baseline="central">QC results</text>
+  <text class="ts" x="340" y="440" text-anchor="middle" dominant-baseline="central">Confidence scored per field</text>
+</g>
+
+<line x1="340" y1="456" x2="340" y2="470" class="arr" marker-end="url(#arrow)"/>
+
+<g class="node c-amber" onclick="sendPrompt('How should the reviewer queue be assigned, sorted by confidence score, and what does the correction UI look like?')">
+  <rect x="195" y="470" width="290" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="491" text-anchor="middle" dominant-baseline="central">Reviewer workflow</text>
+  <text class="ts" x="340" y="510" text-anchor="middle" dominant-baseline="central">Sorted low-confidence first</text>
+</g>
+
+<line x1="340" y1="526" x2="340" y2="560" class="arr" marker-end="url(#arrow)"/>
+
+<g class="node c-green" onclick="sendPrompt('How does the pattern miner detect recurring corrections and promote them to Java rules? Show me the SQL and promotion logic.')">
+  <rect x="195" y="560" width="290" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="581" text-anchor="middle" dominant-baseline="central">Feedback + pattern miner</text>
+  <text class="ts" x="340" y="600" text-anchor="middle" dominant-baseline="central">Corrections become new rules</text>
+</g>
+
+<path d="M195,588 L110,588 L110,338 L195,338" fill="none" stroke="var(--color-text-success)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<text class="ts" x="44" y="474" text-anchor="start" style="fill:var(--color-text-success)">rules</text>
+<text class="ts" x="44" y="488" text-anchor="start" style="fill:var(--color-text-success)">update</text>
+
+<line x1="195" y1="638" x2="225" y2="638" stroke="var(--b)" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text class="ts" x="232" y="641" dominant-baseline="central">main flow</text>
+<line x1="325" y1="638" x2="355" y2="638" stroke="var(--t)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+<text class="ts" x="362" y="641" dominant-baseline="central">conditional / optional</text>
+</svg>
+</div>
+
+<div id="t-loop" style="display:none;padding:4px 0">
+  <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:12px;letter-spacing:.06em">STEP 1 — CONFIDENCE ROUTING AFTER EXTRACTION</div>
+  <div class="cr">
+    <div class="csc" style="background:var(--color-background-success);color:var(--color-text-success);border:0.5px solid var(--color-border-success)">85%+</div>
+    <div>
+      <div style="font-size:13px;font-weight:500;color:var(--color-text-success);margin-bottom:3px">Auto QC decision</div>
+      <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.5">Rule evaluates and stores result as PASS or FAIL automatically. No reviewer needed.</div>
+    </div>
+  </div>
+  <div class="cr">
+    <div class="csc" style="background:var(--color-background-warning);color:var(--color-text-warning);border:0.5px solid var(--color-border-warning)">60–85%</div>
+    <div>
+      <div style="font-size:13px;font-weight:500;color:var(--color-text-warning);margin-bottom:3px">Standard reviewer queue</div>
+      <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.5">Reviewer sees extracted value with source page highlight. One-click confirm or correct.</div>
+    </div>
+  </div>
+  <div class="cr">
+    <div class="csc" style="background:var(--color-background-danger);color:var(--color-text-danger);border:0.5px solid var(--color-border-danger)">&lt;60%</div>
+    <div>
+      <div style="font-size:13px;font-weight:500;color:var(--color-text-danger);margin-bottom:3px">Ollama assist + reviewer</div>
+      <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.5">Local Ollama suggests a value for the uncertain field. Its output is treated as untrusted context. Reviewer confirms or overrides.</div>
+    </div>
+  </div>
+
+  <div style="margin:14px 0 0;padding:12px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:12px;color:var(--color-text-secondary);line-height:1.7">
+    <span style="font-weight:500">Decision boundary:</span> Python extracts facts and confidence only. Ollama may propose a field value for low-confidence cases. Java rules decide PASS, FAIL, VERIFY, AUTO_FAIL, or SKIPPED. Reviewer corrections are the training signal.
+  </div>
+
+  <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin:18px 0 10px;letter-spacing:.06em">STEP 2 — REVIEWER CORRECTS, CORRECTION IS STORED</div>
+  <div style="padding:10px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:12px;color:var(--color-text-secondary);line-height:1.8;font-family:var(--font-mono)">
+    correction_log {<br>
+    &nbsp;&nbsp;qc_result_id, field_catalog_id,<br>
+    &nbsp;&nbsp;extracted_value, corrected_value,<br>
+    &nbsp;&nbsp;confidence_score, extraction_method,<br>
+    &nbsp;&nbsp;source_page, source_bbox,<br>
+    &nbsp;&nbsp;reviewer_id, reviewed_at,<br>
+    &nbsp;&nbsp;pattern_candidate_id<br>
+    }
+  </div>
+
+  <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin:18px 0 10px;letter-spacing:.06em">STEP 3 — PATTERN MINER RUNS NIGHTLY</div>
+  <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.7">
+    Groups corrections by <code>field_key + extraction_method + source_context</code>. Detects patterns like <em>"subject.address is wrong when page type is scanned header"</em>. When N ≥ 5 consistent corrections match, the pattern is flagged for admin review as a Java rule, Python regex, or extraction heuristic.
+  </div>
+
+  <div style="padding:10px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:12px;color:var(--color-text-secondary);line-height:1.8;font-family:var(--font-mono);margin-top:10px">
+    pattern_candidate {<br>
+    &nbsp;&nbsp;field_key, extraction_method,<br>
+    &nbsp;&nbsp;source_context_hint,<br>
+    &nbsp;&nbsp;sample_correction_count,<br>
+    &nbsp;&nbsp;proposed_fix,<br>
+    &nbsp;&nbsp;status,<br>
+    &nbsp;&nbsp;promoted_rule_code<br>
+    }
+  </div>
+
+  <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin:18px 0 10px;letter-spacing:.06em">STEP 4 — PATTERN PROMOTED TO RULE</div>
+  <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.7">
+    Admin approves the promoted regex, heuristic, or deterministic Java rule. Java rule engine picks it up on next deploy. Future extractions of that pattern get higher confidence and fewer reviewer interruptions over time.
+  </div>
+
+  <div style="margin-top:18px;padding:12px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:12px;color:var(--color-text-secondary);line-height:1.7">
+    <span style="font-weight:500">No external AI dependency.</span> Python uses regex + PyMuPDF + Tesseract on CPU. Ollama is local, optional, and advisory. Pattern mining is SQL aggregation. Rules remain deterministic and auditable in Java.
+  </div>
+</div>
+
+<div id="t-plan" style="display:none">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
+  <div class="pc">
+    <span class="pt" style="background:var(--color-background-danger);color:var(--color-text-danger)">Phase 0 · 2 weeks · now</span>
+    <div style="font-size:13px;font-weight:500;margin-bottom:10px">Fix critical bugs</div>
+    <div class="pi">Fix _extract_contract_section name mismatch in extraction_service</div>
+    <div class="pi">Fix missing advanced_parser import in qc_processor</div>
+    <div class="pi">Add Stage 9 handlers for 3 silently skipped rules</div>
+    <div class="pi">Lock /api/auth/register — never accept role from request body</div>
+    <div class="pi">Add file ownership check in FileController</div>
+    <div class="pi">Replace ThreadLocal in ImpersonationService with request-scoped bean</div>
+    <div class="pi">Restrict CORS in main.py to your actual domain</div>
+    <div class="pi">Remove feedback.sqlite3 + logs from repo (PII risk)</div>
+    <div class="pi">Remove dead code after FAIL return in S-2 rule</div>
+    <div class="pi">Write first pytest suite — currently zero Python tests</div>
+  </div>
+  <div class="pc">
+    <span class="pt" style="background:var(--color-background-warning);color:var(--color-text-warning)">Phase 1 · 1–2 months</span>
+    <div style="font-size:13px;font-weight:500;margin-bottom:10px">Feedback infrastructure</div>
+    <div class="pi">Add confidence_score to every extracted field in Python response</div>
+    <div class="pi">Add FeedbackStore entity + correction REST API with source_bbox</div>
+    <div class="pi">Add inline correction UI to reviewer (edit + save with source page)</div>
+    <div class="pi">Route queue by confidence score — not just TO_VERIFY bucket</div>
+    <div class="pi">Assign reviewer to specific results, not global queue</div>
+    <div class="pi">Implement ENV/XML parser (currently TODO)</div>
+    <div class="pi">Add FieldCatalog + AppraisalFieldValue schema</div>
+    <div class="pi">Fix config drift — honor pipeline_config.yaml values in code</div>
+  </div>
+  <div class="pc">
+    <span class="pt" style="background:var(--color-background-info);color:var(--color-text-info)">Phase 2 · 2–4 months</span>
+    <div style="font-size:13px;font-weight:500;margin-bottom:10px">Learning + Ollama assist</div>
+    <div class="pi">Enable Ollama only for fields below 60% confidence threshold</div>
+    <div class="pi">Store Ollama suggestion separately from extracted value</div>
+    <div class="pi">Build PatternMiner nightly scheduled job</div>
+    <div class="pi">Pattern → rule promotion with admin approval step</div>
+    <div class="pi">Move Subject + Contract rules from Python to Java</div>
+    <div class="pi">Java calls /qc/extract only — retire /qc/process</div>
+    <div class="pi">Add Neighborhood + Site rules in Java</div>
+    <div class="pi">Wire AUTO_FAIL for hard-fail conditions</div>
+    <div class="pi">Audit trail for rule version changes</div>
+    <div class="pi">Delete duplicate app/api/api_v1 folder</div>
+  </div>
+  <div class="pc">
+    <span class="pt" style="background:var(--color-background-success);color:var(--color-text-success)">Phase 3 · 4–8 months</span>
+    <div style="font-size:13px;font-weight:500;margin-bottom:10px">Full checklist + local assist</div>
+    <div class="pi">Improvement, Sales grid, Reconciliation rules in Java</div>
+    <div class="pi">FHA / USDA specific rule sets</div>
+    <div class="pi">Signature, photos, maps validation</div>
+    <div class="pi">1007 / 216 form type support</div>
+    <div class="pi">Commentary hints via local Ollama, reviewer-approved only</div>
+    <div class="pi">Image review stays manual until deterministic checks are proven</div>
+    <div class="pi">Reviewer question drafts must cite rule code + source field</div>
+    <div class="pi">Fine-tune local model only after enough correction data exists</div>
+  </div>
+  </div>
+</div>
+
+<script>
+function sw(id,el){
+  ['arch','loop','plan'].forEach(t=>{document.getElementById('t-'+t).style.display=t===id?'block':'none'});
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+}
+</script>

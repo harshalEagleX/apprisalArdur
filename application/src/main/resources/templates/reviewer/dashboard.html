@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('Reviewer Dashboard')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-reviewer}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">Review Dashboard</h1>
+                <p class="page-subtitle">Manage and complete assigned batch reviews</p>
+            </header>
+
+            <div class="page-content">
+                <!-- Alerts -->
+                <div th:if="${success}" class="alert alert-success animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span th:text="${success}">Success message</span>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stat-grid mb-xl">
+                    <div class="stat-card animate-slide-up">
+                        <div class="stat-icon">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                        </div>
+                        <div class="stat-value" th:text="${metrics != null} ? ${metrics.assignedBatches} : '0'">0</div>
+                        <div class="stat-label">Assigned to You</div>
+                    </div>
+
+                    <div class="stat-card animate-slide-up" style="animation-delay: 50ms;">
+                        <div class="stat-icon"
+                            style="background: rgba(99, 102, 241, 0.2); color: var(--color-accent-primary);">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div class="stat-value" th:text="${metrics != null} ? ${metrics.inReview} : '0'">0</div>
+                        <div class="stat-label">In Progress</div>
+                    </div>
+
+                    <div class="stat-card animate-slide-up" style="animation-delay: 100ms;">
+                        <div class="stat-icon"
+                            style="background: rgba(16, 185, 129, 0.2); color: var(--color-success);">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div class="stat-value" th:text="${metrics != null} ? ${metrics.completed} : '0'">0</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+
+                    <div class="stat-card animate-slide-up" style="animation-delay: 150ms;">
+                        <div class="stat-icon">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div class="stat-value" th:text="${metrics != null} ? ${metrics.totalFiles} : '0'">0</div>
+                        <div class="stat-label">Total Files</div>
+                    </div>
+                </div>
+
+                <!-- Assigned Batches -->
+                <div class="card mb-xl">
+                    <div class="card-header">
+                        <h3 class="card-title">Batches Assigned to You</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Batch ID</th>
+                                    <th>Client</th>
+                                    <th>Status</th>
+                                    <th>Files</th>
+                                    <th>Assigned</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="batch : ${assignedBatches}">
+                                    <td>
+                                        <span class="font-medium" th:text="${batch.parentBatchId}">BATCH_001</span>
+                                    </td>
+                                    <td th:text="${batch.client.name}">Client Name</td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${batch.status.name() == 'COMPLETED'} ? 'badge-success' : (${batch.status.name() == 'IN_REVIEW'} ? 'badge-warning' : 'badge-info')"
+                                            th:text="${batch.status}">STATUS</span>
+                                    </td>
+                                    <td>
+                                        <div class="file-count">
+                                            <span th:text="${batch.files.size()}">0</span> files
+                                        </div>
+                                    </td>
+                                    <td th:text="${#temporals.format(batch.updatedAt, 'MMM dd, yyyy')}">Jan 01, 2025
+                                    </td>
+                                    <td>
+                                        <div class="flex gap-sm">
+                                            <a th:href="@{/reviewer/batches/{id}(id=${batch.id})}"
+                                                class="btn btn-primary btn-sm">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                                Review
+                                            </a>
+                                            <form th:action="@{/reviewer/batches/{id}/start(id=${batch.id})}"
+                                                method="post" th:if="${batch.status.name() == 'REVIEW_PENDING'}">
+                                                <button type="submit" class="btn btn-secondary btn-sm">Start
+                                                    Review</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr th:if="${assignedBatches == null || assignedBatches.isEmpty()}">
+                                    <td colspan="6" class="text-center text-muted">
+                                        <div class="py-xl">
+                                            <svg width="48" height="48" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24" style="margin: 0 auto 16px; opacity: 0.3;">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                            </svg>
+                                            <p>No batches assigned to you</p>
+                                            <p class="text-sm mt-sm">Batches will appear here when assigned by an admin
+                                            </p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Your Recent Activity</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="activity-list" th:if="${recentActivity != null && !recentActivity.isEmpty()}">
+                            <div class="activity-item" th:each="activity : ${recentActivity}">
+                                <div class="activity-icon"
+                                    th:classappend="${activity.action.contains('COMPLETED')} ? 'activity-success' : ''">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div class="activity-content">
+                                    <div class="activity-text" th:text="${activity.action}">Completed review</div>
+                                    <div class="activity-time"
+                                        th:text="${#temporals.format(activity.createdAt, 'MMM dd, HH:mm')}">Jan 01,
+                                        12:00</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div th:if="${recentActivity == null || recentActivity.isEmpty()}"
+                            class="text-center text-muted">
+                            No recent activity
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <style>
+        .file-count {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: var(--color-bg-glass);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-sm);
+        }
+
+        .activity-success {
+            background: rgba(16, 185, 129, 0.2) !important;
+            color: var(--color-success) !important;
+        }
+
+        .py-xl {
+            padding-top: var(--spacing-xl);
+            padding-bottom: var(--spacing-xl);
+        }
+    </style>
+
+    <script src="/js/main.js"></script>
+</body>
+
+</html>

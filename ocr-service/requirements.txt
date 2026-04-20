@@ -1,0 +1,41 @@
+# Python 3.11 compatible requirements for OCR Service
+# Install with: pip install -r requirements.txt
+# Then run: python -m spacy download en_core_web_md
+
+# Web Framework
+fastapi>=0.100.0,<0.115.0
+uvicorn>=0.23.0,<0.31.0
+python-multipart>=0.0.6
+
+# PDF Processing
+pymupdf>=1.23.0,<1.25.0
+Pillow>=10.0.0,<11.0.0
+pdf2image>=1.16.3
+
+# Image Processing
+opencv-python>=4.8.0
+
+# Data Validation
+pydantic>=2.0.0,<3.0.0
+
+# OCR
+pytesseract>=0.3.10
+
+# HTTP Client
+httpx>=0.24.0,<0.28.0
+
+# Local Ollama extraction assist uses HTTP via httpx.
+
+# Feedback storage (PostgreSQL optional)
+psycopg2-binary>=2.9.9
+
+# NLP - spaCy for text processing
+spacy>=3.7.0,<3.8.0
+numpy>=1.24.0,<2.0.0
+
+# Note: After installing, download the spaCy model:
+# python -m spacy download en_core_web_md
+
+# System Dependencies (install manually):
+# macOS: brew install poppler tesseract
+# Ubuntu/Debian: sudo apt-get install poppler-utils tesseract-ocr

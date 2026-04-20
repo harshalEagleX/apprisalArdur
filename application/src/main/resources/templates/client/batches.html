@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('My Batches')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-client}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header flex justify-between items-center">
+                <div>
+                    <h1 class="page-title">My Batches</h1>
+                    <p class="page-subtitle" th:if="${client != null}"
+                        th:text="'View all batches for ' + ${client.name}">View all your batches</p>
+                </div>
+                <a th:href="@{/client/upload}" class="btn btn-primary">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload New
+                </a>
+            </header>
+
+            <div class="page-content">
+                <!-- Error Alert -->
+                <div th:if="${error}" class="alert alert-error">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span th:text="${error}">Error message</span>
+                </div>
+
+                <!-- Batches Table -->
+                <div class="card" th:if="${batches != null}">
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Batch ID</th>
+                                    <th>Status</th>
+                                    <th>Files</th>
+                                    <th>Uploaded</th>
+                                    <th>Last Updated</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="batch : ${batches}">
+                                    <td>
+                                        <span class="font-medium" th:text="${batch.parentBatchId}">BATCH_001</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${batch.status.name() == 'COMPLETED'} ? 'badge-success' : (${batch.status.name().contains('ERROR') || batch.status.name().contains('FAILED')} ? 'badge-error' : (${batch.status.name().contains('REVIEW')} ? 'badge-warning' : 'badge-info'))"
+                                            th:text="${batch.status}">STATUS</span>
+                                    </td>
+                                    <td th:text="${batch.files.size()}">0</td>
+                                    <td th:text="${#temporals.format(batch.createdAt, 'MMM dd, yyyy HH:mm')}">Jan 01,
+                                        2025</td>
+                                    <td th:text="${#temporals.format(batch.updatedAt, 'MMM dd, yyyy HH:mm')}">Jan 01,
+                                        2025</td>
+                                    <td>
+                                        <a th:href="@{/client/batches/{id}(id=${batch.id})}"
+                                            class="btn btn-secondary btn-sm">View Details</a>
+                                    </td>
+                                </tr>
+                                <tr th:if="${batches.empty}">
+                                    <td colspan="6" class="text-center text-muted">
+                                        No batches found. <a th:href="@{/client/upload}">Upload your first batch</a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div th:if="${batches.totalPages > 1}" class="card-footer flex justify-between items-center">
+                        <div class="text-sm text-muted">
+                            Showing page <span th:text="${batches.number + 1}">1</span> of <span
+                                th:text="${batches.totalPages}">1</span>
+                        </div>
+                        <div class="flex gap-sm">
+                            <a th:href="@{/client/batches(page=${batches.number - 1})}"
+                                th:class="${batches.first} ? 'btn btn-secondary btn-sm disabled' : 'btn btn-secondary btn-sm'">Previous</a>
+                            <a th:href="@{/client/batches(page=${batches.number + 1})}"
+                                th:class="${batches.last} ? 'btn btn-secondary btn-sm disabled' : 'btn btn-secondary btn-sm'">Next</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>

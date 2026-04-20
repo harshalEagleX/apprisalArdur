@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="~{fragments/layout :: head('My Batches')}"></head>
+
+<body>
+    <div class="app-layout">
+        <th:block th:replace="~{fragments/layout :: sidebar-reviewer}"></th:block>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">My Batches</h1>
+                <p class="page-subtitle">Batches assigned to you for review</p>
+            </header>
+
+            <div class="page-content">
+                <!-- Alerts -->
+                <div th:if="${success}" class="alert alert-success animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span th:text="${success}">Success message</span>
+                </div>
+                <div th:if="${error}" class="alert alert-error animate-slide-up">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span th:text="${error}">Error message</span>
+                </div>
+
+                <!-- Batches Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Assigned Batches</h3>
+                        <span class="badge badge-info" th:text="${batches.size()} + ' batches'">0 batches</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="table" id="batchesTable">
+                            <thead>
+                                <tr>
+                                    <th data-sortable="batchId">Batch ID</th>
+                                    <th>Client</th>
+                                    <th data-sortable="status">Status</th>
+                                    <th>Files</th>
+                                    <th data-sortable="date">Assigned</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="batch : ${batches}" class="animate-fade-in">
+                                    <td>
+                                        <span class="font-medium" th:text="${batch.parentBatchId}">BATCH_001</span>
+                                    </td>
+                                    <td th:text="${batch.client.name}">Client Name</td>
+                                    <td>
+                                        <span class="badge"
+                                            th:classappend="${batch.status.name() == 'COMPLETED'} ? 'badge-success' : (${batch.status.name() == 'IN_REVIEW'} ? 'badge-warning' : 'badge-info')"
+                                            th:text="${batch.status}">STATUS</span>
+                                    </td>
+                                    <td th:text="${batch.files.size()}">0</td>
+                                    <td th:text="${#temporals.format(batch.updatedAt, 'MMM dd, yyyy')}">Jan 01, 2025
+                                    </td>
+                                    <td>
+                                        <div class="flex gap-sm">
+                                            <a th:href="@{/reviewer/batches/{id}(id=${batch.id})}"
+                                                class="btn btn-primary btn-sm">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                                Review
+                                            </a>
+                                            <form th:if="${batch.status.name() == 'REVIEW_PENDING'}"
+                                                th:action="@{/reviewer/batches/{id}/start(id=${batch.id})}"
+                                                method="post" style="display: inline;">
+                                                <button type="submit" class="btn btn-secondary btn-sm">Start</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr th:if="${batches.isEmpty()}">
+                                    <td colspan="6" class="text-center text-muted py-xl">
+                                        <svg width="48" height="48" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24" style="margin: 0 auto 16px; opacity: 0.3;">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                        </svg>
+                                        <p>No batches assigned to you yet.</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            Table.makeSortable('batchesTable');
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ocr-postgres
+    environment:
+      POSTGRES_DB: apprisal
+      POSTGRES_USER: apprisal
+      POSTGRES_PASSWORD: apprisal
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apprisal -d apprisal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ocr-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocr-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://apprisal:apprisal@postgres:5432/apprisal
+      FEEDBACK_DB_PATH: /tmp/feedback.sqlite3
+      USE_AI_EXTRACTION: "false"
+      AI_PROVIDER: ollama
+      AI_MODEL: llama3.1:8b
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      CONFIDENCE_THRESHOLD: "0.95"
+      OCR_TIMEOUT: "120"
+      OCR_RETRIES: "2"
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:
