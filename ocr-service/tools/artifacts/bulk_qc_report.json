@@ -1,0 +1,504 @@
+{
+  "uploads_root": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads",
+  "base_url": "http://127.0.0.1:5001",
+  "total_pdfs": 12,
+  "files": [
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/2307 Merrily Cir N.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 85560,
+        "total_rules": 17,
+        "passed": 11,
+        "failed": 1,
+        "verify": 5,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-2",
+            "msg": "Assignment type is 'Refinance'; however, owner name and borrower name are different, please revise or comment."
+          },
+          {
+            "id": "S-3",
+            "msg": "Refinance transaction: Owner of Public Record differs from Borrower. Verify comment is provided explaining the discrepancy."
+          },
+          {
+            "id": "S-7",
+            "msg": "Property is vacant. Please state if utilities are ON or OFF."
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-12",
+            "msg": "Property was offered for sale in past 12 months. Missing: Days on Market (DOM), List Price, List Date."
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/8234 E Pearson.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 74343,
+        "total_rules": 17,
+        "passed": 12,
+        "failed": 1,
+        "verify": 4,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-2",
+            "msg": "Assignment type is 'Refinance'; however, owner name and borrower name are different, please revise or comment."
+          },
+          {
+            "id": "S-3",
+            "msg": "Refinance transaction: Owner of Public Record differs from Borrower. Verify comment is provided explaining the discrepancy."
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-12",
+            "msg": "Property was offered for sale in past 12 months. Missing: Days on Market (DOM), List Price, List Date."
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 46501,
+        "total_rules": 17,
+        "passed": 13,
+        "failed": 2,
+        "verify": 2,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "C-1",
+            "msg": "Contract must be analyzed for purchase transactions. Please mark 'Did Analyze Contract'."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-7",
+            "msg": "Property is vacant. Please state if utilities are ON or OFF."
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/apprisal_002.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 71886,
+        "total_rules": 17,
+        "passed": 11,
+        "failed": 1,
+        "verify": 5,
+        "failed_rules": [
+          {
+            "id": "C-1",
+            "msg": "Assignment is meant for a refinance transaction; per UAD requirements, the contract section should be left blank."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-2",
+            "msg": "Assignment type is 'Refinance'; however, owner name and borrower name are different, please revise or comment."
+          },
+          {
+            "id": "S-3",
+            "msg": "Refinance transaction: Owner of Public Record differs from Borrower. Verify comment is provided explaining the discrepancy."
+          },
+          {
+            "id": "S-7",
+            "msg": "Property is tenant-occupied. Please provide lease dates."
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-12",
+            "msg": "Property was offered for sale in past 12 months. Missing: Days on Market (DOM), List Price, List Date."
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/apprisal_003.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 97787,
+        "total_rules": 17,
+        "passed": 11,
+        "failed": 2,
+        "verify": 4,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "C-1",
+            "msg": "Assignment is meant for a refinance transaction; per UAD requirements, the contract section should be left blank."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-2",
+            "msg": "Assignment type is 'Refinance'; however, owner name and borrower name are different, please revise or comment."
+          },
+          {
+            "id": "S-3",
+            "msg": "Refinance transaction: Owner of Public Record differs from Borrower. Verify comment is provided explaining the discrepancy."
+          },
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/apprisal_004.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 75157,
+        "total_rules": 17,
+        "passed": 7,
+        "failed": 1,
+        "verify": 9,
+        "failed_rules": [
+          {
+            "id": "C-1",
+            "msg": "Contract must be analyzed for purchase transactions. Please mark 'Did Analyze Contract'."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN)"
+          },
+          {
+            "id": "S-7",
+            "msg": "Property is vacant. Please state if utilities are ON or OFF."
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          },
+          {
+            "id": "S-12",
+            "msg": "Property was offered for sale in past 12 months. Missing: MLS Number."
+          },
+          {
+            "id": "C-2",
+            "msg": "Contract Price not extracted from report. Please verify manually."
+          },
+          {
+            "id": "C-3",
+            "msg": "Is Seller Owner of Public Record checkbox not detected. Please verify manually."
+          },
+          {
+            "id": "C-4",
+            "msg": "Financial Assistance checkbox (Yes/No) not detected. Please verify manually."
+          },
+          {
+            "id": "C-5",
+            "msg": "Personal property items are listed. Please explicitly state whether they contribute to value."
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/2307 Merrily order form.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 20325,
+        "total_rules": 17,
+        "passed": 10,
+        "failed": 4,
+        "verify": 3,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "S-3",
+            "msg": "Owner of Public Record is missing or blank."
+          },
+          {
+            "id": "S-7",
+            "msg": "Occupant status is missing or blank."
+          },
+          {
+            "id": "S-12",
+            "msg": "Prior sale/offered status (Yes/No) is not indicated in subject section."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/8234 E Pearson Order form.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 20598,
+        "total_rules": 17,
+        "passed": 10,
+        "failed": 4,
+        "verify": 3,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "S-3",
+            "msg": "Owner of Public Record is missing or blank."
+          },
+          {
+            "id": "S-7",
+            "msg": "Occupant status is missing or blank."
+          },
+          {
+            "id": "S-12",
+            "msg": "Prior sale/offered status (Yes/No) is not indicated in subject section."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/96 Baell Tr Ct Order form.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 21290,
+        "total_rules": 17,
+        "passed": 10,
+        "failed": 4,
+        "verify": 3,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "S-3",
+            "msg": "Owner of Public Record is missing or blank."
+          },
+          {
+            "id": "S-7",
+            "msg": "Occupant status is missing or blank."
+          },
+          {
+            "id": "S-12",
+            "msg": "Prior sale/offered status (Yes/No) is not indicated in subject section."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/engagement_002.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 21180,
+        "total_rules": 17,
+        "passed": 10,
+        "failed": 4,
+        "verify": 3,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "S-3",
+            "msg": "Owner of Public Record is missing or blank."
+          },
+          {
+            "id": "S-7",
+            "msg": "Occupant status is missing or blank."
+          },
+          {
+            "id": "S-12",
+            "msg": "Prior sale/offered status (Yes/No) is not indicated in subject section."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/engagement_003.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 20992,
+        "total_rules": 17,
+        "passed": 10,
+        "failed": 4,
+        "verify": 3,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "S-3",
+            "msg": "Owner of Public Record is missing or blank."
+          },
+          {
+            "id": "S-7",
+            "msg": "Occupant status is missing or blank."
+          },
+          {
+            "id": "S-12",
+            "msg": "Prior sale/offered status (Yes/No) is not indicated in subject section."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          }
+        ]
+      }
+    },
+    {
+      "file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/engagement_004.pdf",
+      "summary": {
+        "success": true,
+        "processing_time_ms": 23442,
+        "total_rules": 17,
+        "passed": 10,
+        "failed": 4,
+        "verify": 3,
+        "failed_rules": [
+          {
+            "id": "S-1",
+            "msg": "Property address does not match with order form. City missing in Report; State missing in Report; Zip code missing in Report"
+          },
+          {
+            "id": "S-3",
+            "msg": "Owner of Public Record is missing or blank."
+          },
+          {
+            "id": "S-7",
+            "msg": "Occupant status is missing or blank."
+          },
+          {
+            "id": "S-12",
+            "msg": "Prior sale/offered status (Yes/No) is not indicated in subject section."
+          }
+        ],
+        "verify_rules": [
+          {
+            "id": "S-4",
+            "msg": "Missing required field: Missing Tax/Legal Fields: Assessor's Parcel Number (APN), Tax Year, Real Estate Taxes"
+          },
+          {
+            "id": "S-8",
+            "msg": "Missing required field: Special Assessments"
+          },
+          {
+            "id": "S-11",
+            "msg": "Missing required field: Property Rights Appraised"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

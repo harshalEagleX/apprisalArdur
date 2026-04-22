@@ -33,7 +33,7 @@ Rules for confidence:
 - <0.5 = field missing or very unclear
 
 Document text:
-{document_text}
+<<DOCUMENT_TEXT>>
 """
 
 
@@ -54,9 +54,14 @@ class AIExtractionService:
         return True
 
     def extract_subject_with_confidence(self, document_text: str) -> Dict[str, Any]:
-        prompt = SUBJECT_SECTION_PROMPT.format(document_text=document_text[:4000])
+        # IMPORTANT: don't use `.format()` here because the prompt contains JSON braces.
+        prompt = SUBJECT_SECTION_PROMPT.replace("<<DOCUMENT_TEXT>>", document_text[:4000])
         raw_text = self._call_model(prompt)
-        parsed = self._parse_json_response(raw_text)
+        try:
+            parsed = self._parse_json_response(raw_text)
+        except Exception as e:
+            preview = (raw_text or "").strip().replace("\n", "\\n")[:300]
+            raise ValueError(f"Failed to parse Ollama JSON response. preview={preview}") from e
 
         auto_filled: Dict[str, Any] = {}
         needs_review: Dict[str, Any] = {}
@@ -84,6 +89,9 @@ class AIExtractionService:
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            # Ask Ollama to return valid JSON (when supported by model/server).
+            # If the model still returns non-JSON, we fall back to tolerant parsing.
+            "format": "json",
             "options": {"temperature": 0},
         }
         with httpx.Client(timeout=120) as client:
@@ -96,10 +104,27 @@ class AIExtractionService:
     def _parse_json_response(raw_text: str) -> Dict[str, Any]:
         text = raw_text.strip()
         if text.startswith("```"):
-            # Strip markdown code fences from model output.
-            text = text.strip("`")
-            if text.startswith("json"):
-                text = text[4:].strip()
+            # Remove leading/trailing code fences.
+            lines = [ln.rstrip() for ln in text.splitlines()]
+            # Drop first fence line
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            # Drop last fence line
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            # Drop optional "json" marker line
+            if lines and lines[0].strip().lower() == "json":
+                lines = lines[1:]
+            text = "\n".join(lines).strip()
+
+        # Common Ollama mistake: returns top-level key/value pairs without outer braces, e.g.
+        #   "property_address": {...},
+        #   "borrower_name": {...}
+        # (which still contains inner braces).
+        if '"property_address"' in text and not text.lstrip().startswith("{"):
+            candidate = text.strip().strip(",")
+            text = "{\n" + candidate + "\n}"
+
         start = text.find("{")
         end = text.rfind("}")
         if start == -1 or end == -1 or end <= start:

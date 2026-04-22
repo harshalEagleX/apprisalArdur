@@ -137,13 +137,26 @@ class SmartQCProcessor:
             try:
                 ai_result = ai_extraction_service.extract_subject_with_confidence(full_text)
                 ai_subject = ai_extraction_service.to_subject_extract(ai_result)
-                if ai_subject.model_dump(exclude_none=True):
-                    s_extract = ai_subject
                 field_confidence = {
                     name: float(result.get("confidence", 0.0))
                     for name, result in ai_result.get("raw", {}).items()
                     if isinstance(result, dict)
                 }
+                # Merge AI values into regex extraction conservatively:
+                # - Only fill missing/blank regex fields
+                # - Only use AI fields above the threshold
+                merged = s_extract.model_copy(deep=True)
+                ai_dump = ai_subject.model_dump()
+                for field_name, ai_value in ai_dump.items():
+                    if ai_value is None:
+                        continue
+                    confidence = field_confidence.get(field_name, 0.0)
+                    if confidence < ai_extraction_service.threshold:
+                        continue
+                    current = getattr(merged, field_name, None)
+                    if current is None or (isinstance(current, str) and not current.strip()):
+                        setattr(merged, field_name, ai_value)
+                s_extract = merged
             except Exception as e:
                 logger.warning(f"AI extraction unavailable, using regex extraction: {e}")
         

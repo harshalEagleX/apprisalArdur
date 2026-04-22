@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:apprisal_dev;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  flyway:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+
+# Keep OCR service config same defaults as application.yml unless overridden
+ocr:
+  service:
+    url: ${OCR_SERVICE_URL:http://localhost:5001}
+    timeout-seconds: ${OCR_TIMEOUT:120}
+    retry-attempts: ${OCR_RETRIES:2}

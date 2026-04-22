@@ -1,0 +1,45 @@
+{
+  "uploads_root": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads",
+  "base_url": "http://127.0.0.1:5001",
+  "total_pdfs": 12,
+  "pair_keys": 11,
+  "files": [],
+  "errors": [
+    {
+      "pair_key": "2307 merrily cir",
+      "appraisal_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/2307 Merrily Cir N.pdf",
+      "engagement_file": null,
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "pair_key": "8234 e pearson",
+      "appraisal_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/8234 E Pearson.pdf",
+      "engagement_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/engagement/8234 E Pearson Order form.pdf",
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "pair_key": "96 baell trace",
+      "appraisal_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf",
+      "engagement_file": null,
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "pair_key": "apprisal 002",
+      "appraisal_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/apprisal_002.pdf",
+      "engagement_file": null,
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "pair_key": "apprisal 003",
+      "appraisal_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/apprisal_003.pdf",
+      "engagement_file": null,
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "pair_key": "apprisal 004",
+      "appraisal_file": "/Users/eaglex/Documents/functionalProject/ardur/Apprisal/apprisalArdur/uploads/EQSS/xBatch/appraisal/apprisal_004.pdf",
+      "engagement_file": null,
+      "error": "[Errno 61] Connection refused"
+    }
+  ]
+}

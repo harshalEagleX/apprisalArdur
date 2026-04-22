@@ -824,7 +824,10 @@ class ExtractionService:
         # Try Pattern 2: "Street City State Zip" (no comma, more greedy city capture)
         # Example: "25126 N Jack Tone Rd Acampo CA 95220"
         # This pattern captures: City name before State abbreviation CA 95220
-        match = re.search(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)', address)
+        match = re.search(
+            r"\b([A-Za-z][A-Za-z\s]+?)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\b",
+            address,
+        )
         if match:
             result["city"] = match.group(1).strip()
             result["state"] = match.group(2)
