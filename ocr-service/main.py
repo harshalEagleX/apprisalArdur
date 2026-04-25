@@ -3,11 +3,11 @@ OCR Microservice for Appraisal Document Processing
 FastAPI application that extracts fields from appraisal PDFs.
 """
 
+import hashlib
 import os
 import re
 import time
 import shutil
-import asyncio
 import tempfile
 import uuid
 from typing import Optional, Dict, Any
@@ -27,8 +27,11 @@ from app.logging_config import setup_logging
 logger = setup_logging()
 
 # Import OCR configuration
-from app.config import OCR_CONFIG, TESSERACT_CMD, validate_binaries, get_system_info
+from app.config import OCR_CONFIG, TESSERACT_CMD, MAX_FILE_SIZE_BYTES, MAX_PAGE_COUNT, validate_binaries, get_system_info
 from app.ocr.ocr_pipeline import OCRPipeline
+
+# Import rules at startup so @rule decorators register against the global engine
+import app.rules  # noqa: F401  (side-effect import)
 
 # Try to import Tesseract, but make it optional
 try:
@@ -293,14 +296,18 @@ async def process_qc(
     request: Request,
     file: UploadFile = File(...),
     engagement_letter: Optional[UploadFile] = None,
+    contract_file: Optional[UploadFile] = None,
 ):
     """
     Full QC pipeline: OCR → Extract → Subject & Contract Rules → Results
+
+    - file: Appraisal PDF (required)
+    - engagement_letter: Order form / engagement letter PDF (optional but recommended)
+    - contract_file: Purchase agreement PDF (optional; used when appraisal indicates
+      contract was analyzed, enables C-2/C-4/C-5 cross-checks)
     """
     request_id = getattr(request.state, "request_id", None)
 
-    # Validate file type
-    # Validate file extension
     if not file.filename.lower().endswith('.pdf'):
         logger.warning(
             "Invalid file type in process_qc",
@@ -310,55 +317,71 @@ async def process_qc(
             status_code=400,
             detail={"error": "INVALID_FILE_TYPE", "message": "Only PDF files are accepted"}
         )
-    
+
     try:
         logger.info(
-            "Starting QC processing", 
+            "Starting QC processing",
             extra={
-                "uploaded_filename": file.filename, 
+                "uploaded_filename": file.filename,
                 "has_engagement_letter": engagement_letter is not None,
+                "has_contract_file": contract_file is not None,
                 "request_id": request_id
             }
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Stream PDF to disk
+            # Stream appraisal PDF to disk
             pdf_path = os.path.join(temp_dir, f"qc_input_{uuid.uuid4()}.pdf")
             with open(pdf_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            # Security: Magic Byte Check
-            if not is_valid_pdf(pdf_path):
-                 raise HTTPException(
-                    status_code=400,
-                    detail={"error": "INVALID_FILE_CONTENT", "message": "File does not appear to be a valid PDF"}
-                )
-            
+            err = validate_upload(pdf_path, request_id)
+            if err:
+                raise HTTPException(status_code=400, detail={"error": "INVALID_FILE", "message": err})
+
+            file_hash = sha256_file(pdf_path)
+
             # Process engagement letter if provided
             engagement_text = None
             if engagement_letter:
                 eng_path = os.path.join(temp_dir, f"qc_eng_{uuid.uuid4()}")
                 with open(eng_path, "wb") as buffer:
                     shutil.copyfileobj(engagement_letter.file, buffer)
-                
-                # Check based on extension, but could also check header if PDF
                 if engagement_letter.filename.lower().endswith(".pdf"):
-                     if is_valid_pdf(eng_path):
+                    if is_valid_pdf(eng_path):
                         engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
                 else:
-                     with open(eng_path, "rb") as f:
+                    with open(eng_path, "rb") as f:
                         engagement_text = f.read().decode('utf-8', errors='ignore')
-            
+
+            # Process contract / purchase agreement if provided
+            contract_text = None
+            if contract_file:
+                con_path = os.path.join(temp_dir, f"qc_con_{uuid.uuid4()}")
+                with open(con_path, "wb") as buffer:
+                    shutil.copyfileobj(contract_file.file, buffer)
+                if contract_file.filename.lower().endswith(".pdf"):
+                    if is_valid_pdf(con_path):
+                        contract_text = await run_in_threadpool(extract_text_from_pdf, con_path)
+                else:
+                    with open(con_path, "rb") as f:
+                        contract_text = f.read().decode('utf-8', errors='ignore')
+
             # Run QC processor in threadpool
             processor = get_qc_processor()
             results = await run_in_threadpool(
                 processor.process_document,
                 pdf_path=pdf_path,
                 engagement_letter_text=engagement_text,
+                contract_text=contract_text,
+                file_hash=file_hash,
+                original_filename=file.filename,
             )
-            
+
             logger.info("QC processing completed", extra={"request_id": request_id})
-            return results.model_dump()
+            payload = results.model_dump()
+            payload["file_hash"] = file_hash
+            return payload
             
     except HTTPException:
         raise
@@ -715,6 +738,44 @@ def calculate_confidence(fields: Dict[str, Any], raw_text: str) -> float:
     
     # Cap score between 0 and 1
     return max(0.0, min(1.0, score))
+
+
+def sha256_file(file_path: str) -> str:
+    """Return the SHA-256 hex digest of a file — used for deduplication cache key."""
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def validate_upload(file_path: str, request_id: str = None) -> Optional[str]:
+    """
+    Run Phase 1 ingestion checks after the file is written to disk.
+    Returns an error message string if invalid, None if OK.
+    """
+    size = os.path.getsize(file_path)
+    if size > MAX_FILE_SIZE_BYTES:
+        mb = size / (1024 * 1024)
+        logger.warning("File too large: %.1f MB", mb, extra={"request_id": request_id})
+        return f"File size {mb:.1f} MB exceeds the 50 MB limit."
+
+    if not is_valid_pdf(file_path):
+        logger.warning("Invalid PDF magic bytes", extra={"request_id": request_id})
+        return "File does not appear to be a valid PDF."
+
+    try:
+        import fitz as _fitz
+        doc = _fitz.open(file_path)
+        pages = len(doc)
+        doc.close()
+        if pages > MAX_PAGE_COUNT:
+            logger.warning("Page count %d exceeds limit %d", pages, MAX_PAGE_COUNT, extra={"request_id": request_id})
+            return f"Document has {pages} pages — maximum allowed is {MAX_PAGE_COUNT}."
+    except Exception:
+        return "Could not read PDF page count — file may be corrupted."
+
+    return None
 
 
 def is_valid_pdf(file_path: str) -> bool:

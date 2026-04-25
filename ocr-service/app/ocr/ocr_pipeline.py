@@ -1,15 +1,19 @@
 """
-Two-Pass OCR Pipeline for Appraisal Document Processing
+Parallel OCR Pipeline for Appraisal Document Processing
 
-Pass 1: Fast extraction using PyMuPDF embedded text or Tesseract
-Pass 2: High-quality extraction for low-confidence pages (optional cloud OCR)
-Pass 3: Image preprocessing for maximum quality (PDF → Image → Preprocess → OCR)
+Strategy (Phase 1):
+  - Render all pages to PIL Images in main thread (fitz is NOT thread-safe)
+  - OCR pages in parallel via ThreadPoolExecutor(max_workers=4)
+  - Smart threshold: ≥100 words embedded → skip Tesseract entirely
+                     30–99 words → run both, pick best
+                     <30 words   → Tesseract required (image/photo pages)
+  - Force mode (force_image_ocr=True): always Tesseract, but still parallelized
 """
 
-import os
 import re
 import logging
-from typing import Dict, List, Tuple, Optional, Any
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -67,18 +71,23 @@ class ExtractionResult:
 
 class OCRPipeline:
     """
-    Two-pass OCR pipeline for appraisal PDFs.
-    
-    Pass 1: Extract embedded text using PyMuPDF (fast, free)
-    Pass 2: Use Tesseract for pages with poor/no embedded text
-    Pass 3 (optional): Cloud OCR for complex pages
+    Parallel OCR pipeline for appraisal PDFs.
+
+    Pages are rendered to images in the main thread (fitz thread-safety),
+    then OCR'd in parallel with ThreadPoolExecutor(max_workers=4).
     """
-    
-    # Minimum words per page to consider extraction successful
-    MIN_WORDS_THRESHOLD = 50
-    
+
+    # ≥ this many embedded words → use embedded text, skip Tesseract
+    MIN_WORDS_THRESHOLD = 100
+
+    # < this many embedded words → must OCR (image/photo pages)
+    HYBRID_OCR_THRESHOLD = 30
+
     # Confidence threshold for re-extraction
     LOW_CONFIDENCE_THRESHOLD = 0.5
+
+    # Max parallel Tesseract workers
+    MAX_WORKERS = 4
     
     def __init__(self, use_tesseract: bool = True, use_cloud: bool = False, force_image_ocr: bool = False, use_preprocessing: bool = False):
         self.use_tesseract = use_tesseract and TESSERACT_AVAILABLE
@@ -100,35 +109,122 @@ class OCRPipeline:
 
     def extract_all_pages(self, pdf_path: str, force_ocr: bool = None) -> ExtractionResult:
         """
-        Extract text from all pages of a PDF.
-        
-        Returns:
-            ExtractionResult with page_index mapping page numbers to text
+        Extract text from all pages of a PDF using parallel Tesseract workers.
+
+        Phase 1 (main thread): Render each page to a PIL Image via fitz.
+            fitz Page objects are NOT thread-safe — all fitz calls happen here.
+        Phase 2 (ThreadPoolExecutor): Run Tesseract in parallel on pre-rendered images.
+            pytesseract operating on PIL Images IS thread-safe.
+
+        Smart decision per page:
+            embedded words ≥ MIN_WORDS_THRESHOLD (100) → use embedded, no OCR
+            embedded words 30–99 (HYBRID zone)         → run both, pick best
+            embedded words < HYBRID_OCR_THRESHOLD (30) → OCR required
+            force_image_ocr=True                       → always OCR (parallelised)
         """
         import time
         start_time = time.time()
-        
+
         result = ExtractionResult()
-        
+        use_force = force_ocr if force_ocr is not None else self.force_image_ocr
+
         try:
             doc = fitz.open(pdf_path)
             result.total_pages = len(doc)
-            
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                # Allow method override
-                use_force = force_ocr if force_ocr is not None else self.force_image_ocr
-                page_text = self._extract_page(page, page_num + 1, force_image=use_force)  # 1-indexed
-                
-                result.page_index[page_num + 1] = page_text.text
-                result.page_details.append(page_text)
-                
+
+            # ── Phase 1: render in main thread (fitz is not thread-safe) ──────
+            page_jobs = []
+            for i in range(len(doc)):
+                page = doc[i]
+                page_num = i + 1
+
+                embedded_text = page.get_text("text")
+                embedded_wc = len(embedded_text.split())
+                has_tables = self._detect_tables(page)
+
+                # Decide whether OCR render is needed
+                needs_render = (
+                    use_force
+                    or embedded_wc < self.MIN_WORDS_THRESHOLD
+                ) and self.use_tesseract
+
+                pil_img = None
+                if needs_render:
+                    # Higher DPI for low-text pages (photos, signatures, maps)
+                    dpi = 300 if (use_force or embedded_wc < self.HYBRID_OCR_THRESHOLD) else 200
+                    mat = fitz.Matrix(dpi / 72, dpi / 72)
+                    pix = page.get_pixmap(matrix=mat)
+                    # Convert to greyscale PIL Image — safe to pass to other threads
+                    pil_img = Image.frombytes(
+                        "RGB", [pix.width, pix.height], pix.samples
+                    ).convert("L")
+
+                page_jobs.append({
+                    "page_num":      page_num,
+                    "embedded_text": embedded_text,
+                    "embedded_wc":   embedded_wc,
+                    "has_tables":    has_tables,
+                    "pil_img":       pil_img,
+                    "force":         use_force,
+                })
+
             doc.close()
-            
+
+            # ── Phase 2: OCR in parallel (PIL + pytesseract is thread-safe) ───
+            def _ocr_job(job: dict) -> PageText:
+                pn       = job["page_num"]
+                emb_text = job["embedded_text"]
+                emb_wc   = job["embedded_wc"]
+                htables  = job["has_tables"]
+                img      = job["pil_img"]
+                force    = job["force"]
+
+                def _tess(image) -> Tuple[str, int]:
+                    text = pytesseract.image_to_string(image, config="--psm 6")
+                    return text, len(text.split())
+
+                # Force path: always Tesseract
+                if force and img is not None:
+                    try:
+                        text, wc = _tess(img)
+                        return PageText(pn, text, ExtractionMethod.TESSERACT,
+                                        self._estimate_confidence(text), wc, htables)
+                    except Exception as e:
+                        logger.warning("Forced Tesseract failed page %d: %s", pn, e)
+                        # Fall through to embedded
+
+                # Embedded text good enough
+                if emb_wc >= self.MIN_WORDS_THRESHOLD:
+                    return PageText(pn, emb_text, ExtractionMethod.EMBEDDED,
+                                    self._estimate_confidence(emb_text), emb_wc, htables)
+
+                # Hybrid zone or OCR-required zone
+                if img is not None:
+                    try:
+                        text, wc = _tess(img)
+                        if wc > emb_wc:
+                            return PageText(pn, text, ExtractionMethod.TESSERACT,
+                                            self._estimate_confidence(text), wc, htables)
+                    except Exception as e:
+                        logger.warning("Tesseract fallback failed page %d: %s", pn, e)
+
+                # Last resort: return whatever embedded gave us
+                conf = 0.5 if emb_wc < 10 else 0.7
+                return PageText(pn, emb_text, ExtractionMethod.EMBEDDED, conf, emb_wc, htables)
+
+            workers = min(self.MAX_WORKERS, len(page_jobs))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                # executor.map preserves input order → no need to sort
+                page_results = list(pool.map(_ocr_job, page_jobs))
+
+            for pt in page_results:
+                result.page_index[pt.page_number] = pt.text
+                result.page_details.append(pt)
+
         except Exception as e:
-            logger.error(f"Failed to process PDF: {e}")
+            logger.error("Failed to process PDF: %s", e)
             result.warnings.append(f"PDF processing error: {str(e)}")
-            
+
         result.extraction_time_ms = int((time.time() - start_time) * 1000)
         return result
     
@@ -198,7 +294,7 @@ class OCRPipeline:
             has_tables=self._detect_tables(page)
         )
     
-    def _tesseract_extract(self, page: fitz.Page = None, image: 'np.ndarray' = None, dpi: int = 200, config: str = '') -> str:
+    def _tesseract_extract(self, page: fitz.Page = None, image=None, dpi: int = 200, config: str = '') -> str:
         """
         Extract text using Tesseract OCR with preprocessing.
         

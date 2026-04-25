@@ -114,9 +114,13 @@ OCR_CONFIG = {
     'image_enhance': True,  # Apply image enhancement for better OCR
     
     # Performance settings
-    'max_workers': 4,  # Parallel processing threads
+    'max_workers': 4,  # Parallel processing threads — used by ThreadPoolExecutor in OCRPipeline
     'timeout_seconds': 30,  # OCR timeout per page
 }
+
+# Ingestion limits (Phase 1 security)
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024   # 50 MB
+MAX_PAGE_COUNT = 100                      # Reject construction plans, etc.
 
 # Validation: Check if critical binaries exist
 def validate_binaries():
@@ -159,6 +163,8 @@ __all__ = [
     'PDFINFO_CMD',
     'PDFTOPPM_CMD',
     'MAGICK_CMD',
+    'MAX_FILE_SIZE_BYTES',
+    'MAX_PAGE_COUNT',
     'validate_binaries',
     'get_system_info',
 ]

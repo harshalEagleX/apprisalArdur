@@ -1,0 +1,46 @@
+version: "3.8"
+
+# ── Appraisal QC — Infrastructure Services ────────────────────────────────────
+# Starts PostgreSQL (OCR cache + results) and Redis (Celery broker + job status)
+#
+# Usage:
+#   docker-compose up -d           # start in background
+#   docker-compose down            # stop
+#   docker-compose down -v         # stop + wipe volumes (clean slate)
+
+services:
+
+  # ── PostgreSQL 15 ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: appraisal_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       appraisal_qc
+      POSTGRES_USER:     qc_user
+      POSTGRES_PASSWORD: qc_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qc_user -d appraisal_qc"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Redis 7 (Celery broker + result backend) ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: appraisal_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:

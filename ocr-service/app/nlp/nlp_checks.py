@@ -16,7 +16,24 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Try to import optional NLP libraries
+# Tier 1: Ollama / llama3 (best quality, requires local ollama server)
+try:
+    from app.services.ollama_service import (
+        classify_commentary,
+        analyze_market_conditions,
+        is_neighborhood_description_specific,
+        is_ollama_available,
+    )
+    OLLAMA_AVAILABLE = is_ollama_available()
+    if OLLAMA_AVAILABLE:
+        logger.info("Ollama available — using llama3:8b-instruct-q4_0 for commentary analysis")
+    else:
+        logger.info("Ollama not running — falling back to embedding/rule-based checks")
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    logger.info("ollama_service not importable — using fallback")
+
+# Tier 2: sentence-transformers (good, no server required)
 try:
     from sentence_transformers import SentenceTransformer, util
     SENTENCE_TRANSFORMERS_AVAILABLE = True
@@ -145,36 +162,46 @@ class NLPChecker:
             self.use_embeddings = False
     
     def detect_canned_commentary(
-        self, 
-        text: str, 
+        self,
+        text: str,
         threshold: float = 0.75
     ) -> CommentaryAnalysis:
         """
         Detect if commentary appears to be generic/canned.
-        
-        Args:
-            text: Commentary text to analyze
-            threshold: Similarity threshold for embedding-based detection
-            
-        Returns:
-            CommentaryAnalysis with detection results
+
+        Tier 1: ollama/llama3 (most accurate)
+        Tier 2: sentence-transformers similarity
+        Tier 3: rule-based template matching (always available)
         """
         if not text or len(text.strip()) < 20:
             return CommentaryAnalysis(
-                is_canned=False, 
+                is_canned=False,
                 confidence=0.0,
                 has_specific_details=False
             )
-        
+
         text_lower = text.lower()
-        
-        # Method 1: Direct template matching
-        matched_templates = []
-        for template in CANNED_TEMPLATES:
-            if template in text_lower:
-                matched_templates.append(template)
-        
-        # Method 2: Embedding similarity (if available)
+        has_specific_details = self._has_specific_details(text)
+        reasoning_score = self._check_reasoning_presence(text)
+
+        # --- Tier 1: Ollama ---
+        if OLLAMA_AVAILABLE:
+            try:
+                ollama_result = classify_commentary(text)
+                if ollama_result is not None:
+                    confidence = 0.9 if ollama_result else 0.1
+                    return CommentaryAnalysis(
+                        is_canned=ollama_result,
+                        confidence=confidence,
+                        matched_templates=[],
+                        reasoning_score=reasoning_score,
+                        has_specific_details=has_specific_details,
+                    )
+            except Exception as e:
+                logger.warning("Ollama canned check failed, falling back: %s", e)
+
+        # --- Tier 2: sentence-transformers ---
+        matched_templates = [t for t in CANNED_TEMPLATES if t in text_lower]
         embedding_score = 0.0
         if self.use_embeddings and self._model:
             try:
@@ -182,32 +209,24 @@ class NLPChecker:
                 similarities = util.cos_sim(text_embedding, self._template_embeddings)
                 embedding_score = float(similarities.max())
             except Exception as e:
-                logger.warning(f"Embedding comparison failed: {e}")
-        
-        # Method 3: Check for specific details
-        has_specific_details = self._has_specific_details(text)
-        
-        # Calculate final score
+                logger.warning("Embedding comparison failed: %s", e)
+
+        # --- Tier 3: Rule-based ---
         template_score = min(1.0, len(matched_templates) * 0.3)
-        
         if self.use_embeddings:
-            combined_score = (template_score * 0.3 + embedding_score * 0.7)
+            combined_score = template_score * 0.3 + embedding_score * 0.7
         else:
             combined_score = template_score
-        
-        # Reduce score if specific details present
+
         if has_specific_details:
             combined_score *= 0.5
-        
-        # Check reasoning
-        reasoning_score = self._check_reasoning_presence(text)
-        
+
         return CommentaryAnalysis(
             is_canned=combined_score > 0.4,
             confidence=combined_score,
             matched_templates=matched_templates,
             reasoning_score=reasoning_score,
-            has_specific_details=has_specific_details
+            has_specific_details=has_specific_details,
         )
     
     def _has_specific_details(self, text: str) -> bool:
@@ -319,39 +338,71 @@ class NLPChecker:
 
 def detect_canned_commentary(text: str) -> Tuple[bool, float]:
     """
-    Simple function to detect canned commentary.
-    
+    Detect canned commentary.  Tries ollama first, falls back to rule-based.
+
     Returns:
         Tuple of (is_canned, confidence)
     """
+    if OLLAMA_AVAILABLE:
+        try:
+            result = classify_commentary(text)
+            if result is not None:
+                return (result, 0.9 if result else 0.1)
+        except Exception:
+            pass
     checker = NLPChecker(use_embeddings=False)
     result = checker.detect_canned_commentary(text)
     return (result.is_canned, result.confidence)
 
 
 def check_reasoning_presence(text: str) -> bool:
-    """
-    Check if text contains adequate reasoning.
-    
-    Uses rule-based detection of causal words and analytical phrases.
-    """
+    """Check if text contains adequate reasoning."""
     checker = NLPChecker(use_embeddings=False)
     has_reasoning, _ = checker.check_reasoning_presence(text)
     return has_reasoning
 
 
 def extract_market_trends(text: str) -> List[str]:
-    """
-    Extract market trend keywords from text.
-    
-    Returns list of found trend keywords.
-    """
+    """Extract market trend keywords from text."""
     checker = NLPChecker(use_embeddings=False)
     trends = checker.extract_market_trends(text)
-    
-    # Flatten to list
-    all_keywords = []
+    all_keywords: List[str] = []
     for keywords in trends.values():
         all_keywords.extend(keywords)
-    
     return all_keywords
+
+
+def check_market_conditions_commentary(text: str) -> dict:
+    """
+    Evaluate market conditions commentary quality.
+    Uses ollama if available, rule-based otherwise.
+    """
+    if OLLAMA_AVAILABLE:
+        try:
+            return analyze_market_conditions(text)
+        except Exception:
+            pass
+    # Rule-based fallback
+    is_see_1004mc = bool(re.search(r"see\s+1004mc", text, re.IGNORECASE)) if text else False
+    checker = NLPChecker(use_embeddings=False)
+    has_reasoning, _ = checker.check_reasoning_presence(text or "")
+    return {
+        "has_analysis": has_reasoning,
+        "is_see_1004mc": is_see_1004mc,
+        "summary": None,
+    }
+
+
+def check_neighborhood_description(text: str) -> Optional[bool]:
+    """
+    Check if neighborhood description is specific (not generic).
+    Returns True=specific, False=generic, None=unavailable.
+    """
+    if OLLAMA_AVAILABLE:
+        try:
+            return is_neighborhood_description_specific(text)
+        except Exception:
+            pass
+    # Rule-based fallback: check if any specific-detail patterns fire
+    checker = NLPChecker(use_embeddings=False)
+    return checker._has_specific_details(text or "")

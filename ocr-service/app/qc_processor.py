@@ -33,6 +33,11 @@ from app.rule_engine.engine import engine, RuleStatus, RuleResult
 import app.rules
 from app.services.extraction_service import extraction_service
 from app.models.difference_report import SubjectSectionExtract, ContractSectionExtract
+from app.services.cache_service import (
+    get_cached_ocr, save_ocr_pages,
+    save_extracted_fields, save_rule_results,
+    DB_AVAILABLE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +62,8 @@ class QCResults(BaseModel):
     processing_time_ms: int
     total_pages: int
     extraction_method: str
+    document_id: Optional[str] = None     # DB record ID — None if DB unavailable
+    cache_hit: bool = False               # True if OCR was served from cache
     
     # Extracted fields summary
     extracted_fields: Dict[str, Any] = {}
@@ -88,10 +95,15 @@ class SmartQCProcessor:
     """
     
     def __init__(self, use_tesseract: bool = True, use_nlp_embeddings: bool = False):
-        self.ocr_pipeline = OCRPipeline(use_tesseract=use_tesseract, force_image_ocr=True)
-    def __init__(self, use_tesseract: bool = True, use_nlp_embeddings: bool = False):
-        # We now use extraction_service for OCR, but might still need pipeline for other tasks if any
-        self.ocr_pipeline = OCRPipeline(use_tesseract=use_tesseract, force_image_ocr=True)
+        # use_preprocessing=True enables the full 5-step image pipeline:
+        # grayscale → denoise → Otsu threshold → table-line removal → deskew
+        # force_image_ocr=True is kept so every page is checked via Tesseract,
+        # but the pipeline now runs in parallel (4 workers) per Phase 1.
+        self.ocr_pipeline = OCRPipeline(
+            use_tesseract=use_tesseract,
+            force_image_ocr=True,
+            use_preprocessing=True,
+        )
         self.use_nlp_embeddings = use_nlp_embeddings
     
     def process_document(
@@ -99,24 +111,61 @@ class SmartQCProcessor:
         pdf_path: str,
         engagement_letter_text: Optional[str] = None,
         contract_text: Optional[str] = None,
+        file_hash: Optional[str] = None,
+        original_filename: str = "unknown.pdf",
     ) -> QCResults:
         """
         Process an appraisal PDF through the complete QC pipeline.
-        
+
         Args:
-            pdf_path: Path to the appraisal PDF
+            pdf_path:               Path to the appraisal PDF
             engagement_letter_text: Optional text from engagement letter
-            contract_text: Optional text from purchase contract
-            
+            contract_text:          Optional text from purchase contract
+            file_hash:              SHA-256 of the PDF (for cache lookup/save)
+            original_filename:      Original upload filename (for DB record)
+
         Returns:
             QCResults with all validation outcomes
         """
         start_time = time.time()
-        
-        # Step 1: OCR Extraction (Single Pass)
-        logger.info(f"Starting OCR extraction for: {pdf_path}")
-        extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
-        
+        document_id: Optional[str] = None
+
+        # ── Step 1: Check OCR Cache ─────────────────────────────────────────
+        import fitz as _fitz
+        try:
+            _doc = _fitz.open(pdf_path)
+            total_pages = len(_doc)
+            _doc.close()
+        except Exception:
+            total_pages = 0
+
+        cache_hit = False
+        if file_hash and total_pages > 0:
+            cached_pages = get_cached_ocr(file_hash, total_pages)
+            if cached_pages:
+                logger.info("Cache HIT — skipping OCR for %s", file_hash[:12])
+                cache_hit = True
+                # Reconstruct ExtractionResult from cached pages
+                from app.ocr.ocr_pipeline import ExtractionResult
+                extraction_result = ExtractionResult()
+                extraction_result.total_pages = total_pages
+                for pt in cached_pages:
+                    extraction_result.page_index[pt.page_number] = pt.text
+                    extraction_result.page_details.append(pt)
+
+        # ── Step 2: OCR Extraction (if not cached) ──────────────────────────
+        if not cache_hit:
+            logger.info("Cache MISS — running OCR for %s", pdf_path)
+            extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
+
+            # Save to cache for next time
+            if file_hash and extraction_result.page_details:
+                document_id = save_ocr_pages(
+                    file_hash=file_hash,
+                    filename=original_filename,
+                    pages=extraction_result.page_details,
+                )
+
         if not extraction_result.page_index:
             return QCResults(
                 success=False,
@@ -125,7 +174,7 @@ class SmartQCProcessor:
                 extraction_method="none",
                 processing_warnings=["Failed to extract any text from PDF"]
             )
-            
+
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
 
         # Step 2: Multi-Source Extraction
@@ -161,24 +210,40 @@ class SmartQCProcessor:
                 assignment_type=report.contract.assignment_type or "Refinance"
             )
 
-        # Step 5: Create ValidationContext
+        # Step 5: Parse contract PDF if provided OR if appraisal says it was analyzed
+        purchase_agreement = None
+        if contract_text:
+            pa_extract = extraction_service.extract_purchase_agreement(contract_text)
+            purchase_agreement = pa_extract
+        elif report.contract.did_analyze_contract:
+            logger.info("Appraisal indicates contract was analyzed but no contract PDF provided.")
+
+        # Step 6: Create ValidationContext
         ctx = ValidationContext(
             report=report,
-            engagement_letter=engagement_letter
+            engagement_letter=engagement_letter,
+            purchase_agreement=purchase_agreement
         )
         
-        # Step 6: Execute rule engine
+        # Step 7: Execute rule engine
         logger.info("Executing rule engine")
         rule_results = engine.execute(ctx)
-        
-        # Step 7: Assemble results
+
+        # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
+        if document_id:
+            page_confidences = [p.confidence for p in extraction_result.page_details]
+            save_extracted_fields(document_id, s_extract.model_dump(), page_confidences)
+            save_rule_results(document_id, rule_results)
+
+        # Step 9: Assemble results
         results = self._assemble_results(
             extraction_result=extraction_result,
             s_extract=s_extract,
             rule_results=rule_results,
-            start_time=start_time
+            start_time=start_time,
+            document_id=document_id,
         )
-        
+
         return results
     
     def _map_extraction_to_report(
@@ -287,6 +352,7 @@ class SmartQCProcessor:
         s_extract: SubjectSectionExtract,
         rule_results: List[RuleResult],
         start_time: float,
+        document_id: Optional[str] = None,
     ) -> QCResults:
         """Assemble final QC results."""
         
@@ -325,17 +391,38 @@ class SmartQCProcessor:
         # Get improvement suggestions
         suggestions = engine.get_improvement_suggestions()
         
-        # Calculate primary method
+        # Primary extraction method (most frequent across pages)
         methods = [p.method.value for p in extraction_result.page_details]
         primary_method = max(set(methods), key=methods.count) if methods else "unknown"
+
+        # Per-field confidence: avg OCR page confidence ± field-type adjustment
+        avg_conf = (
+            sum(p.confidence for p in extraction_result.page_details)
+            / len(extraction_result.page_details)
+        ) if extraction_result.page_details else 0.7
+
+        HIGH_CONF = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
+        LOW_CONF  = {"neighborhood_name", "legal_description", "owner_of_public_record"}
+
+        field_confidence: Dict[str, float] = {}
+        for field_name, value in s_extract.model_dump().items():
+            if value is None:
+                field_confidence[field_name] = 0.0
+            elif field_name in HIGH_CONF:
+                field_confidence[field_name] = round(min(1.0, avg_conf + 0.10), 3)
+            elif field_name in LOW_CONF:
+                field_confidence[field_name] = round(max(0.0, avg_conf - 0.10), 3)
+            else:
+                field_confidence[field_name] = round(avg_conf, 3)
 
         return QCResults(
             success=True,
             processing_time_ms=int((time.time() - start_time) * 1000),
             total_pages=extraction_result.total_pages,
             extraction_method=primary_method,
-            extracted_fields=s_extract.model_dump(), # Use Subject Extract as summary
-            field_confidence={}, # TODO: map legacy confidence
+            document_id=document_id,
+            extracted_fields=s_extract.model_dump(),
+            field_confidence=field_confidence,
             total_rules=len(rule_results),
             passed=status_counts[RuleStatus.PASS],
             failed=status_counts[RuleStatus.FAIL],

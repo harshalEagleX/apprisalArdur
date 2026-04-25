@@ -119,8 +119,6 @@ class ExtractionService:
         except Exception as e:
             logger.error(f"PDF extraction failed: {e}")
             raise
-        
-        return "\n\n".join(text_parts), total_pages
     
     def _parse_env(self, env_content: bytes) -> str:
         """Parse ENV file to extract text. Placeholder for future implementation."""
@@ -846,6 +844,73 @@ class ExtractionService:
         if not value:
             return None
         return re.sub(r'\s+', ' ', value.strip().lower())
+
+    # =========================================================================
+    # Purchase Agreement / Contract Extraction
+    # =========================================================================
+
+    def extract_purchase_agreement(self, text: str):
+        """
+        Extract facts from a Purchase Agreement / Contract PDF.
+        Returns a PurchaseAgreement domain object.
+        """
+        from app.models.appraisal import PurchaseAgreement
+
+        pa = PurchaseAgreement()
+
+        # Contract price
+        price_str = self._extract_field(text, [
+            r"(?:Total\s+)?(?:Purchase\s+)?(?:Sales?\s+)?Price[:\s]*\$?\s*([\d,]+)",
+            r"(?:Contract|Agreement)\s+Price[:\s]*\$?\s*([\d,]+)",
+        ])
+        if price_str:
+            pa.contract_price = self._parse_money(price_str)
+
+        # Contract date — prefer "fully executed" / "acceptance" date,
+        # otherwise pick the latest date found in the document.
+        date_str = self._extract_field(text, [
+            r"(?:Fully\s+Executed|Final|Acceptance|Accepted|Effective)\s+Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
+        ])
+        if not date_str:
+            all_dates = re.findall(r"\b(\d{1,2}/\d{1,2}/\d{4})\b", text)
+            if all_dates:
+                # Normalise to YYYY-MM-DD for sorting then pick the latest
+                def _to_sortable(d):
+                    try:
+                        parts = d.split("/")
+                        return f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+                    except Exception:
+                        return d
+                sorted_dates = sorted(all_dates, key=_to_sortable)
+                date_str = sorted_dates[-1]
+        pa.contract_date = date_str
+
+        # Seller name
+        pa.seller_name = self._extract_field(text, [
+            r"Seller[:\s]+([A-Za-z][A-Za-z\s,\.]+?)(?:\n|Address|Phone|Email|Buyer|$)",
+            r"SELLER[:\s]+([^\n]{3,60})",
+        ])
+
+        # Seller concessions / closing cost contributions
+        conc_str = self._extract_field(text, [
+            r"(?:Seller\s+)?Concessions?[:\s]*\$?\s*([\d,]+)",
+            r"Closing\s+Costs?\s+(?:Paid\s+by\s+Seller|Contribution)[:\s]*\$?\s*([\d,]+)",
+            r"Seller\s+(?:to\s+Pay|Contribution|Credit)[:\s]*\$?\s*([\d,]+)",
+        ])
+        if conc_str:
+            pa.concessions_amount = self._parse_money(conc_str)
+
+        # Personal property / included items
+        pp_match = re.search(
+            r"(?:Personal\s+Property|Inclusions?|Items?\s+Included)[:\s]+([^\n]{10,300})",
+            text, re.IGNORECASE
+        )
+        if pp_match:
+            pa.personal_property_items = [
+                i.strip() for i in re.split(r"[,;]", pp_match.group(1)) if i.strip()
+            ]
+
+        return pa
 
 
 # Global instance
