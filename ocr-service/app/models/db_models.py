@@ -75,7 +75,9 @@ class ExtractedFieldRecord(Base):
     field_value       = Column(Text)
     confidence_score  = Column(Float, default=0.0)
     source_page       = Column(Integer)              # which page the value was found on
-    extraction_method = Column(String(20))           # embedded / tesseract / regex
+    extraction_method = Column(String(30))           # spatial_anchor / regex_primary / regex_fallback / not_found
+    raw_ocr_text      = Column(Text)                 # value before OCR correction (training signal)
+    correction_applied = Column(Boolean, default=False)  # True if ocr_correction.py changed the value
     created_at        = Column(DateTime, default=datetime.utcnow)
 
     document = relationship("Document", back_populates="fields")
@@ -137,6 +139,45 @@ class FeedbackEvent(Base):
 
 
 # ── Training examples (auto-generated from feedback) ─────────────────────────
+
+class RuleConfig(Base):
+    """
+    DB-driven rule configuration (Phase 3).
+    Allows toggling rules, changing severity, and restricting to loan types
+    WITHOUT a code deploy — just update this table.
+    """
+    __tablename__ = "rules_config"
+
+    rule_id              = Column(String(20), primary_key=True)
+    rule_name            = Column(String(200), nullable=False)
+    rule_category        = Column(String(50))                    # Subject / Contract / Narrative
+    is_active            = Column(Boolean, default=True)         # toggle without restart
+    severity_level       = Column(String(20), default="STANDARD")  # BLOCKING / STANDARD / ADVISORY
+    applicable_loan_types = Column(String(200), default="ALL")   # comma-separated: ALL, Purchase, Refinance
+    execution_order      = Column(Integer, default=100)          # lower = runs first
+    last_modified_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    modified_by          = Column(String(100), default="system")
+
+    __table_args__ = (
+        Index("ix_rules_config_active", "is_active"),
+    )
+
+
+class LLMResponseCache(Base):
+    """
+    Cache LLM (ollama) responses by hash of input text (Phase 4).
+    Same commentary text → same LLM answer, no repeated API call.
+    """
+    __tablename__ = "llm_response_cache"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    input_hash   = Column(String(64), nullable=False, unique=True, index=True)  # SHA-256 of prompt
+    task         = Column(String(50))                           # "canned_detection", "market_quality", etc.
+    response     = Column(Text)                                 # Raw LLM response string
+    model_name   = Column(String(100))
+    created_at   = Column(DateTime, default=datetime.utcnow)
+    hit_count    = Column(Integer, default=0)                   # How many times this cache entry was used
+
 
 class TrainingExample(Base):
     __tablename__ = "training_examples"

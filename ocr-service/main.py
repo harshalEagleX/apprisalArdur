@@ -33,6 +33,10 @@ from app.ocr.ocr_pipeline import OCRPipeline
 # Import rules at startup so @rule decorators register against the global engine
 import app.rules  # noqa: F401  (side-effect import)
 
+# Seed DB rule config (idempotent — does nothing if already seeded)
+from app.rule_engine.rules_db import seed_rules_config
+seed_rules_config()
+
 # Try to import Tesseract, but make it optional
 try:
     import pytesseract
@@ -401,53 +405,68 @@ async def process_qc(
 
 @app.get("/qc/rules")
 async def list_qc_rules():
-    """
-    List all registered QC rules.
-    """
+    """List all registered QC rules with DB configuration (Phase 3)."""
     from app.rule_engine.engine import engine
-    
+    from app.rule_engine.rules_db import load_rule_configs
+
+    configs = load_rule_configs()
     rules_info = []
-    subject_rules_count = 0
-    contract_rules_count = 0
-    
-    for rule_func in engine._rules:
-        rule_id = getattr(rule_func, 'rule_id', 'UNKNOWN')
-        rule_name = getattr(rule_func, 'rule_name', rule_func.__name__)
-        
-        # Categorize rules
-        if rule_id.startswith('S-'):
-            category = 'Subject Section'
-            subject_rules_count += 1
-        elif rule_id.startswith('C-'):
-            category = 'Contract Section'
-            contract_rules_count += 1
+    counts = {"Subject": 0, "Contract": 0, "Narrative": 0, "Other": 0}
+
+    for rule_id, rule_func in engine._rules.items():
+        cfg = configs.get(rule_id)
+        if rule_id.startswith("S-"):
+            category = "Subject Section"
+            counts["Subject"] += 1
+        elif rule_id.startswith("C-"):
+            category = "Contract Section"
+            counts["Contract"] += 1
+        elif rule_id.startswith("N-"):
+            category = "Narrative Section"
+            counts["Narrative"] += 1
         else:
-            category = 'Other'
-        
+            category = "Other"
+            counts["Other"] += 1
+
         rules_info.append({
             "id": rule_id,
-            "name": rule_name,
+            "name": getattr(rule_func, "rule_name", rule_func.__name__),
             "category": category,
-            "doc": rule_func.__doc__[:200] if rule_func.__doc__ else None,
+            "is_active": cfg.is_active if cfg else True,
+            "severity": cfg.severity if cfg else "STANDARD",
+            "execution_order": cfg.execution_order if cfg else 999,
+            "applicable_loan_types": cfg.applicable_loan_types if cfg else "ALL",
+            "doc": rule_func.__doc__[:150] if rule_func.__doc__ else None,
         })
-    
-    logger.debug(
-        "Listed QC rules", 
-        extra={
-            "total_rules": len(rules_info),
-            "subject_rules": subject_rules_count,
-            "contract_rules": contract_rules_count
-        }
-    )
 
+    rules_info.sort(key=lambda r: r["execution_order"])
     return {
         "total_rules": len(rules_info),
-        "categories": {
-            "subject_section": subject_rules_count,
-            "contract_section": contract_rules_count
-        },
-        "rules": rules_info
+        "active_rules": sum(1 for r in rules_info if r["is_active"]),
+        "categories": counts,
+        "rules": rules_info,
     }
+
+
+@app.patch("/admin/rules/{rule_id}")
+async def toggle_rule(rule_id: str, is_active: bool):
+    """
+    Toggle a rule on or off without restarting the server (Phase 3).
+    Example: PATCH /admin/rules/S-5?is_active=false
+    """
+    try:
+        from app.database import get_db
+        from app.models.db_models import RuleConfig
+        with get_db() as db:
+            row = db.query(RuleConfig).filter(RuleConfig.rule_id == rule_id).first()
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found in DB config")
+            row.is_active = is_active
+        return {"rule_id": rule_id, "is_active": is_active, "status": "updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/ocr/appraisal", response_model=OcrResponse)

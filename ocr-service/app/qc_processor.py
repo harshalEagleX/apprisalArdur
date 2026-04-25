@@ -34,26 +34,32 @@ import app.rules
 from app.services.extraction_service import extraction_service
 from app.models.difference_report import SubjectSectionExtract, ContractSectionExtract
 from app.services.cache_service import (
-    get_cached_ocr, save_ocr_pages,
+    get_cached_ocr, get_document_id, save_ocr_pages,
     save_extracted_fields, save_rule_results,
     DB_AVAILABLE,
 )
+from app.services.phase2_extraction import phase2_engine
 
 logger = logging.getLogger(__name__)
 
 
 class QCResultItem(BaseModel):
-    """Individual rule result."""
+    """Individual rule result — Phase 3 adds severity and source_page."""
     rule_id: str
     rule_name: str
     status: str
     message: str
     action_item: Optional[str] = None
     details: Optional[Dict] = None
-    # Comparison fields for reviewer UI
     appraisal_value: Optional[str] = None
     engagement_value: Optional[str] = None
     review_required: bool = False
+    # Phase 3 additions
+    severity: str = "STANDARD"
+    source_page: Optional[int] = None
+    field_confidence: Optional[float] = None
+    auto_correctable: bool = False
+    rule_version: str = "1.0"
 
 
 class QCResults(BaseModel):
@@ -145,6 +151,7 @@ class SmartQCProcessor:
             if cached_pages:
                 logger.info("Cache HIT — skipping OCR for %s", file_hash[:12])
                 cache_hit = True
+                document_id = get_document_id(file_hash)
                 # Reconstruct ExtractionResult from cached pages
                 from app.ocr.ocr_pipeline import ExtractionResult
                 extraction_result = ExtractionResult()
@@ -177,9 +184,12 @@ class SmartQCProcessor:
 
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
 
-        # Step 2: Multi-Source Extraction
-        # Source A: Extraction Service (High Quality for Subject/Contract)
-        s_extract = extraction_service.extract_subject_section(full_text)
+        # Step 2: Phase 2 Multi-Layer Extraction
+        # Source A: Phase 2 engine (spatial anchor + OCR correction + sanity checks)
+        s_extract, field_meta = phase2_engine.extract_subject(
+            full_text, extraction_result.page_index
+        )
+        # Contract: still uses original extraction service (not yet Phase 2)
         c_extract = extraction_service.extract_contract_section(full_text)
         
         # Source B: Advanced Parser (Legacy for Site/Improvements)
@@ -210,6 +220,14 @@ class SmartQCProcessor:
                 assignment_type=report.contract.assignment_type or "Refinance"
             )
 
+        # Step 4b: Populate neighborhood commentary from Phase 2 extraction
+        nbr_desc = field_meta.get("neighborhood_description")
+        mkt_cmt  = field_meta.get("market_conditions_commentary")
+        if nbr_desc and nbr_desc.value:
+            report.neighborhood.description_commentary = nbr_desc.value
+        if mkt_cmt and mkt_cmt.value:
+            report.neighborhood.market_conditions_comment = mkt_cmt.value
+
         # Step 5: Parse contract PDF if provided OR if appraisal says it was analyzed
         purchase_agreement = None
         if contract_text:
@@ -218,11 +236,12 @@ class SmartQCProcessor:
         elif report.contract.did_analyze_contract:
             logger.info("Appraisal indicates contract was analyzed but no contract PDF provided.")
 
-        # Step 6: Create ValidationContext
+        # Step 6: Create ValidationContext (pass field_meta for source_page + confidence)
         ctx = ValidationContext(
             report=report,
             engagement_letter=engagement_letter,
-            purchase_agreement=purchase_agreement
+            purchase_agreement=purchase_agreement,
+            field_meta=field_meta,
         )
         
         # Step 7: Execute rule engine
@@ -232,7 +251,8 @@ class SmartQCProcessor:
         # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
         if document_id:
             page_confidences = [p.confidence for p in extraction_result.page_details]
-            save_extracted_fields(document_id, s_extract.model_dump(), page_confidences)
+            # Pass Phase 2 FieldMetaResult dict directly — richer than model_dump()
+            save_extracted_fields(document_id, field_meta, page_confidences)
             save_rule_results(document_id, rule_results)
 
         # Step 9: Assemble results
@@ -242,6 +262,8 @@ class SmartQCProcessor:
             rule_results=rule_results,
             start_time=start_time,
             document_id=document_id,
+            cache_hit=cache_hit,
+            field_meta=field_meta,
         )
 
         return results
@@ -353,6 +375,8 @@ class SmartQCProcessor:
         rule_results: List[RuleResult],
         start_time: float,
         document_id: Optional[str] = None,
+        cache_hit: bool = False,
+        field_meta: Optional[Dict] = None,
     ) -> QCResults:
         """Assemble final QC results."""
         
@@ -381,7 +405,12 @@ class SmartQCProcessor:
                 details=result.details,
                 appraisal_value=result.appraisal_value,
                 engagement_value=result.engagement_value,
-                review_required=result.review_required
+                review_required=result.review_required,
+                severity=result.severity.value if hasattr(result.severity, "value") else str(result.severity),
+                source_page=result.source_page,
+                field_confidence=result.field_confidence,
+                auto_correctable=result.auto_correctable,
+                rule_version=result.rule_version,
             ))
             
             # Collect action items from failed/skipped rules
@@ -395,25 +424,16 @@ class SmartQCProcessor:
         methods = [p.method.value for p in extraction_result.page_details]
         primary_method = max(set(methods), key=methods.count) if methods else "unknown"
 
-        # Per-field confidence: avg OCR page confidence ± field-type adjustment
-        avg_conf = (
-            sum(p.confidence for p in extraction_result.page_details)
-            / len(extraction_result.page_details)
-        ) if extraction_result.page_details else 0.7
-
-        HIGH_CONF = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
-        LOW_CONF  = {"neighborhood_name", "legal_description", "owner_of_public_record"}
-
+        # Per-field confidence: use Phase 2 FieldMetaResult scores when available
         field_confidence: Dict[str, float] = {}
         for field_name, value in s_extract.model_dump().items():
-            if value is None:
+            meta_entry = (field_meta or {}).get(field_name)
+            if meta_entry is not None and hasattr(meta_entry, "effective_confidence"):
+                field_confidence[field_name] = round(meta_entry.effective_confidence, 3)
+            elif value is None:
                 field_confidence[field_name] = 0.0
-            elif field_name in HIGH_CONF:
-                field_confidence[field_name] = round(min(1.0, avg_conf + 0.10), 3)
-            elif field_name in LOW_CONF:
-                field_confidence[field_name] = round(max(0.0, avg_conf - 0.10), 3)
             else:
-                field_confidence[field_name] = round(avg_conf, 3)
+                field_confidence[field_name] = 0.7
 
         return QCResults(
             success=True,
@@ -421,6 +441,7 @@ class SmartQCProcessor:
             total_pages=extraction_result.total_pages,
             extraction_method=primary_method,
             document_id=document_id,
+            cache_hit=cache_hit,
             extracted_fields=s_extract.model_dump(),
             field_confidence=field_confidence,
             total_rules=len(rule_results),

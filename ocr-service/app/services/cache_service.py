@@ -47,6 +47,19 @@ def _db_ok() -> bool:
 
 # ── OCR Page Cache ─────────────────────────────────────────────────────────────
 
+def get_document_id(file_hash: str) -> Optional[str]:
+    """Return the document_id (UUID str) for a known file_hash, or None."""
+    if not _db_ok():
+        return None
+    try:
+        with get_db() as db:
+            doc = db.query(Document).filter(Document.file_hash == file_hash).first()
+            return str(doc.id) if doc else None
+    except Exception as e:
+        logger.warning("get_document_id failed: %s", e)
+        return None
+
+
 def get_cached_ocr(file_hash: str, expected_pages: int):
     """
     Return a list of PageText objects if all pages are cached, else None.
@@ -63,6 +76,9 @@ def get_cached_ocr(file_hash: str, expected_pages: int):
 
     try:
         from app.ocr.ocr_pipeline import PageText, ExtractionMethod
+
+        # Read ALL column values INSIDE the session — once the session closes,
+        # SQLAlchemy ORM objects become detached and attribute access raises an error.
         with get_db() as db:
             rows = (
                 db.query(PageOCRResult)
@@ -71,20 +87,22 @@ def get_cached_ocr(file_hash: str, expected_pages: int):
                 .all()
             )
 
-        if len(rows) != expected_pages:
-            return None  # Cache incomplete (partial previous run or different doc)
+            if len(rows) != expected_pages:
+                return None  # Cache incomplete
 
-        pages = [
-            PageText(
-                page_number=r.page_number,
-                text=r.raw_text or "",
-                method=ExtractionMethod(r.extraction_method or "embedded"),
-                confidence=r.confidence_score or 0.5,
-                word_count=r.word_count or 0,
-                has_tables=r.has_tables or False,
-            )
-            for r in rows
-        ]
+            # Materialise all values while session is still open
+            pages = [
+                PageText(
+                    page_number=r.page_number,
+                    text=r.raw_text or "",
+                    method=ExtractionMethod(r.extraction_method or "embedded"),
+                    confidence=r.confidence_score or 0.5,
+                    word_count=r.word_count or 0,
+                    has_tables=r.has_tables or False,
+                )
+                for r in rows
+            ]
+
         logger.info("Cache HIT: %s (%d pages)", file_hash[:12], len(pages))
         return pages
 
@@ -107,7 +125,7 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
         doc_id = uuid.uuid4()
 
         with get_db() as db:
-            # Upsert document record
+            # Upsert document record (read inside session)
             existing = db.query(Document).filter(Document.file_hash == file_hash).first()
             if existing:
                 doc_id = existing.id
@@ -120,25 +138,29 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
                     upload_timestamp=datetime.utcnow(),
                 )
                 db.add(doc)
-                db.flush()  # assign ID before child inserts
+                db.flush()  # get DB-assigned id before child rows
 
-            # Upsert page OCR rows
+            # Get existing page numbers in one query (avoid N+1)
+            existing_page_nums = {
+                row[0]
+                for row in db.query(PageOCRResult.page_number)
+                .filter(PageOCRResult.file_hash == file_hash)
+                .all()
+            }
+
             for pt in pages:
-                existing_page = (
-                    db.query(PageOCRResult)
-                    .filter(
+                if pt.page_number in existing_page_nums:
+                    # Update via direct SQL to avoid session binding issues
+                    db.query(PageOCRResult).filter(
                         PageOCRResult.file_hash == file_hash,
-                        PageOCRResult.page_number == pt.page_number
-                    )
-                    .first()
-                )
-                if existing_page:
-                    # Update if we have a better result
-                    if (pt.confidence or 0) > (existing_page.confidence_score or 0):
-                        existing_page.raw_text = pt.text
-                        existing_page.word_count = pt.word_count
-                        existing_page.confidence_score = pt.confidence
-                        existing_page.extraction_method = pt.method.value
+                        PageOCRResult.page_number == pt.page_number,
+                    ).update({
+                        "raw_text": pt.text,
+                        "word_count": pt.word_count,
+                        "confidence_score": pt.confidence,
+                        "extraction_method": pt.method.value,
+                        "has_tables": pt.has_tables,
+                    })
                 else:
                     page_row = PageOCRResult(
                         document_id=doc_id,
@@ -165,40 +187,53 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
 def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confidences: List[float]):
     """
     Persist extracted field values with confidence scores.
-
-    confidence = average OCR page confidence × field-specific multiplier
+    Accepts either:
+      - Dict[str, Any]             (legacy Phase 1: field_name → value)
+      - Dict[str, FieldMetaResult] (Phase 2: field_name → FieldMetaResult)
     """
     if not _db_ok() or not document_id:
         return
 
-    # Average confidence of all OCR pages — base for per-field scores
     avg_conf = sum(page_confidences) / len(page_confidences) if page_confidences else 0.7
-
-    # Field-specific confidence rules
-    # Fields with tight format validation get a bonus; free-text fields are less certain
-    HIGH_CONFIDENCE_FIELDS = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
-    LOWER_CONFIDENCE_FIELDS = {"neighborhood_name", "legal_description", "owner_of_public_record"}
+    HIGH_CONF = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
+    LOW_CONF  = {"neighborhood_name", "legal_description", "owner_of_public_record"}
 
     try:
+        from app.models.field_meta import FieldMetaResult as FMR
         doc_uuid = uuid.UUID(document_id)
+
         with get_db() as db:
             for field_name, value in fields.items():
-                if value is None:
-                    conf = 0.0
-                elif field_name in HIGH_CONFIDENCE_FIELDS:
-                    conf = min(1.0, avg_conf + 0.10)
-                elif field_name in LOWER_CONFIDENCE_FIELDS:
-                    conf = max(0.0, avg_conf - 0.10)
+                if isinstance(value, FMR):
+                    # Phase 2 path — rich metadata available
+                    db_dict = value.to_db_dict()
+                    record = ExtractedFieldRecord(
+                        document_id=doc_uuid,
+                        field_name=db_dict["field_name"],
+                        field_value=db_dict["field_value"],
+                        confidence_score=db_dict["confidence_score"],
+                        source_page=db_dict["source_page"],
+                        extraction_method=db_dict["extraction_method"],
+                        raw_ocr_text=db_dict["raw_ocr_text"],
+                        correction_applied=db_dict["correction_applied"],
+                    )
                 else:
-                    conf = avg_conf
-
-                record = ExtractedFieldRecord(
-                    document_id=doc_uuid,
-                    field_name=field_name,
-                    field_value=str(value) if value is not None else None,
-                    confidence_score=round(conf, 3),
-                    extraction_method="regex",
-                )
+                    # Phase 1 legacy path — plain value
+                    if value is None:
+                        conf = 0.0
+                    elif field_name in HIGH_CONF:
+                        conf = round(min(1.0, avg_conf + 0.10), 3)
+                    elif field_name in LOW_CONF:
+                        conf = round(max(0.0, avg_conf - 0.10), 3)
+                    else:
+                        conf = round(avg_conf, 3)
+                    record = ExtractedFieldRecord(
+                        document_id=doc_uuid,
+                        field_name=field_name,
+                        field_value=str(value) if value is not None else None,
+                        confidence_score=conf,
+                        extraction_method="regex",
+                    )
                 db.add(record)
 
     except Exception as e:

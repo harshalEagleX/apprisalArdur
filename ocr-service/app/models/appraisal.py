@@ -207,10 +207,16 @@ class AppraisalReport(BaseModel):
 
 class ValidationContext(BaseModel):
     """
-    The context passed to the Rule Engine. 
+    The context passed to the Rule Engine.
     Contains the parsed report and any available supporting docs.
     """
     report: AppraisalReport
     engagement_letter: Optional[EngagementLetter] = None
     purchase_agreement: Optional[PurchaseAgreement] = None
     public_record: Optional[PublicRecord] = None
+
+    # Phase 2 field metadata — carries per-field confidence + source page.
+    # Rules can inspect this to decide VERIFY vs FAIL based on extraction confidence.
+    field_meta: Optional[Dict[str, Any]] = None
+
+    model_config = {"arbitrary_types_allowed": True}

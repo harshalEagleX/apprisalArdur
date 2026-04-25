@@ -13,12 +13,19 @@ logging.basicConfig(
 logger = logging.getLogger("SmartIdentifier")
 
 class RuleStatus(str, Enum):
-    PASS = "PASS"
-    FAIL = "FAIL"
-    VERIFY = "VERIFY"  # OCR uncertain/missing field - needs human review
-    WARNING = "WARNING"  # Soft issue, can be accepted
-    SKIPPED = "SKIPPED"  # Rule not applicable
-    SYSTEM_ERROR = "SYSTEM_ERROR"  # Engine crash, unreadable PDF only
+    PASS         = "pass"
+    FAIL         = "fail"
+    VERIFY       = "verify"        # field missing or too low confidence — human must check
+    WARNING      = "warning"       # soft issue, can be accepted
+    SKIPPED      = "skipped"       # rule not applicable to this loan type
+    SYSTEM_ERROR = "system_error"  # rule code crashed
+
+
+class RuleSeverity(str, Enum):
+    BLOCKING = "BLOCKING"   # FAIL = stop delivery, return to appraiser
+    STANDARD = "STANDARD"   # FAIL = correction needed before delivery
+    ADVISORY = "ADVISORY"   # WARNING = flag only, not blocking
+
 
 class RuleResult(BaseModel):
     rule_id: str
@@ -26,11 +33,17 @@ class RuleResult(BaseModel):
     status: RuleStatus
     message: str
     details: Optional[Dict[str, Any]] = None
-    action_item: Optional[str] = None  # Suggestion for the developer/user
+    action_item: Optional[str] = None
     # Comparison fields for reviewer UI
-    appraisal_value: Optional[str] = None  # Value extracted from appraisal document
-    engagement_value: Optional[str] = None  # Expected value from engagement letter
-    review_required: bool = False  # True if human review is needed
+    appraisal_value: Optional[str] = None
+    engagement_value: Optional[str] = None
+    review_required: bool = False
+    # Phase 3 additions
+    severity: RuleSeverity = RuleSeverity.STANDARD
+    source_page: Optional[int] = None          # PDF page where the triggering field was found
+    field_confidence: Optional[float] = None   # Confidence of extracted value(s) used
+    auto_correctable: bool = False             # True if system can fix without human
+    rule_version: str = "1.0"
 
 class SmartLogger:
     """
