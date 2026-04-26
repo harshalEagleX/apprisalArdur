@@ -159,7 +159,7 @@ def _has_market_analysis_fallback(text: str) -> bool:
 
 # ── N-1: Neighborhood Description Specificity ─────────────────────────────────
 
-@rule(id="N-1", name="Neighborhood Description Specificity")
+@rule(id="COM-1", name="Neighborhood Description Specificity")
 def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     """
     N-1: Is the neighborhood description specific to this area, or generic boilerplate?
@@ -169,7 +169,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     text = ctx.report.neighborhood.description_commentary
     if not text or len(text.strip()) < 20:
         return RuleResult(
-            rule_id="N-1", rule_name="Neighborhood Description Specificity",
+            rule_id="COM-1", rule_name="Neighborhood Description Specificity",
             status=RuleStatus.VERIFY,
             message="Neighborhood description not found or too short to evaluate.",
             review_required=True,
@@ -181,14 +181,14 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     if llm_result is not None:
         if llm_result:
             return RuleResult(
-                rule_id="N-1", rule_name="Neighborhood Description Specificity",
+                rule_id="COM-1", rule_name="Neighborhood Description Specificity",
                 status=RuleStatus.PASS,
                 message="Neighborhood description is specific to the subject area.",
                 severity=RuleSeverity.ADVISORY,
             )
         else:
             return RuleResult(
-                rule_id="N-1", rule_name="Neighborhood Description Specificity",
+                rule_id="COM-1", rule_name="Neighborhood Description Specificity",
                 status=RuleStatus.WARNING,
                 message="Neighborhood description appears generic/boilerplate. "
                         "It should reference specific local landmarks, employers, streets, or market data.",
@@ -200,7 +200,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     is_canned, conf = _is_canned_fallback(text)
     if is_canned:
         return RuleResult(
-            rule_id="N-1", rule_name="Neighborhood Description Specificity",
+            rule_id="COM-1", rule_name="Neighborhood Description Specificity",
             status=RuleStatus.WARNING,
             message="Neighborhood description may be generic. Add specific local market details.",
             action_item="Revise to include area-specific data (distances, employers, schools, market stats).",
@@ -208,7 +208,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
             severity=RuleSeverity.ADVISORY,
         )
     return RuleResult(
-        rule_id="N-1", rule_name="Neighborhood Description Specificity",
+        rule_id="COM-1", rule_name="Neighborhood Description Specificity",
         status=RuleStatus.PASS,
         message="Neighborhood description appears specific.",
         field_confidence=conf,
@@ -218,7 +218,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
 
 # ── N-2: Market Conditions Quality ────────────────────────────────────────────
 
-@rule(id="N-2", name="Market Conditions Quality")
+@rule(id="COM-2", name="Market Conditions Quality")
 def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
     """
     N-2: Does the market conditions commentary contain real analysis?
@@ -227,7 +227,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
     text = ctx.report.neighborhood.market_conditions_comment
     if not text or len(text.strip()) < 10:
         return RuleResult(
-            rule_id="N-2", rule_name="Market Conditions Quality",
+            rule_id="COM-2", rule_name="Market Conditions Quality",
             status=RuleStatus.FAIL,
             message="Market conditions commentary is blank or missing. "
                     "UAD requires a market analysis in this section; 'See 1004MC' alone is not acceptable.",
@@ -243,7 +243,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
 
         if is_see_1004mc and not has_analysis:
             return RuleResult(
-                rule_id="N-2", rule_name="Market Conditions Quality",
+                rule_id="COM-2", rule_name="Market Conditions Quality",
                 status=RuleStatus.FAIL,
                 message="Market conditions commentary only references the 1004MC addendum. "
                         "UAD requires actual commentary, not just 'see 1004MC'.",
@@ -253,7 +253,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
             )
         if has_analysis:
             return RuleResult(
-                rule_id="N-2", rule_name="Market Conditions Quality",
+                rule_id="COM-2", rule_name="Market Conditions Quality",
                 status=RuleStatus.PASS,
                 message="Market conditions commentary contains actual analysis.",
                 severity=RuleSeverity.STANDARD,
@@ -262,7 +262,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
     # Tier 2: fallback
     if re.search(r'\bsee\s+1004mc\b', text, re.I) and not _has_market_analysis_fallback(text):
         return RuleResult(
-            rule_id="N-2", rule_name="Market Conditions Quality",
+            rule_id="COM-2", rule_name="Market Conditions Quality",
             status=RuleStatus.FAIL,
             message="Market conditions section appears to only say 'See 1004MC'. Add specific commentary.",
             action_item="Provide actual market analysis in this section.",
@@ -271,7 +271,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
 
     has_analysis = _has_market_analysis_fallback(text)
     return RuleResult(
-        rule_id="N-2", rule_name="Market Conditions Quality",
+        rule_id="COM-2", rule_name="Market Conditions Quality",
         status=RuleStatus.PASS if has_analysis else RuleStatus.WARNING,
         message="Market conditions commentary found." if has_analysis
                 else "Market conditions commentary may lack specific market data.",
@@ -281,7 +281,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
 
 # ── N-3: Comparable Selection Rationale ───────────────────────────────────────
 
-@rule(id="N-3", name="Comparable Selection Rationale")
+@rule(id="COM-3", name="Comparable Selection Rationale")
 def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
     """
     N-3: Does the appraiser explain why these comparables were selected?
@@ -290,7 +290,7 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
     sales = ctx.report.sales_comparison
     if sales.comparables_count_sales is not None and sales.comparables_count_sales < 3:
         return RuleResult(
-            rule_id="N-3", rule_name="Comparable Selection Rationale",
+            rule_id="COM-3", rule_name="Comparable Selection Rationale",
             status=RuleStatus.FAIL,
             message=f"Only {sales.comparables_count_sales} comparable sale(s) provided. Minimum 3 required.",
             action_item="Add at least 3 comparable sales to the grid.",
@@ -307,7 +307,7 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
 
     if not commentary or len(commentary.strip()) < 20:
         return RuleResult(
-            rule_id="N-3", rule_name="Comparable Selection Rationale",
+            rule_id="COM-3", rule_name="Comparable Selection Rationale",
             status=RuleStatus.VERIFY,
             message="Comparable selection commentary not found. "
                     "Please verify the appraiser explains why these comparables were chosen.",
@@ -317,14 +317,14 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
 
     if has_rationale:
         return RuleResult(
-            rule_id="N-3", rule_name="Comparable Selection Rationale",
+            rule_id="COM-3", rule_name="Comparable Selection Rationale",
             status=RuleStatus.PASS,
             message="Comparable selection rationale is provided.",
             severity=RuleSeverity.ADVISORY,
         )
 
     return RuleResult(
-        rule_id="N-3", rule_name="Comparable Selection Rationale",
+        rule_id="COM-3", rule_name="Comparable Selection Rationale",
         status=RuleStatus.WARNING,
         message="Comparable selection commentary does not clearly explain why these properties were selected.",
         action_item="Add rationale explaining why each comparable was selected (proximity, similarity, availability).",
@@ -334,7 +334,7 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
 
 # ── N-4: Adjustments Explanation ──────────────────────────────────────────────
 
-@rule(id="N-4", name="Adjustments Explanation")
+@rule(id="COM-4", name="Adjustments Explanation")
 def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
     """
     N-4: Are the adjustments in the sales comparison grid explained?
@@ -351,7 +351,7 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
 
     if not commentary or len(commentary.strip()) < 20:
         return RuleResult(
-            rule_id="N-4", rule_name="Adjustments Explanation",
+            rule_id="COM-4", rule_name="Adjustments Explanation",
             status=RuleStatus.VERIFY,
             message="Sales comparison commentary not found. Verify adjustments are explained.",
             review_required=True,
@@ -359,7 +359,7 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
         )
 
     return RuleResult(
-        rule_id="N-4", rule_name="Adjustments Explanation",
+        rule_id="COM-4", rule_name="Adjustments Explanation",
         status=RuleStatus.PASS if has_explanation else RuleStatus.WARNING,
         message="Adjustment explanation found in commentary." if has_explanation
                 else "Adjustments may not be adequately explained. "
@@ -372,7 +372,7 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
 
 # ── N-5: Reconciliation Sufficiency ───────────────────────────────────────────
 
-@rule(id="N-5", name="Reconciliation Sufficiency")
+@rule(id="COM-5", name="Reconciliation Sufficiency")
 def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
     """
     N-5: Does the reconciliation section explain WHY the final value was chosen,
@@ -390,7 +390,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
 
     if not commentary or len(commentary.strip()) < 20:
         return RuleResult(
-            rule_id="N-5", rule_name="Reconciliation Sufficiency",
+            rule_id="COM-5", rule_name="Reconciliation Sufficiency",
             status=RuleStatus.VERIFY,
             message="Reconciliation commentary not found.",
             review_required=True,
@@ -403,7 +403,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
 
     if llm_result is True:   # canned
         return RuleResult(
-            rule_id="N-5", rule_name="Reconciliation Sufficiency",
+            rule_id="COM-5", rule_name="Reconciliation Sufficiency",
             status=RuleStatus.WARNING,
             message="Reconciliation commentary appears generic. It should explain why the final "
                     "value was chosen, not just restate the comparable values.",
@@ -413,14 +413,14 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
 
     if has_recon_phrases:
         return RuleResult(
-            rule_id="N-5", rule_name="Reconciliation Sufficiency",
+            rule_id="COM-5", rule_name="Reconciliation Sufficiency",
             status=RuleStatus.PASS,
             message="Reconciliation commentary explains the basis for the final value.",
             severity=RuleSeverity.STANDARD,
         )
 
     return RuleResult(
-        rule_id="N-5", rule_name="Reconciliation Sufficiency",
+        rule_id="COM-5", rule_name="Reconciliation Sufficiency",
         status=RuleStatus.WARNING,
         message="Reconciliation section may not adequately explain why the final value was selected.",
         action_item="Add commentary explaining which comparable(s) are most reliable and why.",
@@ -430,7 +430,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
 
 # ── N-6: Addenda Consistency ──────────────────────────────────────────────────
 
-@rule(id="N-6", name="Addenda Consistency")
+@rule(id="COM-6", name="Addenda Consistency")
 def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
     """
     N-6: Do addenda contradict the main form values?
@@ -442,7 +442,7 @@ def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
     mv = ctx.report.sales_comparison  # simplified — full check in Phase 5
 
     return RuleResult(
-        rule_id="N-6", rule_name="Addenda Consistency",
+        rule_id="COM-6", rule_name="Addenda Consistency",
         status=RuleStatus.VERIFY,
         message="Addenda cross-reference requires manual review. "
                 "Automated addenda consistency check will be available in Phase 5.",
@@ -453,7 +453,7 @@ def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
 
 # ── N-7: Prior Sales Disclosure ───────────────────────────────────────────────
 
-@rule(id="N-7", name="Prior Sales Disclosure")
+@rule(id="COM-7", name="Prior Sales Disclosure")
 def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
     """
     N-7: Are prior sales of the subject property disclosed and analyzed?
@@ -464,7 +464,7 @@ def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
 
     if offered is None:
         return RuleResult(
-            rule_id="N-7", rule_name="Prior Sales Disclosure",
+            rule_id="COM-7", rule_name="Prior Sales Disclosure",
             status=RuleStatus.VERIFY,
             message="Could not determine if prior listing/sale history is addressed. "
                     "Verify the appraiser has disclosed any prior transfers.",
@@ -481,7 +481,7 @@ def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
             missing.append("Data Source")
         if missing:
             return RuleResult(
-                rule_id="N-7", rule_name="Prior Sales Disclosure",
+                rule_id="COM-7", rule_name="Prior Sales Disclosure",
                 status=RuleStatus.WARNING,
                 message=f"Property was offered for sale but missing: {', '.join(missing)}.",
                 action_item=f"Add {', '.join(missing)} to the Subject section.",
@@ -489,7 +489,7 @@ def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
             )
 
     return RuleResult(
-        rule_id="N-7", rule_name="Prior Sales Disclosure",
+        rule_id="COM-7", rule_name="Prior Sales Disclosure",
         status=RuleStatus.PASS,
         message="Prior listing/sale history is disclosed.",
         severity=RuleSeverity.STANDARD,

@@ -67,6 +67,9 @@ class ExtractionResult:
     images: List[Tuple[int, bytes]] = field(default_factory=list)  # (page_num, image_bytes)
     extraction_time_ms: int = 0
     warnings: List[str] = field(default_factory=list)
+    # PIL Images per page — used for moondream checkbox detection (Phase 2 Step 2)
+    # Stored as grayscale PIL.Image objects, keyed by 1-indexed page number
+    page_images: Dict[int, "Image.Image"] = field(default_factory=dict)
 
 
 class OCRPipeline:
@@ -167,6 +170,11 @@ class OCRPipeline:
                     "pil_img":       pil_img,
                     "force":         use_force,
                 })
+
+                # Store page image for moondream checkbox detection
+                # Only keep first 10 pages (form pages) to manage memory
+                if pil_img is not None and page_num <= 10:
+                    result.page_images[page_num] = pil_img
 
             doc.close()
 

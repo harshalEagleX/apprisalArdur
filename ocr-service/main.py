@@ -13,9 +13,10 @@ import uuid
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import fitz  # PyMuPDF
@@ -757,6 +758,160 @@ def calculate_confidence(fields: Dict[str, Any], raw_text: str) -> float:
     
     # Cap score between 0 and 1
     return max(0.0, min(1.0, score))
+
+
+# ── Feedback models ────────────────────────────────────────────────────────────
+
+class FeedbackRequest(BaseModel):
+    document_id: str
+    rule_id: Optional[str] = None
+    field_name: Optional[str] = None
+    original_value: Optional[str] = None
+    corrected_value: Optional[str] = None
+    feedback_type: str = "CORRECTION"   # CORRECT / OCR_ERROR / EXTRACTION_ERROR / RULE_ERROR
+    operator_comment: Optional[str] = None
+
+
+@app.post("/qc/feedback")
+async def submit_feedback(payload: FeedbackRequest, request: Request):
+    """
+    Phase 5: Store an operator correction for the learning loop.
+
+    Every correction becomes a training example (Phase 6).
+    """
+    request_id = getattr(request.state, "request_id", None)
+
+    try:
+        import uuid as _uuid
+        from app.database import get_db
+        from app.models.db_models import FeedbackEvent, TrainingExample
+
+        doc_uuid = _uuid.UUID(payload.document_id)
+
+        with get_db() as db:
+            event = FeedbackEvent(
+                document_id=doc_uuid,
+                rule_id=payload.rule_id,
+                field_name=payload.field_name,
+                original_value=payload.original_value,
+                corrected_value=payload.corrected_value,
+                operator_comment=payload.operator_comment,
+                original_status=payload.feedback_type,
+                corrected_status=payload.feedback_type,
+                used_for_training=False,
+            )
+            db.add(event)
+            db.flush()
+
+            # Auto-generate training example for OCR corrections
+            if payload.feedback_type == "OCR_ERROR" and payload.original_value and payload.corrected_value:
+                db.add(TrainingExample(
+                    feature_type="ocr_correction",
+                    input_text=payload.original_value,
+                    label=payload.corrected_value,
+                    source_feedback_id=event.id,
+                ))
+
+        logger.info(
+            "Feedback stored",
+            extra={"document_id": payload.document_id, "rule_id": payload.rule_id,
+                   "feedback_type": payload.feedback_type, "request_id": request_id}
+        )
+        return {"success": True, "message": "Feedback recorded. Thank you."}
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid document_id format.")
+    except Exception as e:
+        logger.error("Feedback save error: %s", e, extra={"request_id": request_id})
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── WebSocket: real-time processing progress ──────────────────────────────────
+
+@app.websocket("/qc/ws")
+async def qc_websocket(websocket: WebSocket):
+    """
+    Phase 5: WebSocket for real-time processing progress.
+
+    Client sends JSON: {"appraisal_b64": "...", "engagement_b64": "...", "contract_b64": "..."}
+    Server pushes progress events then final results.
+
+    Progress format: {"event": "progress", "stage": "ocr", "page": 5, "total": 27, "message": "..."}
+    Result format:   {"event": "complete", "data": {...qc_results...}}
+    Error format:    {"event": "error",    "message": "..."}
+    """
+    await websocket.accept()
+    request_id = str(__import__("uuid").uuid4())
+
+    try:
+        import json as _json, base64, tempfile, shutil
+
+        msg = await websocket.receive_json()
+        appraisal_b64  = msg.get("appraisal_b64")
+        engagement_b64 = msg.get("engagement_b64")
+        contract_b64   = msg.get("contract_b64")
+
+        if not appraisal_b64:
+            await websocket.send_json({"event": "error", "message": "appraisal_b64 required"})
+            return
+
+        await websocket.send_json({"event": "progress", "stage": "upload",
+                                   "message": "Files received. Starting validation..."})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # Write files
+            pdf_path = f"{tmp}/appraisal.pdf"
+            with open(pdf_path, "wb") as f:
+                f.write(base64.b64decode(appraisal_b64))
+
+            err = validate_upload(pdf_path, request_id)
+            if err:
+                await websocket.send_json({"event": "error", "message": err})
+                return
+
+            file_hash = sha256_file(pdf_path)
+            await websocket.send_json({"event": "progress", "stage": "ocr",
+                                       "message": "Extracting text from PDF...", "hash": file_hash})
+
+            engagement_text = None
+            if engagement_b64:
+                eng_path = f"{tmp}/engagement.pdf"
+                with open(eng_path, "wb") as f:
+                    f.write(base64.b64decode(engagement_b64))
+                engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
+
+            contract_text = None
+            if contract_b64:
+                con_path = f"{tmp}/contract.pdf"
+                with open(con_path, "wb") as f:
+                    f.write(base64.b64decode(contract_b64))
+                contract_text = await run_in_threadpool(extract_text_from_pdf, con_path)
+
+            await websocket.send_json({"event": "progress", "stage": "rules",
+                                       "message": "Running compliance rules..."})
+
+            processor = get_qc_processor()
+            results = await run_in_threadpool(
+                processor.process_document,
+                pdf_path=pdf_path,
+                engagement_letter_text=engagement_text,
+                contract_text=contract_text,
+                file_hash=file_hash,
+                original_filename="upload.pdf",
+            )
+
+            payload = results.model_dump()
+            payload["file_hash"] = file_hash
+            await websocket.send_json({"event": "complete", "data": payload})
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected", extra={"request_id": request_id})
+    except Exception as e:
+        logger.error("WebSocket error: %s", e, extra={"request_id": request_id})
+        try:
+            await websocket.send_json({"event": "error", "message": str(e)})
+        except Exception:
+            pass
 
 
 def sha256_file(file_path: str) -> str:

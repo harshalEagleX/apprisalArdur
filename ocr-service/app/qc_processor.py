@@ -185,9 +185,11 @@ class SmartQCProcessor:
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
 
         # Step 2: Phase 2 Multi-Layer Extraction
-        # Source A: Phase 2 engine (spatial anchor + OCR correction + sanity checks)
+        # Source A: Phase 2 engine — pass page_images for moondream checkbox fallback
         s_extract, field_meta = phase2_engine.extract_subject(
-            full_text, extraction_result.page_index
+            full_text,
+            extraction_result.page_index,
+            page_images=extraction_result.page_images,
         )
         # Contract: still uses original extraction service (not yet Phase 2)
         c_extract = extraction_service.extract_contract_section(full_text)

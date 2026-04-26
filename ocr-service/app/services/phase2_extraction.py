@@ -28,6 +28,16 @@ from app.services.ocr_correction import apply_ocr_correction
 
 logger = logging.getLogger(__name__)
 
+# moondream vision fallback for uncertain checkboxes
+try:
+    from app.services.ollama_service import detect_checkbox_vision, is_moondream_available
+    _MOONDREAM_OK = is_moondream_available()
+    if _MOONDREAM_OK:
+        logger.info("moondream2 available — checkbox vision fallback enabled")
+except Exception:
+    _MOONDREAM_OK = False
+    detect_checkbox_vision = None
+
 # State → expected first digit(s) of zip code
 _STATE_ZIP_PREFIXES: Dict[str, Tuple[str, ...]] = {
     "AL": ("3",), "AR": ("7",), "AZ": ("8",), "CA": ("9",),
@@ -76,11 +86,15 @@ class Phase2ExtractionEngine:
     """
     Phase 2 field extraction with metadata (source page, confidence, correction).
     """
+    def __init__(self):
+        # Page images for moondream checkbox fallback — set per extract_subject() call
+        self._page_images: Dict[int, object] = {}
 
     def extract_subject(
         self,
         full_text: str,
         page_index: Dict[int, str],
+        page_images: Optional[Dict[int, object]] = None,
     ) -> Tuple[SubjectSectionExtract, Dict[str, FieldMetaResult]]:
         """
         Extract Subject Section fields with full per-field metadata.
@@ -88,6 +102,10 @@ class Phase2ExtractionEngine:
         Returns:
             (SubjectSectionExtract, dict of field_name → FieldMetaResult)
         """
+        # Store page images for moondream checkbox fallback (Step 2)
+        # Page 1 is the main form page — checkboxes are almost always on pages 1-3
+        self._page_images = page_images or {}
+
         # Apply OCR corrections to the full text before any regex
         corrected_text, correction_count = self._correct_text(full_text)
         if correction_count > 0:
@@ -167,15 +185,29 @@ class Phase2ExtractionEngine:
         ], page_pos, pos_offset)
 
         # ── S-7: Occupant ─────────────────────────────────────────────────────
-        occupant = self._detect_checkbox(text, {
-            "Owner":  r"(?:\[x\]|\[X\]|X|><)\s*[Oo]wner|[Oo]wner\s*(?:\[x\]|\[X\]|X|><)",
-            "Tenant": r"(?:\[x\]|\[X\]|X|><)\s*[Tt]enant|[Tt]enant\s*(?:\[x\]|\[X\]|X|><)",
-            "Vacant": r"(?:\[x\]|\[X\]|X|><)\s*[Vv]acant|[Vv]acant\s*(?:\[x\]|\[X\]|X|><)",
-        })
-        occ_m = FieldMetaResult("occupant_status", raw_value=occupant, corrected_value=occupant,
-                                confidence=0.75 if occupant else 0.0,
-                                extraction_method="regex_primary" if occupant else "not_found")
-        meta["occupant_status"] = occ_m
+        # Use three-state detection: True=[X], False=[ ], None=not found
+        owner_state  = self._checkbox_state(text, "Owner")
+        tenant_state = self._checkbox_state(text, "Tenant")
+        vacant_state = self._checkbox_state(text, "Vacant")
+
+        if owner_state is True:
+            occupant, occ_conf = "Owner", 0.90
+        elif tenant_state is True:
+            occupant, occ_conf = "Tenant", 0.90
+        elif vacant_state is True:
+            occupant, occ_conf = "Vacant", 0.90
+        elif any(s is False for s in [owner_state, tenant_state, vacant_state]):
+            # Some are explicitly [ ] but none are [X] — problem field
+            occupant, occ_conf = None, 0.30
+        else:
+            # OCR couldn't read any checkbox
+            occupant, occ_conf = None, 0.0
+
+        meta["occupant_status"] = FieldMetaResult(
+            "occupant_status", raw_value=occupant, corrected_value=occupant,
+            confidence=occ_conf,
+            extraction_method="regex_primary" if occupant else ("regex_fallback" if occ_conf > 0 else "not_found"),
+        )
 
         # ── S-8: Special Assessments ──────────────────────────────────────────
         meta["special_assessments"] = self._extract("special_assessments", text, [
@@ -183,10 +215,14 @@ class Phase2ExtractionEngine:
         ], page_pos, pos_offset)
 
         # ── S-9: PUD / HOA ────────────────────────────────────────────────────
-        pud = bool(re.search(r"(?:\[x\]|\[X\]|X|><)\s*PUD|PUD\s*(?:\[x\]|\[X\]|X|><)", text))
+        pud_state = self._checkbox_state(text, "PUD")
+        # True=[X] → PUD checked, False=[ ] → explicitly no PUD, None → unknown
+        pud_val = "True" if pud_state is True else ("False" if pud_state is False else None)
+        pud_conf = 0.90 if pud_state is not None else 0.0
         meta["is_pud_checked"] = FieldMetaResult(
-            "is_pud_checked", raw_value=str(pud), corrected_value=str(pud),
-            confidence=0.70, extraction_method="regex_primary"
+            "is_pud_checked", raw_value=pud_val, corrected_value=pud_val,
+            confidence=pud_conf,
+            extraction_method="regex_primary" if pud_state is not None else "not_found",
         )
 
         meta["hoa_dues"] = self._extract("hoa_dues", text, [
@@ -207,24 +243,32 @@ class Phase2ExtractionEngine:
 
         # ── S-10: Lender / Client ─────────────────────────────────────────────
         meta["lender_name"] = self._extract("lender_name", text, [
-            r"Lender/?Client[\s—:-]+([A-Za-z][A-Za-z\s]+(?:Corporation|Corp|Inc|LLC|Company|Co\.?|Bank|Mortgage|Credit Union))(?:\s+Address|$|\n)",
-            r"Lender/?Client[\s—:-]+([^\n]{5,80})(?:Address|\n)",
-        ], page_pos, pos_offset, post_clean=r'\s*Address.*$')
+            # Pattern 1: company name keyword (most specific)
+            r"Lender/?Client[\s—:-]+([A-Za-z][A-Za-z0-9\s,\.&]+(?:Corporation|Corp|Inc|LLC|LLP|Company|Co\.?|Bank|Mortgage|Credit Union|Funding|Capital|Financial|Home Loans?|Lending|Services?))(?:\s+Address|\s*$|\n)",
+            # Pattern 2: looks for line starting with a number-street (lender address often follows inline)
+            r"Lender/?Client[\s—:-]+([A-Z][A-Za-z0-9\s,\.&]{4,60}?)(?=\s+\d{1,5}\s|\s+Address|\n|$)",
+            # Pattern 3: anything that looks like a proper name (Title Case, reasonable length, no slash-junk)
+            r"Lender/?Client[\s\-—:]+([A-Z][a-zA-Z0-9\s&,\.]{3,50}?)(?:\s+Address|\n)",
+        ], page_pos, pos_offset, post_clean=r'\s*(Address|Client Address).*$')
 
         meta["lender_address"] = self._extract("lender_address", text, [
             r"(?:Lender/?Client|Lender)\s+Address[:\s]+([^\n]+)",
         ], page_pos, pos_offset)
 
         # ── S-11: Property Rights ─────────────────────────────────────────────
-        rights = self._detect_checkbox(text, {
-            "Fee Simple":    r"(?:\[x\]|\[X\]|X|><)\s*[Ff]ee\s+[Ss]imple|[Ff]ee\s+[Ss]imple\s*(?:\[x\]|\[X\]|X|><)",
-            "Leasehold":     r"(?:\[x\]|\[X\]|X|><)\s*[Ll]easehold|[Ll]easehold\s*(?:\[x\]|\[X\]|X|><)",
-            "De Minimis PUD":r"(?:\[x\]|\[X\]|X|><)\s*[Dd]e\s+[Mm]inimis|[Dd]e\s+[Mm]inimis\s*(?:\[x\]|\[X\]|X|><)",
-        })
+        # Three-state: [X] = this rights type applies, [ ] = explicit no, None = unknown
+        rights = None
+        rights_conf = 0.0
+        for label in ["Fee Simple", "Leasehold", "De Minimis PUD"]:
+            state = self._checkbox_state(text, label)
+            if state is True:
+                rights = label
+                rights_conf = 0.90
+                break
         meta["property_rights"] = FieldMetaResult(
             "property_rights", raw_value=rights, corrected_value=rights,
-            confidence=0.80 if rights else 0.0,
-            extraction_method="regex_primary" if rights else "not_found"
+            confidence=rights_conf,
+            extraction_method="regex_primary" if rights else "not_found",
         )
 
         # ── S-12: Prior Listing ───────────────────────────────────────────────
@@ -526,11 +570,70 @@ class Phase2ExtractionEngine:
         return FieldMetaResult(field_name=field_name, confidence=0.0, extraction_method="not_found")
 
     def _detect_checkbox(self, text: str, options: Dict[str, str]) -> Optional[str]:
-        """Detect which checkbox is marked. Returns option key or None."""
-        for label, pattern in options.items():
-            if re.search(pattern, text):
-                return label
-        return None
+        """
+        Detect which checkbox option is marked.
+
+        Rules (per build plan / user spec):
+          [X] or [x] near a label → that option IS selected → return label key
+          [ ]         near a label → explicitly NOT selected (skip that option)
+          Nothing found            → UNKNOWN, return None (→ VERIFY in rules)
+
+        Returns the option key if checked, None if unchecked or uncertain.
+        """
+        for label, checked_pattern in options.items():
+            if re.search(checked_pattern, text, re.I):
+                return label  # [X] found → YES, proceed
+
+        # All labels have no [X] — check if they're explicitly unchecked [ ]
+        # Unchecked pattern: "[ ]" or "[ ]" with label nearby
+        label_names = list(options.keys())
+        for label in label_names:
+            unchecked = rf"\[\s\]\s*{re.escape(label)}|{re.escape(label)}\s*\[\s\]"
+            if re.search(unchecked, text, re.I):
+                pass  # explicitly unchecked — don't return it
+
+        return None  # Either all [ ] or nothing found → caller returns VERIFY
+
+    def _checkbox_state(self, text: str, label: str) -> Optional[bool]:
+        """
+        Three-state checkbox detection with moondream vision fallback.
+
+        Step 1: OCR text patterns (instant, always runs first)
+          [X] or [x] near label → True  (YES, checked)
+          [ ] near label        → False (NO, explicitly unchecked)
+
+        Step 2: moondream2 vision (only when Step 1 returns None)
+          Sends the page image crop to local moondream model
+          Asks: "Is the checkbox next to '{label}' checked? YES or NO only."
+
+        Returns None only when both steps fail → VERIFY in rules.
+        """
+        label_esc = re.escape(label)
+
+        # Step 1: OCR text — [X]/[x] = checked, [ ] = unchecked
+        checked   = rf"(?:\[x\]|\[X\]|X|><)\s*{label_esc}|{label_esc}\s*(?:\[x\]|\[X\]|X|><)"
+        unchecked = rf"\[\s\]\s*{label_esc}|{label_esc}\s*\[\s\]"
+
+        if re.search(checked, text, re.I):
+            return True
+        if re.search(unchecked, text, re.I):
+            return False
+
+        # Step 2: moondream vision (page_image stored in self._page_images by extract_subject)
+        if _MOONDREAM_OK and detect_checkbox_vision and self._page_images:
+            # Try page 1 first (main form), then pages 2 and 3
+            for pg_num in [1, 2, 3]:
+                page_img = self._page_images.get(pg_num)
+                if page_img is not None:
+                    result = detect_checkbox_vision(page_img, label)
+                    if result is not None:
+                        logger.debug(
+                            "moondream checkbox '%s' page %d → %s",
+                            label, pg_num, result
+                        )
+                        return result
+
+        return None  # both steps failed → VERIFY
 
     # ── Comparable extraction ──────────────────────────────────────────────────
 
@@ -540,46 +643,76 @@ class Phase2ExtractionEngine:
         page_pos: List[Tuple[int, int]],
         pos_offset: int,
     ) -> List[Dict[str, FieldMetaResult]]:
-        """Extract address + price for up to 3 comparable sales."""
+        """
+        Extract address + price for up to 3 comparable sales.
+
+        UAD 1004 forms use several label formats:
+          "COMPARABLE NO. 1"  "COMPARABLE SALE # 1"  "Comparable No 1"
+          "COMPARABLE 1"  "Comp. 1"  "Sale 1"
+
+        Also tries extracting from the Sales Comparison grid pattern where
+        addresses appear in columns after "Subject" on the grid pages.
+        """
         comps = []
+
+        # ── Strategy 1: find explicit COMPARABLE headers ──────────────────────
         for comp_num in range(1, 4):
-            # Find the comparable section header
+            next_num = comp_num + 1
             section_match = re.search(
-                rf"COMPARABLE\s+(?:SALE)?\s*(?:NO\.?\s*)?[#]?\s*{comp_num}(.*?)"
-                rf"(?:COMPARABLE\s+(?:SALE)?\s*(?:NO\.?\s*)?[#]?\s*{comp_num+1}|$)",
+                rf"COMPARABLE\s+(?:SALE\s+)?(?:NO\.?\s*|#\s*)?{comp_num}[^\d](.*?)"
+                rf"(?:COMPARABLE\s+(?:SALE\s+)?(?:NO\.?\s*|#\s*)?{next_num}[^\d]|$)",
                 text, re.I | re.DOTALL
             )
+
             if not section_match:
                 comps.append({})
                 continue
 
-            comp_text = section_match.group(1)
+            comp_text = section_match.group(1)[:600]
             base_page = page_for_pos(section_match.start() + pos_offset, page_pos)
 
-            # Address: first line that looks like a street address
-            addr_match = re.search(r'(\d+\s+[A-Za-z][^\n]{5,60})', comp_text)
-            address_m = FieldMetaResult(
-                f"comp_{comp_num}_address",
-                raw_value=addr_match.group(1).strip() if addr_match else None,
-                corrected_value=addr_match.group(1).strip() if addr_match else None,
-                confidence=0.70 if addr_match else 0.0,
-                source_page=base_page,
-                extraction_method="regex_primary" if addr_match else "not_found"
-            )
+            addr_match = re.search(r'(\d+\s+[A-Za-z][A-Za-z0-9\s\.\,]{5,60})', comp_text)
+            price_match = re.search(r'\$\s*([\d,]{5,})', comp_text)
+            if not price_match:
+                price_match = re.search(r'\b([\d]{3},[\d]{3})\b', comp_text)
 
-            # Sale price: dollar amount
-            price_match = re.search(r'\$?\s*([\d,]{5,})', comp_text)
-            raw_price = price_match.group(1) if price_match else None
-            price_m = FieldMetaResult(
-                f"comp_{comp_num}_sale_price",
-                raw_value=raw_price,
-                corrected_value=raw_price,
-                confidence=0.72 if raw_price else 0.0,
-                source_page=base_page,
-                extraction_method="regex_primary" if raw_price else "not_found"
-            )
+            comps.append({
+                "address": FieldMetaResult(
+                    f"comp_{comp_num}_address",
+                    raw_value=addr_match.group(1).strip() if addr_match else None,
+                    corrected_value=addr_match.group(1).strip() if addr_match else None,
+                    confidence=0.70 if addr_match else 0.0,
+                    source_page=base_page,
+                    extraction_method="spatial_anchor" if addr_match else "not_found",
+                ),
+                "sale_price": FieldMetaResult(
+                    f"comp_{comp_num}_sale_price",
+                    raw_value=price_match.group(1) if price_match else None,
+                    corrected_value=price_match.group(1) if price_match else None,
+                    confidence=0.72 if price_match else 0.0,
+                    source_page=base_page,
+                    extraction_method="regex_primary" if price_match else "not_found",
+                ),
+            })
 
-            comps.append({"address": address_m, "sale_price": price_m})
+        # ── Strategy 2: grid column scan (fallback if no headers found) ────────
+        all_empty = all(not c.get("address") or c["address"].value is None for c in comps)
+        if all_empty:
+            # In the sales grid, comp addresses appear as 3 addresses after "Subject"
+            # Look for lines with street addresses in groups of 3-4
+            addr_lines = re.findall(r'(\d+\s+[A-Za-z][A-Za-z0-9\s\.\,]{5,50})', text)
+            # Filter to only look like street addresses (has directional/type suffix)
+            street_lines = [
+                a for a in addr_lines
+                if re.search(r'\b(?:St|Ave|Rd|Blvd|Ln|Dr|Way|Ct|Pl|Cir|Hwy|N|S|E|W|NE|NW|SE|SW)\b', a, re.I)
+            ]
+            if len(street_lines) >= 2:
+                for i, sl in enumerate(street_lines[1:4], 1):
+                    if i <= len(comps) and comps[i-1].get("address") and comps[i-1]["address"].value is None:
+                        comps[i-1]["address"] = FieldMetaResult(
+                            f"comp_{i}_address", raw_value=sl, corrected_value=sl,
+                            confidence=0.55, extraction_method="regex_fallback",
+                        )
 
         return comps
 

@@ -412,39 +412,53 @@ class ExtractionService:
         """Extract facts from Contract Section."""
         contract = ContractSectionExtract()
         
-        # C-1: Assignment Type and Contract Analysis
-        text_lower = text.lower()
-        
-        # Detect assignment type
-        check_pattern = r"(?:\[x\]|\[X\]|X|><|\]X|X\[|x)"
-        
-        purchase_checked = bool(re.search(rf"{check_pattern}\s*purchase|purchase\s*{check_pattern}", text_lower))
-        refinance_checked = bool(re.search(rf"{check_pattern}\s*refin|refin\s*{check_pattern}", text_lower))
-        
-        if purchase_checked and refinance_checked:
-            contract.assignment_type = "Both_Checked"  # Flag for Java to handle
-        elif purchase_checked:
+        # ── Helper: three-state checkbox — [X]=True, [ ]=False, missing=None ──
+        def chk(label: str) -> Optional[bool]:
+            """[X]/[x] near label → True, [ ] near label → False, absent → None."""
+            label_esc = re.escape(label)
+            if re.search(rf"(?:\[x\]|\[X\]|X|><)\s*{label_esc}|{label_esc}\s*(?:\[x\]|\[X\]|X|><)", text, re.I):
+                return True
+            if re.search(rf"\[\s\]\s*{label_esc}|{label_esc}\s*\[\s\]", text, re.I):
+                return False
+            return None
+
+        # C-1: Assignment Type
+        # [X] Purchase = Purchase transaction, [X] Refinance = Refinance
+        purchase_state  = chk("Purchase") or chk("purchase")
+        refinance_state = chk("Refinance") or chk("refinance") or chk("Refin")
+
+        if purchase_state is True and refinance_state is True:
+            contract.assignment_type = "Both_Checked"
+        elif purchase_state is True:
             contract.assignment_type = "Purchase"
-        elif refinance_checked:
+        elif refinance_state is True:
             contract.assignment_type = "Refinance"
-        
-        # Did analyze contract
-        check_pattern = r"(?:\[x\]|\[X\]|X|><|\]X|X\[|x)"
-        if re.search(rf"{check_pattern}\s*did\s*analyze|did\s*analyze\s*{check_pattern}", text_lower) and not "did not" in text_lower:
+        elif purchase_state is False and refinance_state is False:
+            contract.assignment_type = None  # Both explicitly unchecked → VERIFY
+        # else: Neither found → assignment_type stays None
+
+        # C-1: Did Analyze Contract
+        # [X] on "Did Analyze" → True (analyzed), [X] on "Did Not Analyze" → False
+        did_analyze_state     = chk("did analyze")
+        did_not_analyze_state = chk("did not analyze")
+
+        if did_analyze_state is True and did_not_analyze_state is not True:
             contract.did_analyze_contract = True
-        elif re.search(rf"{check_pattern}\s*did not\s*analyze|did not\s*analyze\s*{check_pattern}", text_lower):
+        elif did_not_analyze_state is True:
             contract.did_analyze_contract = False
-        # Fallback for missing boolean boxes (text search)
-        elif "did not analyze" in text_lower:
-             contract.did_analyze_contract = False
-        elif "did analyze" in text_lower or "i did analyze" in text_lower:
-             contract.did_analyze_contract = True
-        
-        # Sale type
-        sale_types = ["Arms-Length", "Non Arms-Length", "REO", "Short Sale", "Court Ordered"]
-        check_pattern = r"(?:\[x\]|\[X\]|X|><|\]X|X\[|x)"
-        for sale_type in sale_types:
-            if re.search(rf"{check_pattern}\s*{sale_type}|{sale_type}\s*{check_pattern}", text, re.I):
+        elif did_analyze_state is False and did_not_analyze_state is False:
+            contract.did_analyze_contract = None  # Both [ ] → VERIFY
+        else:
+            # Text-based fallback (when checkboxes not in standard format)
+            tl = text.lower()
+            if "did not analyze" in tl:
+                contract.did_analyze_contract = False
+            elif "did analyze" in tl or "i did analyze" in tl:
+                contract.did_analyze_contract = True
+
+        # C-1: Sale type — [X] on the sale type label
+        for sale_type in ["Arms-Length", "Non Arms-Length", "REO", "Short Sale", "Court Ordered"]:
+            if chk(sale_type) is True:
                 contract.sale_type = sale_type
                 break
         
@@ -455,23 +469,42 @@ class ExtractionService:
         ])
         if price_str:
             contract.contract_price = self._parse_money(price_str)
-        # C-3: Owner of Record - Is seller owner of public record?
-        # OCR format: "Is the property seller the owner of public record? XX Yes | No Data Source(s) County / Contract"
-        # XX before Yes = Yes checked, XX before No = No checked
-        owner_check_pattern = r"seller.*owner.*(?:public record|record)\?\s*(XX|X|><|\[X\]|\[x\])\s*(Yes|No)"
-        owner_match = re.search(owner_check_pattern, text, re.IGNORECASE)
-        if owner_match:
-            answer = owner_match.group(2).upper()
-            contract.is_seller_owner_of_record = (answer == "YES")
-        else:
-            # Alternative patterns
-            if re.search(r"seller.*owner.*\?\s*(?:XX|X|><)\s*Yes", text, re.IGNORECASE):
-                contract.is_seller_owner_of_record = True
-            elif re.search(r"seller.*owner.*\?\s*(?:XX|X|><)\s*No", text, re.IGNORECASE):
-                contract.is_seller_owner_of_record = False
-            # Fallback: check if Yes is marked anywhere near the question
-            elif re.search(r"owner of public record.*XX\s*Yes", text, re.IGNORECASE):
-                contract.is_seller_owner_of_record = True
+        # C-3: Is seller the owner of public record?
+        # [X] Yes → True (seller IS owner), [X] No → False (seller is NOT owner)
+        # [ ] on both or not found → None (VERIFY)
+        yes_state = None
+        no_state  = None
+
+        # Pattern: "...public record? [X] Yes [ ] No" or vice versa
+        yes_match = re.search(
+            r"seller.*owner.*(?:public\s+record|record)\?.*?"
+            r"(?:(?:\[x\]|\[X\]|X|><|\[?\s*X\s*\]?)\s*Yes|(Yes)\s*(?:\[x\]|\[X\]|X|><))",
+            text, re.I | re.DOTALL
+        )
+        no_match = re.search(
+            r"seller.*owner.*(?:public\s+record|record)\?.*?"
+            r"(?:(?:\[x\]|\[X\]|X|><)\s*No|(No)\s*(?:\[x\]|\[X\]|X|><))",
+            text, re.I | re.DOTALL
+        )
+        # Explicit [ ] variants
+        yes_unchecked = re.search(r"seller.*owner.*\?\s*\[\s\]\s*Yes", text, re.I | re.DOTALL)
+        no_unchecked  = re.search(r"seller.*owner.*\?\s*\[\s\]\s*No",  text, re.I | re.DOTALL)
+
+        if yes_match:
+            yes_state = True
+        elif yes_unchecked:
+            yes_state = False
+
+        if no_match:
+            no_state = True  # "No" checkbox is checked
+        elif no_unchecked:
+            no_state = False
+
+        if yes_state is True:
+            contract.is_seller_owner_of_record = True
+        elif no_state is True:
+            contract.is_seller_owner_of_record = False
+        # else: remains None → VERIFY
         
         # C-3: Data Source extraction - "Data Source(s) County / Contract"
         contract.owner_record_data_source = self._extract_field(text, [
@@ -483,25 +516,21 @@ class ExtractionService:
             # Remove trailing checkbox artifacts
             contract.owner_record_data_source = re.sub(r'\s*\[?\s*\|?\s*$', '', contract.owner_record_data_source).strip()
         
-        # C-4: Financial Assistance - checkbox detection
-        # OCR format: "|s there any financial assistance...? [| Yes No" (No checked when | before Yes)
-        # Or: "financial assistance...? [| Yes  x No" (x before No = No checked)
-        
-        # Look for the financial assistance question
-        fin_assist_match = re.search(
-            r"financial assistance.*\?.*?(x|X|XX|><|\[x\]|\[X\])\s*(Yes|No)",
-            text, re.IGNORECASE
-        )
-        if fin_assist_match:
-            answer = fin_assist_match.group(2).upper()
-            contract.has_financial_assistance = (answer == "YES")
-        else:
-            # Alternative: check for "No" with amount $0 as indicator of No
-            if re.search(r"financial assistance.*\$\s*0|no financial assistance", text, re.IGNORECASE):
-                contract.has_financial_assistance = False
-            # Check for Yes checkbox near financial assistance
-            elif re.search(r"financial assistance.*(?:XX|X|><)\s*Yes", text, re.IGNORECASE):
-                contract.has_financial_assistance = True
+        # C-4: Financial Assistance — three-state:
+        # [X] Yes → has assistance, [X] No → no assistance, [ ] both → VERIFY
+        fa_yes = re.search(r"financial assistance.*\?.*?(?:\[x\]|\[X\]|X|><)\s*Yes", text, re.I | re.DOTALL)
+        fa_no  = re.search(r"financial assistance.*\?.*?(?:\[x\]|\[X\]|X|><)\s*No",  text, re.I | re.DOTALL)
+        fa_yes_blank = re.search(r"financial assistance.*\?.*?\[\s\]\s*Yes", text, re.I | re.DOTALL)
+        fa_no_blank  = re.search(r"financial assistance.*\?.*?\[\s\]\s*No",  text, re.I | re.DOTALL)
+
+        if fa_yes:
+            contract.has_financial_assistance = True
+        elif fa_no:
+            contract.has_financial_assistance = False
+        elif fa_yes_blank and fa_no_blank:
+            contract.has_financial_assistance = None   # Both [ ] → VERIFY
+        elif re.search(r"financial assistance.*\$\s*0|no financial assistance", text, re.I):
+            contract.has_financial_assistance = False  # text-based fallback
         
         # C-4: Financial Assistance Amount
         assist_str = self._extract_field(text, [
@@ -803,32 +832,50 @@ class ExtractionService:
         return None
     
     def _parse_address_components(self, address: str) -> Dict:
-        """Parse address into city, state, zip components."""
+        """
+        Parse address into (street, city, state, zip) using data-pattern anchoring.
+
+        Strategy (same as Phase 2):
+          1. Find 5-digit zip → anchor
+          2. Find 2-letter uppercase before zip → state
+          3. Find city between last comma/City-keyword and state
+          4. Street = everything before city
+        """
         result = {}
-        
-        # Clean extra text like "Property County:" that might be appended
+
+        # Strip trailing noise
         address = re.sub(r'\s+Property County:.*$', '', address, flags=re.IGNORECASE)
-        address = re.sub(r'\s+\(.*?\)\s*', ' ', address)  # Remove parenthetical notes
-        
-        # Try Pattern 1: "Street City, State Zip" (with comma)
-        # Example: "123 Main St, Anytown, CA 12345"
-        match = re.search(r'([A-Za-z\s]+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)', address)
-        if match:
-            result["city"] = match.group(1).strip()
-            result["state"] = match.group(2)
-            result["zip_code"] = match.group(3)
+        address = re.sub(r'\s+County:.*$', '', address, flags=re.IGNORECASE)
+        address = re.sub(r'\s+\(.*?\)\s*', ' ', address)
+        address = address.strip()
+
+        # Step 1: find zip (5-digit number)
+        zip_m = re.search(r'\b(\d{5}(?:-\d{4})?)\b', address)
+        if not zip_m:
             return result
-        
-        # Try Pattern 2: "Street City State Zip" (no comma, more greedy city capture)
-        # Example: "25126 N Jack Tone Rd Acampo CA 95220"
-        # This pattern captures: City name before State abbreviation CA 95220
-        match = re.search(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)', address)
-        if match:
-            result["city"] = match.group(1).strip()
-            result["state"] = match.group(2)
-            result["zip_code"] = match.group(3)
+        result["zip_code"] = zip_m.group(1)
+        before_zip = address[:zip_m.start()].strip()
+
+        # Step 2: find state (2 uppercase letters immediately before zip)
+        state_m = re.search(r'\b([A-Z]{2})\s*$', before_zip)
+        if not state_m:
+            # Try anywhere before zip
+            state_m = re.search(r'\b([A-Z]{2})\s+\d{5}', address)
+        if not state_m:
             return result
-        
+        result["state"] = state_m.group(1)
+        before_state = before_zip[:state_m.start()].strip().rstrip(',').strip()
+
+        # Step 3: city = last word(s) in before_state (after last comma if any)
+        if ',' in before_state:
+            parts = before_state.rsplit(',', 1)
+            city_candidate = parts[-1].strip()
+        else:
+            # City is the last 1-2 words that look like a city name
+            words = before_state.split()
+            city_candidate = words[-1] if words else ""
+
+        result["city"] = city_candidate
         return result
     
     def _parse_money(self, value_str: str) -> Optional[float]:

@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//opt/homebrew/var/log/**)",
+      "Bash(psql *)",
+      "Bash(brew services *)",
+      "Bash(ollama *)",
+      "Bash(conda run *)",
+      "Bash(conda activate *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(uvicorn *)",
+      "Bash(pkill -f *)",
+      "Bash(alembic *)",
+      "Bash(redis-cli *)",
+      "Bash(pg_isready *)",
+      "Bash(pg_ctl *)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -s -X POST http://localhost:*)",
+      "Bash(curl -s -X PATCH http://localhost:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -v http://localhost:5001/health)",
+      "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' -F 'engagement_letter=@uploads/EQSS/xBatch/eagagement/96 Baell Tr Ct Order form.pdf' -F 'contract_file=@uploads/EQSS/xBatch/contract/96 baell Tr Ct CONTRACT.pdf')",
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}' -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' -F 'engagement_letter=@uploads/EQSS/xBatch/eagagement/96 Baell Tr Ct Order form.pdf')",
+      "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' -F 'engagement_letter=@uploads/EQSS/xBatch/eagagement/96 Baell Tr Ct Order form.pdf' -F 'contract_file=@uploads/EQSS/xBatch/contract/96 baell Tr Ct CONTRACT.pdf' -o /tmp/qc96.json)",
+      "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' -F 'engagement_letter=@uploads/EQSS/xBatch/eagagement/96 Baell Tr Ct Order form.pdf' -F 'contract_file=@uploads/EQSS/xBatch/contract/96 baell Tr Ct CONTRACT.pdf' --connect-timeout 10 --max-time 300 -o /tmp/qc96.json)",
+      "Bash(echo \"curl exit: $?\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' -F 'engagement_letter=@uploads/EQSS/xBatch/eagagement/96 Baell Tr Ct Order form.pdf' -F 'contract_file=@uploads/EQSS/xBatch/contract/96 baell Tr Ct CONTRACT.pdf' --max-time 180)",
+      "Bash(curl -s -X POST http://localhost:5001/qc/rules)",
+      "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' --max-time 30)",
+      "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' --max-time 30 -w '\\\\nSTATUS:%{http_code}')",
+      "Bash(grep -v \"^--\\\\|row\\\\|^$\")"
+    ]
+  }
+}
