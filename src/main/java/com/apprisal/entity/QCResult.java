@@ -66,6 +66,12 @@ public class QCResult {
     @Column(name = "extraction_method")
     private String extractionMethod;
 
+    @Column(name = "python_document_id")
+    private String pythonDocumentId;
+
+    @Column(name = "cache_hit")
+    private Boolean cacheHit = false;
+
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
@@ -224,13 +230,14 @@ public class QCResult {
         this.processingTimeMs = processingTimeMs;
     }
 
-    public String getExtractionMethod() {
-        return extractionMethod;
-    }
+    public String getExtractionMethod() { return extractionMethod; }
+    public void setExtractionMethod(String extractionMethod) { this.extractionMethod = extractionMethod; }
 
-    public void setExtractionMethod(String extractionMethod) {
-        this.extractionMethod = extractionMethod;
-    }
+    public String getPythonDocumentId() { return pythonDocumentId; }
+    public void setPythonDocumentId(String pythonDocumentId) { this.pythonDocumentId = pythonDocumentId; }
+
+    public Boolean getCacheHit() { return cacheHit; }
+    public void setCacheHit(Boolean cacheHit) { this.cacheHit = cacheHit; }
 
     public LocalDateTime getProcessedAt() {
         return processedAt;
@@ -298,7 +305,9 @@ public class QCResult {
         private Integer errorCount = 0;
         private Integer skippedCount = 0;
         private Integer processingTimeMs;
-        private String extractionMethod;
+        private String  extractionMethod;
+        private String  pythonDocumentId;      // IMPL FIX: was missing from builder
+        private Boolean cacheHit = false;      // IMPL FIX: was missing from builder
 
         public QCResultBuilder batchFile(BatchFile batchFile) {
             this.batchFile = batchFile;
@@ -360,26 +369,27 @@ public class QCResult {
             return this;
         }
 
-        public QCResultBuilder extractionMethod(String extractionMethod) {
-            this.extractionMethod = extractionMethod;
-            return this;
-        }
+        public QCResultBuilder extractionMethod(String v)   { this.extractionMethod = v; return this; }
+        public QCResultBuilder pythonDocumentId(String v)   { this.pythonDocumentId = v; return this; }
+        public QCResultBuilder cacheHit(Boolean v)          { this.cacheHit = v;          return this; }
 
         public QCResult build() {
             QCResult result = new QCResult();
-            result.batchFile = this.batchFile;
-            result.qcDecision = this.qcDecision;
-            result.pythonResponse = this.pythonResponse;
-            result.totalRules = this.totalRules;
-            result.passedCount = this.passedCount;
-            result.failedCount = this.failedCount;
-            result.verifyCount = this.verifyCount;
+            result.batchFile       = this.batchFile;
+            result.qcDecision      = this.qcDecision;
+            result.pythonResponse  = this.pythonResponse;
+            result.totalRules      = this.totalRules;
+            result.passedCount     = this.passedCount;
+            result.failedCount     = this.failedCount;
+            result.verifyCount     = this.verifyCount;
             result.manualPassCount = this.manualPassCount;
-            result.warningCount = this.warningCount;
-            result.errorCount = this.errorCount;
-            result.skippedCount = this.skippedCount;
+            result.warningCount    = this.warningCount;
+            result.errorCount      = this.errorCount;
+            result.skippedCount    = this.skippedCount;
             result.processingTimeMs = this.processingTimeMs;
             result.extractionMethod = this.extractionMethod;
+            result.pythonDocumentId = this.pythonDocumentId;
+            result.cacheHit         = this.cacheHit;
             return result;
         }
     }

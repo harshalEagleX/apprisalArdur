@@ -37,27 +37,27 @@ public class ReviewerApiController {
     public ResponseEntity<Map<String, Object>> saveDecision(@RequestBody DecisionSaveRequest request) {
         try {
             // Validate required fields
-            if (request.getRuleResultId() == null) {
+            if (request.ruleResultId() == null) {
                 throw new IllegalArgumentException("ruleResultId is required");
             }
-            if (request.getDecision() == null || request.getDecision().isEmpty()) {
+            if (request.decision() == null || request.decision().isEmpty()) {
                 throw new IllegalArgumentException("decision is required");
             }
 
             QCRuleResult result = verificationService.saveDecision(
-                    Objects.requireNonNull(request.getRuleResultId()),
-                    Objects.requireNonNull(request.getDecision()),
-                    request.getComment());
+                    Objects.requireNonNull(request.ruleResultId()),
+                    Objects.requireNonNull(request.decision()),
+                    request.comment());
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("ruleResultId", result.getId());
             response.put("ruleId", result.getRuleId());
-            response.put("decision", request.getDecision());
+            response.put("decision", request.decision());
             response.put("savedAt", result.getVerifiedAt().toString());
 
             log.info("Decision auto-saved: ruleResultId={}, decision={}",
-                    request.getRuleResultId(), request.getDecision());
+                    request.ruleResultId(), request.decision());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {

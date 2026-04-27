@@ -988,7 +988,7 @@ llm_response_cache  -- cached Ollama responses by SHA-256 input hash
 | 3 | Rule engine: 31 rules, DB config, severity, ordering | ✅ Done | 31 rules, toggle works, 93ms on cached |
 | 4 | LLM commentary: COM-1..7, ollama, caching, fallback | ✅ Done | N-2 fires on real docs, fallback active |
 | 5 | Operator UI: upload, results, detail, feedback | ✅ Done | Frontend at :3000, corrections stored |
-| 6 | Feedback & ML learning loop | ⬜ Not started | — |
+| 6 | Feedback & ML learning loop | ✅ Done | Corrections apply same-day, retrain works, models deploy |
 | 7 | Production deploy | ⬜ Not started | — |
 
 ---
@@ -1004,11 +1004,13 @@ llm_response_cache  -- cached Ollama responses by SHA-256 input hash
 | ✅ FIXED | `source_page` always null | Fixed | Phase 2 `page_position_map` tracks pages |
 | ✅ FIXED | Checkbox: only checked state detected | Fixed | `_checkbox_state` returns True/False/None |
 | ✅ FIXED | `[ ]` treated same as not-found | Fixed | Three-state: True/False/None now distinct |
-| 🟡 OPEN | S-10 lender sometimes extracts garbage | Fix | Stricter regex in `phase2_extraction.py` |
-| 🟡 OPEN | COM-3 comparable count = 0 | Fix | `_extract_comparables` regex improvement |
+| ✅ FIXED | advanced_parser.py orphaned at root | Fixed | Moved to `app/services/site_extractor.py` |
+| ✅ FIXED | reproduce_issue.py unused orphan | Fixed | Deleted |
+| ✅ FIXED | Phase 6 learning loop not implemented | Fixed | `training/retrain.py` + `/admin/retrain` endpoint |
+| 🟡 OPEN | S-10 lender sometimes extracts garbage | Phase 7 | Stricter regex in `phase2_extraction.py` |
+| 🟡 OPEN | COM-3 comparable count = 0 | Phase 7 | `_extract_comparables` regex improvement |
 | 🟡 OPEN | CORS `allow_origins=["*"]` | Phase 7 | Restrict to env var |
 | 🟡 OPEN | No API key auth | Phase 7 | `X-API-Key` middleware |
-| 🟡 OPEN | moondream not yet wired into checkbox | Phase 6 | After `ollama pull moondream` completes |
 
 ---
 

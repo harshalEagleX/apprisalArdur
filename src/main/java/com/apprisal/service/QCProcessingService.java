@@ -6,8 +6,8 @@ import com.apprisal.entity.*;
 import com.apprisal.repository.BatchRepository;
 import com.apprisal.repository.QCResultRepository;
 import com.apprisal.service.FileMatchingService.FilePair;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -47,7 +47,9 @@ public class QCProcessingService {
 
     /**
      * Process QC for an entire batch.
-     * 
+     * PIPELINE: runs synchronously — call from a background thread or Celery task for
+     * large batches to avoid blocking the HTTP thread.
+     *
      * @param batchId The batch to process
      * @return Summary of processing results
      */
@@ -66,16 +68,29 @@ public class QCProcessingService {
         List<FilePair> pairs = fileMatchingService.getMatchedPairs(batchId);
         log.info("Found {} file pairs to process", pairs.size());
 
+        if (pairs.isEmpty()) {
+            log.warn("Batch {} has no matched appraisal-engagement pairs — check folder structure", batchId);
+            batch.setStatus(BatchStatus.ERROR);
+            batchRepository.save(batch);
+            return new QCProcessingSummary(0, 0, 0, 0, 0, BatchStatus.ERROR);
+        }
+
         int autoPassCount = 0;
         int toVerifyCount = 0;
         int autoFailCount = 0;
-        int errorCount = 0;
+        int errorCount    = 0;
 
-        // Process each pair
         for (FilePair pair : pairs) {
             try {
-                QCResult result = processFilePair(pair);
+                // PIPELINE: check if Python service is available before looping
+                if (!pythonClient.isHealthy()) {
+                    log.error("Python OCR service is down — aborting batch {} after {} pairs", batchId, errorCount);
+                    batch.setStatus(BatchStatus.ERROR);
+                    batchRepository.save(batch);
+                    throw new RuntimeException("Python OCR service unavailable");
+                }
 
+                QCResult result = processFilePair(pair);
                 switch (result.getQcDecision()) {
                     case AUTO_PASS -> autoPassCount++;
                     case TO_VERIFY -> toVerifyCount++;
@@ -88,7 +103,6 @@ public class QCProcessingService {
             }
         }
 
-        // Determine batch status based on results
         BatchStatus newStatus = determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
         batch.setStatus(newStatus);
         batchRepository.save(batch);
@@ -96,8 +110,7 @@ public class QCProcessingService {
         log.info("Batch {} QC completed: autoPass={}, toVerify={}, autoFail={}, errors={}. New status: {}",
                 batchId, autoPassCount, toVerifyCount, autoFailCount, errorCount, newStatus);
 
-        return new QCProcessingSummary(pairs.size(), autoPassCount, toVerifyCount, autoFailCount, errorCount,
-                newStatus);
+        return new QCProcessingSummary(pairs.size(), autoPassCount, toVerifyCount, autoFailCount, errorCount, newStatus);
     }
 
     /**
@@ -119,10 +132,11 @@ public class QCProcessingService {
                     .orElseThrow(() -> new IllegalStateException("QC Result not found"));
         }
 
-        // Call Python service
+        // Call Python service — send all three document types when available
         PythonQCResponse pythonResponse = pythonClient.processQC(
                 pair.getAppraisalPath(),
-                pair.getEngagementPath());
+                pair.getEngagementPath(),
+                pair.getContractPath());
 
         // Determine decision
         QCDecision decision = determineDecision(pythonResponse);
@@ -132,31 +146,33 @@ public class QCProcessingService {
                 .batchFile(appraisal)
                 .qcDecision(decision)
                 .pythonResponse(toJson(pythonResponse))
-                .totalRules(pythonResponse.getTotalRules())
-                .passedCount(pythonResponse.getPassed())
-                .failedCount(pythonResponse.getFailed())
-                .verifyCount(pythonResponse.getVerify()) // NEW: items needing human verification
-                .warningCount(pythonResponse.getWarnings())
-                .errorCount(pythonResponse.getSystemErrors())
-                .skippedCount(pythonResponse.getSkipped())
-                .processingTimeMs(pythonResponse.getProcessingTimeMs())
-                .extractionMethod(pythonResponse.getExtractionMethod())
+                .totalRules(pythonResponse.totalRules())
+                .passedCount(pythonResponse.passed())
+                .failedCount(pythonResponse.failed())
+                .verifyCount(pythonResponse.verify())
+                .warningCount(pythonResponse.warnings())
+                .errorCount(pythonResponse.systemErrors())
+                .skippedCount(pythonResponse.skipped())
+                .processingTimeMs(pythonResponse.processingTimeMs())
+                .extractionMethod(pythonResponse.extractionMethod())
+                .pythonDocumentId(pythonResponse.documentId())
+                .cacheHit(pythonResponse.cacheHit())
                 .build();
 
         // Create rule results
-        if (pythonResponse.getRuleResults() != null) {
-            for (PythonRuleResult pr : pythonResponse.getRuleResults()) {
+        if (pythonResponse.ruleResults() != null) {
+            for (PythonRuleResult pr : pythonResponse.ruleResults()) {
                 QCRuleResult ruleResult = QCRuleResult.builder()
-                        .ruleId(pr.getRuleId())
-                        .ruleName(pr.getRuleName())
-                        .status(pr.getStatus())
-                        .message(pr.getMessage())
-                        .details(toJson(pr.getDetails()))
-                        .actionItem(pr.getActionItem())
+                        .ruleId(pr.ruleId())
+                        .ruleName(pr.ruleName())
+                        .status(pr.status())
+                        .message(pr.message())
+                        .details(toJson(pr.details()))
+                        .actionItem(pr.actionItem())
                         .needsVerification(pr.needsVerification())
-                        .reviewRequired(pr.isReviewRequired() || pr.needsVerification())
-                        .appraisalValue(pr.getAppraisalValue())
-                        .engagementValue(pr.getEngagementValue())
+                        .reviewRequired(pr.reviewRequired() || pr.needsVerification())
+                        .appraisalValue(pr.appraisalValue())
+                        .engagementValue(pr.engagementValue())
                         .build();
                 qcResult.addRuleResult(ruleResult);
             }
@@ -179,26 +195,10 @@ public class QCProcessingService {
      * - All PASS → AUTO_PASS
      */
     private QCDecision determineDecision(PythonQCResponse response) {
-        // If there are VERIFY items, route to human review
-        if (response.getVerify() > 0) {
-            return QCDecision.TO_VERIFY;
-        }
-
-        // If there are failures, check if OCR is confident enough
-        if (response.getFailed() > 0) {
-            // If there are also errors (OCR issues), route to review instead of auto-reject
-            if (response.getSystemErrors() > 0) {
-                return QCDecision.TO_VERIFY;
-            }
-            // High confidence failure - but still route to review, never auto-reject
-            return QCDecision.TO_VERIFY; // Changed from AUTO_FAIL
-        }
-
-        // Warnings and errors need human review
-        if (response.getWarnings() > 0 || response.getSystemErrors() > 0) {
-            return QCDecision.TO_VERIFY;
-        }
-
+        if (response.verify() > 0)      return QCDecision.TO_VERIFY;
+        if (response.failed() > 0)      return QCDecision.TO_VERIFY;
+        if (response.warnings() > 0)    return QCDecision.TO_VERIFY;
+        if (response.systemErrors() > 0) return QCDecision.TO_VERIFY;
         return QCDecision.AUTO_PASS;
     }
 
@@ -222,7 +222,7 @@ public class QCProcessingService {
             return null;
         try {
             return objectMapper.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("Failed to serialize to JSON: {}", e.getMessage());
             return null;
         }

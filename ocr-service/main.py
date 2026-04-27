@@ -13,11 +13,15 @@ import uuid
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, WebSocket, WebSocketDisconnect, Security
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 import fitz  # PyMuPDF
 
@@ -51,20 +55,46 @@ except ImportError:
     TESSERACT_AVAILABLE = False
     logger.warning("Tesseract not available")
 
+# ── Rate limiting ──────────────────────────────────────────────────────────────
+# PROD: /qc/process is expensive (14-30s OCR). Limit per IP to prevent abuse.
+_limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[]          # no global limit — apply per-route
+)
+
 app = FastAPI(
     title="Appraisal OCR Service",
     description="Extracts key fields from appraisal PDF documents",
     version="1.0.0"
 )
 
-# CORS configuration
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── CORS — restrict to Java backend + local dev ───────────────────────────────
+_ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:8080,http://localhost:3000"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in _ALLOWED_ORIGINS],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["POST", "GET", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+# ── API-Key authentication ─────────────────────────────────────────────────────
+_API_KEY        = os.getenv("PYTHON_API_KEY", "")          # empty = dev mode (no key required)
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def _require_api_key(api_key: str = Security(_api_key_header)) -> None:
+    """Validate X-API-Key header. Skipped in dev mode (PYTHON_API_KEY not set)."""
+    if not _API_KEY:
+        return  # dev mode — no key required
+    if api_key != _API_KEY:
+        raise HTTPException(status_code=403, detail={"error": "FORBIDDEN", "message": "Invalid or missing API key"})
 
 # Request Logging Middleware
 @app.middleware("http")
@@ -197,6 +227,7 @@ def get_extraction_service():
 @app.post("/qc/extract")
 async def extract_facts(
     request: Request,
+    _auth: None = Security(_require_api_key),
     file: UploadFile = File(...),
     engagement_letter: Optional[UploadFile] = None,
     env_file: Optional[UploadFile] = None,
@@ -297,8 +328,10 @@ async def extract_facts(
 
 
 @app.post("/qc/process")
+@_limiter.limit("20/minute")   # PROD: max 20 QC requests/min per IP — OCR is expensive
 async def process_qc(
     request: Request,
+    _auth: None = Security(_require_api_key),
     file: UploadFile = File(...),
     engagement_letter: Optional[UploadFile] = None,
     contract_file: Optional[UploadFile] = None,
@@ -447,6 +480,44 @@ async def list_qc_rules():
         "categories": counts,
         "rules": rules_info,
     }
+
+
+@app.post("/admin/retrain")
+async def trigger_retraining(
+    request: Request,
+    _auth: None = Security(_require_api_key),
+    synthetic: bool = False,
+):
+    """
+    Phase 6: Trigger the ML retraining pipeline manually.
+
+    - Pulls all unprocessed feedback_events from the DB
+    - Retrains: OCR correction model, commentary classifier, confidence model
+    - Only deploys a new model if its accuracy improves over the current version
+    - Marks all processed feedback as used_for_training=True
+    - If ?synthetic=true: generates 30 synthetic examples first (useful for testing)
+
+    Runs synchronously (blocks until complete — typically 5–30 seconds).
+    For production, wire to a Celery task instead.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    logger.info("Retraining triggered", extra={"request_id": request_id, "synthetic": synthetic})
+
+    try:
+        import sys
+        sys.path.insert(0, "/Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/ocr-service")
+        from training.retrain import run_retraining, generate_synthetic_feedback
+
+        if synthetic:
+            n = generate_synthetic_feedback(30)
+            logger.info("Generated %d synthetic examples", n, extra={"request_id": request_id})
+
+        result = await run_in_threadpool(run_retraining)
+        return result
+
+    except Exception as e:
+        logger.error("Retraining failed: %s", e, extra={"request_id": request_id}, exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": "RETRAIN_FAILED", "message": str(e)})
 
 
 @app.patch("/admin/rules/{rule_id}")
@@ -811,6 +882,12 @@ async def submit_feedback(payload: FeedbackRequest, request: Request):
                     label=payload.corrected_value,
                     source_feedback_id=event.id,
                 ))
+                # Invalidate the learned-corrections cache so this applies immediately
+                try:
+                    from app.services.ocr_correction import invalidate_learned_cache
+                    invalidate_learned_cache()
+                except Exception:
+                    pass
 
         logger.info(
             "Feedback stored",

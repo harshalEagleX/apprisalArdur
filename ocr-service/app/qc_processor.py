@@ -194,8 +194,8 @@ class SmartQCProcessor:
         # Contract: still uses original extraction service (not yet Phase 2)
         c_extract = extraction_service.extract_contract_section(full_text)
         
-        # Source B: Advanced Parser (Legacy for Site/Improvements)
-        from advanced_parser import extract_advanced_fields
+        # Source B: Site/Improvement extractor (dimensions, zoning, year built, comp count)
+        from app.services.site_extractor import extract_advanced_fields
         legacy_fields = extract_advanced_fields(full_text)
 
         # Step 3: Map to AppraisalReportDomain Model

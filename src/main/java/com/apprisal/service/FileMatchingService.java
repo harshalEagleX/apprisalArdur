@@ -83,17 +83,25 @@ public class FileMatchingService {
         List<FilePair> pairs = new ArrayList<>();
 
         for (BatchFile appraisal : appraisals) {
-            // Skip macOS resource fork files
-            if (appraisal.getFilename().startsWith("._")) {
-                continue;
-            }
+            if (appraisal.getFilename().startsWith("._")) continue;
 
             Optional<BatchFile> engagement = findEngagementForAppraisal(appraisal);
-            pairs.add(new FilePair(appraisal, engagement.orElse(null)));
+            Optional<BatchFile> contract   = findContractForAppraisal(appraisal);
+            pairs.add(new FilePair(appraisal, engagement.orElse(null), contract.orElse(null)));
         }
 
         log.info("Found {} file pairs for batch {}", pairs.size(), batchId);
         return pairs;
+    }
+
+    public Optional<BatchFile> findContractForAppraisal(BatchFile appraisalFile) {
+        String orderId = appraisalFile.getOrderId();
+        if (orderId == null || orderId.isBlank()) return Optional.empty();
+
+        List<BatchFile> contracts = batchFileRepository.findByBatchIdAndOrderIdAndFileType(
+                appraisalFile.getBatch().getId(), orderId, FileType.CONTRACT);
+
+        return contracts.isEmpty() ? Optional.empty() : Optional.of(contracts.get(0));
     }
 
     /**
@@ -125,23 +133,24 @@ public class FileMatchingService {
     public static class FilePair {
         private final BatchFile appraisal;
         private final BatchFile engagement;
+        private final BatchFile contract;
 
         public FilePair(BatchFile appraisal, BatchFile engagement) {
-            this.appraisal = appraisal;
+            this(appraisal, engagement, null);
+        }
+
+        public FilePair(BatchFile appraisal, BatchFile engagement, BatchFile contract) {
+            this.appraisal  = appraisal;
             this.engagement = engagement;
+            this.contract   = contract;
         }
 
-        public BatchFile getAppraisal() {
-            return appraisal;
-        }
+        public BatchFile getAppraisal()  { return appraisal; }
+        public BatchFile getEngagement() { return engagement; }
+        public BatchFile getContract()   { return contract; }
 
-        public BatchFile getEngagement() {
-            return engagement;
-        }
-
-        public boolean hasEngagement() {
-            return engagement != null;
-        }
+        public boolean hasEngagement() { return engagement != null; }
+        public boolean hasContract()   { return contract != null; }
 
         public Path getAppraisalPath() {
             return Paths.get(appraisal.getStoragePath());
@@ -149,6 +158,10 @@ public class FileMatchingService {
 
         public Path getEngagementPath() {
             return engagement != null ? Paths.get(engagement.getStoragePath()) : null;
+        }
+
+        public Path getContractPath() {
+            return contract != null ? Paths.get(contract.getStoragePath()) : null;
         }
     }
 }

@@ -32,7 +32,25 @@
       "Bash(curl -s -X POST http://localhost:5001/qc/rules)",
       "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' --max-time 30)",
       "Bash(curl -s -X POST http://localhost:5001/qc/process -F 'file=@uploads/EQSS/xBatch/appraisal/96 Baell Trace Ct SE.pdf' --max-time 30 -w '\\\\nSTATUS:%{http_code}')",
-      "Bash(grep -v \"^--\\\\|row\\\\|^$\")"
+      "Bash(grep -v \"^--\\\\|row\\\\|^$\")",
+      "Bash(rm reproduce_issue.py)",
+      "Bash(cp advanced_parser.py app/services/site_extractor.py)",
+      "Bash(echo \"colab/ kept as experimental notebooks — not imported in production\")",
+      "Bash(/opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/uvicorn main:app --port 5001)",
+      "Bash(/opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/python -c ' *)",
+      "Bash(python3)",
+      "Bash(/opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/python)",
+      "Bash(curl -s http://localhost:8080/login)",
+      "Bash(./mvnw clean *)",
+      "Bash(java -jar target/apprisal-0.0.1-SNAPSHOT.jar --spring.jpa.hibernate.ddl-auto=update)",
+      "Bash(echo \"Java PID: $!\")",
+      "Bash(sed -i '' 's|from \"@/app/page\"|from \"@/lib/api\"|g' components/UploadScreen.tsx components/RuleDetailView.tsx components/ResultsDashboard.tsx)",
+      "Bash(python3 /tmp/fix_types.py)",
+      "Bash(curl -s http://localhost:3000/login)",
+      "Bash(diff advanced_parser.py app/services/site_extractor.py)",
+      "Bash(rm advanced_parser.py)",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

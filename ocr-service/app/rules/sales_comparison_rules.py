@@ -9,33 +9,47 @@ from app.models.appraisal import ValidationContext
 @rule(id="SCA-1", name="Comparable Market Summary")
 def validate_comparable_summary(ctx: ValidationContext) -> RuleResult:
     sca = getattr(ctx.report, 'sales_comparison', None)
-    if not sca or sca.offered_comps is None or sca.sold_comps is None:
+    # Use actual model fields: comparables_count_sales, comparables_count_listings
+    sales    = getattr(sca, 'comparables_count_sales',    None) if sca else None
+    listings = getattr(sca, 'comparables_count_listings', None) if sca else None
+    if sales is None and listings is None:
         return RuleResult(
-            rule_id="SCA-1", rule_name="Comparable Market Summary", status=RuleStatus.FAIL,
-            message="Must include # of Comparable Properties Currently Offered and # of Comparable Sales within 12 Months."
+            rule_id="SCA-1", rule_name="Comparable Market Summary",
+            status=RuleStatus.VERIFY,
+            message="Comparable market summary not extracted. Verify # of comps offered and sold within 12 months.",
+            review_required=True,
         )
-    return RuleResult(rule_id="SCA-1", rule_name="Comparable Market Summary", status=RuleStatus.PASS, message="Comparable market summary provided.")
+    return RuleResult(rule_id="SCA-1", rule_name="Comparable Market Summary",
+                      status=RuleStatus.PASS,
+                      message=f"Comps: {sales} sales, {listings} listings.")
 
 @rule(id="SCA-2", name="Comparables Required")
 def validate_comparables_required(ctx: ValidationContext) -> RuleResult:
     sca = getattr(ctx.report, 'sales_comparison', None)
-    if not sca: raise DataMissingException("Sales Comparison Section")
-    
-    value = getattr(ctx.report, 'final_value', 0)
-    sales = sca.total_sales or 0
-    listings = sca.total_listings or 0
-    
-    if value < 1000000 and (sales < 3 or listings < 2):
+    if not sca:
+        raise DataMissingException("Sales Comparison Section")
+
+    # Use actual model fields
+    sales    = getattr(sca, 'comparables_count_sales',    0) or 0
+    listings = getattr(sca, 'comparables_count_listings', 0) or 0
+
+    if sales == 0 and listings == 0:
         return RuleResult(
-            rule_id="SCA-2", rule_name="Comparables Required", status=RuleStatus.FAIL,
-            message="Value < $1 Million requires minimum 3 sales + 2 listings."
+            rule_id="SCA-2", rule_name="Comparables Required",
+            status=RuleStatus.VERIFY,
+            message="Comparable count not extracted. Verify at least 3 sales + 2 listings are provided.",
+            review_required=True,
         )
-    elif value >= 1000000 and (sales < 4 or listings < 2):
+    if sales < 3:
         return RuleResult(
-            rule_id="SCA-2", rule_name="Comparables Required", status=RuleStatus.FAIL,
-            message="Value >= $1 Million requires minimum 4 sales + 2 listings."
+            rule_id="SCA-2", rule_name="Comparables Required",
+            status=RuleStatus.FAIL,
+            message=f"Only {sales} comparable sale(s) found. Minimum 3 required.",
+            appraisal_value=str(sales),
         )
-    return RuleResult(rule_id="SCA-2", rule_name="Comparables Required", status=RuleStatus.PASS, message="Adequate number of comparables provided.")
+    return RuleResult(rule_id="SCA-2", rule_name="Comparables Required",
+                      status=RuleStatus.PASS,
+                      message=f"{sales} comparable sales, {listings} listings.")
 
 @rule(id="SCA-3", name="Address (Subject and Comparables)")
 def validate_addresses(ctx: ValidationContext) -> RuleResult:

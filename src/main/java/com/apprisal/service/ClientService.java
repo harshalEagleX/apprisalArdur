@@ -27,14 +27,17 @@ public class ClientService {
         this.clientRepository = clientRepository;
     }
 
+    @Transactional(readOnly = true)
     public Optional<Client> findById(@NonNull Long id) {
         return clientRepository.findById(id);
     }
 
+    @Transactional(readOnly = true)
     public Optional<Client> findByCode(String code) {
         return clientRepository.findByCode(code);
     }
 
+    @Transactional(readOnly = true)
     public List<Client> findAll() {
         return clientRepository.findAll();
     }
@@ -88,6 +91,7 @@ public class ClientService {
         clientRepository.deleteById(id);
     }
 
+    @Transactional(readOnly = true)
     public long count() {
         return clientRepository.count();
     }

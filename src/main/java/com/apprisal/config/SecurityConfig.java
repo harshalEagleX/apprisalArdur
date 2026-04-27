@@ -76,13 +76,24 @@ public class SecurityConfig {
                 .securityMatcher("/**")
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()   // health check only
+                        // SECURITY: /files/** — authenticated + ownership enforced in FileController
                         .requestMatchers("/files/**").authenticated()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/client/**").hasAnyRole("ADMIN", "CLIENT")
                         .requestMatchers("/reviewer/**").hasAnyRole("ADMIN", "REVIEWER")
                         .anyRequest().authenticated())
                 .headers(headers -> headers
-                        .frameOptions(frameOptions -> frameOptions.sameOrigin()))
+                        .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                        // SECURITY: X-Content-Type-Options prevents MIME sniffing
+                        .contentTypeOptions(contentType -> {})
+                        // SECURITY: enable HSTS in production behind HTTPS
+                        .httpStrictTransportSecurity(hsts -> hsts.disable()))
+                .sessionManagement(session -> session
+                        // SECURITY: session fixation protection
+                        .sessionFixation().migrateSession()
+                        .maximumSessions(5)                    // max 5 concurrent sessions per user
+                        .maxSessionsPreventsLogin(false))
                 .formLogin(form -> form
                         .loginPage("/login")
                         .loginProcessingUrl("/login")
@@ -93,6 +104,7 @@ public class SecurityConfig {
                         .logoutUrl("/logout")
                         .logoutSuccessHandler(logoutSuccessHandler())
                         .invalidateHttpSession(true)
+                        .clearAuthentication(true)
                         .deleteCookies("JSESSIONID")
                         .permitAll())
                 .authenticationProvider(authenticationProvider());
@@ -180,10 +192,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    @SuppressWarnings("deprecation")
     DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }

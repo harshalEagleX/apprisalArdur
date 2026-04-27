@@ -4,6 +4,7 @@ import com.apprisal.entity.*;
 import com.apprisal.repository.BatchFileRepository;
 import com.apprisal.repository.BatchRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Map;
  * Service for generating dashboard metrics and statistics.
  */
 @Service
+@Transactional(readOnly = true)
 public class DashboardService {
 
         private final BatchRepository batchRepository;

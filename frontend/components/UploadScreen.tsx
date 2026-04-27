@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import type { QCResults } from "@/app/page";
+import type { QCResults } from "@/lib/legacy-types";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+const API = process.env.NEXT_PUBLIC_PYTHON_URL || "http://localhost:5001";
 
 type FileEntry = { file: File; key: string };
 type Stage = "idle" | "uploading" | "ocr" | "rules" | "done" | "error";

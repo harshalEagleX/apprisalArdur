@@ -34,6 +34,7 @@ public class VerificationService {
     /**
      * Get QC result for verification.
      */
+    @Transactional(readOnly = true)
     public QCResult getForVerification(@NonNull Long qcResultId) {
         return qcResultRepository.findById(qcResultId)
                 .orElseThrow(() -> new RuntimeException("QC Result not found: " + qcResultId));
@@ -42,6 +43,7 @@ public class VerificationService {
     /**
      * Get items that need verification for a QC result.
      */
+    @Transactional(readOnly = true)
     public List<QCRuleResult> getVerificationItems(Long qcResultId) {
         return qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId);
     }
@@ -49,6 +51,7 @@ public class VerificationService {
     /**
      * Get pending (unverified) items for a QC result.
      */
+    @Transactional(readOnly = true)
     public List<QCRuleResult> getPendingItems(Long qcResultId) {
         return qcRuleResultRepository.findPendingVerificationForQcResult(qcResultId);
     }
@@ -56,6 +59,7 @@ public class VerificationService {
     /**
      * Get ALL rule results for a QC result (for full rule visibility UI).
      */
+    @Transactional(readOnly = true)
     public List<QCRuleResult> getAllRuleResults(Long qcResultId) {
         return qcRuleResultRepository.findByQcResultId(qcResultId);
     }

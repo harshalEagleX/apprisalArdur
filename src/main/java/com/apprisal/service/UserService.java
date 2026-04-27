@@ -35,26 +35,32 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    @Transactional(readOnly = true)
     public Optional<User> findById(@NonNull Long id) {
         return userRepository.findById(id);
     }
 
+    @Transactional(readOnly = true)
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
+    @Transactional(readOnly = true)
     public List<User> findAll() {
         return userRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public Page<User> findAll(@NonNull Pageable pageable) {
         return userRepository.findAll(pageable);
     }
 
+    @Transactional(readOnly = true)
     public List<User> findByRole(Role role) {
         return userRepository.findByRole(role);
     }
 
+    @Transactional(readOnly = true)
     public List<User> findByClientId(Long clientId) {
         return userRepository.findByClientId(clientId);
     }
@@ -136,14 +142,17 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
+    @Transactional(readOnly = true)
     public boolean existsByUsername(String username) {
         return userRepository.findByUsername(username).isPresent();
     }
 
+    @Transactional(readOnly = true)
     public long count() {
         return userRepository.count();
     }
 
+    @Transactional(readOnly = true)
     public long countByRole(Role role) {
         return userRepository.countByRole(role);
     }

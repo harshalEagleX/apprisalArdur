@@ -169,9 +169,80 @@ def apply_ocr_correction_to_full_text(text: str) -> Tuple[str, int]:
     """
     Apply corrections to an entire OCR page or document.
 
+    Applies TWO layers (Phase 6 — Level 1 learning):
+      Layer 1: Static LABEL_CORRECTIONS dictionary (built-in)
+      Layer 2: Operator-learned corrections from feedback_events DB table
+
     Returns:
         (corrected_text, correction_count)
     """
     corrected, _ = apply_ocr_correction(text)
-    count = sum(1 for wrong in LABEL_CORRECTIONS if wrong in text)
-    return corrected, count
+    static_count = sum(1 for wrong in LABEL_CORRECTIONS if wrong in text)
+
+    # Layer 2: apply operator-learned corrections from DB (same-day, no retraining)
+    learned = _get_learned_corrections_cached()
+    learned_count = 0
+    for wrong, right in learned.items():
+        if wrong in corrected:
+            corrected = corrected.replace(wrong, right)
+            learned_count += 1
+
+    return corrected, static_count + learned_count
+
+
+# ── Phase 6: Learned corrections from operator feedback ───────────────────────
+# Cached in memory with a short TTL so new corrections apply within minutes
+# without hitting the DB on every document.
+
+import time
+_learned_cache: dict = {}
+_learned_cache_time: float = 0.0
+_LEARNED_CACHE_TTL = 300  # 5 minutes
+
+
+def _get_learned_corrections_cached() -> dict:
+    """
+    Pull operator OCR corrections from feedback_events (feedback_type='OCR_ERROR').
+    Cached for 5 minutes so DB isn't hit on every document.
+    """
+    global _learned_cache, _learned_cache_time
+
+    if time.time() - _learned_cache_time < _LEARNED_CACHE_TTL:
+        return _learned_cache
+
+    try:
+        from app.database import get_db
+        from app.models.db_models import FeedbackEvent
+
+        learned = {}
+        with get_db() as db:
+            rows = (
+                db.query(FeedbackEvent)
+                .filter(
+                    FeedbackEvent.original_status == "OCR_ERROR",
+                    FeedbackEvent.original_value.isnot(None),
+                    FeedbackEvent.corrected_value.isnot(None),
+                )
+                .all()
+            )
+            for row in rows:
+                if row.original_value and row.corrected_value:
+                    learned[row.original_value] = row.corrected_value
+
+        _learned_cache = learned
+        _learned_cache_time = time.time()
+        return learned
+
+    except Exception:
+        return {}
+
+
+def get_learned_corrections_count() -> int:
+    """Return how many operator corrections are in the DB (for monitoring)."""
+    return len(_get_learned_corrections_cached())
+
+
+def invalidate_learned_cache():
+    """Call after a new correction is saved so it applies immediately."""
+    global _learned_cache_time
+    _learned_cache_time = 0.0

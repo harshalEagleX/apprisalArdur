@@ -32,29 +32,25 @@ public class AuthenticationService {
 
         public AuthenticationResponse register(RegisterRequest request) {
                 User user = User.builder()
-                                .username(request.getUsername())
-                                .password(passwordEncoder.encode(request.getPassword()))
-                                .role(request.getRole())
+                                .username(request.username())
+                                .password(passwordEncoder.encode(request.password()))
+                                .role(request.role())
                                 .build();
                 repository.save(Objects.requireNonNull(user));
                 UserPrincipal userPrincipal = new UserPrincipal(Objects.requireNonNull(user));
                 String jwtToken = jwtUtils.generateToken(userPrincipal);
-                return AuthenticationResponse.builder()
-                                .token(jwtToken)
-                                .build();
+                return new AuthenticationResponse(jwtToken);
         }
 
         public AuthenticationResponse authenticate(AuthenticationRequest request) {
                 authenticationManager.authenticate(
                                 new UsernamePasswordAuthenticationToken(
-                                                request.getUsername(),
-                                                request.getPassword()));
-                User user = repository.findByUsername(request.getUsername())
+                                                request.username(),
+                                                request.password()));
+                User user = repository.findByUsername(request.username())
                                 .orElseThrow();
                 UserPrincipal userPrincipal = new UserPrincipal(Objects.requireNonNull(user));
                 String jwtToken = jwtUtils.generateToken(userPrincipal);
-                return AuthenticationResponse.builder()
-                                .token(jwtToken)
-                                .build();
+                return new AuthenticationResponse(jwtToken);
         }
 }

@@ -52,13 +52,11 @@ public class BatchApiController {
     public ResponseEntity<?> getBatch(@PathVariable @NonNull Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
         User user = principal.getUser();
+        Client userClient = user.getClient();
+        if (userClient == null) return ResponseEntity.status(403).build();
 
-        return batchService.findById(id)
-                .filter(batch -> {
-                    // Security check: ensure batch belongs to user's client
-                    Client userClient = user.getClient();
-                    return userClient != null && batch.getClient().getId().equals(userClient.getId());
-                })
+        return batchService.findByIdWithFiles(id)
+                .filter(batch -> batch.getClient().getId().equals(userClient.getId()))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -103,32 +101,11 @@ public class BatchApiController {
     public ResponseEntity<?> getBatchStatus(@PathVariable @NonNull Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
         User user = principal.getUser();
+        Client userClient = user.getClient();
+        if (userClient == null) return ResponseEntity.status(403).build();
 
-        return batchService.findById(id)
-                .filter(batch -> {
-                    Client userClient = user.getClient();
-                    return userClient != null && batch.getClient().getId().equals(userClient.getId());
-                })
-                .map(batch -> {
-                    Map<String, Object> status = new HashMap<>();
-                    status.put("batchId", batch.getId());
-                    status.put("parentBatchId", batch.getParentBatchId());
-                    status.put("status", batch.getStatus());
-                    status.put("totalFiles", batch.getFiles().size());
-
-                    long pendingFiles = batch.getFiles().stream()
-                            .filter(f -> f.getStatus() == FileStatus.PENDING)
-                            .count();
-                    long completedFiles = batch.getFiles().stream()
-                            .filter(f -> f.getStatus() == FileStatus.COMPLETED)
-                            .count();
-
-                    status.put("pendingFiles", pendingFiles);
-                    status.put("completedFiles", completedFiles);
-                    status.put("updatedAt", batch.getUpdatedAt());
-
-                    return ResponseEntity.ok(status);
-                })
+        return batchService.getStatusInfo(id, userClient.getId())
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 }

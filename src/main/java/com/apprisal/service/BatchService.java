@@ -21,7 +21,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
@@ -52,38 +54,69 @@ public class BatchService {
         this.auditLogService = auditLogService;
     }
 
+    @Transactional(readOnly = true)
     public Optional<Batch> findById(@NonNull Long id) {
         return batchRepository.findById(id);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<Batch> findByIdWithFiles(@NonNull Long id) {
+        return batchRepository.findWithFilesById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Map<String, Object>> getStatusInfo(@NonNull Long batchId, @NonNull Long clientId) {
+        return batchRepository.findWithFilesById(batchId)
+                .filter(b -> b.getClient().getId().equals(clientId))
+                .map(b -> {
+                    Map<String, Object> info = new HashMap<>();
+                    info.put("batchId", b.getId());
+                    info.put("parentBatchId", b.getParentBatchId());
+                    info.put("status", b.getStatus());
+                    info.put("totalFiles", b.getFiles().size());
+                    info.put("pendingFiles",   b.getFiles().stream().filter(f -> f.getStatus() == FileStatus.PENDING).count());
+                    info.put("completedFiles", b.getFiles().stream().filter(f -> f.getStatus() == FileStatus.COMPLETED).count());
+                    info.put("updatedAt", b.getUpdatedAt());
+                    return info;
+                });
+    }
+
+    @Transactional(readOnly = true)
     public List<Batch> findByClientId(Long clientId) {
         return batchRepository.findByClientId(clientId);
     }
 
+    @Transactional(readOnly = true)
     public Page<Batch> findByClientId(Long clientId, Pageable pageable) {
         return batchRepository.findByClientId(clientId, pageable);
     }
 
+    @Transactional(readOnly = true)
     public List<Batch> findByStatus(BatchStatus status) {
         return batchRepository.findByStatus(status);
     }
 
+    @Transactional(readOnly = true)
     public List<Batch> findByReviewerId(Long reviewerId) {
         return batchRepository.findByAssignedReviewerId(reviewerId);
     }
 
+    @Transactional(readOnly = true)
     public List<Batch> findByReviewerIdAndStatus(Long reviewerId, BatchStatus status) {
         return batchRepository.findByAssignedReviewerIdAndStatus(reviewerId, status);
     }
 
+    @Transactional(readOnly = true)
     public Page<Batch> findByReviewer(Long reviewerId, Pageable pageable) {
         return batchRepository.findByAssignedReviewerId(reviewerId, pageable);
     }
 
+    @Transactional(readOnly = true)
     public List<Batch> findAll() {
         return batchRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public Page<Batch> findAll(@NonNull Pageable pageable) {
         return batchRepository.findAll(pageable);
     }
@@ -237,12 +270,15 @@ public class BatchService {
                 }
 
                 FileType fileType;
-                if (entryName.toLowerCase().contains("appraisal")) {
+                String lower = entryName.toLowerCase();
+                if (lower.contains("appraisal")) {
                     fileType = FileType.APPRAISAL;
                     hasAppraisalFolder = true;
-                } else if (entryName.toLowerCase().contains("engagement")) {
+                } else if (lower.contains("engagement") || lower.contains("eagagement") || lower.contains("order")) {
                     fileType = FileType.ENGAGEMENT;
                     hasEngagementFolder = true;
+                } else if (lower.contains("contract") || lower.contains("purchase") || lower.contains("agreement")) {
+                    fileType = FileType.CONTRACT;
                 } else {
                     continue;
                 }
@@ -310,18 +346,22 @@ public class BatchService {
     }
 
     // Statistics methods
+    @Transactional(readOnly = true)
     public long countByClient(Long clientId) {
         return batchRepository.countByClientId(clientId);
     }
 
+    @Transactional(readOnly = true)
     public long countByClientAndStatus(Long clientId, BatchStatus status) {
         return batchRepository.countByClientIdAndStatus(clientId, status);
     }
 
+    @Transactional(readOnly = true)
     public long countByStatus(BatchStatus status) {
         return batchRepository.countByStatus(status);
     }
 
+    @Transactional(readOnly = true)
     public long count() {
         return batchRepository.count();
     }

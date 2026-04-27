@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import type { QCResults, RuleResult } from "@/app/page";
+import type { QCResults, RuleResult } from "@/lib/legacy-types";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+const API = process.env.NEXT_PUBLIC_JAVA_URL || "http://localhost:8080";
 
 type FeedbackType = "CORRECT" | "OCR_ERROR" | "EXTRACTION_ERROR" | "RULE_ERROR";
 

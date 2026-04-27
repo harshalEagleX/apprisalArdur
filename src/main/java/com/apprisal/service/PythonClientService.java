@@ -41,13 +41,17 @@ public class PythonClientService {
      * @return QC processing results from Python
      */
     public PythonQCResponse processQC(Path appraisalPath, Path engagementPath) {
+        return processQC(appraisalPath, engagementPath, null);
+    }
+
+    public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath) {
         String url = config.getUrl() + "/qc/process";
 
-        log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}",
+        log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}, contract: {}",
                 url, appraisalPath.getFileName(),
-                engagementPath != null ? engagementPath.getFileName() : "none");
+                engagementPath != null ? engagementPath.getFileName() : "none",
+                contractPath != null ? contractPath.getFileName() : "none");
 
-        // Build multipart request
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
 
@@ -55,8 +59,16 @@ public class PythonClientService {
             body.add("engagement_letter", new FileSystemResource(Objects.requireNonNull(engagementPath.toFile())));
         }
 
+        if (contractPath != null) {
+            body.add("contract_file", new FileSystemResource(Objects.requireNonNull(contractPath.toFile())));
+        }
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        // SECURITY: send API key to Python service
+        if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+            headers.set("X-API-Key", config.getApiKey());
+        }
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
@@ -70,7 +82,7 @@ public class PythonClientService {
             PythonQCResponse result = response.getBody();
             if (result != null) {
                 log.info("Python QC completed: passed={}, failed={}, warnings={}, total_rules={}",
-                        result.getPassed(), result.getFailed(), result.getWarnings(), result.getTotalRules());
+                        result.passed(), result.failed(), result.warnings(), result.totalRules());
             }
             return result;
 
