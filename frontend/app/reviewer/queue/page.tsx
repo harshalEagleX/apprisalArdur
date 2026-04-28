@@ -1,48 +1,46 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getQCResults, type QCResult } from "@/lib/api";
+import { type QCResult } from "@/lib/api";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+
+async function logout() {
+  await fetch(`${JAVA}/logout`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "",
+    redirect: "manual",
+  });
+  window.location.href = "/login";
+}
 
 export default function ReviewerQueuePage() {
   const [items, setItems]     = useState<QCResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
 
   useEffect(() => {
-    // IMPL FIX: use reviewer-scoped endpoint, not /api/admin/batches
-    // This respects reviewer's assigned batches and doesn't require ADMIN role
     const loadQueue = async () => {
       try {
-        // Get batches assigned to this reviewer via reviewer API
-        const bRes = await fetch(`${JAVA}/api/reviewer/dashboard`, { credentials: "include" });
-        if (!bRes.ok) {
-          if (bRes.status === 401 || bRes.status === 403) window.location.href = "/login";
+        // First verify session is still valid
+        const authRes = await fetch(`${JAVA}/api/reviewer/dashboard`, { credentials: "include" });
+        if (!authRes.ok) {
+          window.location.href = "/login";
           return;
         }
 
-        // Use the reviewer-accessible batch list (from security-scoped endpoint)
-        const qRes = await fetch(`${JAVA}/api/qc/results/pending`, { credentials: "include" });
-        if (qRes.ok) {
-          const data: QCResult[] = await qRes.json();
-          setItems(data.filter(r => r.qcDecision === "TO_VERIFY" && !r.finalDecision));
+        // Fetch the pending verification queue
+        const qRes = await fetch(`${JAVA}/api/reviewer/qc/results/pending`, { credentials: "include" });
+        if (!qRes.ok) {
+          setError(`Failed to load queue (HTTP ${qRes.status})`);
           return;
         }
-
-        // Fallback: admin or reviewer with broader access
-        const aRes = await fetch(`${JAVA}/api/client/batches?size=100`, { credentials: "include" });
-        if (!aRes.ok) return;
-        const page = await aRes.json();
-        const batches = (page.content ?? []) as { id: number; status: string }[];
-
-        const allResults: QCResult[] = [];
-        for (const batch of batches) {
-          if (!["REVIEW_PENDING","IN_REVIEW"].includes(batch.status)) continue;
-          const res = await getQCResults(batch.id);
-          allResults.push(...res.filter((r: QCResult) => r.qcDecision === "TO_VERIFY" && !r.finalDecision));
-        }
-        setItems(allResults);
+        const data: QCResult[] = await qRes.json();
+        setItems(data.filter(r => r.qcDecision === "TO_VERIFY" && !r.finalDecision));
       } catch (e) {
         console.error("Failed to load queue:", e);
+        setError("Could not connect to server. Is the backend running?");
       } finally {
         setLoading(false);
       }
@@ -62,9 +60,14 @@ export default function ReviewerQueuePage() {
         <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-sm">A</div>
         <span className="font-semibold">Ardur Appraisal</span>
         <span className="text-slate-400">/ Reviewer</span>
-        <div className="ml-auto flex gap-3">
+        <div className="ml-auto flex gap-3 items-center">
           <a href="/reviewer/queue" className="text-blue-400 text-sm">Queue</a>
-          <a href="/login" className="text-slate-400 text-sm hover:text-white">Logout</a>
+          <button
+            onClick={logout}
+            className="text-slate-400 text-sm hover:text-white transition-colors"
+          >
+            Sign Out
+          </button>
         </div>
       </nav>
 
@@ -79,9 +82,18 @@ export default function ReviewerQueuePage() {
           </span>
         </div>
 
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-700 rounded-xl text-red-300 text-sm">
+            {error}
+          </div>
+        )}
+
         {loading ? (
-          <div className="text-center py-12 text-slate-500">Loading queue…</div>
-        ) : items.length === 0 ? (
+          <div className="text-center py-12 text-slate-500">
+            <span className="inline-block animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mr-3" />
+            Loading queue…
+          </div>
+        ) : items.length === 0 && !error ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">✅</div>
             <h3 className="text-lg font-semibold text-green-400">All caught up!</h3>

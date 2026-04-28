@@ -24,6 +24,26 @@ public class DashboardApiController {
         this.dashboardService = dashboardService;
     }
 
+    /**
+     * Returns the current user's id, username, and role.
+     * Used by the Next.js root page (/) to decide which dashboard to show
+     * without probing multiple role-specific endpoints.
+     * Returns 401 automatically if the session is not authenticated.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> getCurrentUser(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        User user = principal.getUser();
+        return ResponseEntity.ok(Map.of(
+                "id",       user.getId(),
+                "username", user.getUsername(),
+                "role",     user.getRole().name()
+        ));
+    }
+
     @GetMapping("/admin/dashboard")
     public ResponseEntity<Map<String, Object>> getAdminDashboard() {
         return ResponseEntity.ok(dashboardService.getAdminDashboard());

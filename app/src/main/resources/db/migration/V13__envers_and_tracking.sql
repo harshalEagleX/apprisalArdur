@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS revision_info (
 -- ── Operator session ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS operator_session (
     id               BIGSERIAL   PRIMARY KEY,
-    user_id          BIGINT      NOT NULL REFERENCES apprisal_user(id),
+    user_id          BIGINT      NOT NULL REFERENCES _user(id),
     session_token    VARCHAR(128) NOT NULL UNIQUE,
     started_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
     last_active_at   TIMESTAMP,
@@ -117,5 +117,19 @@ CREATE TABLE IF NOT EXISTS client_AUD (
     name    VARCHAR(255),
     code    VARCHAR(50),
     status  VARCHAR(50),
+    PRIMARY KEY (id, rev)
+);
+
+CREATE TABLE IF NOT EXISTS qc_rule_result_AUD (
+    id              BIGINT  NOT NULL,
+    rev             INTEGER NOT NULL REFERENCES revision_info(id),
+    revtype         SMALLINT,
+    rule_id         VARCHAR(50),
+    rule_name       VARCHAR(255),
+    status          VARCHAR(50),
+    review_required BOOLEAN,
+    reviewer_verified BOOLEAN,
+    reviewer_comment  TEXT,
+    qc_result_id    BIGINT,
     PRIMARY KEY (id, rev)
 );

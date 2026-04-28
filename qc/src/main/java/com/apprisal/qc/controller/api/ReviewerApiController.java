@@ -1,7 +1,10 @@
 package com.apprisal.qc.controller.api;
 
 import com.apprisal.common.dto.DecisionSaveRequest;
+import com.apprisal.common.entity.QCDecision;
+import com.apprisal.common.entity.QCResult;
 import com.apprisal.common.entity.QCRuleResult;
+import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.qc.service.VerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,10 +27,54 @@ public class ReviewerApiController {
     private static final Logger log = LoggerFactory.getLogger(ReviewerApiController.class);
 
     private final VerificationService verificationService;
+    private final QCResultRepository qcResultRepository;
 
-    public ReviewerApiController(VerificationService verificationService) {
+    public ReviewerApiController(VerificationService verificationService,
+                                 QCResultRepository qcResultRepository) {
         this.verificationService = verificationService;
+        this.qcResultRepository  = qcResultRepository;
     }
+
+    // ── Pending queue ──────────────────────────────────────────────────────────
+
+    /**
+     * Returns all TO_VERIFY QC results that have no final decision yet.
+     * Called by the Next.js reviewer queue page at /api/qc/results/pending.
+     */
+    @GetMapping("/qc/results/pending")
+    public ResponseEntity<List<Map<String, Object>>> getPendingQueue() {
+        try {
+            List<QCResult> pending = qcResultRepository.findPendingVerification();
+            List<Map<String, Object>> body = pending.stream().map(r -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id",             r.getId());
+                m.put("qcDecision",     r.getQcDecision() != null ? r.getQcDecision().name() : null);
+                m.put("finalDecision",  r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
+                m.put("totalRules",     r.getTotalRules());
+                m.put("passedCount",    r.getPassedCount());
+                m.put("failedCount",    r.getFailedCount());
+                m.put("verifyCount",    r.getVerifyCount());
+                m.put("manualPassCount",r.getManualPassCount());
+                m.put("processingTimeMs", r.getProcessingTimeMs());
+                m.put("cacheHit",       r.getCacheHit());
+                m.put("processedAt",    r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
+                // Embed minimal batchFile info the UI needs
+                if (r.getBatchFile() != null) {
+                    m.put("batchFile", Map.of(
+                            "id",       r.getBatchFile().getId(),
+                            "filename", r.getBatchFile().getFilename() != null ? r.getBatchFile().getFilename() : ""
+                    ));
+                }
+                return m;
+            }).toList();
+            return ResponseEntity.ok(body);
+        } catch (Exception e) {
+            log.error("Failed to load pending queue: {}", e.getMessage(), e);
+            return ResponseEntity.ok(List.of()); // return empty list, not an error
+        }
+    }
+
+    // ── Decision save ──────────────────────────────────────────────────────────
 
     /**
      * Auto-save a single reviewer decision.
@@ -69,6 +116,8 @@ public class ReviewerApiController {
         }
     }
 
+    // ── Rule results ───────────────────────────────────────────────────────────
+
     /**
      * Get all rule results for a QC result (for UI rendering).
      */
@@ -101,22 +150,24 @@ public class ReviewerApiController {
         }
     }
 
+    // ── Progress ───────────────────────────────────────────────────────────────
+
     /**
      * Get verification progress for a QC result.
      */
     @GetMapping("/qc/{qcResultId}/progress")
     public ResponseEntity<Map<String, Object>> getProgress(@PathVariable Long qcResultId) {
         try {
-            List<QCRuleResult> allRules = verificationService.getAllRuleResults(qcResultId);
-            List<QCRuleResult> pendingItems = verificationService.getPendingItems(qcResultId);
+            List<QCRuleResult> allRules         = verificationService.getAllRuleResults(qcResultId);
+            List<QCRuleResult> pendingItems      = verificationService.getPendingItems(qcResultId);
             List<QCRuleResult> verificationItems = verificationService.getVerificationItems(qcResultId);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("totalRules", allRules.size());
+            response.put("totalRules",    allRules.size());
             response.put("totalToVerify", verificationItems.size());
-            response.put("pending", pendingItems.size());
-            response.put("completed", verificationItems.size() - pendingItems.size());
-            response.put("canSubmit", pendingItems.isEmpty() && !verificationItems.isEmpty());
+            response.put("pending",       pendingItems.size());
+            response.put("completed",     verificationItems.size() - pendingItems.size());
+            response.put("canSubmit",     pendingItems.isEmpty() && !verificationItems.isEmpty());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {

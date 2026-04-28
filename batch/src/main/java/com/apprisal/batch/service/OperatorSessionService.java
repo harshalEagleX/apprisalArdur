@@ -32,6 +32,21 @@ public class OperatorSessionService {
 
     @Transactional
     public OperatorSession startSession(User user, String ipAddress, String userAgent) {
+        // End all existing active/idle sessions before opening a new one so we
+        // never accumulate stale sessions for the same user.
+        // Use a mutable list — JPA findBy* may return an unmodifiable list.
+        List<OperatorSession> previous = new java.util.ArrayList<>(
+                repo.findByUserIdAndStatus(user.getId(), Status.ACTIVE));
+        previous.addAll(repo.findByUserIdAndStatus(user.getId(), Status.IDLE));
+        for (OperatorSession prev : previous) {
+            prev.setEndedAt(LocalDateTime.now());
+            prev.setStatus(Status.ENDED);
+            updateActiveMinutes(prev);
+            repo.save(prev);
+            log.info("Ended previous session={} for user={} before new login",
+                     prev.getSessionToken(), user.getUsername());
+        }
+
         OperatorSession session = OperatorSession.builder()
                 .user(user)
                 .sessionToken(UUID.randomUUID().toString())

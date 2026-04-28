@@ -1,6 +1,7 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 
 /**
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
  * - needsVerification: true for WARNING/ERROR items
  * - reviewerVerified: null=pending, true=OK, false=rejected
  */
+@Audited
 @Entity
 @Table(name = "qc_rule_result")
 public class QCRuleResult {

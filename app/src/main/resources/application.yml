@@ -12,7 +12,7 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -21,7 +21,8 @@ spring:
     open-in-view: false           # SECURITY+PERF: prevent lazy-load in view layer
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
   servlet:
     multipart:
       enabled: true

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { getAdminDashboard, getAdminBatches, getUsers, getClients, processQC, assignReviewer,
-         deleteBatch, createUser, createClient, type Batch, type User, type Client } from "@/lib/api";
+         deleteBatch, createUser, createClient, logout, type Batch, type User, type Client } from "@/lib/api";
 
 type Tab = "overview" | "batches" | "users" | "clients";
 
@@ -40,9 +40,13 @@ export default function AdminPage() {
                t === "users" ? "👥 Users" : "🏢 Clients"}
             </button>
           ))}
+                <div className="border-t border-slate-800 mt-2 pt-2 space-y-1">
+            <a href="/analytics" className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">📈 Analytics</a>
+            <a href="/help" className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">❓ Help</a>
+          </div>
         </nav>
         <div className="p-3 border-t border-slate-800">
-          <a href="/login" className="text-slate-400 hover:text-white text-xs">Sign out</a>
+          <button onClick={() => logout().then(() => window.location.href = '/login')} className="w-full text-left text-slate-400 hover:text-white text-xs">Sign out</button>
         </div>
       </aside>
 

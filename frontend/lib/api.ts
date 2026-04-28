@@ -38,7 +38,10 @@ export async function login(username: string, password: string): Promise<void> {
     body: form.toString(),
     redirect: "manual",
   });
-  if (res.status !== 302 && res.status !== 200 && res.status !== 301) {
+  // With redirect:"manual" the browser returns an opaque response (status 0)
+  // instead of the actual 302 the server sends — treat that as success too.
+  const ok = res.status === 0 || res.status === 200 || res.status === 301 || res.status === 302;
+  if (!ok) {
     throw new Error("Invalid username or password");
   }
 }
@@ -213,3 +216,10 @@ export interface QCRuleResult {
   reviewerComment?: string;
   severity?: string;
 }
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/overview?days=${days}`);
+export const getAnalyticsOcr       = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/ocr?days=${days}`);
+export const getAnalyticsMl        = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/ml?days=${days}`);
+export const getAnalyticsOperators = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/operators?days=${days}`);
+export const getAnalyticsTrend     = (days = 30) => apiFetch<unknown[]>(`/api/analytics/trend?days=${days}`);

@@ -75,7 +75,28 @@
       "Bash(sed -i '' 's/^import jakarta\\\\.persistence\\\\.\\\\*;/import jakarta.persistence.*;\\\\nimport org.hibernate.envers.Audited;/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/entity/__TRACKED_VAR__)",
       "Bash(sed -i '' 's/^@Entity$/@Audited\\\\n@Entity/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/entity/__TRACKED_VAR__)",
       "Bash(sed '')",
-      "Bash(sed -i '' 's|List<QCResult> findByQcDecision\\(QCDecision qcDecision\\);|List<QCResult> findByQcDecision\\(QCDecision qcDecision\\);\\\\n long countByQcDecision\\(QCDecision qcDecision\\);|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/repository/QCResultRepository.java)"
+      "Bash(sed -i '' 's|List<QCResult> findByQcDecision\\(QCDecision qcDecision\\);|List<QCResult> findByQcDecision\\(QCDecision qcDecision\\);\\\\n long countByQcDecision\\(QCDecision qcDecision\\);|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/repository/QCResultRepository.java)",
+      "Bash(sed -i '' 's/import org.springframework.boot.SpringApplication;/import org.springframework.boot.SpringApplication;\\\\nimport org.springframework.scheduling.annotation.EnableScheduling;/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/app/src/main/java/com/apprisal/ApprisalApplication.java)",
+      "Bash(sed -i '' 's/@SpringBootApplication/@SpringBootApplication\\\\n@EnableScheduling/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/app/src/main/java/com/apprisal/ApprisalApplication.java)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Python OCR:', d.get\\('status','?'\\)\\)\")",
+      "Bash(curl -s http://localhost:8080/actuator/health)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Java:', d.get\\('status','?'\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Ollama: UP,', len\\(d.get\\('models',[]\\)\\),'models'\\)\")",
+      "Bash(echo \"Ollama PID: $!\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Ollama UP, models:', [m['name'] for m in d.get\\('models',[]\\)]\\)\")",
+      "Bash(echo \"Python OCR PID: $!\")",
+      "Read(//private/tmp/**)",
+      "Bash(sed -i '' 's|^import jakarta\\\\.persistence\\\\.\\\\*;|import jakarta.persistence.*;\\\\nimport org.hibernate.envers.Audited;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/entity/QCRuleResult.java)",
+      "Bash(sed -i '' 's|^@Entity$|@Audited\\\\n@Entity|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/entity/QCRuleResult.java)",
+      "Bash(echo \"Build: $\\(./mvnw clean package -DskipTests 2>&1)",
+      "Bash(java -jar app/target/app-0.0.1-SNAPSHOT.jar)",
+      "Bash(jar tf *)",
+      "Bash(java -jar app/target/app-0.0.1-SNAPSHOT.jar --spring.flyway.enabled=false)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Java:', d.get\\('status'\\)\\)\")",
+      "Bash(java -jar app/target/app-0.0.1-SNAPSHOT.jar --spring.flyway.enabled=false --spring.jpa.hibernate.ddl-auto=update)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp"
     ]
   },
   "hooks": {

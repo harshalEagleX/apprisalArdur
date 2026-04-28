@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { getClientDashboard, getClientBatches, uploadBatch, getBatchStatus, type Batch } from "@/lib/api";
+import { getClientDashboard, getClientBatches, uploadBatch, getBatchStatus, logout, type Batch } from "@/lib/api";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
@@ -54,7 +54,7 @@ export default function ClientPage() {
           ))}
         </nav>
         <div className="p-3 border-t border-slate-800">
-          <a href="/login" className="text-slate-400 hover:text-white text-xs">Sign out</a>
+          <button onClick={() => logout().then(() => window.location.href = '/login')} className="w-full text-left text-slate-400 hover:text-white text-xs">Sign out</button>
         </div>
       </aside>
 

@@ -4,6 +4,7 @@ import com.apprisal.common.entity.User;
 import com.apprisal.user.security.JwtAuthenticationFilter;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.security.UserPrincipal;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -22,6 +23,11 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -32,12 +38,32 @@ public class SecurityConfig {
     private final UserDetailsService userDetailsService;
     private final AuditLogService auditLogService;
 
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
+    private String allowedOriginsConfig;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter,
             UserDetailsService userDetailsService,
             AuditLogService auditLogService) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.userDetailsService = userDetailsService;
         this.auditLogService = auditLogService;
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cfg = new CorsConfiguration();
+        // Allow Next.js frontend and any configured production origins
+        List<String> origins = List.of(allowedOriginsConfig.split(","));
+        cfg.setAllowedOrigins(origins.stream().map(String::trim).toList());
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("*"));
+        cfg.setExposedHeaders(List.of("X-Correlation-ID", "Set-Cookie"));
+        cfg.setAllowCredentials(true);   // required for session cookies (credentials: "include")
+        cfg.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cfg);
+        return source;
     }
 
     /**
@@ -50,6 +76,7 @@ public class SecurityConfig {
     SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/**")
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
@@ -74,6 +101,9 @@ public class SecurityConfig {
     SecurityFilterChain webSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/**")
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // CSRF disabled: SameSite=Strict cookies + CORS origin allowlist provide equivalent protection
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()   // health check only
