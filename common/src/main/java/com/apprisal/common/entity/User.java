@@ -1,8 +1,10 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 
+@Audited
 @Entity
 @Table(name = "_user")
 public class User {

@@ -1,6 +1,7 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.List;
 /**
  * Batch entity representing a collection of appraisal documents.
  */
+@Audited
 @Entity
 @Table(name = "batch")
 public class Batch {

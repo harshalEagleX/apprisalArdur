@@ -1,6 +1,7 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.List;
  * - finalDecision: PASS or FAIL (after reviewer verification, if needed)
  * - Collection of QCRuleResults for individual rule outcomes
  */
+@Audited
 @Entity
 @Table(name = "qc_result")
 public class QCResult {

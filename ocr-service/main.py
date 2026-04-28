@@ -1048,3 +1048,153 @@ def is_valid_pdf(file_path: str) -> bool:
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5001)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ANALYTICS ENDPOINTS  — operator-safe, no ML/OCR jargon exposed
+# ─────────────────────────────────────────────────────────────────────────────
+
+from datetime import datetime, timedelta
+from typing import Optional
+import statistics
+
+_analytics_store: list[dict] = []   # in-process ring buffer (max 10000 entries)
+_MAX_STORE = 10_000
+
+def _record_metric(data: dict) -> None:
+    """Append a processing event to the in-memory analytics ring buffer."""
+    _analytics_store.append({**data, "ts": datetime.utcnow().isoformat()})
+    while len(_analytics_store) > _MAX_STORE:
+        _analytics_store.pop(0)
+
+
+@app.get("/analytics/summary", tags=["analytics"])
+async def analytics_summary(
+    days: int = 30,
+    _auth: None = Security(_require_api_key)
+):
+    """Overall processing health for the last N days (default 30)."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
+
+    if not recent:
+        return {
+            "status": "ok",
+            "period_days": days,
+            "files_processed": 0,
+            "avg_accuracy_pct": None,
+            "avg_processing_seconds": None,
+            "cache_hit_rate_pct": None,
+            "message": "No data yet for this period."
+        }
+
+    confs   = [r["ocr_confidence"] for r in recent if r.get("ocr_confidence") is not None]
+    times   = [r["processing_ms"]  for r in recent if r.get("processing_ms")  is not None]
+    cached  = sum(1 for r in recent if r.get("cache_hit"))
+
+    return {
+        "status": "ok",
+        "period_days": days,
+        "files_processed": len(recent),
+        "avg_accuracy_pct": round(statistics.mean(confs), 1) if confs else None,
+        "avg_processing_seconds": round(statistics.mean(times) / 1000, 1) if times else None,
+        "cache_hit_rate_pct": round(cached / len(recent) * 100, 1),
+        "min_accuracy_pct": round(min(confs), 1) if confs else None,
+        "max_processing_seconds": round(max(times) / 1000, 1) if times else None,
+    }
+
+
+@app.get("/analytics/rules", tags=["analytics"])
+async def analytics_rules(
+    days: int = 30,
+    _auth: None = Security(_require_api_key)
+):
+    """Per-rule pass/fail counts to show which rules are most commonly triggered."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
+
+    rule_counts: dict[str, dict] = {}
+    for record in recent:
+        for rule in record.get("rule_results", []):
+            rid  = rule.get("rule_id", "unknown")
+            stat = rule.get("status", "unknown")
+            if rid not in rule_counts:
+                rule_counts[rid] = {"rule_id": rid, "rule_name": rule.get("rule_name",""), "pass": 0, "fail": 0, "verify": 0, "skip": 0}
+            if stat == "PASS":   rule_counts[rid]["pass"]   += 1
+            elif stat == "FAIL": rule_counts[rid]["fail"]   += 1
+            elif stat in ("VERIFY","WARNING"): rule_counts[rid]["verify"] += 1
+            else:                rule_counts[rid]["skip"]   += 1
+
+    rows = sorted(rule_counts.values(), key=lambda x: x["fail"] + x["verify"], reverse=True)
+    return {"status": "ok", "period_days": days, "rules": rows}
+
+
+@app.get("/analytics/model-health", tags=["analytics"])
+async def model_health(
+    days: int = 30,
+    _auth: None = Security(_require_api_key)
+):
+    """Model performance in plain language: how confident the system is, trend over time."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
+
+    confs = [r["ocr_confidence"] for r in recent if r.get("ocr_confidence") is not None]
+    avg   = round(statistics.mean(confs), 1) if confs else None
+
+    # Simple trend: compare first half vs second half of the period
+    trend = "stable"
+    if len(confs) >= 10:
+        half  = len(confs) // 2
+        first = statistics.mean(confs[:half])
+        second = statistics.mean(confs[half:])
+        if second - first > 2:   trend = "improving"
+        elif first - second > 2: trend = "declining"
+
+    confidence_label = "unknown"
+    if avg is not None:
+        if avg >= 85:   confidence_label = "high"
+        elif avg >= 70: confidence_label = "medium"
+        else:           confidence_label = "low"
+
+    low_confidence_files = sum(1 for c in confs if c < 70)
+
+    return {
+        "status": "ok",
+        "period_days": days,
+        "avg_confidence_pct": avg,
+        "confidence_level": confidence_label,
+        "trend": trend,
+        "files_analysed": len(recent),
+        "files_needing_attention": low_confidence_files,
+        "guidance": (
+            "System is working well — no action needed." if confidence_label == "high" else
+            "Some files had lower confidence. Review flagged items." if confidence_label == "medium" else
+            "Confidence is low. Contact your system administrator."
+        )
+    }
+
+
+@app.get("/analytics/operator-view", tags=["analytics"])
+async def operator_analytics(
+    days: int = 7,
+    _auth: None = Security(_require_api_key)
+):
+    """Simple metrics an operator can understand: files done, time saved, issues found."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
+
+    issues_found  = sum(r.get("failed_rules", 0)  for r in recent)
+    needs_review  = sum(r.get("verify_rules", 0)  for r in recent)
+    auto_passed   = sum(1 for r in recent if r.get("decision") == "AUTO_PASS")
+    cache_hits    = sum(1 for r in recent if r.get("cache_hit"))
+
+    return {
+        "status": "ok",
+        "period_days": days,
+        "files_checked": len(recent),
+        "issues_found": issues_found,
+        "items_need_your_review": needs_review,
+        "files_passed_automatically": auto_passed,
+        "time_saved_by_cache_minutes": round(cache_hits * 0.25, 1),
+        "summary": f"{len(recent)} files checked, {issues_found} issues found, {needs_review} need your review."
+    }

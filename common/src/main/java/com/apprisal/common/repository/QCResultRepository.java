@@ -31,6 +31,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
      * Find all QC results with a specific decision type.
      */
     List<QCResult> findByQcDecision(QCDecision qcDecision);
+    long countByQcDecision(QCDecision qcDecision);
 
     /**
      * Find all TO_VERIFY results that haven't been reviewed.

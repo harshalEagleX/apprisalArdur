@@ -1,11 +1,13 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 
 /**
  * BatchFile entity representing individual files within a batch.
  */
+@Audited
 @Entity
 @Table(name = "batch_file")
 public class BatchFile {

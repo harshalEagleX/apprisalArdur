@@ -1,11 +1,13 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 
 /**
  * Client organization entity.
  */
+@Audited
 @Entity
 @Table(name = "client")
 public class Client {

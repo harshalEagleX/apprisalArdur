@@ -70,7 +70,12 @@
       "Bash(sed -i '' 's|import org.springframework.web.servlet.mvc.support.RedirectAttributes;|import org.springframework.web.servlet.mvc.support.RedirectAttributes;\\\\nimport com.apprisal.common.exception.AccessDeniedException;\\\\nimport com.apprisal.common.exception.ResourceNotFoundException;\\\\nimport com.apprisal.common.exception.ValidationException;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/app/src/main/java/com/apprisal/exception/GlobalWebExceptionHandler.java)",
       "Bash(git check-ignore *)",
       "Bash(git rm *)",
-      "Bash(echo \"Build: $\\(./mvnw clean package -DskipTests -q 2>&1)"
+      "Bash(echo \"Build: $\\(./mvnw clean package -DskipTests -q 2>&1)",
+      "mcp__code-review-graph__semantic_search_nodes_tool",
+      "Bash(sed -i '' 's/^import jakarta\\\\.persistence\\\\.\\\\*;/import jakarta.persistence.*;\\\\nimport org.hibernate.envers.Audited;/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/entity/__TRACKED_VAR__)",
+      "Bash(sed -i '' 's/^@Entity$/@Audited\\\\n@Entity/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/entity/__TRACKED_VAR__)",
+      "Bash(sed '')",
+      "Bash(sed -i '' 's|List<QCResult> findByQcDecision\\(QCDecision qcDecision\\);|List<QCResult> findByQcDecision\\(QCDecision qcDecision\\);\\\\n long countByQcDecision\\(QCDecision qcDecision\\);|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/common/src/main/java/com/apprisal/common/repository/QCResultRepository.java)"
     ]
   },
   "hooks": {

@@ -4,6 +4,7 @@ import com.apprisal.common.dto.python.PythonQCResponse;
 import com.apprisal.common.dto.python.PythonRuleResult;
 import com.apprisal.common.entity.*;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.ProcessingMetricsRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.service.FileMatchingService;
 import com.apprisal.common.service.FileMatchingService.FilePair;
@@ -11,10 +12,12 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.lang.NonNull;
 
@@ -31,6 +34,7 @@ public class QCProcessingService {
     private final FileMatchingService fileMatchingService;
     private final QCResultRepository qcResultRepository;
     private final BatchRepository batchRepository;
+    private final ProcessingMetricsRepository metricsRepository;
     private final ObjectMapper objectMapper;
 
     public QCProcessingService(
@@ -38,11 +42,13 @@ public class QCProcessingService {
             FileMatchingService fileMatchingService,
             QCResultRepository qcResultRepository,
             BatchRepository batchRepository,
+            ProcessingMetricsRepository metricsRepository,
             ObjectMapper objectMapper) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
         this.batchRepository = batchRepository;
+        this.metricsRepository = metricsRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -183,6 +189,9 @@ public class QCProcessingService {
         qcResult = Objects.requireNonNull(qcResultRepository.save(qcResult));
         log.info("Saved QC result for file {}: decision={}", appraisal.getFilename(), decision);
 
+        // Capture processing metrics for analytics
+        saveMetrics(qcResult, pythonResponse, appraisal);
+
         return qcResult;
     }
 
@@ -216,6 +225,51 @@ public class QCProcessingService {
 
         // Any issues → route to human review, never auto-reject
         return BatchStatus.REVIEW_PENDING;
+    }
+
+    private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file) {
+        try {
+            int total  = r.totalRules();
+            int passed = r.passed();
+            double passRate = total > 0 ? (passed * 100.0 / total) : 0.0;
+
+            // Derive OCR confidence from field_confidence map
+            double avgConf = 0.0, minConf = 100.0;
+            int lowConfCount = 0;
+            if (r.fieldConfidence() != null && !r.fieldConfidence().isEmpty()) {
+                var values = r.fieldConfidence().values().stream()
+                    .filter(v -> v != null).mapToDouble(Double::doubleValue).toArray();
+                if (values.length > 0) {
+                    avgConf = java.util.Arrays.stream(values).average().orElse(0);
+                    minConf = java.util.Arrays.stream(values).min().orElse(0);
+                    lowConfCount = (int) java.util.Arrays.stream(values).filter(v -> v < 70.0).count();
+                }
+            }
+
+            ProcessingMetrics metrics = ProcessingMetrics.builder()
+                .qcResult(qcResult)
+                .correlationId(MDC.get("correlationId"))
+                .totalProcessingMs((long) r.processingTimeMs())
+                .ocrTimeMs((long) r.processingTimeMs())
+                .ocrConfidenceAvg(avgConf)
+                .ocrConfidenceMin(minConf)
+                .fieldsExtracted(r.fieldConfidence() != null ? r.fieldConfidence().size() : 0)
+                .fieldsLowConfidence(lowConfCount)
+                .extractionMethod(r.extractionMethod())
+                .pagesProcessed(r.totalPages())
+                .rulePassRate(passRate)
+                .rulesTotal(total)
+                .rulesPassed(passed)
+                .rulesFailed(r.failed())
+                .rulesVerify(r.verify())
+                .cacheHit(r.cacheHit())
+                .fileSizeBytes(file.getFileSize())
+                .build();
+
+            metricsRepository.save(metrics);
+        } catch (Exception e) {
+            log.warn("Failed to save processing metrics for file {}: {}", file.getFilename(), e.getMessage());
+        }
     }
 
     private String toJson(Object obj) {

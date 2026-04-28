@@ -33,6 +33,12 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Hibernate Envers: full audit history for all @Audited entities -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-envers</artifactId>
+        </dependency>
+
         <!-- Jackson 3 / Hibernate lazy-proxy integration -->
         <dependency>
             <groupId>tools.jackson.datatype</groupId>
