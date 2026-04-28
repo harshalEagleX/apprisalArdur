@@ -1,34 +1,182 @@
-HELP.md
+# =============================================================================
+# JAVA / MAVEN  (all modules: app, batch, qc, user, common)
+# =============================================================================
 target/
-.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+HELP.md
+*.jar
+*.war
+*.nar
+*.ear
+.mvn/wrapper/maven-wrapper.jar
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
+# =============================================================================
+# JAVA COMPILED
+# =============================================================================
+*.class
+*.ctxt
 
-### IntelliJ IDEA ###
-.idea
+# =============================================================================
+# IDE — IntelliJ IDEA
+# =============================================================================
+.idea/
 *.iws
 *.iml
 *.ipr
+out/
+.factorypath
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+# IDE — Eclipse / STS
+.apt_generated/
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+# IDE — NetBeans
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
 build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### VS Code ###
-.vscode/
-.pyc
+# IDE — VS Code
+.vscode/extensions.json
+.vscode/.history/
+
+# =============================================================================
+# ENVIRONMENT / SECRETS  (never commit)
+# =============================================================================
+.env
+.env.*
+!.env.example
+application-prod.yml
+application-prod.properties
+application-local.yml
+application-local.properties
+
+# =============================================================================
+# OS
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =============================================================================
+# PYTHON  (ocr-service/)
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.conda/
+
+# Distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+pip-wheel-metadata/
+.eggs/
+
+# ML models — large binaries, train locally
+ocr-service/training/models/*.pkl
+ocr-service/training/models/*.h5
+ocr-service/training/models/*.pt
+ocr-service/training/models/*.pth
+ocr-service/training/models/*.onnx
+ocr-service/training/models/*.bin
+
+# Test / coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+nosetests.xml
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# mypy / pyright
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+pyrightconfig.json
+
+# =============================================================================
+# NEXT.JS / FRONTEND
+# =============================================================================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/build/
+frontend/.cache/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/coverage/
+frontend/storybook-static/
+
+# =============================================================================
+# RUNTIME UPLOADS (keep directory, ignore actual uploaded files)
+# =============================================================================
+uploads/**
+!uploads/.gitkeep
+
+# =============================================================================
+# LOGS
+# =============================================================================
+*.log
+logs/
+*.log.*
+
+# =============================================================================
+# CODE REVIEW GRAPH  (local DB — rebuilt via `code-review-graph build`)
+# =============================================================================
+.code-review-graph/
+
+# =============================================================================
+# SCRATCH / TEMP
+# =============================================================================
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+temp-inspect/
+tools/
+diff.txt
+
+# MCP config — machine-specific absolute paths, generate via: code-review-graph install --platform claude-code
+.mcp.json

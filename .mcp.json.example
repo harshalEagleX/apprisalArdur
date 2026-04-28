@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/path/to/your/conda/envs/apprisal/bin/code-review-graph",
+      "args": [
+        "serve",
+        "--repo",
+        "/absolute/path/to/apprisalArdur"
+      ],
+      "type": "stdio"
+    }
+  }
+}

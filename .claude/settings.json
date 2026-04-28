@@ -50,7 +50,53 @@
       "Bash(diff advanced_parser.py app/services/site_extractor.py)",
       "Bash(rm advanced_parser.py)",
       "WebSearch",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(pip3 show *)",
+      "Bash(pip3 install *)",
+      "Bash(./mvnw compile *)",
+      "Bash(pipx install *)",
+      "mcp__code-review-graph__list_graph_stats_tool",
+      "mcp__code-review-graph__get_architecture_overview_tool",
+      "mcp__code-review-graph__list_communities_tool",
+      "Bash(cp -r src/main/resources app/src/main/)",
+      "Bash(cp -r src/test app/src/)",
+      "Bash(sed 's/^package com\\\\.apprisal\\\\.qc\\\\.service;/package com.apprisal.common.service;/' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/qc/src/main/java/com/apprisal/qc/service/FileMatchingService.java)",
+      "Bash(sed -i '' 's|import com.apprisal.qc.service.FileMatchingService;|import com.apprisal.common.service.FileMatchingService;|g' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/qc/src/main/java/com/apprisal/qc/service/QCProcessingService.java)",
+      "Bash(sed -i '' 's|com.apprisal.qc.service.FileMatchingService|com.apprisal.common.service.FileMatchingService|g' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/batch/src/main/java/com/apprisal/batch/service/BatchService.java)",
+      "Bash(sed -i '' 's|import com.apprisal.common.service.AuditLogService;|import com.apprisal.common.service.AuditLogService;\\\\nimport com.apprisal.common.service.FileMatchingService;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/batch/src/main/java/com/apprisal/batch/service/BatchService.java)",
+      "Bash(sed -i '' 's|import com.apprisal.user.util.JwtUtils;|import com.apprisal.user.util.JwtUtils;\\\\nimport com.apprisal.common.security.UserPrincipal;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/user/src/main/java/com/apprisal/user/service/AuthenticationService.java)",
+      "Bash(sed -i '' 's|import com.apprisal.common.entity.User;|import com.apprisal.common.entity.User;\\\\nimport com.apprisal.common.security.UserPrincipal;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/user/src/main/java/com/apprisal/user/service/ImpersonationService.java)",
+      "Bash(sed -i '' 's|import org.springframework.lang.NonNull;|import org.springframework.lang.NonNull;\\\\nimport com.apprisal.common.exception.AccessDeniedException;\\\\nimport com.apprisal.common.exception.BatchProcessingException;\\\\nimport com.apprisal.common.exception.ResourceNotFoundException;\\\\nimport com.apprisal.common.exception.ValidationException;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/app/src/main/java/com/apprisal/exception/GlobalApiExceptionHandler.java)",
+      "Bash(sed -i '' 's|import org.springframework.web.servlet.mvc.support.RedirectAttributes;|import org.springframework.web.servlet.mvc.support.RedirectAttributes;\\\\nimport com.apprisal.common.exception.AccessDeniedException;\\\\nimport com.apprisal.common.exception.ResourceNotFoundException;\\\\nimport com.apprisal.common.exception.ValidationException;|' /Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/app/src/main/java/com/apprisal/exception/GlobalWebExceptionHandler.java)",
+      "Bash(git check-ignore *)",
+      "Bash(git rm *)",
+      "Bash(echo \"Build: $\\(./mvnw clean package -DskipTests -q 2>&1)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph update --skip-flows",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph status",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
