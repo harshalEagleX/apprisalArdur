@@ -27,7 +27,10 @@ const ICON_COLORS = {
 export default function ToastContainer() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  useEffect(() => subscribe(setToasts), []);
+  useEffect(() => {
+    const unsub = subscribe(setToasts);
+    return () => { unsub(); };
+  }, []);
 
   if (toasts.length === 0) return null;
 

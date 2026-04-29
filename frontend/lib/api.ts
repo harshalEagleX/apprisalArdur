@@ -184,6 +184,8 @@ export interface Batch {
   status: string;
   client: Client;
   files: BatchFile[];
+  /** Eagerly-computed file count from DB @Formula — always accurate even when files is not loaded */
+  fileCount?: number;
   assignedReviewer?: Pick<User, "id" | "username" | "fullName">;
   createdBy?: Pick<User, "id" | "username">;
   errorMessage?: string;

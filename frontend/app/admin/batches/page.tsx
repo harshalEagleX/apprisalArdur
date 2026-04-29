@@ -63,11 +63,26 @@ export default function BatchesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Auto-start polling for any batch already in QC_PROCESSING when the list loads.
+  // This handles page refresh, navigation back, or batches triggered in a prior session.
+  useEffect(() => {
+    batches.forEach(b => {
+      if (b.status === "QC_PROCESSING" && !pollingRef.current[b.id]) {
+        startPolling(b);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches]);
+
   // Start polling a batch that just entered QC_PROCESSING
   function startPolling(batch: Batch) {
     const batchId = batch.id;
     const jobKey = `qc-${batchId}`;
-    const total = batch.files?.filter(f => f.fileType === "APPRAISAL").length ?? batch.files?.length ?? 0;
+    // Use formula-computed count; fall back to filtered file array if present
+    const appraisalFiles = batch.files?.filter(f => f.fileType === "APPRAISAL") ?? [];
+    const total = batch.fileCount
+      ? Math.ceil(batch.fileCount / 3)      // rough estimate: 3 file types per appraisal
+      : appraisalFiles.length > 0 ? appraisalFiles.length : (batch.fileCount ?? 1);
 
     trackJob({ id: jobKey, label: `QC: ${batch.parentBatchId}`, current: 0, total, batchId, startedAt: Date.now() });
 
@@ -306,9 +321,9 @@ export default function BatchesPage() {
                       </div>
                     )}
                   </td>
-                  {/* Files */}
+                  {/* Files — prefer formula-computed count, fall back to loaded array length */}
                   <td className="px-4 py-3 text-xs text-slate-400 tabular-nums">
-                    {b.files?.length ?? 0}
+                    {b.fileCount ?? b.files?.length ?? 0}
                   </td>
                   {/* Reviewer */}
                   <td className="px-4 py-3 text-xs">

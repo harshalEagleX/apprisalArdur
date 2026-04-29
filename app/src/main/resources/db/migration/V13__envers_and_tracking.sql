@@ -100,15 +100,36 @@ CREATE TABLE IF NOT EXISTS qc_result_AUD (
     PRIMARY KEY (id, rev)
 );
 
-CREATE TABLE IF NOT EXISTS apprisal_user_AUD (
-    id       BIGINT  NOT NULL,
-    rev      INTEGER NOT NULL REFERENCES revision_info(id),
-    revtype  SMALLINT,
-    username VARCHAR(100),
-    role     VARCHAR(50),
-    email    VARCHAR(255),
+CREATE TABLE IF NOT EXISTS _user_aud (
+    id BIGINT NOT NULL,
+    rev INTEGER NOT NULL,
+    revtype SMALLINT,
+    username VARCHAR(255),
+    password VARCHAR(255),
+    email VARCHAR(255),
+    full_name VARCHAR(255),
+    role VARCHAR(50),
+    client_id BIGINT,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
     PRIMARY KEY (id, rev)
 );
+
+ALTER TABLE _user_aud
+ADD CONSTRAINT fk_user_aud_rev
+FOREIGN KEY (rev)
+REFERENCES revinfo(rev);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_aud_rev'
+    ) THEN
+        ALTER TABLE _user_aud
+        ADD CONSTRAINT fk_user_aud_rev
+        FOREIGN KEY (rev) REFERENCES revinfo(rev);
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS client_AUD (
     id      BIGINT  NOT NULL,
@@ -132,4 +153,9 @@ CREATE TABLE IF NOT EXISTS qc_rule_result_AUD (
     reviewer_comment  TEXT,
     qc_result_id    BIGINT,
     PRIMARY KEY (id, rev)
+);
+
+CREATE TABLE IF NOT EXISTS revinfo (
+    rev SERIAL PRIMARY KEY,
+    revtstmp BIGINT
 );

@@ -2,6 +2,7 @@ package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.Formula;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -49,6 +50,19 @@ public class Batch {
 
     @OneToMany(mappedBy = "batch", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BatchFile> files = new ArrayList<>();
+
+    /**
+     * Eagerly-computed file count via SQL formula — avoids lazy-load issues when
+     * batches are serialized in list API responses (open-in-view = false).
+     * Read-only: maintained by the DB, never set directly.
+     *
+     * @NotAudited: Envers cannot audit @Formula fields (no physical column exists
+     * in the audit table). This field is derived — the audit trail is captured
+     * through the BatchFile audit entries instead.
+     */
+    @org.hibernate.envers.NotAudited
+    @Formula("(SELECT COUNT(*) FROM batch_file bf WHERE bf.batch_id = id)")
+    private Integer fileCount;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -138,6 +152,8 @@ public class Batch {
     }
 
     public Long getVersion() { return version; }
+
+    public Integer getFileCount() { return fileCount != null ? fileCount : files.size(); }
 
     public String getFileHash() { return fileHash; }
     public void setFileHash(String fileHash) { this.fileHash = fileHash; }

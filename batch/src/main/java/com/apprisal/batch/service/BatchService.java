@@ -222,6 +222,10 @@ public class BatchService {
         log.info("Creating batch '{}' for client '{}' by user '{}'",
                 parentBatchId, client.getCode(), creator.getUsername());
 
+        // Build batch in memory — do NOT save yet.
+        // Saving before addFile() would make this a managed entity; Hibernate would
+        // then auto-flush the dirty files collection AND cascade-merge on the second
+        // save, causing every file to be inserted twice (Bug 1 fix).
         Batch batch = Batch.builder()
                 .parentBatchId(parentBatchId)
                 .client(client)
@@ -230,33 +234,38 @@ public class BatchService {
                 .build();
         batch.setFileHash(fileHash);
 
-        batch = Objects.requireNonNull(batchRepository.save(batch));
-
         try {
             Path batchDir = Paths.get(storagePath, client.getCode(), parentBatchId);
             Files.createDirectories(batchDir);
             extractAndValidateZip(file, batch, batchDir);
-            batch.setStatus(BatchStatus.QC_PROCESSING);
-            log.info("Batch '{}' processed successfully with {} files",
+            // UPLOADED = ZIP is valid, files are on disk, waiting for admin to trigger QC.
+            // QC_PROCESSING is only set by QCProcessingService when Python is actually called.
+            // Setting QC_PROCESSING here was the bug that hid the "Run QC" button forever.
+            batch.setStatus(BatchStatus.UPLOADED);
+            log.info("Batch '{}' uploaded successfully with {} files — ready for QC",
                     parentBatchId, batch.getFiles().size());
         } catch (ValidationException e) {
             log.warn("Batch validation failed for '{}': {}", parentBatchId, e.getMessage());
             batch.setStatus(BatchStatus.VALIDATION_FAILED);
             batch.setErrorMessage(e.getMessage());
+            batchRepository.save(batch); // persist error state so admin can see it
             throw e;
         } catch (IOException e) {
             log.error("IO error processing batch '{}': {}", parentBatchId, e.getMessage(), e);
             batch.setStatus(BatchStatus.VALIDATION_FAILED);
             batch.setErrorMessage("Failed to process ZIP file: " + e.getMessage());
-            throw new BatchProcessingException(batch.getId(), "Failed to process ZIP file: " + e.getMessage(), e);
+            Long savedId = batchRepository.save(batch).getId();
+            throw new BatchProcessingException(savedId, "Failed to process ZIP file: " + e.getMessage(), e);
         } catch (Exception e) {
             log.error("Unexpected error processing batch '{}': {}", parentBatchId, e.getMessage(), e);
             batch.setStatus(BatchStatus.ERROR);
             batch.setErrorMessage("Unexpected error: " + e.getMessage());
-            throw new BatchProcessingException(batch.getId(), "Unexpected error: " + e.getMessage(), e);
+            Long savedId = batchRepository.save(batch).getId();
+            throw new BatchProcessingException(savedId, "Unexpected error: " + e.getMessage(), e);
         }
 
-        batch = batchRepository.save(batch);
+        // ONE save in the success path — cascade creates all files atomically
+        batch = Objects.requireNonNull(batchRepository.save(batch));
         auditLogService.logEntity(creator, "BATCH_UPLOAD", "Batch", batch.getId());
 
         return batch;

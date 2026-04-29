@@ -10,64 +10,65 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: create   # 🔥 IMPORTANT: Hibernate will manage schema
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: false         # disable in production (verbose)
-    show-sql: false               # disable in production (performance)
-    open-in-view: false           # SECURITY+PERF: prevent lazy-load in view layer
+        format_sql: false
+    show-sql: false
+    open-in-view: false
+
+  # ❌ REMOVE FLYWAY COMPLETELY
   flyway:
-    enabled: true
-    baseline-on-migrate: true
-    locations: classpath:db/migration
+    enabled: false
+
   servlet:
     multipart:
       enabled: true
       max-file-size: 100MB
       max-request-size: 100MB
+
   session:
     cookie:
-      http-only: true             # SECURITY: prevent JS access to session cookie
-      secure: ${COOKIE_SECURE:false}  # set true behind HTTPS in production
-      same-site: strict           # SECURITY: CSRF protection via SameSite
+      http-only: true
+      secure: ${COOKIE_SECURE:false}
+      same-site: strict
 
 app:
   admin:
     username: ${ADMIN_EMAIL:dhoteharshal16@gmail.com}
-    # SECURITY: no default password — must be set via ADMIN_PASSWORD env var in production
     password: ${ADMIN_PASSWORD:Admin123!}
+
   jwt:
-    # SECURITY: no default — must be set via JWT_SECRET in production (32+ byte Base64 string)
     secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+
   storage:
     path: ${STORAGE_PATH:./uploads}
+
   api-key:
-    # Key Java uses to call Python service — must match PYTHON_API_KEY on Python side
     python-service: ${PYTHON_API_KEY:}
 
-# Python OCR Service Configuration
+# IMPORTANT: Use 127.0.0.1, not "localhost".
+# On macOS/Linux "localhost" often resolves to ::1 (IPv6) while uvicorn
+# listens only on 127.0.0.1 (IPv4) → silent connection failure with zero Python logs.
+# Start Python with: uvicorn main:app --host 0.0.0.0 --port 5001 --reload
 ocr:
   service:
-    url: ${OCR_SERVICE_URL:http://localhost:5001}
+    url: ${OCR_SERVICE_URL:http://127.0.0.1:5001}
     timeout-seconds: ${OCR_TIMEOUT:180}
     retry-attempts: ${OCR_RETRIES:2}
 
-# QC Processing Configuration
 qc:
   enabled: true
   auto-process-on-upload: false
   reconciler:
     enabled: ${QC_RECONCILER_ENABLED:true}
-    # Minutes before a QC_PROCESSING batch is considered stuck and eligible for retry
     retry-after-minutes: ${QC_RECONCILER_RETRY_MINUTES:15}
-    # Minutes before a stuck batch is given up on and set to ERROR (admin must re-upload)
-    # Must be > longest realistic OCR run: 20 files × 15s = 5min + generous buffer
     abandon-after-minutes: ${QC_RECONCILER_ABANDON_MINUTES:90}
 
-# Actuator — health only, no sensitive data exposed
 management:
   endpoints:
     web:
@@ -77,7 +78,6 @@ management:
     health:
       show-details: never
 
-# Logging
 logging:
   level:
     com.apprisal: INFO

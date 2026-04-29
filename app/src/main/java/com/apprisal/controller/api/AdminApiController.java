@@ -45,10 +45,17 @@ public class AdminApiController {
     // ── User Management ───────────────────────────────────────────────────────
 
     @GetMapping("/users")
-    public ResponseEntity<Page<User>> getUsers(
+    public ResponseEntity<?> getUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(userService.findAll(PageRequest.of(page, size, Sort.by("id").descending())));
+        var pg = userService.findAll(PageRequest.of(page, size, Sort.by("id").descending()));
+        // Return a stable map — Page<User> serialization is unstable across Spring Data versions
+        return ResponseEntity.ok(Map.of(
+            "content",       pg.getContent(),
+            "totalPages",    pg.getTotalPages(),
+            "number",        pg.getNumber(),
+            "totalElements", pg.getTotalElements()
+        ));
     }
 
     @GetMapping("/users/{id}")

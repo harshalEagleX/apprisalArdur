@@ -7,7 +7,10 @@ export default function ActivityMonitor() {
   const [jobs, setJobs]           = useState<ActiveJob[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => subscribeJobs(setJobs), []);
+  useEffect(() => {
+    const unsub = subscribeJobs(setJobs);
+    return () => { unsub(); };
+  }, []);
 
   if (jobs.length === 0) return null;
 

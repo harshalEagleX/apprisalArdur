@@ -17,6 +17,20 @@ import java.util.Optional;
 @Repository
 public interface BatchRepository extends JpaRepository<Batch, Long> {
 
+    /**
+     * Eagerly load client and assignedReviewer on the paginated list.
+     *
+     * Without this, both associations are LAZY. When the Hibernate session closes after
+     * findAll() returns (open-in-view=false), any access to b.getClient() or
+     * b.getAssignedReviewer() from outside a transaction throws LazyInitializationException.
+     *
+     * @EntityGraph uses LEFT JOIN (not JOIN FETCH), so it is safe with pagination —
+     * Hibernate does not load the full result set into memory before paginating.
+     */
+    @Override
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
+    Page<Batch> findAll(org.springframework.data.domain.Pageable pageable);
+
     @EntityGraph(attributePaths = {"files"})
     Optional<Batch> findWithFilesById(Long id);
 

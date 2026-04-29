@@ -247,17 +247,32 @@ public class QCProcessingService {
     }
 
     /**
-     * Determine batch status based on file decisions.
-     * 
-     * NEW PHILOSOPHY: Never auto-reject. All issues go to REVIEW_PENDING.
+     * Determine batch status from file-level outcomes.
+     *
+     * ERROR — every file failed (Python was unreachable or all files are corrupt).
+     *         Admin must investigate. Do NOT put this in REVIEW_PENDING because
+     *         there are no QCResults for the reviewer to act on.
+     *
+     * COMPLETED — every file passed all 136 rules automatically.
+     *
+     * REVIEW_PENDING — at least one file has rules needing human verification.
+     *                  This is the normal case for any non-trivial appraisal.
      */
     private BatchStatus determineBatchStatus(int autoPass, int toVerify, int autoFail, int errors) {
-        // If everything passed, mark as completed
+        int total = autoPass + toVerify + autoFail + errors;
+
+        // All files errored — Python was down or all files corrupt. Show ERROR so admin
+        // gets a visible failure signal instead of an empty REVIEW_PENDING queue.
+        if (total > 0 && errors == total) {
+            return BatchStatus.ERROR;
+        }
+
+        // Everything passed cleanly — no reviewer needed
         if (autoPass > 0 && toVerify == 0 && autoFail == 0 && errors == 0) {
             return BatchStatus.COMPLETED;
         }
 
-        // Any issues → route to human review, never auto-reject
+        // Mixed results or partial errors — send to reviewer
         return BatchStatus.REVIEW_PENDING;
     }
 

@@ -16,13 +16,11 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.lang.NonNull;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * REST API for batch operations — ADMIN only.
- *
- * Mounted at /api/admin/batches (moved from /api/client/batches).
- * Upload, assignment, status queries — all require ADMIN role.
  */
 @RestController
 @RequestMapping("/api/admin/batches")
@@ -41,30 +39,96 @@ public class BatchApiController {
         this.clientRepository = clientRepository;
     }
 
+    /**
+     * Returns paginated batch list as a stable JSON structure.
+     *
+     * Spring Data's PageImpl serialization is not stable — it produces different
+     * JSON across versions. We return an explicit Map instead to avoid the
+     * "Serializing PageImpl instances as-is is not supported" warning and
+     * to guarantee a consistent shape for the frontend.
+     *
+     * Each batch item includes fileCount (from @Formula — no lazy-load required)
+     * so the frontend gets accurate file counts without loading the full files list.
+     */
     @GetMapping
     public ResponseEntity<?> getBatches(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status) {
 
+        Page<Batch> batchPage;
         if (status != null && !status.isBlank()) {
             try {
                 BatchStatus batchStatus = BatchStatus.valueOf(status.toUpperCase());
-                return ResponseEntity.ok(batchService.findByStatus(batchStatus));
+                List<Batch> list = batchService.findByStatus(batchStatus);
+                return ResponseEntity.ok(Map.of(
+                    "content", list.stream().map(this::toSummary).toList(),
+                    "totalPages", 1,
+                    "number", 0,
+                    "totalElements", list.size()
+                ));
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Unknown status: " + status));
             }
         }
 
-        Page<Batch> batches = batchService.findAll(
-                PageRequest.of(page, size, Sort.by("createdAt").descending()));
-        return ResponseEntity.ok(batches);
+        batchPage = batchService.findAll(PageRequest.of(page, size, Sort.by("createdAt").descending()));
+
+        return ResponseEntity.ok(Map.of(
+            "content",       batchPage.getContent().stream().map(this::toSummary).toList(),
+            "totalPages",    batchPage.getTotalPages(),
+            "number",        batchPage.getNumber(),
+            "totalElements", batchPage.getTotalElements()
+        ));
+    }
+
+    /**
+     * Converts a Batch to a summary map for the list API.
+     * Uses @Formula fileCount — no lazy-loading of the files collection required.
+     */
+    private Map<String, Object> toSummary(Batch b) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id",            b.getId());
+        m.put("parentBatchId", b.getParentBatchId());
+        m.put("status",        b.getStatus() != null ? b.getStatus().name() : null);
+        m.put("errorMessage",  b.getErrorMessage());
+        m.put("fileHash",      b.getFileHash());
+        m.put("createdAt",     b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
+        m.put("updatedAt",     b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null);
+        // fileCount from @Formula — always accurate, no lazy-load required
+        m.put("fileCount", b.getFileCount());
+        // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
+        // returns (open-in-view=false). Use fileCount for the count display.
+        // The full files array is only needed on the detail endpoint (findByIdWithFiles
+        // uses @EntityGraph and loads files eagerly within its own transaction).
+        m.put("files", List.of());
+        // Embed reviewer
+        if (b.getAssignedReviewer() != null) {
+            m.put("assignedReviewer", Map.of(
+                "id",       b.getAssignedReviewer().getId(),
+                "username", b.getAssignedReviewer().getUsername(),
+                "fullName", b.getAssignedReviewer().getFullName() != null ? b.getAssignedReviewer().getFullName() : ""
+            ));
+        } else {
+            m.put("assignedReviewer", null);
+        }
+        // Embed client
+        if (b.getClient() != null) {
+            m.put("client", Map.of(
+                "id",   b.getClient().getId(),
+                "name", b.getClient().getName() != null ? b.getClient().getName() : "",
+                "code", b.getClient().getCode() != null ? b.getClient().getCode() : ""
+            ));
+        } else {
+            m.put("client", null);
+        }
+        return m;
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getBatch(@PathVariable @NonNull Long id) {
         return batchService.findByIdWithFiles(id)
-                .map(ResponseEntity::ok)
+                .map(b -> ResponseEntity.ok(toSummary(b)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -72,19 +136,17 @@ public class BatchApiController {
     public ResponseEntity<?> getBatchStatus(@PathVariable @NonNull Long id) {
         return batchService.findById(id)
                 .map(b -> ResponseEntity.ok(Map.of(
-                        "batchId", b.getId(),
-                        "status", b.getStatus(),
-                        "totalFiles", b.getFiles().size(),
-                        "completedFiles", b.getFiles().stream()
-                                .filter(f -> f.getStatus() == FileStatus.COMPLETED).count(),
-                        "updatedAt", b.getUpdatedAt()
+                        "batchId",      b.getId(),
+                        "status",       b.getStatus() != null ? b.getStatus().name() : null,
+                        "totalFiles",   b.getFileCount(),
+                        "errorMessage", b.getErrorMessage() != null ? b.getErrorMessage() : "",
+                        "updatedAt",    b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null
                 )))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     /**
-     * Upload a ZIP batch.
-     * Expects multipart/form-data with:
+     * Upload a ZIP batch. Requires multipart/form-data:
      *   file     — the ZIP archive
      *   clientId — ID of the tenant organisation
      */
@@ -114,11 +176,11 @@ public class BatchApiController {
             auditLogService.logEntity(admin, "BATCH_UPLOADED", "Batch", batch.getId());
 
             Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("batchId", batch.getId());
-            response.put("parentBatchId", batch.getParentBatchId());
-            response.put("fileCount", batch.getFiles().size());
-            response.put("status", batch.getStatus());
+            response.put("success",       true);
+            response.put("batchId",        batch.getId());
+            response.put("parentBatchId",  batch.getParentBatchId());
+            response.put("fileCount",      batch.getFileCount());
+            response.put("status",         batch.getStatus() != null ? batch.getStatus().name() : null);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Upload failed: " + e.getMessage()));
