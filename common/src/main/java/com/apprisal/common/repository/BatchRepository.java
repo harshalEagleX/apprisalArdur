@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,7 +47,24 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     List<Batch> findByAssignedReviewerIdAndStatus(Long reviewerId, BatchStatus status);
 
     // Duplicate upload detection
-    java.util.Optional<Batch> findByFileHash(String fileHash);
+    Optional<Batch> findByFileHash(String fileHash);
+
+    /**
+     * Find batches stuck in QC_PROCESSING whose updatedAt is older than the given cutoff.
+     * Used by StuckBatchReconciler to detect and recover incomplete processing runs.
+     *
+     * A batch is "stuck" when:
+     *   - The async QC thread crashed or the JVM was killed mid-processing
+     *   - Python rejected the request and Java never updated the status
+     *   - The processing thread timed out without catching the exception
+     */
+    @Query("""
+        SELECT b FROM Batch b
+        WHERE b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING
+          AND b.updatedAt < :cutoff
+        ORDER BY b.updatedAt ASC
+        """)
+    List<Batch> findStuckInQcProcessing(@Param("cutoff") LocalDateTime cutoff);
 
     // Efficient TopN queries for dashboards
     List<Batch> findTop10ByOrderByCreatedAtDesc();

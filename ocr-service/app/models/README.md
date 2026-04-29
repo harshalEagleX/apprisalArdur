@@ -44,3 +44,36 @@ Java (port 8080)
                                               └─ returns PythonQCResponse JSON
   ← Java stores QCResult + QCRuleResult[] in Java DB
 ```
+
+## Consistency Model (Eventual Consistency — Accepted Tradeoff)
+
+There is **no distributed transaction** between the two writes:
+1. Python writes to its own DB (rule_results, extracted_fields, page_ocr_results)
+2. Java writes to its own DB (qc_result, qc_rule_result)
+
+These two writes happen sequentially over HTTP. If Java crashes between step 1 and step 2:
+- Python has the results cached (by file_hash)
+- Java's batch is stuck in `QC_PROCESSING`
+
+**This is intentional and acceptable because:**
+
+- Java is the **system of record** for QC outcomes and reviewer decisions
+- Python's data is **operational** (OCR cache, ML training signals) — not what reviewers act on
+- Python's `file_hash` cache makes re-processing the same file **fast** (no re-OCR)
+- The `StuckBatchReconciler` detects and recovers stuck batches every 10 minutes
+- The `qc_result.python_document_id` field links Java records to Python records for debugging
+
+**Recovery path for the crash scenario:**
+```
+1. JVM crashes after Python writes, before Java writes
+2. Batch stays in QC_PROCESSING with stale updatedAt
+3. StuckBatchReconciler fires 10 minutes later
+4. Calls processBatchAsync(batchId) → PythonClientService → Python returns cached result
+5. Java writes QCResult this time → consistency restored
+```
+
+**The alternative — a distributed transaction (2PC/Saga) — is not justified here:**
+- Adds significant complexity (coordinator, compensation logic)
+- The failure window is milliseconds between two local writes
+- The business consequence of divergence (ML data inconsistency) is low-severity
+- The recovery is automatic and invisible to the user within 10-15 minutes

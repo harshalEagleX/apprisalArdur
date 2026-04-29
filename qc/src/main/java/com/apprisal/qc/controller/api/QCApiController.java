@@ -6,6 +6,7 @@ import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.qc.service.PythonClientService;
 import com.apprisal.qc.service.QCProcessingService;
+import com.apprisal.qc.service.StuckBatchReconciler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -29,16 +30,19 @@ public class QCApiController {
     private final QCResultRepository qcResultRepository;
     private final PythonClientService pythonClientService;
     private final BatchRepository batchRepository;
+    private final StuckBatchReconciler reconciler;
 
     public QCApiController(
             QCProcessingService qcProcessingService,
             QCResultRepository qcResultRepository,
             PythonClientService pythonClientService,
-            BatchRepository batchRepository) {
+            BatchRepository batchRepository,
+            StuckBatchReconciler reconciler) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
         this.pythonClientService = pythonClientService;
         this.batchRepository = batchRepository;
+        this.reconciler = reconciler;
     }
 
     /**
@@ -129,5 +133,26 @@ public class QCApiController {
         return rules != null
             ? ResponseEntity.ok(rules)
             : ResponseEntity.status(503).body("{\"error\": \"Python service unavailable\"}");
+    }
+
+    /**
+     * Manually trigger stuck-batch reconciliation.
+     * Useful when admin notices a batch stuck in QC_PROCESSING.
+     * Scheduled reconciler runs automatically every 10 minutes.
+     */
+    @PostMapping("/reconcile")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> reconcileStuckBatches() {
+        log.info("Manual reconciliation triggered by admin");
+        var report = reconciler.runManually();
+        return ResponseEntity.ok(Map.of(
+            "stuckFound",      report.stuckFound(),
+            "retried",         report.retried(),
+            "abandoned",       report.abandoned(),
+            "pythonHealthy",   report.pythonWasHealthy(),
+            "message",         report.stuckFound() == 0
+                ? "No stuck batches found"
+                : report.retried() + " retried, " + report.abandoned() + " abandoned"
+        ));
     }
 }

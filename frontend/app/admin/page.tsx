@@ -1,126 +1,144 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Package, Users, AlertCircle, CheckCircle2, Clock, Loader, Building2, ArrowRight } from "lucide-react";
 import { getAdminDashboard, type Batch, type User } from "@/lib/api";
 import StatCard from "@/components/shared/StatCard";
 import StatusBadge from "@/components/shared/StatusBadge";
+import { CardSkeleton, Skeleton } from "@/components/shared/Skeleton";
 
 export default function AdminOverviewPage() {
   const [dash, setDash]   = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAdminDashboard()
-      .then(setDash)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    getAdminDashboard().then(setDash).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   const n = (k: string) => Number(dash[k] ?? 0);
   const recentBatches = (dash.recentBatches as Batch[] | undefined) ?? [];
-  const reviewers     = (dash.reviewers as User[] | undefined) ?? [];
+  const reviewers     = (dash.reviewers     as User[]  | undefined) ?? [];
   const workload      = (dash.reviewerWorkload as Record<string, number> | undefined) ?? {};
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">Overview</h1>
-        <Link href="/admin/batches"
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-medium transition-colors">
-          Upload Batch
-        </Link>
+    <div className="p-6 max-w-6xl">
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold text-white">Overview</h1>
+        <p className="text-slate-500 text-sm mt-0.5">Platform status at a glance</p>
       </div>
 
-      {loading ? (
-        <div className="text-slate-500 text-sm">Loading…</div>
-      ) : (
-        <>
-          {/* Metrics grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard label="Total Batches"  value={n("totalBatches")}  color="text-slate-200" />
-            <StatCard label="QC Processing"  value={n("pendingOcr")}    color="text-indigo-400" />
-            <StatCard label="Pending Review" value={n("pendingReview")} color="text-amber-400" />
-            <StatCard label="In Review"      value={n("inReview")}      color="text-orange-400" />
-            <StatCard label="Completed"      value={n("completed")}     color="text-green-400" />
-            <StatCard label="Errors"         value={n("errors")}        color="text-red-400" />
-            <StatCard label="Reviewers"      value={n("reviewerCount")} color="text-blue-400" />
-            <StatCard label="Client Orgs"    value={n("clientOrganizations")} color="text-purple-400" />
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        {loading ? (
+          Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
+        ) : (
+          <>
+            <StatCard label="Total batches"    value={n("totalBatches")}   icon={Package}      color="slate" />
+            <StatCard label="QC running"       value={n("pendingOcr")}     icon={Loader}       color="indigo" />
+            <StatCard label="Awaiting review"  value={n("pendingReview")}  icon={Clock}        color="amber" />
+            <StatCard label="In review"        value={n("inReview")}       icon={Clock}        color="amber" />
+            <StatCard label="Completed"        value={n("completed")}      icon={CheckCircle2} color="green" />
+            <StatCard label="Errors"           value={n("errors")}         icon={AlertCircle}  color="red" />
+            <StatCard label="Active reviewers" value={n("reviewerCount")}  icon={Users}        color="blue" />
+            <StatCard label="Client orgs"      value={n("clientOrganizations")} icon={Building2} color="slate" />
+          </>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Recent batches */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+            <span className="text-sm font-medium text-slate-200">Recent batches</span>
+            <Link href="/admin/batches" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+              View all <ArrowRight size={12} />
+            </Link>
           </div>
-
-          {/* Two columns: recent batches + reviewer workload */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            {/* Recent batches */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                <h2 className="text-sm font-semibold text-slate-200">Recent Batches</h2>
-                <Link href="/admin/batches" className="text-xs text-blue-400 hover:underline">View all →</Link>
-              </div>
-              {recentBatches.length === 0 ? (
-                <div className="px-4 py-8 text-center text-slate-500 text-sm">No batches yet</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <tbody className="divide-y divide-slate-800">
-                    {recentBatches.slice(0, 6).map(b => (
-                      <tr key={b.id} className="hover:bg-slate-800/40">
-                        <td className="px-4 py-2.5">
-                          <div className="font-mono text-xs text-slate-300 truncate max-w-[180px]">{b.parentBatchId}</div>
-                          <div className="text-slate-500 text-[11px]">{b.client?.name ?? "—"}</div>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <StatusBadge status={b.status} />
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-slate-500 text-xs">
-                          {new Date(b.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            {/* Reviewer workload */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                <h2 className="text-sm font-semibold text-slate-200">Reviewer Workload</h2>
-                <Link href="/admin/users" className="text-xs text-blue-400 hover:underline">Manage →</Link>
-              </div>
-              {reviewers.length === 0 ? (
-                <div className="px-4 py-8 text-center text-slate-500 text-sm">
-                  No reviewers yet.{" "}
-                  <Link href="/admin/users" className="text-blue-400 hover:underline">Add one →</Link>
+          {loading ? (
+            <div className="divide-y divide-slate-800">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between px-5 py-3 gap-3">
+                  <Skeleton className="h-3.5 w-40" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                  <Skeleton className="h-3 w-16" />
                 </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="border-b border-slate-800 text-slate-500 text-xs">
-                    <tr>
-                      <th className="px-4 py-2 text-left">Reviewer</th>
-                      <th className="px-4 py-2 text-right">Active</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {reviewers.map(r => (
-                      <tr key={r.id} className="hover:bg-slate-800/40">
-                        <td className="px-4 py-2.5">
-                          <div className="text-slate-200">{r.fullName ?? r.username}</div>
-                          <div className="text-slate-500 text-xs">{r.username}</div>
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <span className={`font-bold ${workload[r.id] > 0 ? "text-amber-400" : "text-slate-500"}`}>
-                            {workload[r.id] ?? 0}
-                          </span>
-                          <span className="text-slate-600 text-xs ml-1">batches</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              ))}
             </div>
+          ) : recentBatches.length === 0 ? (
+            <div className="px-5 py-10 text-center text-slate-500 text-sm">No batches yet</div>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {recentBatches.slice(0, 6).map(b => (
+                <div key={b.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-800/40 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono text-slate-300 truncate">{b.parentBatchId}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">{b.client?.name ?? "—"}</div>
+                  </div>
+                  <StatusBadge status={b.status} />
+                  <div className="text-[11px] text-slate-600 flex-shrink-0">
+                    {new Date(b.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Reviewer workload */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+            <span className="text-sm font-medium text-slate-200">Reviewer workload</span>
+            <Link href="/admin/users" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+              Manage <ArrowRight size={12} />
+            </Link>
           </div>
-        </>
-      )}
+          {loading ? (
+            <div className="divide-y divide-slate-800">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center px-5 py-3 gap-3">
+                  <Skeleton className="h-3.5 flex-1" />
+                  <Skeleton className="h-3.5 w-12" />
+                </div>
+              ))}
+            </div>
+          ) : reviewers.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-slate-500 text-sm mb-3">No reviewers yet</p>
+              <Link href="/admin/users" className="text-xs text-blue-400 hover:underline">Add a reviewer</Link>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800">
+              {reviewers.map(r => {
+                const active = workload[r.id] ?? 0;
+                return (
+                  <div key={r.id} className="flex items-center gap-3 px-5 py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-slate-200 truncate">{r.fullName ?? r.username}</div>
+                      <div className="text-[11px] text-slate-500">{r.username}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Workload bar */}
+                      <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(active * 20, 100)}%`,
+                            background: active > 3 ? "#f59e0b" : "#3b82f6",
+                          }}
+                        />
+                      </div>
+                      <span className={`text-xs font-mono font-semibold tabular-nums ${active > 0 ? "text-slate-300" : "text-slate-600"}`}>
+                        {active}
+                      </span>
+                      <span className="text-[11px] text-slate-600">active</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

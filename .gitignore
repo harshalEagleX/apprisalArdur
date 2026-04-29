@@ -180,3 +180,49 @@ diff.txt
 
 # MCP config — machine-specific absolute paths, generate via: code-review-graph install --platform claude-code
 .mcp.json
+
+# =============================================================================
+# PROJECT-SPECIFIC (VERY IMPORTANT)
+# =============================================================================
+
+# Python runtime outputs
+ocr-service/test_output/
+ocr-service/logs/
+ocr-service/python_service.log
+
+# Jupyter notebooks (optional but recommended)
+*.ipynb
+
+# Large data / documents
+*.pdf
+*.zip
+*.xlsx
+*.docx
+
+# ML / AI artifacts (extra safety)
+*.joblib
+*.sav
+*.model
+
+# Temporary outputs
+output/
+results/
+cache/
+
+# Celery / async
+celerybeat-schedule
+
+# Mac temp inside project
+*.DS_Store
+
+# =============================================================================
+# EXTRA SAFETY (UPLOADS — DOUBLE LOCK)
+# =============================================================================
+uploads/**/*.pdf
+uploads/**/*.zip
+uploads/**/*.docx
+
+# =============================================================================
+# TEST ARTIFACTS
+# =============================================================================
+test_output/

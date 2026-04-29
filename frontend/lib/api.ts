@@ -112,6 +112,12 @@ export async function uploadBatch(
   return res.json();
 }
 
+export const reconcileStuckBatches = () =>
+  apiFetch<{ stuckFound: number; retried: number; abandoned: number; pythonHealthy: boolean; message: string }>(
+    "/api/qc/reconcile",
+    { method: "POST" }
+  );
+
 export const processQC = (batchId: number) =>
   apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
     `/api/qc/process/${batchId}`,
