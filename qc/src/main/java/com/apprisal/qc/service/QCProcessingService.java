@@ -13,12 +13,14 @@ import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.lang.NonNull;
 
 /**
@@ -60,6 +62,30 @@ public class QCProcessingService {
      * @param batchId The batch to process
      * @return Summary of processing results
      */
+    /**
+     * Fire-and-forget async wrapper — returns 202 immediately so the HTTP thread is free.
+     * Admin polls GET /api/admin/batches/{id}/status to see progress.
+     */
+    @Async("qcTaskExecutor")
+    public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId) {
+        try {
+            QCProcessingSummary result = processBatch(batchId);
+            return CompletableFuture.completedFuture(result);
+        } catch (Exception e) {
+            log.error("Async QC processing failed for batch {}: {}", batchId, e.getMessage(), e);
+            try {
+                batchRepository.findById(batchId).ifPresent(b -> {
+                    b.setStatus(BatchStatus.ERROR);
+                    b.setErrorMessage("Processing failed: " + e.getMessage());
+                    batchRepository.save(b);
+                });
+            } catch (Exception saveEx) {
+                log.error("Failed to persist error status for batch {}: {}", batchId, saveEx.getMessage());
+            }
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     @Transactional
     public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId) {
         log.info("Starting QC processing for batch {}", batchId);
@@ -67,8 +93,14 @@ public class QCProcessingService {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
 
+        // Guard against concurrent duplicate triggers
+        if (batch.getStatus() == BatchStatus.QC_PROCESSING) {
+            log.warn("Batch {} is already QC_PROCESSING — ignoring duplicate trigger", batchId);
+            return new QCProcessingSummary(0, 0, 0, 0, 0, BatchStatus.QC_PROCESSING);
+        }
+
         // Update batch status
-        batch.setStatus(BatchStatus.QC_PROCESSING);
+        batch.setStatus(BatchStatus.QC_PROCESSING); // Python OCR + rules running
         batchRepository.save(batch);
 
         // Get matched file pairs
@@ -93,6 +125,7 @@ public class QCProcessingService {
                 if (!pythonClient.isHealthy()) {
                     log.error("Python OCR service is down — aborting batch {} after {} pairs", batchId, errorCount);
                     batch.setStatus(BatchStatus.ERROR);
+                    batch.setErrorMessage("Python OCR service unavailable — check that ocr-service is running on port 5001");
                     batchRepository.save(batch);
                     throw new RuntimeException("Python OCR service unavailable");
                 }
@@ -174,6 +207,7 @@ public class QCProcessingService {
                         .ruleName(pr.ruleName())
                         .status(pr.status())
                         .message(pr.message())
+                        .severity(pr.severity() != null ? pr.severity() : "STANDARD")
                         .details(toJson(pr.details()))
                         .actionItem(pr.actionItem())
                         .needsVerification(pr.needsVerification())

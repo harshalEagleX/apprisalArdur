@@ -213,6 +213,29 @@ public class VerificationService {
     }
 
     /**
+     * IDOR guard: throw SecurityException if reviewer is not assigned to the batch
+     * containing this QC result.
+     */
+    @Transactional(readOnly = true)
+    public void assertReviewerOwnsQcResult(@NonNull Long qcResultId, @NonNull Long reviewerId) {
+        boolean owns = qcResultRepository.isReviewerAssigned(qcResultId, reviewerId);
+        if (!owns) {
+            throw new SecurityException("Reviewer " + reviewerId + " is not assigned to QC result " + qcResultId);
+        }
+    }
+
+    /**
+     * IDOR guard: throw SecurityException if reviewer is not assigned to the batch
+     * containing the rule result.
+     */
+    @Transactional(readOnly = true)
+    public void assertReviewerOwnsRuleResult(@NonNull Long ruleResultId, @NonNull Long reviewerId) {
+        QCRuleResult rule = qcRuleResultRepository.findById(ruleResultId)
+                .orElseThrow(() -> new RuntimeException("Rule result not found: " + ruleResultId));
+        assertReviewerOwnsQcResult(rule.getQcResult().getId(), reviewerId);
+    }
+
+    /**
      * Recalculate all counters for a QC result based on current rule statuses.
      * Called after each reviewer decision to keep counters accurate.
      */

@@ -1,10 +1,11 @@
 package com.apprisal.qc.controller.api;
 
+import com.apprisal.common.entity.BatchStatus;
 import com.apprisal.common.entity.QCResult;
+import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.qc.service.PythonClientService;
 import com.apprisal.qc.service.QCProcessingService;
-import com.apprisal.qc.service.QCProcessingService.QCProcessingSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -12,12 +13,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.lang.NonNull;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * REST API controller for QC processing operations.
+ * REST API for QC processing — ADMIN triggers, REVIEWER+ADMIN reads results.
  */
 @RestController
 @RequestMapping("/api/qc")
@@ -28,54 +28,64 @@ public class QCApiController {
     private final QCProcessingService qcProcessingService;
     private final QCResultRepository qcResultRepository;
     private final PythonClientService pythonClientService;
+    private final BatchRepository batchRepository;
 
     public QCApiController(
             QCProcessingService qcProcessingService,
             QCResultRepository qcResultRepository,
-            PythonClientService pythonClientService) {
+            PythonClientService pythonClientService,
+            BatchRepository batchRepository) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
         this.pythonClientService = pythonClientService;
+        this.batchRepository = batchRepository;
     }
 
     /**
-     * Trigger QC processing for a batch.
-     * POST /api/qc/process/{batchId}
+     * Trigger async QC processing for a batch.
+     * Returns 202 Accepted immediately — admin polls GET /api/admin/batches/{id}/status.
      */
     @PostMapping("/process/{batchId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> processBatch(@PathVariable @NonNull Long batchId) {
         log.info("QC processing requested for batch {}", batchId);
 
-        try {
-            QCProcessingSummary summary = qcProcessingService.processBatch(batchId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("batchId", batchId);
-            response.put("totalFiles", summary.totalFiles());
-            response.put("autoPass", summary.autoPassCount());
-            response.put("toVerify", summary.toVerifyCount());
-            response.put("autoFail", summary.autoFailCount());
-            response.put("errors", summary.errorCount());
-            response.put("batchStatus", summary.batchStatus().name());
-            response.put("needsReview", summary.needsReview());
-
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("QC processing failed for batch {}: {}", batchId, e.getMessage(), e);
-
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(error);
+        // Validate batch exists and is in a triggerable state
+        var batchOpt = batchRepository.findById(batchId);
+        if (batchOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
         }
+        var batch = batchOpt.get();
+
+        if (batch.getStatus() == BatchStatus.QC_PROCESSING) {
+            return ResponseEntity.ok(Map.of(
+                "message", "Batch is already being processed",
+                "batchId", batchId,
+                "status", "QC_PROCESSING",
+                "pollUrl", "/api/admin/batches/" + batchId + "/status"
+            ));
+        }
+
+        if (batch.getStatus() == BatchStatus.COMPLETED) {
+            return ResponseEntity.ok(Map.of(
+                "message", "Batch already completed — delete and re-upload to reprocess",
+                "batchId", batchId,
+                "status", "COMPLETED"
+            ));
+        }
+
+        // Fire async — returns immediately
+        qcProcessingService.processBatchAsync(batchId);
+
+        return ResponseEntity.accepted().body(Map.of(
+            "message", "QC processing started",
+            "batchId", batchId,
+            "pollUrl", "/api/admin/batches/" + batchId + "/status"
+        ));
     }
 
     /**
-     * Get QC results for a batch.
-     * GET /api/qc/results/{batchId}
+     * Get QC results for a batch (ADMIN: any, REVIEWER: own assignments).
      */
     @GetMapping("/results/{batchId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
@@ -85,45 +95,39 @@ public class QCApiController {
     }
 
     /**
-     * Get QC result for a specific file.
-     * GET /api/qc/file/{fileId}
+     * Get QC result and batchFile info for a specific QC result ID.
+     * Used by the reviewer verify page to load the PDF file ID.
      */
-    @GetMapping("/file/{fileId}")
+    @GetMapping("/file/{qcResultId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
-    public ResponseEntity<?> getFileResult(@PathVariable @NonNull Long fileId) {
-        return qcResultRepository.findByBatchFileId(fileId)
-                .map(ResponseEntity::ok)
+    public ResponseEntity<?> getQCResult(@PathVariable @NonNull Long qcResultId) {
+        return qcResultRepository.findById(qcResultId)
+                .map(r -> ResponseEntity.ok(Map.of(
+                        "id", r.getId(),
+                        "qcDecision", r.getQcDecision() != null ? r.getQcDecision().name() : null,
+                        "batchFile", r.getBatchFile() != null ? Map.of(
+                                "id", r.getBatchFile().getId(),
+                                "filename", r.getBatchFile().getFilename() != null ? r.getBatchFile().getFilename() : ""
+                        ) : null
+                )))
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * Check Python service health.
-     * GET /api/qc/health
-     */
+    /** Python service health check. */
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> checkHealth() {
         boolean healthy = pythonClientService.isHealthy();
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("pythonService", healthy ? "healthy" : "unavailable");
-
-        if (healthy) {
-            return ResponseEntity.ok(response);
-        } else {
-            return ResponseEntity.status(503).body(response);
-        }
+        return healthy
+            ? ResponseEntity.ok(Map.of("pythonService", "healthy"))
+            : ResponseEntity.status(503).body(Map.of("pythonService", "unavailable"));
     }
 
-    /**
-     * Get available QC rules from Python.
-     * GET /api/qc/rules
-     */
+    /** Get available QC rules from Python. */
     @GetMapping("/rules")
     public ResponseEntity<String> getRules() {
         String rules = pythonClientService.getRules();
-        if (rules != null) {
-            return ResponseEntity.ok(rules);
-        }
-        return ResponseEntity.status(503).body("{\"error\": \"Python service unavailable\"}");
+        return rules != null
+            ? ResponseEntity.ok(rules)
+            : ResponseEntity.status(503).body("{\"error\": \"Python service unavailable\"}");
     }
 }

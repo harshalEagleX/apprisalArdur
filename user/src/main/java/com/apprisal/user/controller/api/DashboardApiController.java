@@ -49,18 +49,6 @@ public class DashboardApiController {
         return ResponseEntity.ok(dashboardService.getAdminDashboard());
     }
 
-    @GetMapping("/client/dashboard")
-    public ResponseEntity<?> getClientDashboard(@AuthenticationPrincipal UserPrincipal principal) {
-        User user = principal.getUser();
-
-        if (user.getClient() == null) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "No client organization assigned"));
-        }
-
-        return ResponseEntity.ok(dashboardService.getClientDashboard(user.getClient().getId()));
-    }
-
     @GetMapping("/reviewer/dashboard")
     public ResponseEntity<Map<String, Object>> getReviewerDashboard(
             @AuthenticationPrincipal UserPrincipal principal) {

@@ -1,6 +1,7 @@
 package com.apprisal.common.entity;
 
 import jakarta.persistence.*;
+import jakarta.persistence.Version;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -18,8 +19,17 @@ public class Batch {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version = 0L;
+
     @Column(name = "parent_batch_id", nullable = false)
     private String parentBatchId;
+
+    @Column(name = "file_hash", length = 64)
+    private String fileHash;
+
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    private String errorMessage;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
@@ -126,6 +136,14 @@ public class Batch {
         files.remove(file);
         file.setBatch(null);
     }
+
+    public Long getVersion() { return version; }
+
+    public String getFileHash() { return fileHash; }
+    public void setFileHash(String fileHash) { this.fileHash = fileHash; }
+
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

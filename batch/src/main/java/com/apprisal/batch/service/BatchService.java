@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -193,6 +195,25 @@ public class BatchService {
             throw new ValidationException("creator", "Creator is required");
         }
 
+        // Java-side file size guard (50 MB hard limit)
+        long maxBytes = 50L * 1024 * 1024;
+        if (file.getSize() > maxBytes) {
+            throw new ValidationException("file",
+                "File exceeds maximum allowed size of 50 MB (received " +
+                (file.getSize() / 1024 / 1024) + " MB)");
+        }
+
+        // Idempotent deduplication: same ZIP content = same batch
+        String fileHash = computeSha256(file);
+        if (fileHash != null) {
+            var existing = batchRepository.findByFileHash(fileHash);
+            if (existing.isPresent()) {
+                log.info("Duplicate ZIP detected (hash={}), returning existing batch {}",
+                        fileHash, existing.get().getId());
+                return existing.get();
+            }
+        }
+
         String originalFilename = file.getOriginalFilename();
         String parentBatchId = originalFilename != null
                 ? originalFilename.replace(".zip", "")
@@ -207,6 +228,7 @@ public class BatchService {
                 .status(BatchStatus.VALIDATING)
                 .createdBy(creator)
                 .build();
+        batch.setFileHash(fileHash);
 
         batch = Objects.requireNonNull(batchRepository.save(batch));
 
@@ -214,20 +236,23 @@ public class BatchService {
             Path batchDir = Paths.get(storagePath, client.getCode(), parentBatchId);
             Files.createDirectories(batchDir);
             extractAndValidateZip(file, batch, batchDir);
-            batch.setStatus(BatchStatus.OCR_PENDING);
+            batch.setStatus(BatchStatus.QC_PROCESSING);
             log.info("Batch '{}' processed successfully with {} files",
                     parentBatchId, batch.getFiles().size());
         } catch (ValidationException e) {
             log.warn("Batch validation failed for '{}': {}", parentBatchId, e.getMessage());
             batch.setStatus(BatchStatus.VALIDATION_FAILED);
+            batch.setErrorMessage(e.getMessage());
             throw e;
         } catch (IOException e) {
             log.error("IO error processing batch '{}': {}", parentBatchId, e.getMessage(), e);
             batch.setStatus(BatchStatus.VALIDATION_FAILED);
+            batch.setErrorMessage("Failed to process ZIP file: " + e.getMessage());
             throw new BatchProcessingException(batch.getId(), "Failed to process ZIP file: " + e.getMessage(), e);
         } catch (Exception e) {
             log.error("Unexpected error processing batch '{}': {}", parentBatchId, e.getMessage(), e);
             batch.setStatus(BatchStatus.ERROR);
+            batch.setErrorMessage("Unexpected error: " + e.getMessage());
             throw new BatchProcessingException(batch.getId(), "Unexpected error: " + e.getMessage(), e);
         }
 
@@ -313,6 +338,17 @@ public class BatchService {
 
         if (batch.getFiles().isEmpty()) {
             throw new ValidationException("No valid PDF files found in the batch");
+        }
+    }
+
+    private String computeSha256(MultipartFile file) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(file.getBytes());
+            return HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            log.warn("Could not compute SHA-256 for file '{}': {}", file.getOriginalFilename(), e.getMessage());
+            return null;
         }
     }
 

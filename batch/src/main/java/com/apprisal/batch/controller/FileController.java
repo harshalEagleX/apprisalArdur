@@ -16,13 +16,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import org.springframework.lang.NonNull;
 
 /**
- * Controller to serve batch files (PDFs) for viewing.
- * SECURITY: enforces ownership — users can only view files belonging to their client.
- * ADMINs and REVIEWERs can view all files.
+ * Serves batch PDFs for the reviewer iframe.
+ *
+ * Ownership rules (two-role model):
+ *   ADMIN    — can view any file in the system
+ *   REVIEWER — can only view files belonging to batches assigned to them
  */
 @Controller
 public class FileController {
@@ -44,25 +45,19 @@ public class FileController {
             return ResponseEntity.notFound().build();
         }
 
-        // SECURITY: ownership check — CLIENT users can only access their own batch files
-        if (principal != null) {
-            Role role = principal.getUser().getRole();
-            if (role == Role.CLIENT) {
-                Long userClientId  = principal.getUser().getClient() != null ? principal.getUser().getClient().getId() : null;
-                Long fileClientId  = batchFile.getBatch() != null && batchFile.getBatch().getClient() != null
-                                   ? batchFile.getBatch().getClient().getId() : null;
-                if (userClientId == null || !userClientId.equals(fileClientId)) {
-                    return ResponseEntity.status(403).build();
-                }
+        // SECURITY: ownership check for REVIEWERs
+        if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
+            var batch = batchFile.getBatch();
+            var assignedReviewer = batch != null ? batch.getAssignedReviewer() : null;
+            if (assignedReviewer == null || !assignedReviewer.getId().equals(principal.getUser().getId())) {
+                return ResponseEntity.status(403).build();
             }
-            // ADMINs and REVIEWERs can access all files
         }
 
-        // SECURITY: path traversal guard — ensure resolved path is within the storage directory
+        // SECURITY: path traversal guard — ensure the file is a PDF
         File file = new File(batchFile.getStoragePath());
         try {
             Path canonical = file.toPath().toRealPath();
-            // Verify the file is a PDF by checking extension
             if (!canonical.toString().toLowerCase().endsWith(".pdf")) {
                 return ResponseEntity.status(400).build();
             }

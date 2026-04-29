@@ -4,10 +4,12 @@ import com.apprisal.common.entity.*;
 import com.apprisal.batch.service.BatchService;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.security.UserPrincipal;
+import com.apprisal.common.repository.ClientRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,74 +19,99 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * REST API Controller for batch operations.
+ * REST API for batch operations — ADMIN only.
+ *
+ * Mounted at /api/admin/batches (moved from /api/client/batches).
+ * Upload, assignment, status queries — all require ADMIN role.
  */
 @RestController
-@RequestMapping("/api/client/batches")
+@RequestMapping("/api/admin/batches")
+@PreAuthorize("hasRole('ADMIN')")
 public class BatchApiController {
 
     private final BatchService batchService;
     private final AuditLogService auditLogService;
+    private final ClientRepository clientRepository;
 
-    public BatchApiController(BatchService batchService, AuditLogService auditLogService) {
+    public BatchApiController(BatchService batchService,
+                              AuditLogService auditLogService,
+                              ClientRepository clientRepository) {
         this.batchService = batchService;
         this.auditLogService = auditLogService;
+        this.clientRepository = clientRepository;
     }
 
     @GetMapping
     public ResponseEntity<?> getBatches(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status) {
 
-        User user = principal.getUser();
-        Client client = user.getClient();
-
-        if (client == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "No client organization assigned"));
+        if (status != null && !status.isBlank()) {
+            try {
+                BatchStatus batchStatus = BatchStatus.valueOf(status.toUpperCase());
+                return ResponseEntity.ok(batchService.findByStatus(batchStatus));
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unknown status: " + status));
+            }
         }
 
-        Page<Batch> batches = batchService.findByClientId(client.getId(),
+        Page<Batch> batches = batchService.findAll(
                 PageRequest.of(page, size, Sort.by("createdAt").descending()));
-
         return ResponseEntity.ok(batches);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getBatch(@PathVariable @NonNull Long id,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        User user = principal.getUser();
-        Client userClient = user.getClient();
-        if (userClient == null) return ResponseEntity.status(403).build();
-
+    public ResponseEntity<?> getBatch(@PathVariable @NonNull Long id) {
         return batchService.findByIdWithFiles(id)
-                .filter(batch -> batch.getClient().getId().equals(userClient.getId()))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @PostMapping("/upload")
-    public ResponseEntity<?> uploadBatch(@RequestParam MultipartFile file,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        User user = principal.getUser();
-        Client client = user.getClient();
+    @GetMapping("/{id}/status")
+    public ResponseEntity<?> getBatchStatus(@PathVariable @NonNull Long id) {
+        return batchService.findById(id)
+                .map(b -> ResponseEntity.ok(Map.of(
+                        "batchId", b.getId(),
+                        "status", b.getStatus(),
+                        "totalFiles", b.getFiles().size(),
+                        "completedFiles", b.getFiles().stream()
+                                .filter(f -> f.getStatus() == FileStatus.COMPLETED).count(),
+                        "updatedAt", b.getUpdatedAt()
+                )))
+                .orElse(ResponseEntity.notFound().build());
+    }
 
-        if (client == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "No client organization assigned"));
-        }
+    /**
+     * Upload a ZIP batch.
+     * Expects multipart/form-data with:
+     *   file     — the ZIP archive
+     *   clientId — ID of the tenant organisation
+     */
+    @PostMapping("/upload")
+    public ResponseEntity<?> uploadBatch(
+            @RequestParam MultipartFile file,
+            @RequestParam @NonNull Long clientId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        User admin = principal.getUser();
 
         if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Please select a file to upload"));
+            return ResponseEntity.badRequest().body(Map.of("error", "File is required"));
         }
-
         String filename = file.getOriginalFilename();
         if (filename == null || !filename.toLowerCase().endsWith(".zip")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Please upload a ZIP file"));
+            return ResponseEntity.badRequest().body(Map.of("error", "Only ZIP files are accepted"));
+        }
+
+        Client client = clientRepository.findById(clientId).orElse(null);
+        if (client == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Client organisation not found: " + clientId));
         }
 
         try {
-            Batch batch = batchService.createFromZip(file, client, user);
-            auditLogService.logEntity(user, "BATCH_UPLOADED_API", "Batch", batch.getId());
+            Batch batch = batchService.createFromZip(file, client, admin);
+            auditLogService.logEntity(admin, "BATCH_UPLOADED", "Batch", batch.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -92,22 +119,22 @@ public class BatchApiController {
             response.put("parentBatchId", batch.getParentBatchId());
             response.put("fileCount", batch.getFiles().size());
             response.put("status", batch.getStatus());
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Upload failed: " + e.getMessage()));
         }
     }
 
-    @GetMapping("/{id}/status")
-    public ResponseEntity<?> getBatchStatus(@PathVariable @NonNull Long id,
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteBatch(
+            @PathVariable @NonNull Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        User user = principal.getUser();
-        Client userClient = user.getClient();
-        if (userClient == null) return ResponseEntity.status(403).build();
-
-        return batchService.getStatusInfo(id, userClient.getId())
-                .<ResponseEntity<?>>map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            batchService.deleteBatch(id);
+            auditLogService.logEntity(principal.getUser(), "BATCH_DELETED", "Batch", id);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 }

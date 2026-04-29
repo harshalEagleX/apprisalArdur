@@ -34,10 +34,32 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     long countByQcDecision(QCDecision qcDecision);
 
     /**
-     * Find all TO_VERIFY results that haven't been reviewed.
+     * Find all TO_VERIFY results that haven't been reviewed (ADMIN: all).
      */
     @Query("SELECT qr FROM QCResult qr WHERE qr.qcDecision = 'TO_VERIFY' AND qr.finalDecision IS NULL")
     List<QCResult> findPendingVerification();
+
+    /**
+     * Find TO_VERIFY results assigned to a specific reviewer (REVIEWER: own batches only).
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        WHERE qr.qcDecision = 'TO_VERIFY'
+          AND qr.finalDecision IS NULL
+          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+        """)
+    List<QCResult> findPendingVerificationForReviewer(@Param("reviewerId") Long reviewerId);
+
+    /**
+     * Check if a reviewer is assigned to the batch containing this QC result.
+     */
+    @Query("""
+        SELECT CASE WHEN COUNT(qr) > 0 THEN TRUE ELSE FALSE END
+        FROM QCResult qr
+        WHERE qr.id = :qcResultId
+          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+        """)
+    boolean isReviewerAssigned(@Param("qcResultId") Long qcResultId, @Param("reviewerId") Long reviewerId);
 
     /**
      * Count QC results by decision type for a batch.

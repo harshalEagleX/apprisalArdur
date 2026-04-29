@@ -1,12 +1,10 @@
 /**
  * API client — all calls go to the Java backend on port 8080.
- * Java handles auth, batch management, and user management.
- * Java internally calls Python for OCR/QC processing.
+ * Two roles: ADMIN and REVIEWER only.
  */
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
-// ── Generic fetch with credentials (session cookie) ───────────────────────────
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${JAVA}${path}`, {
     credentials: "include",
@@ -18,6 +16,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     if (typeof window !== "undefined") window.location.href = "/login";
     throw new Error("Unauthenticated");
   }
+  if (res.status === 403) throw new Error("Access denied");
 
   if (!res.ok) {
     const body = await res.text();
@@ -38,38 +37,36 @@ export async function login(username: string, password: string): Promise<void> {
     body: form.toString(),
     redirect: "manual",
   });
-  // With redirect:"manual" the browser returns an opaque response (status 0)
-  // instead of the actual 302 the server sends — treat that as success too.
   const ok = res.status === 0 || res.status === 200 || res.status === 301 || res.status === 302;
-  if (!ok) {
-    throw new Error("Invalid username or password");
-  }
+  if (!ok) throw new Error("Invalid username or password");
 }
 
 export async function logout(): Promise<void> {
-  const form = new URLSearchParams();
   await fetch(`${JAVA}/logout`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form.toString(),
+    body: "",
     redirect: "manual",
   });
 }
 
-// ── Dashboard metrics ─────────────────────────────────────────────────────────
-export const getAdminDashboard   = () => apiFetch<Record<string, unknown>>("/api/admin/dashboard");
-export const getClientDashboard  = () => apiFetch<Record<string, unknown>>("/api/client/dashboard");
-export const getReviewerDashboard= () => apiFetch<Record<string, unknown>>("/api/reviewer/dashboard");
+export async function getMe(): Promise<{ role: "ADMIN" | "REVIEWER"; username: string }> {
+  return apiFetch("/api/me");
+}
+
+// ── Admin: Dashboard ──────────────────────────────────────────────────────────
+export const getAdminDashboard    = () => apiFetch<Record<string, unknown>>("/api/admin/dashboard");
+export const getReviewerDashboard = () => apiFetch<Record<string, unknown>>("/api/reviewer/dashboard");
 
 // ── Admin: Users ──────────────────────────────────────────────────────────────
 export const getUsers = (page = 0) =>
   apiFetch<{ content: User[]; totalPages: number; number: number }>(`/api/admin/users?page=${page}&size=20`);
 
-export const createUser = (data: Partial<User> & { password: string }) =>
+export const createUser = (data: Omit<User, "id" | "createdAt"> & { password: string; clientId?: number }) =>
   apiFetch<User>("/api/admin/users", { method: "POST", body: JSON.stringify(data) });
 
-export const updateUser = (id: number, data: Partial<User>) =>
+export const updateUser = (id: number, data: Partial<User> & { clientId?: number }) =>
   apiFetch<User>(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
 
 export const deleteUser = (id: number) =>
@@ -82,34 +79,28 @@ export const createClient = (name: string, code: string) =>
   apiFetch<Client>("/api/admin/clients", { method: "POST", body: JSON.stringify({ name, code }) });
 
 // ── Admin: Batches ────────────────────────────────────────────────────────────
-export const getAdminBatches = (page = 0) =>
-  apiFetch<{ content: Batch[]; totalPages: number; number: number }>(`/api/admin/batches?page=${page}&size=20`);
-
-export const assignReviewer = (batchId: number, reviewerId: number) =>
-  apiFetch(`/api/admin/batches/${batchId}/assign`, {
-    method: "POST", body: JSON.stringify({ reviewerId }),
-  });
-
-export const processQC = (batchId: number) =>
-  apiFetch(`/api/qc/process/${batchId}`, { method: "POST" });
-
-export const deleteBatch = (batchId: number) =>
-  apiFetch(`/api/admin/batches/${batchId}`, { method: "DELETE" });
-
-// ── Client: Batches ───────────────────────────────────────────────────────────
-export const getClientBatches = (page = 0) =>
-  apiFetch<{ content: Batch[]; totalPages: number; number: number }>(`/api/client/batches?page=${page}&size=20`);
+export const getAdminBatches = (page = 0, status?: string) => {
+  const params = new URLSearchParams({ page: String(page), size: "20" });
+  if (status) params.set("status", status);
+  return apiFetch<{ content: Batch[]; totalPages: number; number: number }>(
+    `/api/admin/batches?${params}`
+  );
+};
 
 export const getBatchById = (id: number) =>
-  apiFetch<Batch>(`/api/client/batches/${id}`);
+  apiFetch<Batch>(`/api/admin/batches/${id}`);
 
 export const getBatchStatus = (id: number) =>
-  apiFetch<{ status: string; completedFiles: number; totalFiles: number }>(`/api/client/batches/${id}/status`);
+  apiFetch<{ status: string; totalFiles: number; completedFiles: number }>(`/api/admin/batches/${id}/status`);
 
-export async function uploadBatch(file: File): Promise<{ batchId: number; parentBatchId: string; fileCount: number }> {
+export async function uploadBatch(
+  file: File,
+  clientId: number
+): Promise<{ batchId: number; parentBatchId: string; fileCount: number }> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`${JAVA}/api/client/batches/upload`, {
+  fd.append("clientId", String(clientId));
+  const res = await fetch(`${JAVA}/api/admin/batches/upload`, {
     method: "POST",
     credentials: "include",
     body: fd,
@@ -121,10 +112,22 @@ export async function uploadBatch(file: File): Promise<{ batchId: number; parent
   return res.json();
 }
 
-// ── Reviewer ──────────────────────────────────────────────────────────────────
-export const getReviewerBatches = () =>
-  apiFetch<Batch[]>("/reviewer/batches"); // uses Thymeleaf route, returns HTML — use REST instead:
+export const processQC = (batchId: number) =>
+  apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
+    `/api/qc/process/${batchId}`,
+    { method: "POST" }
+  );
 
+export const assignReviewer = (batchId: number, reviewerId: number) =>
+  apiFetch(`/api/admin/batches/${batchId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ reviewerId }),
+  });
+
+export const deleteBatch = (batchId: number) =>
+  apiFetch(`/api/admin/batches/${batchId}`, { method: "DELETE" });
+
+// ── Reviewer ──────────────────────────────────────────────────────────────────
 export const getQCResults = (batchId: number) =>
   apiFetch<QCResult[]>(`/api/qc/results/${batchId}`);
 
@@ -144,9 +147,11 @@ export const saveDecision = (ruleResultId: number, decision: "ACCEPT" | "REJECT"
 
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
 
-// ── QC Rules list ─────────────────────────────────────────────────────────────
-export const getPythonRules = () =>
-  fetch(`${JAVA}/api/qc/rules`).then(r => r.json());
+// ── Analytics (ADMIN only) ────────────────────────────────────────────────────
+export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/overview?days=${days}`);
+export const getAnalyticsOcr       = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/ocr?days=${days}`);
+export const getAnalyticsOperators = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/operators?days=${days}`);
+export const getAnalyticsTrend     = (days = 30) => apiFetch<unknown[]>(`/api/analytics/trend?days=${days}`);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface User {
@@ -154,8 +159,8 @@ export interface User {
   username: string;
   email?: string;
   fullName?: string;
-  role: "ADMIN" | "REVIEWER" | "CLIENT";
-  client?: { id: number; name: string };
+  role: "ADMIN" | "REVIEWER";
+  client?: { id: number; name: string; code: string };
   createdAt?: string;
 }
 
@@ -173,7 +178,9 @@ export interface Batch {
   status: string;
   client: Client;
   files: BatchFile[];
-  assignedReviewer?: User;
+  assignedReviewer?: Pick<User, "id" | "username" | "fullName">;
+  createdBy?: Pick<User, "id" | "username">;
+  errorMessage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -216,10 +223,3 @@ export interface QCRuleResult {
   reviewerComment?: string;
   severity?: string;
 }
-
-// ── Analytics ─────────────────────────────────────────────────────────────────
-export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/overview?days=${days}`);
-export const getAnalyticsOcr       = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/ocr?days=${days}`);
-export const getAnalyticsMl        = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/ml?days=${days}`);
-export const getAnalyticsOperators = (days = 30) => apiFetch<Record<string,unknown>>(`/api/analytics/operators?days=${days}`);
-export const getAnalyticsTrend     = (days = 30) => apiFetch<unknown[]>(`/api/analytics/trend?days=${days}`);

@@ -42,12 +42,10 @@ public class DashboardService {
                 metrics.put("totalUsers", userService.count());
                 metrics.put("adminCount", userService.countByRole(Role.ADMIN));
                 metrics.put("reviewerCount", userService.countByRole(Role.REVIEWER));
-                metrics.put("clientCount", userService.countByRole(Role.CLIENT));
 
                 // Batch counts
                 metrics.put("totalBatches", batchRepository.count());
-                metrics.put("pendingOcr", batchRepository.countByStatus(BatchStatus.OCR_PENDING));
-                metrics.put("processingOcr", batchRepository.countByStatus(BatchStatus.OCR_PROCESSING));
+                metrics.put("pendingOcr", batchRepository.countByStatus(BatchStatus.QC_PROCESSING));
                 metrics.put("pendingReview", batchRepository.countByStatus(BatchStatus.REVIEW_PENDING));
                 metrics.put("inReview", batchRepository.countByStatus(BatchStatus.IN_REVIEW));
                 metrics.put("completed", batchRepository.countByStatus(BatchStatus.COMPLETED));
@@ -80,13 +78,11 @@ public class DashboardService {
         public Map<String, Object> getClientDashboard(Long clientId) {
                 Map<String, Object> metrics = new HashMap<>();
 
-                // Batch counts
+                // Batch counts (used for admin viewing a specific client's work)
                 metrics.put("totalBatches", batchRepository.countByClientId(clientId));
                 metrics.put("uploaded", batchRepository.countByClientIdAndStatus(clientId, BatchStatus.UPLOADED));
                 metrics.put("validating", batchRepository.countByClientIdAndStatus(clientId, BatchStatus.VALIDATING));
-                metrics.put("pendingOcr", batchRepository.countByClientIdAndStatus(clientId, BatchStatus.OCR_PENDING));
-                metrics.put("processingOcr",
-                                batchRepository.countByClientIdAndStatus(clientId, BatchStatus.OCR_PROCESSING));
+                metrics.put("qcProcessing", batchRepository.countByClientIdAndStatus(clientId, BatchStatus.QC_PROCESSING));
                 metrics.put("pendingReview",
                                 batchRepository.countByClientIdAndStatus(clientId, BatchStatus.REVIEW_PENDING));
                 metrics.put("inReview", batchRepository.countByClientIdAndStatus(clientId, BatchStatus.IN_REVIEW));

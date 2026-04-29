@@ -81,8 +81,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/client/**").hasAnyRole("ADMIN", "CLIENT")
+                        .requestMatchers("/api/qc/process/**").hasRole("ADMIN")
+                        .requestMatchers("/api/analytics/**").hasRole("ADMIN")
                         .requestMatchers("/api/reviewer/**").hasAnyRole("ADMIN", "REVIEWER")
+                        .requestMatchers("/api/qc/**").hasAnyRole("ADMIN", "REVIEWER")
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)) // Allow session-based auth as
@@ -106,11 +108,10 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
-                        .requestMatchers("/actuator/health").permitAll()   // health check only
+                        .requestMatchers("/actuator/health").permitAll()
                         // SECURITY: /files/** — authenticated + ownership enforced in FileController
                         .requestMatchers("/files/**").authenticated()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/client/**").hasAnyRole("ADMIN", "CLIENT")
                         .requestMatchers("/reviewer/**").hasAnyRole("ADMIN", "REVIEWER")
                         .anyRequest().authenticated())
                 .headers(headers -> headers
@@ -170,9 +171,6 @@ public class SecurityConfig {
                 String role = authority.getAuthority();
                 if (role.equals("ROLE_ADMIN")) {
                     redirectUrl = "/admin/dashboard";
-                    break;
-                } else if (role.equals("ROLE_CLIENT")) {
-                    redirectUrl = "/client/dashboard";
                     break;
                 } else if (role.equals("ROLE_REVIEWER")) {
                     redirectUrl = "/reviewer/dashboard";

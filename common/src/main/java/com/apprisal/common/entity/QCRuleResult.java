@@ -70,6 +70,9 @@ public class QCRuleResult {
     @Column(name = "review_required")
     private Boolean reviewRequired = false;
 
+    @Column(name = "severity")
+    private String severity = "STANDARD"; // BLOCKING | STANDARD | ADVISORY
+
     public QCRuleResult() {
     }
 
@@ -203,6 +206,14 @@ public class QCRuleResult {
         this.reviewRequired = reviewRequired;
     }
 
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
+    }
+
     // Builder pattern
     public static QCRuleResultBuilder builder() {
         return new QCRuleResultBuilder();
@@ -220,6 +231,7 @@ public class QCRuleResult {
         private String appraisalValue;
         private String engagementValue;
         private Boolean reviewRequired = false;
+        private String severity = "STANDARD";
 
         public QCRuleResultBuilder qcResult(QCResult qcResult) {
             this.qcResult = qcResult;
@@ -276,6 +288,11 @@ public class QCRuleResult {
             return this;
         }
 
+        public QCRuleResultBuilder severity(String severity) {
+            this.severity = severity;
+            return this;
+        }
+
         public QCRuleResult build() {
             QCRuleResult result = new QCRuleResult();
             result.qcResult = this.qcResult;
@@ -289,6 +306,7 @@ public class QCRuleResult {
             result.appraisalValue = this.appraisalValue;
             result.engagementValue = this.engagementValue;
             result.reviewRequired = this.reviewRequired;
+            result.severity = this.severity;
             return result;
         }
     }

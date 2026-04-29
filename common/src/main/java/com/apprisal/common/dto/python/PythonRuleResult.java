@@ -15,6 +15,7 @@ public record PythonRuleResult(
         @JsonProperty("rule_name")     String ruleName,
         String status,
         String message,
+        @JsonProperty("severity")      String severity,
         @JsonProperty("action_item")   String actionItem,
         Map<String, Object> details,
         @JsonProperty("appraisal_value")  String appraisalValue,

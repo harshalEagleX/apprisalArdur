@@ -72,6 +72,11 @@ public class PythonClientService {
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
+        // Verify PDF file exists before sending
+        if (!appraisalPath.toFile().exists()) {
+            throw new RuntimeException("Appraisal PDF not found on disk: " + appraisalPath);
+        }
+
         try {
             ResponseEntity<PythonQCResponse> response = restTemplate.exchange(
                     url,
@@ -80,12 +85,27 @@ public class PythonClientService {
                     PythonQCResponse.class);
 
             PythonQCResponse result = response.getBody();
-            if (result != null) {
-                log.info("Python QC completed: passed={}, failed={}, warnings={}, total_rules={}",
-                        result.passed(), result.failed(), result.warnings(), result.totalRules());
+            if (result == null) {
+                throw new RuntimeException("Python QC service returned empty response body");
             }
+            log.info("Python QC completed: passed={}, failed={}, warnings={}, total_rules={}",
+                    result.passed(), result.failed(), result.warnings(), result.totalRules());
             return result;
 
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            // Timeout or connection refused
+            log.error("Python QC service timeout or connection refused: {}", e.getMessage());
+            throw new RuntimeException("Python QC service timeout (limit: " + config.getTimeoutSeconds() + "s). " +
+                    "Check that ocr-service is running and responsive.", e);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // 4xx from Python — e.g. 422 invalid PDF, 400 bad request
+            log.error("Python QC service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Python QC service rejected the request: " +
+                    e.getStatusCode() + " — " + e.getResponseBodyAsString(), e);
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            // 5xx from Python
+            log.error("Python QC service internal error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Python QC service error: " + e.getStatusCode(), e);
         } catch (RestClientException e) {
             log.error("Failed to call Python QC service: {}", e.getMessage(), e);
             throw new RuntimeException("Python QC service call failed: " + e.getMessage(), e);

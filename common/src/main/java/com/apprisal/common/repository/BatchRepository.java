@@ -45,6 +45,9 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
 
     List<Batch> findByAssignedReviewerIdAndStatus(Long reviewerId, BatchStatus status);
 
+    // Duplicate upload detection
+    java.util.Optional<Batch> findByFileHash(String fileHash);
+
     // Efficient TopN queries for dashboards
     List<Batch> findTop10ByOrderByCreatedAtDesc();
 
