@@ -27,6 +27,9 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     @Query("SELECT qr FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId")
     List<QCResult> findByBatchId(@Param("batchId") Long batchId);
 
+    @Query("SELECT COUNT(qr) FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId")
+    long countByBatchId(@Param("batchId") Long batchId);
+
     /**
      * Find all QC results with a specific decision type.
      */

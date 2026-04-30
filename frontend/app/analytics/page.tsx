@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { ArrowLeft, FileText, Lightbulb, Scale, TrendingUp, Users } from "lucide-react";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
@@ -25,11 +27,19 @@ function StatCard({ label, value, sub, color = "text-blue-400" }: {
 }
 
 // ── Section wrapper ────────────────────────────────────────────────────────────
-function Section({ title, children, icon }: { title: string; children: React.ReactNode; icon: string }) {
+function Section({
+  title,
+  children,
+  Icon,
+}: {
+  title: string;
+  children: React.ReactNode;
+  Icon: React.ComponentType<{ size?: number; className?: string }>;
+}) {
   return (
     <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
       <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-        <span>{icon}</span>{title}
+        <Icon size={18} className="text-blue-400" />{title}
       </h2>
       {children}
     </div>
@@ -44,18 +54,6 @@ function ProgressBar({ pct, color = "bg-blue-500" }: { pct: number; color?: stri
            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   );
-}
-
-// ── Trend badge ───────────────────────────────────────────────────────────────
-function TrendBadge({ trend }: { trend?: string }) {
-  if (!trend) return null;
-  const map: Record<string, { label: string; cls: string }> = {
-    improving: { label: "↑ Improving", cls: "text-green-400 bg-green-950" },
-    declining: { label: "↓ Needs attention", cls: "text-red-400 bg-red-950" },
-    stable:    { label: "→ Stable",     cls: "text-slate-300 bg-slate-800" },
-  };
-  const t = map[trend] ?? map.stable;
-  return <span className={`text-xs px-2 py-0.5 rounded font-medium ${t.cls}`}>{t.label}</span>;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -85,11 +83,12 @@ export default function AnalyticsPage() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(days); }, [days, load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(days); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [days, load]);
 
   const num = (k: string, src = overview) => Number(src[k] ?? 0);
-  const str = (k: string, src = overview) => String(src[k] ?? "—");
-
   // ── Helpers for nested objects ─────────────────────────────────────────────
   const decisionBreakdown = ml.decisionBreakdown as Record<string,unknown> | undefined;
   const operatorRows      = (operators.operators as unknown[]) ?? [];
@@ -114,7 +113,9 @@ export default function AnalyticsPage() {
               {d}d
             </button>
           ))}
-          <a href="/admin" className="ml-4 text-slate-400 hover:text-white text-sm">← Back</a>
+          <Link href="/admin" className="ml-4 inline-flex items-center gap-1.5 text-slate-400 hover:text-white text-sm">
+            <ArrowLeft size={14} /> Back
+          </Link>
         </div>
       </header>
 
@@ -146,7 +147,7 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* OCR Insights */}
-            <Section title="Document Reading Quality" icon="📄">
+            <Section title="Document Reading Quality" Icon={FileText}>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Average Accuracy</span>
@@ -158,10 +159,10 @@ export default function AnalyticsPage() {
 
                 <div className="text-xs text-slate-500 mt-1">
                   {Number(ocr.avgAccuracy ?? 0) >= 85
-                    ? "✓ Documents are being read with high accuracy"
+                    ? "Documents are being read with high accuracy"
                     : Number(ocr.avgAccuracy ?? 0) >= 70
-                    ? "⚠ Some documents may need manual review"
-                    : "⚠ Document reading accuracy is low — contact support"}
+                    ? "Some documents may need manual review"
+                    : "Document reading accuracy is low — contact support"}
                 </div>
 
                 <div className="flex justify-between items-center pt-2 border-t border-slate-800">
@@ -184,7 +185,7 @@ export default function AnalyticsPage() {
             </Section>
 
             {/* ML / Rules Insights */}
-            <Section title="Compliance Rule Results" icon="⚖️">
+            <Section title="Compliance Rule Results" Icon={Scale}>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Overall Pass Rate</span>
@@ -227,7 +228,7 @@ export default function AnalyticsPage() {
             </Section>
 
             {/* Operator Performance */}
-            <Section title="Team Performance" icon="👥">
+            <Section title="Team Performance" Icon={Users}>
               {operatorRows.length === 0 ? (
                 <p className="text-slate-500 text-sm">No session data yet for this period.</p>
               ) : (
@@ -249,7 +250,7 @@ export default function AnalyticsPage() {
             </Section>
 
             {/* Daily Trend */}
-            <Section title="Daily Trend" icon="📈">
+            <Section title="Daily Trend" Icon={TrendingUp}>
               {trendRows.length === 0 ? (
                 <p className="text-slate-500 text-sm">Not enough data yet to show a trend.</p>
               ) : (
@@ -275,14 +276,14 @@ export default function AnalyticsPage() {
 
           {/* ── Guidance banner ──────────────────────────────────────────────── */}
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 flex items-start gap-3">
-            <span className="text-2xl mt-0.5">💡</span>
+            <Lightbulb size={22} className="mt-0.5 text-blue-400 flex-shrink-0" />
             <div>
               <div className="text-sm font-medium text-slate-200 mb-1">How to read this dashboard</div>
               <div className="text-xs text-slate-400 space-y-1">
-                <p>• <strong className="text-slate-300">OCR Accuracy</strong> — how well the system reads documents. Below 70% means some fields may need manual entry.</p>
-                <p>• <strong className="text-slate-300">Rule Pass Rate</strong> — percentage of compliance rules automatically satisfied. Lower rates mean more files need reviewer attention.</p>
-                <p>• <strong className="text-slate-300">Cache Hit Rate</strong> — files the system recognised instantly (previously processed). High rates mean faster processing.</p>
-                <p>• <strong className="text-slate-300">Corrections</strong> — times an operator corrected the system. These improve accuracy over time.</p>
+                <p><strong className="text-slate-300">OCR Accuracy</strong> — how well the system reads documents. Below 70% means some fields may need manual entry.</p>
+                <p><strong className="text-slate-300">Rule Pass Rate</strong> — percentage of compliance rules automatically satisfied. Lower rates mean more files need reviewer attention.</p>
+                <p><strong className="text-slate-300">Cache Hit Rate</strong> — files the system recognised instantly (previously processed). High rates mean faster processing.</p>
+                <p><strong className="text-slate-300">Corrections</strong> — times an operator corrected the system. These improve accuracy over time.</p>
               </div>
             </div>
           </div>

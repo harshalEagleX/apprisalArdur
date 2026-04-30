@@ -25,14 +25,17 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setUsername(user?.username ?? "");
-    setFullName(user?.fullName ?? "");
-    setEmail(user?.email ?? "");
-    setPassword("");
-    setRole((user?.role === "ADMIN" ? "ADMIN" : "REVIEWER"));
-    setClientId(user?.client?.id ?? "");
-    setError("");
-    getClients().then(setClients).catch(() => null);
+    const timer = window.setTimeout(() => {
+      setUsername(user?.username ?? "");
+      setFullName(user?.fullName ?? "");
+      setEmail(user?.email ?? "");
+      setPassword("");
+      setRole((user?.role === "ADMIN" ? "ADMIN" : "REVIEWER"));
+      setClientId(user?.client?.id ?? "");
+      setError("");
+      getClients().then(setClients).catch(() => null);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [open, user]);
 
   if (!open) return null;

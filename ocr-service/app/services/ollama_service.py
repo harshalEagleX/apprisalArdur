@@ -13,6 +13,8 @@ Temperature is fixed at 0 for deterministic QC decisions.
 import json
 import logging
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Optional
 
 import httpx
@@ -21,8 +23,33 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL = "llama3:8b-instruct-q4_0"
-OLLAMA_VISION_MODEL = "moondream"           # for checkbox detection
+OLLAMA_VISION_MODEL = "moondream2"          # for checkbox detection
 OLLAMA_TIMEOUT = 60.0  # seconds
+OLLAMA_TEXT_NUM_CTX = 2048
+OLLAMA_VISION_NUM_CTX = 2048
+OLLAMA_TEXT_KEEP_ALIVE = "0s"
+OLLAMA_VISION_KEEP_ALIVE = "30s"
+_TEXT_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_text_model", default=None)
+_VISION_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_vision_model", default=None)
+
+
+def get_active_text_model() -> str:
+    return _TEXT_MODEL_OVERRIDE.get() or OLLAMA_MODEL
+
+
+def get_active_vision_model() -> str:
+    return _VISION_MODEL_OVERRIDE.get() or OLLAMA_VISION_MODEL
+
+
+@contextmanager
+def use_model_selection(text_model: Optional[str] = None, vision_model: Optional[str] = None):
+    text_token = _TEXT_MODEL_OVERRIDE.set(text_model.strip() if text_model else None)
+    vision_token = _VISION_MODEL_OVERRIDE.set(vision_model.strip() if vision_model else None)
+    try:
+        yield
+    finally:
+        _TEXT_MODEL_OVERRIDE.reset(text_token)
+        _VISION_MODEL_OVERRIDE.reset(vision_token)
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +63,8 @@ def is_ollama_available() -> bool:
         if r.status_code != 200:
             return False
         models = [m.get("name", "") for m in r.json().get("models", [])]
-        return any(OLLAMA_MODEL in m for m in models)
+        model = get_active_text_model()
+        return any(model in m for m in models)
     except Exception:
         return False
 
@@ -51,12 +79,14 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
     Returns the model response string, or None on failure.
     """
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": get_active_text_model(),
         "prompt": prompt,
         "system": system,
         "stream": False,
+        "keep_alive": OLLAMA_TEXT_KEEP_ALIVE,
         "options": {
             "temperature": 0.0,
+            "num_ctx": OLLAMA_TEXT_NUM_CTX,
             "num_predict": max_tokens,
             "top_k": 1,
         },
@@ -70,7 +100,7 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
         r.raise_for_status()
         return r.json().get("response", "").strip()
     except httpx.TimeoutException:
-        logger.warning("Ollama request timed out (model=%s)", OLLAMA_MODEL)
+        logger.warning("Ollama request timed out (model=%s)", get_active_text_model())
         return None
     except httpx.HTTPStatusError as e:
         logger.warning("Ollama HTTP error: %s", e)
@@ -153,11 +183,16 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
         )
 
         payload = {
-            "model": OLLAMA_VISION_MODEL,
+            "model": get_active_vision_model(),
             "prompt": prompt,
             "images": [b64],
             "stream": False,
-            "options": {"temperature": 0.0, "num_predict": 5},
+            "keep_alive": OLLAMA_VISION_KEEP_ALIVE,
+            "options": {
+                "temperature": 0.0,
+                "num_ctx": OLLAMA_VISION_NUM_CTX,
+                "num_predict": 5,
+            },
         }
 
         r = httpx.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=15.0)
@@ -180,7 +215,8 @@ def is_moondream_available() -> bool:
     try:
         r = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
         models = [m.get("name", "") for m in r.json().get("models", [])]
-        return any(OLLAMA_VISION_MODEL in m for m in models)
+        model = get_active_vision_model()
+        return any(model in m for m in models)
     except Exception:
         return False
 

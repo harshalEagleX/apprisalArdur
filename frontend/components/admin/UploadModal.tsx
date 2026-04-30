@@ -22,8 +22,11 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setFile(null); setClientId(""); setError(""); setProgress(0);
-    getClients().then(setClients).catch(() => null);
+    const timer = window.setTimeout(() => {
+      setFile(null); setClientId(""); setError(""); setProgress(0);
+      getClients().then(setClients).catch(() => null);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   if (!open) return null;

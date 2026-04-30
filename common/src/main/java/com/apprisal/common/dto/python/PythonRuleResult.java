@@ -24,9 +24,11 @@ public record PythonRuleResult(
 ) {
     /** True when this rule result requires a human reviewer to make a decision. */
     public boolean needsVerification() {
+        String normalizedStatus = status == null ? "" : status.trim().toLowerCase();
         return reviewRequired
-                || "VERIFY".equals(status)
-                || "WARNING".equals(status)
-                || "SYSTEM_ERROR".equals(status);
+                || "fail".equals(normalizedStatus)
+                || "verify".equals(normalizedStatus)
+                || "warning".equals(normalizedStatus)
+                || "system_error".equals(normalizedStatus);
     }
 }

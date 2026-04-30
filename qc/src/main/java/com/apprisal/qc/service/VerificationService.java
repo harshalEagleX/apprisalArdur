@@ -252,13 +252,13 @@ public class VerificationService {
         int manualPassCount = 0;
 
         for (QCRuleResult rule : allRules) {
-            String status = rule.getStatus();
+            String status = rule.getStatus() == null ? "" : rule.getStatus().trim().toLowerCase();
 
-            if ("PASS".equals(status)) {
+            if ("pass".equals(status)) {
                 passCount++;
-            } else if ("FAIL".equals(status)) {
+            } else if ("fail".equals(status)) {
                 failCount++;
-            } else if ("MANUAL_PASS".equals(status)) {
+            } else if ("manual_pass".equals(status)) {
                 manualPassCount++;
             }
 

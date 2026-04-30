@@ -23,7 +23,8 @@ const CONFIG: Record<string, { label: string; dot: string; text: string; bg: str
 const FALLBACK = { label: "", dot: "bg-slate-400", text: "text-slate-400", bg: "bg-slate-800/50" };
 
 export default function StatusBadge({ status, size = "sm" }: { status: string; size?: "sm" | "xs" }) {
-  const c = CONFIG[status] ?? { ...FALLBACK, label: status.replace(/_/g, " ") };
+  const normalizedStatus = status === "MANUAL_PASS" ? status : status.toLowerCase();
+  const c = CONFIG[status] ?? CONFIG[normalizedStatus] ?? { ...FALLBACK, label: status.replace(/_/g, " ") };
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-medium border border-transparent ${c.bg} ${c.text} ${size === "xs" ? "text-[10px]" : "text-xs"}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${c.dot}`} />

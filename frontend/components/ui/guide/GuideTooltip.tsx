@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type TooltipStep = {
@@ -89,14 +90,17 @@ function TooltipOverlay() {
 
   useEffect(() => {
     if (!step) return;
-    const el = document.querySelector(step.target);
-    if (el) {
-      const r = el.getBoundingClientRect();
-      setPos({ top: r.top + window.scrollY, left: r.left + window.scrollX, w: r.width, h: r.height, found: true });
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      setPos(p => ({ ...p, found: false }));
-    }
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.querySelector(step.target);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setPos({ top: r.top + window.scrollY, left: r.left + window.scrollX, w: r.width, h: r.height, found: true });
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        setPos(p => ({ ...p, found: false }));
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [step]);
 
   if (!step) return null;
@@ -127,7 +131,9 @@ function TooltipOverlay() {
            style={{ top: Math.max(8, tipTop), left: Math.max(8, Math.min(tipLeft, window.innerWidth - 300)) }}>
         <div className="flex justify-between items-start mb-2">
           <span className="text-xs text-blue-400 font-medium">Step {stepIndex + 1} of {steps.length}</span>
-          <button onClick={finish} className="text-slate-500 hover:text-slate-300 text-sm">✕</button>
+          <button onClick={finish} className="text-slate-500 hover:text-slate-300" title="Close guide">
+            <X size={14} />
+          </button>
         </div>
         <h3 className="font-semibold text-white text-sm mb-1">{step.title}</h3>
         <p className="text-slate-400 text-xs leading-relaxed mb-4">{step.body}</p>
@@ -142,13 +148,13 @@ function TooltipOverlay() {
         <div className="flex gap-2">
           {stepIndex > 0 && (
             <button onClick={prev}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium">
-              ← Back
+              className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+              <ArrowLeft size={12} /> Back
             </button>
           )}
           <button onClick={next}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
-            {stepIndex === steps.length - 1 ? "Done ✓" : "Next →"}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+            {stepIndex === steps.length - 1 ? <>Done <Check size={12} /></> : <>Next <ArrowRight size={12} /></>}
           </button>
         </div>
 

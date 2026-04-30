@@ -16,7 +16,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request, WebSocket, WebSocketDisconnect, Security
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Request, WebSocket, WebSocketDisconnect, Security
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -338,6 +338,9 @@ async def process_qc(
     file: UploadFile = File(...),
     engagement_letter: Optional[UploadFile] = None,
     contract_file: Optional[UploadFile] = None,
+    model_provider: str = Form("ollama"),
+    text_model: Optional[str] = Form(None),
+    vision_model: Optional[str] = Form(None),
 ):
     """
     Full QC pipeline: OCR → Extract → Subject & Contract Rules → Results
@@ -366,6 +369,9 @@ async def process_qc(
                 "uploaded_filename": file.filename,
                 "has_engagement_letter": engagement_letter is not None,
                 "has_contract_file": contract_file is not None,
+                "model_provider": model_provider,
+                "text_model": text_model,
+                "vision_model": vision_model,
                 "request_id": request_id
             }
         )
@@ -410,14 +416,30 @@ async def process_qc(
 
             # Run QC processor in threadpool
             processor = get_qc_processor()
-            results = await run_in_threadpool(
-                processor.process_document,
-                pdf_path=pdf_path,
-                engagement_letter_text=engagement_text,
-                contract_text=contract_text,
-                file_hash=file_hash,
-                original_filename=file.filename,
-            )
+            def _run_processor():
+                from app.services.ollama_service import use_model_selection
+
+                executable_text_model = text_model if model_provider.lower() == "ollama" else None
+                if model_provider.lower() != "ollama":
+                    logger.warning(
+                        "Provider %s requested, but this service currently executes Ollama helpers; using default Ollama model.",
+                        model_provider,
+                        extra={"request_id": request_id}
+                    )
+
+                with use_model_selection(text_model=executable_text_model, vision_model=vision_model):
+                    return processor.process_document(
+                        pdf_path=pdf_path,
+                        engagement_letter_text=engagement_text,
+                        contract_text=contract_text,
+                        file_hash=file_hash,
+                        original_filename=file.filename,
+                        model_provider=model_provider,
+                        model_name=text_model,
+                        vision_model=vision_model,
+                    )
+
+            results = await run_in_threadpool(_run_processor)
 
             logger.info("QC processing completed", extra={"request_id": request_id})
             payload = results.model_dump()

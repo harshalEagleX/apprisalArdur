@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -62,6 +63,43 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
 
     // Duplicate upload detection
     Optional<Batch> findByFileHash(String fileHash);
+
+    /**
+     * Atomically claim a batch before dispatching async QC work.
+     * This closes the double-click race where two HTTP requests both saw UPLOADED
+     * and launched parallel qc-worker threads for the same batch.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING,
+            b.errorMessage = null,
+            b.updatedAt = CURRENT_TIMESTAMP,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status IN (
+            com.apprisal.common.entity.BatchStatus.UPLOADED,
+            com.apprisal.common.entity.BatchStatus.VALIDATING,
+            com.apprisal.common.entity.BatchStatus.ERROR
+          )
+        """)
+    int markQcProcessingIfTriggerable(@Param("batchId") Long batchId);
+
+    /**
+     * Return a running batch to UPLOADED after an admin stop request.
+     * The existing uploaded files remain available, so the admin can run QC again.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.status = com.apprisal.common.entity.BatchStatus.UPLOADED,
+            b.errorMessage = :message,
+            b.updatedAt = CURRENT_TIMESTAMP,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING
+        """)
+    int markUploadedIfQcProcessing(@Param("batchId") Long batchId, @Param("message") String message);
 
     /**
      * Find batches stuck in QC_PROCESSING whose updatedAt is older than the given cutoff.

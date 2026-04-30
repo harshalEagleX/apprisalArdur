@@ -6,11 +6,18 @@ import { subscribeJobs, removeJob, type ActiveJob } from "@/lib/jobs";
 export default function ActivityMonitor() {
   const [jobs, setJobs]           = useState<ActiveJob[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [now, setNow]             = useState(() => Date.now());
 
   useEffect(() => {
     const unsub = subscribeJobs(setJobs);
     return () => { unsub(); };
   }, []);
+
+  useEffect(() => {
+    if (jobs.length === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [jobs.length]);
 
   if (jobs.length === 0) return null;
 
@@ -42,16 +49,28 @@ export default function ActivityMonitor() {
       {!collapsed && (
         <div className="divide-y divide-slate-800">
           {jobs.map(job => {
-            const pct = job.total > 0 ? Math.round((job.current / job.total) * 100) : 0;
-            const elapsed = Math.round((Date.now() - job.startedAt) / 1000);
+            const pct = job.total > 0
+              ? Math.max(0, Math.min(100, Math.round((job.current / job.total) * 100)))
+              : 0;
+            const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
             return (
               <div key={job.id} className="px-3 py-3">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-slate-200 truncate">{job.label}</div>
                     <div className="text-[11px] text-slate-500 mt-0.5">
-                      {job.current} / {job.total} files &middot; {elapsed}s elapsed
+                      {job.current} / {job.total} {job.unitLabel ?? "files"} &middot; {elapsed}s elapsed
                     </div>
+                    {job.detail && (
+                      <div className="text-[10px] text-slate-600 mt-0.5 truncate">
+                        {job.detail}
+                      </div>
+                    )}
+                    {job.modelLabel && (
+                      <div className="text-[10px] text-blue-400 mt-0.5 truncate">
+                        {job.modelLabel}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => removeJob(job.id)}
@@ -69,8 +88,8 @@ export default function ActivityMonitor() {
                   />
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-[10px] text-slate-600">
-                    {pct < 100 ? "Processing…" : "Finalising…"}
+                  <span className="text-[10px] text-slate-500 truncate pr-2">
+                    {job.message || (pct < 100 ? "Processing…" : "Finalising…")}
                   </span>
                   <span className="text-[10px] text-slate-500 font-mono">{pct}%</span>
                 </div>

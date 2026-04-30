@@ -49,7 +49,9 @@ app:
     path: ${STORAGE_PATH:./uploads}
 
   api-key:
-    python-service: ${PYTHON_API_KEY:}
+    # Must match PYTHON_API_KEY in ocr-service/.env
+    # Dev default matches the value set in ocr-service/.env
+    python-service: ${PYTHON_API_KEY:apprisal-local-dev-key}
 
 # IMPORTANT: Use 127.0.0.1, not "localhost".
 # On macOS/Linux "localhost" often resolves to ::1 (IPv6) while uvicorn
@@ -60,6 +62,9 @@ ocr:
     url: ${OCR_SERVICE_URL:http://127.0.0.1:5001}
     timeout-seconds: ${OCR_TIMEOUT:180}
     retry-attempts: ${OCR_RETRIES:2}
+    # FIX: was missing — OcrServiceConfig binds to ocr.service.api-key (not app.api-key.python-service)
+    # Default matches Python's .env so dev works without setting the env var explicitly
+    api-key: ${PYTHON_API_KEY:apprisal-local-dev-key}
 
 qc:
   enabled: true

@@ -31,7 +31,10 @@ export default function UsersPage() {
     finally { setLoading(false); }
   }, [page]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function handleDelete() {
     if (!deleteTarget) return;

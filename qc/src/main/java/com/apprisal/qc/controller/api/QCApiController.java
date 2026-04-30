@@ -5,16 +5,19 @@ import com.apprisal.common.entity.QCResult;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.qc.service.PythonClientService;
+import com.apprisal.qc.service.QCModelConfig;
 import com.apprisal.qc.service.QCProcessingService;
 import com.apprisal.qc.service.StuckBatchReconciler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.lang.NonNull;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -51,8 +54,14 @@ public class QCApiController {
      */
     @PostMapping("/process/{batchId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> processBatch(@PathVariable @NonNull Long batchId) {
-        log.info("QC processing requested for batch {}", batchId);
+    public ResponseEntity<Map<String, Object>> processBatch(
+            @PathVariable @NonNull Long batchId,
+            @RequestBody(required = false) Map<String, String> modelRequest) {
+        QCModelConfig modelConfig = new QCModelConfig(
+                modelRequest != null ? modelRequest.get("provider") : null,
+                modelRequest != null ? modelRequest.get("textModel") : null,
+                modelRequest != null ? modelRequest.get("visionModel") : null);
+        log.info("QC processing requested for batch {} using {}", batchId, modelConfig.label());
 
         // Validate batch exists and is in a triggerable state
         var batchOpt = batchRepository.findById(batchId);
@@ -78,24 +87,118 @@ public class QCApiController {
             ));
         }
 
+        if (!qcProcessingService.claimBatchForProcessing(batchId, modelConfig)) {
+            var latestStatus = batchRepository.findById(batchId)
+                    .map(b -> b.getStatus() != null ? b.getStatus().name() : "UNKNOWN")
+                    .orElse("NOT_FOUND");
+            return ResponseEntity.ok(Map.of(
+                "message", "Batch could not be claimed for QC",
+                "batchId", batchId,
+                "status", latestStatus,
+                "pollUrl", "/api/admin/batches/" + batchId + "/status"
+            ));
+        }
+
         // Fire async — returns immediately
-        qcProcessingService.processBatchAsync(batchId);
+        qcProcessingService.processBatchAsync(batchId, modelConfig);
 
         return ResponseEntity.accepted().body(Map.of(
             "message", "QC processing started",
             "batchId", batchId,
+            "modelProvider", modelConfig.provider(),
+            "modelName", modelConfig.textModel(),
             "pollUrl", "/api/admin/batches/" + batchId + "/status"
         ));
     }
 
     /**
+     * Best-effort stop for a running QC job.
+     * If Python is already processing a request, Java interrupts the worker and
+     * prevents any late result from being saved when control returns.
+     */
+    @PostMapping("/cancel/{batchId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> cancelBatch(@PathVariable @NonNull Long batchId) {
+        if (!batchRepository.existsById(batchId)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        boolean cancelled = qcProcessingService.cancelBatch(batchId);
+        return ResponseEntity.ok(Map.of(
+            "message", cancelled ? "QC stop requested" : "QC is not running for this batch",
+            "batchId", batchId,
+            "cancelled", cancelled,
+            "status", cancelled ? "UPLOADED" : batchRepository.findById(batchId)
+                    .map(b -> b.getStatus() != null ? b.getStatus().name() : "UNKNOWN")
+                    .orElse("NOT_FOUND")
+        ));
+    }
+
+    /**
      * Get QC results for a batch (ADMIN: any, REVIEWER: own assignments).
+     *
+     * Returns 404 when the batch itself does not exist.
+     * Returns 200 + empty array when the batch exists but QC has not run yet
+     * (these are semantically different — the frontend polling loop should stop
+     * retrying on 404, but continue on an empty array).
+     *
+     * @Transactional(readOnly=true) keeps the Hibernate session open while
+     * Spring's Jackson converter serialises the lazy associations on QCResult,
+     * preventing LazyInitializationException (open-in-view is disabled).
      */
     @GetMapping("/results/{batchId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<QCResult>> getBatchResults(@PathVariable @NonNull Long batchId) {
+        // FIX: distinguish "batch not found" (404) from "no results yet" (200 + [])
+        if (!batchRepository.existsById(batchId)) {
+            return ResponseEntity.notFound().build();
+        }
         List<QCResult> results = qcResultRepository.findByBatchId(batchId);
         return ResponseEntity.ok(results);
+    }
+
+    /**
+     * Live QC progress for the admin batch table.
+     *
+     * This reflects the backend pipeline stage while QC is running: queueing,
+     * file matching, Python OCR/rules, saving results, and completion.
+     */
+    @GetMapping("/progress/{batchId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getBatchProgress(@PathVariable @NonNull Long batchId) {
+        if (!batchRepository.existsById(batchId)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        var progress = qcProcessingService.getProgress(batchId);
+        if (progress == null) {
+            return ResponseEntity.ok(Map.of(
+                    "stage", "idle",
+                    "message", "QC has not started",
+                    "current", 0,
+                    "total", 1,
+                "percent", 0,
+                "running", false,
+                "modelProvider", "ollama",
+                "modelName", QCModelConfig.defaults().textModel(),
+                "visionModel", QCModelConfig.defaults().visionModel()
+            ));
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("stage", progress.stage());
+        body.put("message", progress.message());
+        body.put("current", progress.current());
+        body.put("total", progress.total());
+        body.put("percent", progress.percent());
+        body.put("running", progress.running());
+        body.put("modelProvider", progress.modelProvider());
+        body.put("modelName", progress.modelName());
+        body.put("visionModel", progress.visionModel());
+        body.put("startedAt", progress.startedAt());
+        body.put("updatedAt", progress.updatedAt());
+        return ResponseEntity.ok(body);
     }
 
     /**

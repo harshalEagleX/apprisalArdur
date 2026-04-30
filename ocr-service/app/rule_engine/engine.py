@@ -71,6 +71,19 @@ class RuleEngine:
                 ))
                 continue
 
+            # Skip rules that do not apply to this assignment or loan type.
+            if cfg and not self._is_applicable(context, cfg.applicable_loan_types):
+                res = RuleResult(
+                    rule_id=rule_id,
+                    rule_name=getattr(rule_func, "rule_name", rule_id),
+                    status=RuleStatus.SKIPPED,
+                    message=f"Rule not applicable for this assignment/loan type ({cfg.applicable_loan_types}).",
+                    severity=RuleSeverity(cfg.severity),
+                )
+                results.append(res)
+                self.logger.log_result(res)
+                continue
+
             # Attach field metadata for source_page + confidence lookup
             field_conf, src_page = self._extract_meta(context, rule_id)
 
@@ -147,6 +160,31 @@ class RuleEngine:
         if meta and hasattr(meta, "effective_confidence"):
             return meta.effective_confidence, meta.source_page
         return None, None
+
+    def _is_applicable(self, context: ValidationContext, applicable_loan_types: str) -> bool:
+        tokens = {
+            token.strip().upper()
+            for token in (applicable_loan_types or "ALL").split(",")
+            if token.strip()
+        }
+        if not tokens or "ALL" in tokens:
+            return True
+
+        engagement = context.engagement_letter
+        assignment = (
+            getattr(engagement, "assignment_type", None)
+            or getattr(context.report.contract, "assignment_type", None)
+            or ""
+        ).strip().upper()
+        loan_type = (getattr(engagement, "loan_type", None) or "").strip().upper()
+
+        active = {assignment, loan_type}
+        if assignment == "PURCHASE":
+            active.add("PURCHASE")
+        if assignment == "REFINANCE":
+            active.add("REFINANCE")
+
+        return bool(tokens & active)
 
     def get_improvement_suggestions(self):
         return self.logger.analyze_improvements()

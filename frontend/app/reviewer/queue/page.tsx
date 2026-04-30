@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Inbox, Clock, AlertCircle, CheckCircle2, ChevronRight, RefreshCw } from "lucide-react";
+import { Clock, AlertCircle, CheckCircle2, ChevronRight, RefreshCw } from "lucide-react";
 import { type QCResult } from "@/lib/api";
 import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
@@ -31,7 +31,10 @@ export default function ReviewerQueuePage() {
     }
   }
 
-  useEffect(() => { loadQueue(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadQueue(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const urgent = items.filter(i => i.failedCount > 0);
   const normal = items.filter(i => i.failedCount === 0);

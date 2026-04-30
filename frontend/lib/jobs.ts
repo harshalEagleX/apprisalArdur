@@ -5,10 +5,15 @@
 export interface ActiveJob {
   id: string;           // unique key (e.g. "qc-42")
   label: string;        // "Processing batch EQSS-2024"
-  current: number;      // files processed
-  total: number;        // total files in batch
+  current: number;      // processing units completed
+  total: number;        // total processing units
   batchId: number;
   startedAt: number;    // Date.now()
+  message?: string;
+  stage?: string;
+  modelLabel?: string;
+  unitLabel?: string;
+  detail?: string;
 }
 
 type Listener = (jobs: ActiveJob[]) => void;
@@ -25,8 +30,8 @@ export function trackJob(job: ActiveJob) {
   notify();
 }
 
-export function updateJob(id: string, current: number) {
-  jobs = jobs.map(j => j.id === id ? { ...j, current } : j);
+export function updateJob(id: string, current: number, total?: number, patch: Partial<ActiveJob> = {}) {
+  jobs = jobs.map(j => j.id === id ? { ...j, ...patch, current, total: total ?? j.total } : j);
   notify();
 }
 

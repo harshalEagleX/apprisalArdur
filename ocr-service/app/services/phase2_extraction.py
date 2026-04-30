@@ -135,14 +135,16 @@ class Phase2ExtractionEngine:
 
         # ── S-2: Borrower ─────────────────────────────────────────────────────
         meta["borrower_name"] = self._extract("borrower_name", text, [
-            r"Borrower[:\s]+(?!Lender|Client|File|Property|Owner)([^\n]{3,80})",
-            r"BORROWER[:\s]+(?!LENDER|CLIENT)([^\n]{3,80})",
+            r"Borrower[:\s]+(?!Lender|Client|File|Property|Owner)(.{3,120}?)(?=\s+(?:Owner of Public Record|Property Address|City|County|Legal Description|Assessor|Tax Year|Occupant|Map Reference|Census Tract|Lender|Client)\b|\n|$)",
+            r"BORROWER[:\s]+(?!LENDER|CLIENT)(.{3,120}?)(?=\s+(?:OWNER OF PUBLIC RECORD|PROPERTY ADDRESS|CITY|COUNTY|LEGAL DESCRIPTION|ASSESSOR|TAX YEAR|OCCUPANT|MAP REFERENCE|CENSUS TRACT|LENDER|CLIENT)\b|\n|$)",
         ], page_pos, pos_offset)
+        self._trim_merged_person_field(meta["borrower_name"])
 
         meta["co_borrower_name"] = self._extract("co_borrower_name", text, [
-            r"Co-?Borrower[:\s]+([^\n]{3,80})",
-            r"CO-?BORROWER[:\s]+([^\n]{3,80})",
+            r"Co-?Borrower[:\s]+(.{3,120}?)(?=\s+(?:Owner of Public Record|Property Address|City|County|Legal Description|Assessor|Tax Year|Occupant|Map Reference|Census Tract|Lender|Client)\b|\n|$)",
+            r"CO-?BORROWER[:\s]+(.{3,120}?)(?=\s+(?:OWNER OF PUBLIC RECORD|PROPERTY ADDRESS|CITY|COUNTY|LEGAL DESCRIPTION|ASSESSOR|TAX YEAR|OCCUPANT|MAP REFERENCE|CENSUS TRACT|LENDER|CLIENT)\b|\n|$)",
         ], page_pos, pos_offset)
+        self._trim_merged_person_field(meta["co_borrower_name"])
 
         # ── S-3: Owner of Public Record ───────────────────────────────────────
         meta["owner_of_public_record"] = self._extract("owner_of_public_record", text, [
@@ -671,7 +673,7 @@ class Phase2ExtractionEngine:
             comp_text = section_match.group(1)[:600]
             base_page = page_for_pos(section_match.start() + pos_offset, page_pos)
 
-            addr_match = re.search(r'(\d+\s+[A-Za-z][A-Za-z0-9\s\.\,]{5,60})', comp_text)
+            addr_match = re.search(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,]{5,60})', comp_text)
             price_match = re.search(r'\$\s*([\d,]{5,})', comp_text)
             if not price_match:
                 price_match = re.search(r'\b([\d]{3},[\d]{3})\b', comp_text)
@@ -700,7 +702,7 @@ class Phase2ExtractionEngine:
         if all_empty:
             # In the sales grid, comp addresses appear as 3 addresses after "Subject"
             # Look for lines with street addresses in groups of 3-4
-            addr_lines = re.findall(r'(\d+\s+[A-Za-z][A-Za-z0-9\s\.\,]{5,50})', text)
+            addr_lines = re.findall(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,]{5,50})', text)
             # Filter to only look like street addresses (has directional/type suffix)
             street_lines = [
                 a for a in addr_lines
@@ -708,13 +710,37 @@ class Phase2ExtractionEngine:
             ]
             if len(street_lines) >= 2:
                 for i, sl in enumerate(street_lines[1:4], 1):
-                    if i <= len(comps) and comps[i-1].get("address") and comps[i-1]["address"].value is None:
-                        comps[i-1]["address"] = FieldMetaResult(
-                            f"comp_{i}_address", raw_value=sl, corrected_value=sl,
-                            confidence=0.55, extraction_method="regex_fallback",
-                        )
+                    if i <= len(comps):
+                        existing = comps[i - 1].get("address")
+                        if existing is None or existing.value is None:
+                            comps[i - 1]["address"] = FieldMetaResult(
+                                f"comp_{i}_address", raw_value=sl, corrected_value=sl,
+                                confidence=0.55, extraction_method="regex_fallback",
+                            )
 
         return comps
+
+    def _trim_merged_person_field(self, field: Optional[FieldMetaResult]) -> None:
+        """Cut OCR spillover from the neighboring Subject-section cells."""
+        if not field or not field.value:
+            return
+
+        value = field.value
+        boundary = re.search(
+            r"\b(?:Owner of Public Record|Property Address|City|County|Legal Description|"
+            r"Assessor|Tax Year|Occupant|Map Reference|Census Tract|Lender|Client)\b",
+            value,
+            re.I,
+        )
+        if boundary:
+            value = value[:boundary.start()]
+
+        value = re.sub(r'\s+', ' ', value).strip(" :-|")
+        if value and value != field.value:
+            field.corrected_value = value
+            field.correction_applied = True
+            field.confidence = max(field.confidence, 0.78)
+            field.extraction_method = f"{field.extraction_method}+boundary_trim"
 
     # ── Cross-field sanity checks ──────────────────────────────────────────────
 

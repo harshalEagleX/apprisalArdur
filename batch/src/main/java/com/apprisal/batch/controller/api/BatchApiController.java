@@ -4,7 +4,9 @@ import com.apprisal.common.entity.*;
 import com.apprisal.batch.service.BatchService;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.security.UserPrincipal;
+import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.ClientRepository;
+import com.apprisal.common.repository.QCResultRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,13 +32,19 @@ public class BatchApiController {
     private final BatchService batchService;
     private final AuditLogService auditLogService;
     private final ClientRepository clientRepository;
+    private final BatchFileRepository batchFileRepository;
+    private final QCResultRepository qcResultRepository;
 
     public BatchApiController(BatchService batchService,
                               AuditLogService auditLogService,
-                              ClientRepository clientRepository) {
+                              ClientRepository clientRepository,
+                              BatchFileRepository batchFileRepository,
+                              QCResultRepository qcResultRepository) {
         this.batchService = batchService;
         this.auditLogService = auditLogService;
         this.clientRepository = clientRepository;
+        this.batchFileRepository = batchFileRepository;
+        this.qcResultRepository = qcResultRepository;
     }
 
     /**
@@ -62,7 +70,7 @@ public class BatchApiController {
                 BatchStatus batchStatus = BatchStatus.valueOf(status.toUpperCase());
                 List<Batch> list = batchService.findByStatus(batchStatus);
                 return ResponseEntity.ok(Map.of(
-                    "content", list.stream().map(this::toSummary).toList(),
+                    "content", list.stream().map(b -> toSummary(b, false)).toList(),
                     "totalPages", 1,
                     "number", 0,
                     "totalElements", list.size()
@@ -75,7 +83,7 @@ public class BatchApiController {
         batchPage = batchService.findAll(PageRequest.of(page, size, Sort.by("createdAt").descending()));
 
         return ResponseEntity.ok(Map.of(
-            "content",       batchPage.getContent().stream().map(this::toSummary).toList(),
+            "content",       batchPage.getContent().stream().map(b -> toSummary(b, false)).toList(),
             "totalPages",    batchPage.getTotalPages(),
             "number",        batchPage.getNumber(),
             "totalElements", batchPage.getTotalElements()
@@ -86,7 +94,7 @@ public class BatchApiController {
      * Converts a Batch to a summary map for the list API.
      * Uses @Formula fileCount — no lazy-loading of the files collection required.
      */
-    private Map<String, Object> toSummary(Batch b) {
+    private Map<String, Object> toSummary(Batch b, boolean includeFiles) {
         Map<String, Object> m = new HashMap<>();
         m.put("id",            b.getId());
         m.put("parentBatchId", b.getParentBatchId());
@@ -97,11 +105,20 @@ public class BatchApiController {
         m.put("updatedAt",     b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null);
         // fileCount from @Formula — always accurate, no lazy-load required
         m.put("fileCount", b.getFileCount());
-        // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
-        // returns (open-in-view=false). Use fileCount for the count display.
-        // The full files array is only needed on the detail endpoint (findByIdWithFiles
-        // uses @EntityGraph and loads files eagerly within its own transaction).
-        m.put("files", List.of());
+        if (includeFiles) {
+            m.put("files", b.getFiles().stream().map(f -> Map.of(
+                "id",       f.getId(),
+                "filename", f.getFilename(),
+                "fileType", f.getFileType() != null ? f.getFileType().name() : "",
+                "fileSize", f.getFileSize() != null ? f.getFileSize() : 0L,
+                "status",   f.getStatus() != null ? f.getStatus().name() : "",
+                "orderId",  f.getOrderId() != null ? f.getOrderId() : ""
+            )).toList());
+        } else {
+            // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
+            // returns (open-in-view=false). Use fileCount for the count display.
+            m.put("files", List.of());
+        }
         // Embed reviewer
         if (b.getAssignedReviewer() != null) {
             m.put("assignedReviewer", Map.of(
@@ -128,7 +145,7 @@ public class BatchApiController {
     @GetMapping("/{id}")
     public ResponseEntity<?> getBatch(@PathVariable @NonNull Long id) {
         return batchService.findByIdWithFiles(id)
-                .map(b -> ResponseEntity.ok(toSummary(b)))
+                .map(b -> ResponseEntity.ok(toSummary(b, true)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -139,6 +156,8 @@ public class BatchApiController {
                         "batchId",      b.getId(),
                         "status",       b.getStatus() != null ? b.getStatus().name() : null,
                         "totalFiles",   b.getFileCount(),
+                        "processingTotalFiles", batchFileRepository.countByBatchIdAndFileType(id, FileType.APPRAISAL),
+                        "completedFiles", qcResultRepository.countByBatchId(id),
                         "errorMessage", b.getErrorMessage() != null ? b.getErrorMessage() : "",
                         "updatedAt",    b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null
                 )))

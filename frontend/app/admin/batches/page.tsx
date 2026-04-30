@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Search, Plus, RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { Search, Plus, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Square } from "lucide-react";
 import {
   getAdminBatches, getUsers, processQC, assignReviewer, deleteBatch,
-  getBatchStatus, getQCResults, reconcileStuckBatches,
-  type Batch, type User,
+  getBatchStatus, getBatchQCProgress, reconcileStuckBatches, cancelQC,
+  type Batch, type User, type QCModelSelection,
 } from "@/lib/api";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
@@ -16,11 +16,34 @@ import { trackJob, updateJob, removeJob } from "@/lib/jobs";
 
 const STATUSES = ["", "UPLOADED", "VALIDATING", "VALIDATION_FAILED", "QC_PROCESSING", "REVIEW_PENDING", "IN_REVIEW", "COMPLETED", "ERROR"];
 
+function batchLog(event: string, payload?: unknown) {
+  console.log(`[BatchesPage] ${event}`, payload ?? "");
+}
+
 // Per-batch QC progress tracker
 interface BatchProgress {
   current: number;
   total: number;
+  message: string;
+  stage: string;
+  percent: number;
+  modelProvider?: string;
+  modelName?: string;
+  visionModel?: string;
 }
+
+const MODEL_OPTIONS: Record<QCModelSelection["provider"], { label: string; text: string[]; vision: string[] }> = {
+  ollama: {
+    label: "Ollama",
+    text: ["llama3:8b-instruct-q4_0", "llama3.1:8b", "mistral:7b"],
+    vision: ["moondream2", "moondream"],
+  },
+  claude: {
+    label: "Claude",
+    text: ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
+    vision: ["moondream"],
+  },
+};
 
 export default function BatchesPage() {
   const [batches, setBatches]     = useState<Batch[]>([]);
@@ -36,6 +59,9 @@ export default function BatchesPage() {
   const [actionLoading, setActionLoading] = useState<Set<number>>(new Set());
   const [reconciling, setReconciling]     = useState(false);
   const [progress, setProgress]           = useState<Record<number, BatchProgress>>({});
+  const [modelProvider, setModelProvider] = useState<QCModelSelection["provider"]>("ollama");
+  const [textModel, setTextModel]         = useState(MODEL_OPTIONS.ollama.text[0]);
+  const [visionModel, setVisionModel]     = useState(MODEL_OPTIONS.ollama.vision[0]);
   const pollingRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
 
   // Debounce search
@@ -45,29 +71,63 @@ export default function BatchesPage() {
   }, [search]);
 
   const load = useCallback(async () => {
+    batchLog("load:start", { page, statusFilter });
     setLoading(true);
     try {
       const [bRes, uRes] = await Promise.all([
         getAdminBatches(page, statusFilter || undefined),
         getUsers(0),
       ]);
+      batchLog("load:success", {
+        page: bRes.number,
+        totalPages: bRes.totalPages,
+        batches: bRes.content.map(b => ({
+          id: b.id,
+          parentBatchId: b.parentBatchId,
+          client: b.client?.name,
+          status: b.status,
+          fileCount: b.fileCount,
+          updatedAt: b.updatedAt,
+        })),
+        reviewers: uRes.content.filter(u => u.role === "REVIEWER").length,
+      });
       setBatches(bRes.content);
       setTotalPages(bRes.totalPages);
       setReviewers(uRes.content.filter(u => u.role === "REVIEWER"));
-    } catch {
+    } catch (e) {
+      batchLog("load:error", e);
       toast.error("Failed to load batches");
     } finally {
       setLoading(false);
     }
   }, [page, statusFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  useEffect(() => {
+    const options = MODEL_OPTIONS[modelProvider];
+    batchLog("model-provider:change", { modelProvider, nextTextModel: options.text[0], nextVisionModel: options.vision[0] });
+    setTextModel(options.text[0]);
+    setVisionModel(options.vision[0]);
+  }, [modelProvider]);
+
+  useEffect(() => {
+    batchLog("filters:change", { search, debouncedSearch, statusFilter, page });
+  }, [search, debouncedSearch, statusFilter, page]);
+
+  useEffect(() => {
+    batchLog("progress:change", progress);
+  }, [progress]);
 
   // Auto-start polling for any batch already in QC_PROCESSING when the list loads.
   // This handles page refresh, navigation back, or batches triggered in a prior session.
   useEffect(() => {
     batches.forEach(b => {
       if (b.status === "QC_PROCESSING" && !pollingRef.current[b.id]) {
+        batchLog("poll:auto-start", { batchId: b.id, parentBatchId: b.parentBatchId });
         startPolling(b);
       }
     });
@@ -78,28 +138,62 @@ export default function BatchesPage() {
   function startPolling(batch: Batch) {
     const batchId = batch.id;
     const jobKey = `qc-${batchId}`;
-    // Use formula-computed count; fall back to filtered file array if present
+    batchLog("poll:start", { batchId, parentBatchId: batch.parentBatchId });
+    // Use the real processing unit: appraisal files. Contracts and engagement
+    // letters support QC, but each saved QCResult corresponds to one appraisal.
     const appraisalFiles = batch.files?.filter(f => f.fileType === "APPRAISAL") ?? [];
-    const total = batch.fileCount
-      ? Math.ceil(batch.fileCount / 3)      // rough estimate: 3 file types per appraisal
-      : appraisalFiles.length > 0 ? appraisalFiles.length : (batch.fileCount ?? 1);
+    const initialTotal = appraisalFiles.length > 0 ? appraisalFiles.length : 1;
+    const batchFileCount = batch.fileCount ?? batch.files?.length ?? 0;
 
-    trackJob({ id: jobKey, label: `QC: ${batch.parentBatchId}`, current: 0, total, batchId, startedAt: Date.now() });
+    trackJob({
+      id: jobKey,
+      label: `QC: ${batch.parentBatchId}`,
+      current: 0,
+      total: initialTotal,
+      batchId,
+      startedAt: Date.now(),
+      message: "Starting QC processing",
+      unitLabel: "appraisal set",
+      detail: `${batchFileCount} uploaded file${batchFileCount === 1 ? "" : "s"} in this batch`,
+    });
 
     if (pollingRef.current[batchId]) return; // already polling
 
-    const interval = setInterval(async () => {
+    const poll = async () => {
       try {
-        const [statusRes, results] = await Promise.all([
+        const [statusRes, progressRes] = await Promise.all([
           getBatchStatus(batchId),
-          getQCResults(batchId),
+          getBatchQCProgress(batchId),
         ]);
-        const done = results.length;
-        updateJob(jobKey, done);
-        setProgress(p => ({ ...p, [batchId]: { current: done, total } }));
+        batchLog("poll:tick", { batchId, status: statusRes, progress: progressRes });
+        const total = Math.max(progressRes.total || statusRes.processingTotalFiles || appraisalFiles.length || 1, 1);
+        const done = Math.min(Math.max(progressRes.current, statusRes.completedFiles ?? 0), total);
+        const modelLabel = progressRes.modelName
+          ? `${progressRes.modelProvider ?? "model"}: ${progressRes.modelName}`
+          : undefined;
+        updateJob(jobKey, done, total, {
+          message: progressRes.message || "QC processing is running",
+          stage: progressRes.stage || "processing",
+          modelLabel,
+          unitLabel: total === 1 ? "appraisal set" : "appraisal sets",
+          detail: `${statusRes.totalFiles ?? batchFileCount} uploaded file${(statusRes.totalFiles ?? batchFileCount) === 1 ? "" : "s"} in this batch`,
+        });
+        setProgress(p => ({
+          ...p,
+          [batchId]: {
+            current: done,
+            total,
+            message: progressRes.message || "QC processing is running",
+            stage: progressRes.stage || "processing",
+            percent: progressRes.percent ?? Math.round((done / total) * 100),
+            modelProvider: progressRes.modelProvider,
+            modelName: progressRes.modelName,
+            visionModel: progressRes.visionModel,
+          },
+        }));
 
         if (statusRes.status !== "QC_PROCESSING") {
-          clearInterval(interval);
+          if (pollingRef.current[batchId]) clearInterval(pollingRef.current[batchId]);
           delete pollingRef.current[batchId];
           removeJob(jobKey);
           setProgress(p => { const n = {...p}; delete n[batchId]; return n; });
@@ -108,51 +202,90 @@ export default function BatchesPage() {
             toast.success(`Batch "${batch.parentBatchId}" QC complete`, `${done} file${done !== 1 ? "s" : ""} processed`);
           } else if (statusRes.status === "ERROR") {
             toast.error(`Batch "${batch.parentBatchId}" failed`, "Check the error details in the batch list");
+          } else if (statusRes.status === "UPLOADED") {
+            toast.info(`Batch "${batch.parentBatchId}" QC stopped`, "Run QC is available again");
           }
           await load();
         }
-      } catch { /* keep polling */ }
-    }, 5000);
+      } catch (e) {
+        batchLog("poll:error", { batchId, error: e });
+      }
+    };
+
+    void poll();
+    const interval = setInterval(poll, 5000);
 
     pollingRef.current[batchId] = interval;
   }
 
   // Cleanup polling on unmount
   useEffect(() => {
-    return () => { Object.values(pollingRef.current).forEach(clearInterval); };
+    const polling = pollingRef.current;
+    return () => { Object.values(polling).forEach(clearInterval); };
   }, []);
 
   function setLoading1(id: number, on: boolean) {
     setActionLoading(prev => {
       const n = new Set(prev);
-      on ? n.add(id) : n.delete(id);
+      if (on) n.add(id);
+      else n.delete(id);
       return n;
     });
   }
 
   async function handleProcessQC(batch: Batch) {
+    batchLog("qc:start-click", { batchId: batch.id, parentBatchId: batch.parentBatchId, modelProvider, textModel, visionModel });
     setLoading1(batch.id, true);
     try {
-      await processQC(batch.id);
-      toast.info(`QC started for "${batch.parentBatchId}"`, "Processing files in the background");
-      await load();
+      const response = await processQC(batch.id, { provider: modelProvider, textModel, visionModel });
+      batchLog("qc:start-response", response);
+      setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "QC_PROCESSING", errorMessage: undefined } : b));
+      toast.info(`QC started for "${batch.parentBatchId}"`, `${MODEL_OPTIONS[modelProvider].label} · ${textModel}`);
       // Find the updated batch and start polling
       const updated = { ...batch, status: "QC_PROCESSING" };
       startPolling(updated);
+      await load();
     } catch (e) {
+      batchLog("qc:start-error", e);
       toast.error("QC trigger failed", String(e));
     } finally {
       setLoading1(batch.id, false);
     }
   }
 
+  async function handleStopQC(batch: Batch) {
+    batchLog("qc:stop-click", { batchId: batch.id, parentBatchId: batch.parentBatchId });
+    setLoading1(batch.id, true);
+    try {
+      const response = await cancelQC(batch.id);
+      batchLog("qc:stop-response", response);
+      if (pollingRef.current[batch.id]) {
+        clearInterval(pollingRef.current[batch.id]);
+        delete pollingRef.current[batch.id];
+      }
+      removeJob(`qc-${batch.id}`);
+      setProgress(p => { const n = {...p}; delete n[batch.id]; return n; });
+      setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "UPLOADED", errorMessage: "QC stopped by admin. Click Run QC to start again." } : b));
+      toast.info(`QC stopped for "${batch.parentBatchId}"`, "Run QC is available again");
+      await load();
+    } catch (e) {
+      batchLog("qc:stop-error", e);
+      toast.error("Stop QC failed", String(e));
+    } finally {
+      setLoading1(batch.id, false);
+    }
+  }
+
   async function handleAssign(batchId: number, reviewerId: number) {
+    batchLog("assign:start", { batchId, reviewerId });
     setLoading1(batchId, true);
     try {
       await assignReviewer(batchId, reviewerId);
+      batchLog("assign:success", { batchId, reviewerId });
       toast.success("Reviewer assigned");
       await load();
     } catch (e) {
+      batchLog("assign:error", e);
       toast.error("Assignment failed", String(e));
     } finally {
       setLoading1(batchId, false);
@@ -161,24 +294,30 @@ export default function BatchesPage() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
+    batchLog("delete:start", { batchId: deleteTarget.id, parentBatchId: deleteTarget.parentBatchId });
     try {
       await deleteBatch(deleteTarget.id);
+      batchLog("delete:success", { batchId: deleteTarget.id });
       toast.success(`Batch "${deleteTarget.parentBatchId}" deleted`);
       setDeleteTarget(null);
       await load();
     } catch (e) {
+      batchLog("delete:error", e);
       toast.error("Delete failed", String(e));
     }
   }
 
   async function handleReconcile() {
+    batchLog("reconcile:start");
     setReconciling(true);
     try {
       const r = await reconcileStuckBatches();
+      batchLog("reconcile:response", r);
       if (r.stuckFound === 0) toast.info("No stuck batches found");
       else toast.success("Reconciliation complete", r.message);
       if (r.retried > 0) await load();
     } catch (e) {
+      batchLog("reconcile:error", e);
       toast.error("Reconciliation failed", String(e));
     } finally {
       setReconciling(false);
@@ -248,6 +387,37 @@ export default function BatchesPage() {
         )}
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">QC model</span>
+        <select
+          value={modelProvider}
+          onChange={e => setModelProvider(e.target.value as QCModelSelection["provider"])}
+          className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          {Object.entries(MODEL_OPTIONS).map(([value, option]) => (
+            <option key={value} value={value}>{option.label}</option>
+          ))}
+        </select>
+        <select
+          value={textModel}
+          onChange={e => setTextModel(e.target.value)}
+          className="h-8 min-w-[190px] rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          {MODEL_OPTIONS[modelProvider].text.map(model => (
+            <option key={model} value={model}>{model}</option>
+          ))}
+        </select>
+        <select
+          value={visionModel}
+          onChange={e => setVisionModel(e.target.value)}
+          className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          {MODEL_OPTIONS[modelProvider].vision.map(model => (
+            <option key={model} value={model}>{model}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
@@ -284,7 +454,7 @@ export default function BatchesPage() {
             ) : filtered.map(b => {
               const isLoading = actionLoading.has(b.id);
               const prog = progress[b.id];
-              const pct = prog && prog.total > 0 ? Math.round((prog.current / prog.total) * 100) : 0;
+              const pct = prog ? prog.percent : 0;
 
               return (
                 <tr key={b.id} className="hover:bg-slate-800/30 transition-colors">
@@ -304,12 +474,20 @@ export default function BatchesPage() {
                     {b.status === "QC_PROCESSING" && prog && (
                       <div className="mt-1.5">
                         <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
-                          <span>{prog.current}/{prog.total} files</span>
+                          <span className="max-w-[150px] truncate" title={prog.message}>{prog.message}</span>
                           <span className="font-mono">{pct}%</span>
                         </div>
-                        <div className="w-24 h-1 bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                        <div className="w-32 h-1 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
                         </div>
+                        <div className="mt-0.5 text-[10px] text-slate-600">
+                          {prog.current}/{prog.total} appraisal set{prog.total === 1 ? "" : "s"} · {b.fileCount ?? b.files?.length ?? 0} files · {prog.stage.replace(/_/g, " ")}
+                        </div>
+                        {prog.modelName && (
+                          <div className="mt-0.5 text-[10px] text-blue-400 max-w-[150px] truncate">
+                            {prog.modelProvider ?? "model"} · {prog.modelName}
+                          </div>
+                        )}
                       </div>
                     )}
                     {b.errorMessage && (b.status === "ERROR" || b.status === "VALIDATION_FAILED") && (
@@ -366,26 +544,50 @@ export default function BatchesPage() {
                         </span>
                       )}
 
-                      {/* Assign reviewer */}
-                      {(b.status === "REVIEW_PENDING" || b.status === "QC_PROCESSING") && reviewers.length > 0 && (
-                        <select
-                          defaultValue=""
-                          onChange={e => e.target.value && handleAssign(b.id, Number(e.target.value))}
+                      {b.status === "QC_PROCESSING" && (
+                        <button
+                          onClick={() => handleStopQC(b)}
                           disabled={isLoading}
-                          className="h-7 bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors disabled:opacity-40 max-w-[110px]"
+                          className="h-7 px-2.5 rounded-md border border-red-900/60 bg-red-950/30 hover:bg-red-950/60 text-red-300 text-xs font-medium transition-colors disabled:opacity-40 flex items-center gap-1"
+                          title="Stop QC processing"
                         >
-                          <option value="">Assign…</option>
-                          {reviewers.map(r => (
-                            <option key={r.id} value={r.id}>{r.fullName ?? r.username}</option>
-                          ))}
-                        </select>
+                          <Square size={11} />
+                          Stop
+                        </button>
+                      )}
+
+                      {/* Assign reviewer */}
+                      {b.status === "QC_PROCESSING" && (
+                        <span className="h-7 px-2 rounded-md border border-slate-800 text-[11px] text-slate-500 flex items-center">
+                          Assign after QC
+                        </span>
+                      )}
+                      {b.status === "REVIEW_PENDING" && (
+                        reviewers.length > 0 ? (
+                          <select
+                            defaultValue=""
+                            onChange={e => e.target.value && handleAssign(b.id, Number(e.target.value))}
+                            disabled={isLoading}
+                            className="h-7 bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors disabled:opacity-40 max-w-[120px]"
+                          >
+                            <option value="">Assign…</option>
+                            {reviewers.map(r => (
+                              <option key={r.id} value={r.id}>{r.fullName ?? r.username}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="h-7 px-2 rounded-md border border-amber-900/60 text-[11px] text-amber-300 flex items-center">
+                            No reviewers
+                          </span>
+                        )
                       )}
 
                       {/* Delete */}
                       <button
                         onClick={() => setDeleteTarget(b)}
-                        className="h-7 px-2 rounded-md hover:bg-red-950/40 text-slate-600 hover:text-red-400 text-xs transition-colors"
-                        title="Delete batch"
+                        disabled={b.status === "QC_PROCESSING"}
+                        className="h-7 px-2 rounded-md hover:bg-red-950/40 text-slate-600 hover:text-red-400 text-xs transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-600"
+                        title={b.status === "QC_PROCESSING" ? "Stop QC before deleting this batch" : "Delete batch"}
                       >
                         Delete
                       </button>

@@ -1,12 +1,32 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  CircleHelp,
+  Lightbulb,
+  Lock,
+  Search,
+  Send,
+} from "lucide-react";
 
-type Article = { id: string; icon: string; title: string; summary: string; content: React.ReactNode };
+type Article = {
+  id: string;
+  Icon: React.ComponentType<{ size?: number; className?: string }>;
+  title: string;
+  summary: string;
+  content: React.ReactNode;
+};
 
 const ARTICLES: Article[] = [
   {
     id: "upload",
-    icon: "📤",
+    Icon: Send,
     title: "How to upload and process a file",
     summary: "Step-by-step guide to getting your appraisal file checked.",
     content: (
@@ -22,7 +42,7 @@ const ARTICLES: Article[] = [
   },
   {
     id: "status",
-    icon: "📊",
+    Icon: BarChart3,
     title: "Understanding file status labels",
     summary: "What each status means and what action (if any) you need to take.",
     content: (
@@ -48,22 +68,22 @@ const ARTICLES: Article[] = [
   },
   {
     id: "results",
-    icon: "✅",
+    Icon: CheckCircle2,
     title: "Understanding your results",
     summary: "What PASS, FAIL, and VERIFY mean for your file.",
     content: (
       <div className="space-y-4 text-sm text-slate-300">
         <div className="bg-green-950 border border-green-800 rounded-lg p-3">
-          <div className="font-semibold text-green-300 mb-1">✓ PASS — Everything looks good</div>
+          <div className="font-semibold text-green-300 mb-1">PASS — Everything looks good</div>
           <p>The system found no issues with this item. No action required.</p>
         </div>
         <div className="bg-red-950 border border-red-800 rounded-lg p-3">
-          <div className="font-semibold text-red-300 mb-1">✗ FAIL — An issue was found</div>
-          <p>The system detected something that doesn't match expectations — for example, an address mismatch between the appraisal and the engagement letter. A reviewer will check this.</p>
+          <div className="font-semibold text-red-300 mb-1">FAIL — An issue was found</div>
+          <p>The system detected something that does not match expectations — for example, an address mismatch between the appraisal and the engagement letter. A reviewer will check this.</p>
         </div>
         <div className="bg-amber-950 border border-amber-800 rounded-lg p-3">
           <div className="font-semibold text-amber-300 mb-1">? VERIFY — Needs human confirmation</div>
-          <p>The system was not fully confident about this item. A reviewer will confirm whether it's correct or not. This is not an error — it just means the system wants a human to double-check.</p>
+          <p>The system was not fully confident about this item. A reviewer will confirm whether it is correct or not. This is not an error — it just means the system wants a human to double-check.</p>
         </div>
         <div className="bg-slate-800 rounded-lg p-3">
           <div className="font-semibold text-slate-200 mb-1">What happens to FAIL and VERIFY items?</div>
@@ -74,7 +94,7 @@ const ARTICLES: Article[] = [
   },
   {
     id: "errors",
-    icon: "🚨",
+    Icon: AlertTriangle,
     title: "What to do when something goes wrong",
     summary: "Step-by-step guide for handling errors without panicking.",
     content: (
@@ -86,10 +106,10 @@ const ARTICLES: Article[] = [
         <div className="border border-slate-700 rounded-lg p-4 space-y-3">
           <div className="font-semibold text-white">Step 2 — Check the common causes</div>
           <ul className="space-y-1 text-slate-400 text-xs">
-            <li>• ZIP file is missing required folders (<code className="bg-slate-800 px-1 rounded">appraisal/</code>, <code className="bg-slate-800 px-1 rounded">engagement/</code>)</li>
-            <li>• PDF file is corrupted or password-protected</li>
-            <li>• File size exceeds 100 MB limit</li>
-            <li>• You are not connected to the network</li>
+            <li>ZIP file is missing required folders (<code className="bg-slate-800 px-1 rounded">appraisal/</code>, <code className="bg-slate-800 px-1 rounded">engagement/</code>)</li>
+            <li>PDF file is corrupted or password-protected</li>
+            <li>File size exceeds 100 MB limit</li>
+            <li>You are not connected to the network</li>
           </ul>
         </div>
         <div className="border border-slate-700 rounded-lg p-4 space-y-3">
@@ -105,16 +125,16 @@ const ARTICLES: Article[] = [
   },
   {
     id: "access",
-    icon: "🔒",
+    Icon: Lock,
     title: "Access and permissions",
-    summary: "Why you might see 'Access Denied' and what to do.",
+    summary: "Why you might see Access Denied and what to do.",
     content: (
       <div className="space-y-4 text-sm text-slate-300">
-        <p>Different users have different levels of access. If you see <strong>Access Denied</strong> or a page says you don't have permission:</p>
+        <p>Different users have different levels of access. If you see <strong>Access Denied</strong> or a page says you do not have permission:</p>
         <ul className="space-y-2">
           <li className="flex gap-2">
             <span className="text-blue-400">→</span>
-            <span>You are trying to access a page or feature that your account type doesn't include.</span>
+            <span>You are trying to access a page or feature that your account type does not include.</span>
           </li>
           <li className="flex gap-2">
             <span className="text-blue-400">→</span>
@@ -138,7 +158,7 @@ const ARTICLES: Article[] = [
   },
   {
     id: "tips",
-    icon: "💡",
+    Icon: Lightbulb,
     title: "Best practices for faster processing",
     summary: "Simple tips to get the best results from the system.",
     content: (
@@ -151,7 +171,10 @@ const ARTICLES: Article[] = [
           { tip: "Check your batch status before asking for help", detail: "Most 'missing' files are actually still processing. Check the Batches tab before contacting support." },
         ].map(({ tip, detail }) => (
           <li key={tip} className="bg-slate-900 border border-slate-800 rounded-lg p-3">
-            <div className="font-medium text-slate-200 mb-1">✓ {tip}</div>
+            <div className="flex items-center gap-2 font-medium text-slate-200 mb-1">
+              <CheckCircle2 size={14} className="text-emerald-400" />
+              <span>{tip}</span>
+            </div>
             <div className="text-slate-400 text-xs">{detail}</div>
           </li>
         ))}
@@ -169,7 +192,9 @@ export default function HelpPage() {
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-1">
             <h1 className="text-xl font-bold">Help &amp; Guidance</h1>
-            <a href="/" className="text-slate-400 hover:text-white text-sm">← Back</a>
+            <Link href="/" className="inline-flex items-center gap-1.5 text-slate-400 hover:text-white text-sm">
+              <ArrowLeft size={14} /> Back
+            </Link>
           </div>
           <p className="text-slate-400 text-sm">Simple answers to common questions. No technical jargon.</p>
         </div>
@@ -178,8 +203,8 @@ export default function HelpPage() {
       <main className="max-w-3xl mx-auto p-6 space-y-3">
         {/* Search hint */}
         <div className="bg-blue-950 border border-blue-800 rounded-xl p-4 text-sm text-blue-200 flex items-start gap-2">
-          <span className="text-lg">🔍</span>
-          <span>Click any topic below to expand the answer. If you can't find what you need, contact your administrator.</span>
+          <Search size={18} className="mt-0.5 flex-shrink-0" />
+          <span>Click any topic below to expand the answer. If you cannot find what you need, contact your administrator.</span>
         </div>
 
         {ARTICLES.map(a => (
@@ -188,12 +213,14 @@ export default function HelpPage() {
               onClick={() => setOpen(open === a.id ? null : a.id)}
               className="w-full text-left p-4 flex items-start gap-3 hover:bg-slate-800/40 transition-colors"
             >
-              <span className="text-xl mt-0.5">{a.icon}</span>
+              <a.Icon size={20} className="mt-0.5 text-blue-400 flex-shrink-0" />
               <div className="flex-1">
                 <div className="font-medium text-white">{a.title}</div>
                 <div className="text-slate-400 text-sm mt-0.5">{a.summary}</div>
               </div>
-              <span className="text-slate-500 text-lg mt-0.5">{open === a.id ? "↑" : "↓"}</span>
+              {open === a.id
+                ? <ChevronUp size={18} className="text-slate-500 mt-0.5" />
+                : <ChevronDown size={18} className="text-slate-500 mt-0.5" />}
             </button>
 
             {open === a.id && (
@@ -206,7 +233,7 @@ export default function HelpPage() {
 
         {/* Still stuck */}
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 text-center">
-          <div className="text-2xl mb-2">🤝</div>
+          <CircleHelp size={28} className="mx-auto mb-2 text-blue-400" />
           <div className="font-medium text-white mb-1">Still need help?</div>
           <p className="text-slate-400 text-sm">Contact your system administrator. Describe what you were trying to do and what happened — a screenshot helps if possible.</p>
         </div>

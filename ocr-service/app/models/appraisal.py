@@ -218,5 +218,6 @@ class ValidationContext(BaseModel):
     # Phase 2 field metadata — carries per-field confidence + source page.
     # Rules can inspect this to decide VERIFY vs FAIL based on extraction confidence.
     field_meta: Optional[Dict[str, Any]] = None
+    raw_text: Optional[str] = None
 
     model_config = {"arbitrary_types_allowed": True}

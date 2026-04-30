@@ -8,6 +8,7 @@ import difflib
 from datetime import datetime
 from app.rule_engine.engine import rule, RuleStatus, RuleResult, DataMissingException
 from app.models.appraisal import ValidationContext
+from app.services.external_services import ExternalServices
 
 
 @rule(id="S-1", name="Property Address Validation")
@@ -32,15 +33,57 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
     if not eng.property_address:
         raise DataMissingException("Property Address (Engagement Letter)")
     
-    # helper: normalize string
     def normalize_string(s: Optional[str]) -> str:
         if not s:
             return ""
         # Remove special chars, extra spaces, upper case
         return re.sub(r'[^A-Z0-9\s]', '', s.strip().upper())
 
+    def normalize_address(s: Optional[str]) -> str:
+        """
+        Normalize common USPS-style street variants so real matches are not
+        failed because one source says "Cir N" and the other says "Circle North".
+        """
+        normalized = normalize_string(s)
+        replacements = {
+            "NORTH": "N",
+            "SOUTH": "S",
+            "EAST": "E",
+            "WEST": "W",
+            "CIRCLE": "CIR",
+            "COURT": "CT",
+            "STREET": "ST",
+            "AVENUE": "AVE",
+            "BOULEVARD": "BLVD",
+            "DRIVE": "DR",
+            "ROAD": "RD",
+            "LANE": "LN",
+            "TERRACE": "TER",
+            "TRACE": "TR",
+            "PLACE": "PL",
+            "PARKWAY": "PKWY",
+            "HIGHWAY": "HWY",
+        }
+        tokens = [replacements.get(token, token) for token in normalized.split()]
+        if len(tokens) > 2 and tokens[1] in {"N", "S", "E", "W", "NE", "NW", "SE", "SW"}:
+            direction = tokens.pop(1)
+            tokens.append(direction)
+        return " ".join(tokens)
+
+    def street_tokens_match(report_street: str, engagement_street: str) -> bool:
+        rpt_tokens = report_street.split()
+        eng_tokens = engagement_street.split()
+        if not rpt_tokens or not eng_tokens:
+            return False
+        if rpt_tokens[0] != eng_tokens[0]:
+            return False
+
+        rpt_core = set(t for t in rpt_tokens[1:] if t not in {"ST", "AVE", "BLVD", "DR", "RD", "LN", "CT", "CIR", "TER", "TR", "PL", "PKWY", "HWY", "N", "S", "E", "W"})
+        eng_core = set(t for t in eng_tokens[1:] if t not in {"ST", "AVE", "BLVD", "DR", "RD", "LN", "CT", "CIR", "TER", "TR", "PL", "PKWY", "HWY", "N", "S", "E", "W"})
+        return bool(rpt_core & eng_core)
+
     # --- 1. Prepare Engagement Letter Components ---
-    eng_street = eng.property_address
+    eng_street = re.split(r'\bProperty\s+County\b', eng.property_address, flags=re.IGNORECASE)[0].strip()
     eng_city = eng.city
     eng_state = eng.state
     eng_zip = eng.zip_code
@@ -71,8 +114,8 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
     mismatches = []
     
     # Street: Fuzzy Match
-    norm_eng_street = normalize_string(eng_street)
-    norm_rpt_street = normalize_string(subj.address)
+    norm_eng_street = normalize_address(eng_street)
+    norm_rpt_street = normalize_address(subj.address)
     
     # Calculate similarity
     similarity = difflib.SequenceMatcher(None, norm_rpt_street, norm_eng_street).ratio()
@@ -80,7 +123,11 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
     # Pass if > 0.85 (85%) similarity or strict containment
     if similarity < 0.85:
         # Fallback: check strict containment (e.g. "123 MAIN" in "123 MAIN ST")
-        if norm_rpt_street not in norm_eng_street and norm_eng_street not in norm_rpt_street:
+        if (
+            norm_rpt_street not in norm_eng_street
+            and norm_eng_street not in norm_rpt_street
+            and not street_tokens_match(norm_rpt_street, norm_eng_street)
+        ):
             mismatches.append(f"Street mismatch: '{subj.address}' vs '{eng_street}' (Match: {similarity:.1%})")
 
     # City: Exact Match (Normalized)
@@ -109,6 +156,33 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
     elif rpt_zip != eng_zip_clean:
         mismatches.append(f"Zip mismatch: '{rpt_zip}' vs '{eng_zip_clean}'")
 
+    # County: Exact Match (normalized)
+    rpt_county = normalize_string(subj.county)
+    eng_county = normalize_string(eng.county)
+    if eng_county:
+        if not rpt_county:
+            mismatches.append("County missing in Report")
+        elif rpt_county != eng_county:
+            mismatches.append(f"County mismatch: '{subj.county}' vs '{eng.county}'")
+
+    usps_result = None
+    try:
+        import asyncio
+        usps_result = asyncio.run(
+            ExternalServices().verify_usps_address(
+                subj.address,
+                city=subj.city,
+                state=subj.state,
+                zip_code=subj.zip_code,
+            )
+        )
+        if not usps_result.is_valid:
+            mismatches.append(f"USPS validation failed: {usps_result.error_message or 'invalid address'}")
+        elif usps_result.zip_code and rpt_zip and usps_result.zip_code[:5] != rpt_zip:
+            mismatches.append(f"USPS ZIP mismatch: '{rpt_zip}' vs '{usps_result.zip_code[:5]}'")
+    except Exception as exc:
+        usps_result = None
+
     # --- 3. Result ---
     if not mismatches:
         return RuleResult(
@@ -131,14 +205,20 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
                 "street": subj.address, 
                 "city": subj.city, 
                 "state": subj.state, 
-                "zip": subj.zip_code
+                "zip": subj.zip_code,
+                "county": subj.county,
             },
             "engagement_components": {
                 "street": eng_street, 
                 "city": eng_city, 
                 "state": eng_state, 
-                "zip": eng_zip
-            }
+                "zip": eng_zip,
+                "county": eng.county,
+            },
+            "usps": {
+                "source": getattr(usps_result, "source", "unavailable") if usps_result else "unavailable",
+                "standardized_address": getattr(usps_result, "standardized_address", None) if usps_result else None,
+            },
         }
     )
 
@@ -157,8 +237,18 @@ def validate_borrower_name(ctx: ValidationContext) -> RuleResult:
     if not ctx.engagement_letter or not ctx.engagement_letter.borrower_name:
         raise DataMissingException("Borrower Name (Engagement Letter)")
     
-    rpt_borrower = ctx.report.subject.borrower.strip().upper()
-    eng_borrower = ctx.engagement_letter.borrower_name.strip().upper()
+    def normalize_person_name(value: str) -> str:
+        value = re.split(
+            r"\b(?:Owner of Public Record|Property Address|City|County|Legal Description|"
+            r"Assessor|Tax Year|Occupant|Map Reference|Census Tract|Lender|Client)\b",
+            value,
+            maxsplit=1,
+            flags=re.I,
+        )[0]
+        return re.sub(r"[^A-Z0-9\s]", "", value.upper()).strip()
+
+    rpt_borrower = normalize_person_name(ctx.report.subject.borrower)
+    eng_borrower = normalize_person_name(ctx.engagement_letter.borrower_name)
     
     # Exact match check
     if rpt_borrower != eng_borrower:
@@ -340,51 +430,40 @@ def validate_neighborhood_name(ctx: ValidationContext) -> RuleResult:
 @rule(id="S-6", name="Map Reference and Census Tract")
 def validate_map_census(ctx: ValidationContext) -> RuleResult:
     """
-    Target Fields: Map Reference (OPTIONAL), Census Tract (OPTIONAL for some forms)
-    HomeVision Logic:
-    - Map Reference is NOT required for standard URAR forms
-    - Census Tract is preferred but not always present in all report formats
-    - Both are optional - only validate format if present
+    Target Fields: Map Reference, Census Tract
+    Rule: Both fields must be provided; census tract must be numeric and UAD-like.
     """
     subject = ctx.report.subject
-    warnings = []
-    
-    # Map Reference is OPTIONAL
+    missing = []
     if not subject.map_reference:
-        warnings.append("Map Reference not provided (N/A for this report type).")
-    
-    # Census Tract is also OPTIONAL for some URAR forms
+        missing.append("Map Reference")
     if not subject.census_tract:
-        warnings.append("Census Tract not provided (may be N/A for this report type).")
-    else:
-        # Validate Census Tract format if present: XXXX.XX
-        census_pattern = r'^\d{4}\.\d{2}$'
-        if not re.match(census_pattern, subject.census_tract.strip()):
-            # Be lenient - accept if it has numbers
-            if not re.search(r'\d+', subject.census_tract):
-                warnings.append(f"Census Tract format may be invalid: '{subject.census_tract}'")
-    
-    # Determine message and status
-    if subject.map_reference and subject.census_tract:
-        message = "Map Reference and Census Tract are present and valid."
-        status = RuleStatus.PASS
-    elif subject.census_tract:
-        message = "Census Tract is present and valid."
-        status = RuleStatus.PASS
-    elif subject.map_reference:
-        message = "Map Reference is present. Census Tract not provided."
-        status = RuleStatus.PASS
-    else:
-        # Both missing - still PASS per HomeVision, just note it
-        message = "Map Reference and Census Tract not provided (N/A for this report type)."
-        status = RuleStatus.PASS
+        missing.append("Census Tract")
+
+    if missing:
+        return RuleResult(
+            rule_id="S-6",
+            rule_name="Map Reference and Census Tract",
+            status=RuleStatus.VERIFY,
+            message=f"Missing required field(s): {', '.join(missing)}. Verify Page 1 contains current map reference and census tract.",
+            review_required=True,
+        )
+
+    census_pattern = r'^\d{4}(?:\.\d{2})?$'
+    if not re.match(census_pattern, subject.census_tract.strip()):
+        return RuleResult(
+            rule_id="S-6",
+            rule_name="Map Reference and Census Tract",
+            status=RuleStatus.FAIL,
+            message=f"Census Tract '{subject.census_tract}' is not in a valid UAD numeric format (XXXX or XXXX.XX).",
+            appraisal_value=subject.census_tract,
+        )
     
     return RuleResult(
         rule_id="S-6",
         rule_name="Map Reference and Census Tract",
-        status=status,
-        message=message,
-        details={"warnings": warnings} if warnings else None
+        status=RuleStatus.PASS,
+        message="Map Reference and Census Tract are present and valid."
     )
 
 

@@ -6,6 +6,8 @@ import com.apprisal.common.exception.ResourceNotFoundException;
 import com.apprisal.common.exception.ValidationException;
 import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.ProcessingMetricsRepository;
+import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.service.FileMatchingService;
 import org.slf4j.Logger;
@@ -45,6 +47,8 @@ public class BatchService {
 
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
+    private final QCResultRepository qcResultRepository;
+    private final ProcessingMetricsRepository metricsRepository;
     private final AuditLogService auditLogService;
 
     @Value("${app.storage.path:./uploads}")
@@ -52,9 +56,13 @@ public class BatchService {
 
     public BatchService(BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
+            QCResultRepository qcResultRepository,
+            ProcessingMetricsRepository metricsRepository,
             AuditLogService auditLogService) {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
+        this.qcResultRepository = qcResultRepository;
+        this.metricsRepository = metricsRepository;
         this.auditLogService = auditLogService;
     }
 
@@ -168,7 +176,17 @@ public class BatchService {
             log.warn("Failed to clean up batch directory: {}", e.getMessage());
         }
 
-        // Database will cascade delete files due to orphanRemoval
+        // QCResult owns a FK to BatchFile, so remove QC data before deleting files.
+        List<QCResult> qcResults = qcResultRepository.findByBatchId(batchId);
+        for (QCResult qcResult : qcResults) {
+            metricsRepository.findByQcResultId(qcResult.getId()).ifPresent(metricsRepository::delete);
+        }
+        if (!qcResults.isEmpty()) {
+            qcResultRepository.deleteAll(qcResults);
+            qcResultRepository.flush();
+        }
+
+        // Database will cascade delete files due to orphanRemoval.
         batchRepository.delete(batch);
         log.info("Batch {} deleted successfully", batch.getParentBatchId());
     }
@@ -285,17 +303,29 @@ public class BatchService {
                 }
 
                 String entryName = entry.getName();
+                String lowerEntryName = entryName.toLowerCase();
 
                 // Security: prevent path traversal attacks
                 if (entryName.contains("..")) {
                     throw new ValidationException("Invalid ZIP entry path: " + entryName);
                 }
 
+                // Ignore macOS archive metadata. These often look like PDFs
+                // under __MACOSX/.../._file.pdf but are not real documents.
+                String filenameOnly = Paths.get(entryName).getFileName() != null
+                        ? Paths.get(entryName).getFileName().toString()
+                        : entryName;
+                if (lowerEntryName.startsWith("__macosx/")
+                        || filenameOnly.equals(".DS_Store")
+                        || filenameOnly.startsWith("._")) {
+                    continue;
+                }
+
                 if (entry.isDirectory()) {
-                    if (entryName.toLowerCase().contains("appraisal")) {
+                    if (lowerEntryName.contains("appraisal")) {
                         hasAppraisalFolder = true;
                     }
-                    if (entryName.toLowerCase().contains("engagement")) {
+                    if (lowerEntryName.contains("engagement") || lowerEntryName.contains("eagagement")) {
                         hasEngagementFolder = true;
                     }
                     continue;
@@ -306,7 +336,7 @@ public class BatchService {
                 }
 
                 FileType fileType;
-                String lower = entryName.toLowerCase();
+                String lower = lowerEntryName;
                 if (lower.contains("appraisal")) {
                     fileType = FileType.APPRAISAL;
                     hasAppraisalFolder = true;
@@ -319,7 +349,7 @@ public class BatchService {
                     continue;
                 }
 
-                String filename = Paths.get(entryName).getFileName().toString();
+                String filename = filenameOnly;
                 Path filePath = batchDir.resolve(fileType.name().toLowerCase()).resolve(filename);
                 Files.createDirectories(filePath.getParent());
                 Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -386,6 +416,9 @@ public class BatchService {
         }
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
+        if (batch.getStatus() == BatchStatus.QC_PROCESSING) {
+            throw new ValidationException("batch", "Reviewer can be assigned after QC processing completes");
+        }
         batch.setAssignedReviewer(reviewer);
         batch.setStatus(BatchStatus.REVIEW_PENDING);
         log.info("Assigned batch {} to reviewer {}", batchId, reviewer.getUsername());

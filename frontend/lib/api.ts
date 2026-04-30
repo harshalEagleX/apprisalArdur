@@ -91,7 +91,14 @@ export const getBatchById = (id: number) =>
   apiFetch<Batch>(`/api/admin/batches/${id}`);
 
 export const getBatchStatus = (id: number) =>
-  apiFetch<{ status: string; totalFiles: number; completedFiles: number }>(`/api/admin/batches/${id}/status`);
+  apiFetch<{
+    status: string;
+    totalFiles: number;
+    processingTotalFiles: number;
+    completedFiles: number;
+    errorMessage?: string;
+    updatedAt?: string;
+  }>(`/api/admin/batches/${id}/status`);
 
 export async function uploadBatch(
   file: File,
@@ -118,11 +125,38 @@ export const reconcileStuckBatches = () =>
     { method: "POST" }
   );
 
-export const processQC = (batchId: number) =>
+export interface QCModelSelection {
+  provider: "ollama" | "claude";
+  textModel?: string;
+  visionModel?: string;
+}
+
+export const processQC = (batchId: number, model?: QCModelSelection) =>
   apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
     `/api/qc/process/${batchId}`,
+    { method: "POST", body: JSON.stringify(model ?? { provider: "ollama" }) }
+  );
+
+export const cancelQC = (batchId: number) =>
+  apiFetch<{ message: string; batchId: number; cancelled: boolean; status: string }>(
+    `/api/qc/cancel/${batchId}`,
     { method: "POST" }
   );
+
+export const getBatchQCProgress = (batchId: number) =>
+  apiFetch<{
+    stage: string;
+    message: string;
+    current: number;
+    total: number;
+    percent: number;
+    running: boolean;
+    modelProvider?: string;
+    modelName?: string;
+    visionModel?: string;
+    startedAt?: string;
+    updatedAt?: string;
+  }>(`/api/qc/progress/${batchId}`);
 
 export const assignReviewer = (batchId: number, reviewerId: number) =>
   apiFetch(`/api/admin/batches/${batchId}/assign`, {

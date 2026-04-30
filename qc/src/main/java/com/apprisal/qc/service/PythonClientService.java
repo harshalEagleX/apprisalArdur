@@ -45,12 +45,18 @@ public class PythonClientService {
     }
 
     public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath) {
-        String url = config.getUrl() + "/qc/process";
+        return processQC(appraisalPath, engagementPath, contractPath, QCModelConfig.defaults());
+    }
 
-        log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}, contract: {}",
+    public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath, QCModelConfig modelConfig) {
+        String url = config.getUrl() + "/qc/process";
+        QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+
+        log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}, contract: {}, model: {}",
                 url, appraisalPath.getFileName(),
                 engagementPath != null ? engagementPath.getFileName() : "none",
-                contractPath != null ? contractPath.getFileName() : "none");
+                contractPath != null ? contractPath.getFileName() : "none",
+                safeModelConfig.label());
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
@@ -62,6 +68,9 @@ public class PythonClientService {
         if (contractPath != null) {
             body.add("contract_file", new FileSystemResource(Objects.requireNonNull(contractPath.toFile())));
         }
+        body.add("model_provider", safeModelConfig.provider());
+        body.add("text_model", safeModelConfig.textModel());
+        body.add("vision_model", safeModelConfig.visionModel());
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);

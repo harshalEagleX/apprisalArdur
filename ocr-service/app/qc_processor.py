@@ -10,6 +10,7 @@ Orchestrates the full QC pipeline:
 """
 
 import logging
+import re
 import time
 from typing import Dict, List, Optional, Any, Tuple, Any
 from dataclasses import dataclass, field
@@ -70,6 +71,9 @@ class QCResults(BaseModel):
     extraction_method: str
     document_id: Optional[str] = None     # DB record ID — None if DB unavailable
     cache_hit: bool = False               # True if OCR was served from cache
+    model_provider: str = "ollama"
+    model_name: str = "llama3:8b-instruct-q4_0"
+    vision_model: str = "moondream2"
     
     # Extracted fields summary
     extracted_fields: Dict[str, Any] = {}
@@ -79,7 +83,8 @@ class QCResults(BaseModel):
     total_rules: int = 0
     passed: int = 0
     failed: int = 0
-    verify: int = 0  # Merged: VERIFY + WARNING (all need human review)
+    verify: int = 0         # VERIFY status — needs human review (uncertain extraction)
+    warnings: int = 0      # WARNING status — rule-level warnings (non-fatal issues)
     skipped: int = 0
     system_errors: int = 0  # Only actual engine crashes
     
@@ -119,6 +124,9 @@ class SmartQCProcessor:
         contract_text: Optional[str] = None,
         file_hash: Optional[str] = None,
         original_filename: str = "unknown.pdf",
+        model_provider: str = "ollama",
+        model_name: Optional[str] = None,
+        vision_model: Optional[str] = None,
     ) -> QCResults:
         """
         Process an appraisal PDF through the complete QC pipeline.
@@ -179,6 +187,9 @@ class SmartQCProcessor:
                 processing_time_ms=int((time.time() - start_time) * 1000),
                 total_pages=0,
                 extraction_method="none",
+                model_provider=model_provider,
+                model_name=model_name or "llama3:8b-instruct-q4_0",
+                vision_model=vision_model or "moondream2",
                 processing_warnings=["Failed to extract any text from PDF"]
             )
 
@@ -200,6 +211,7 @@ class SmartQCProcessor:
 
         # Step 3: Map to AppraisalReportDomain Model
         report = self._map_extraction_to_report(s_extract, c_extract, legacy_fields)
+        self._apply_comparables_from_field_meta(report, field_meta)
         
         # Step 4: Handle Engagement Letter
         engagement_letter = None
@@ -244,6 +256,7 @@ class SmartQCProcessor:
             engagement_letter=engagement_letter,
             purchase_agreement=purchase_agreement,
             field_meta=field_meta,
+            raw_text=full_text,
         )
         
         # Step 7: Execute rule engine
@@ -266,6 +279,9 @@ class SmartQCProcessor:
             document_id=document_id,
             cache_hit=cache_hit,
             field_meta=field_meta,
+            model_provider=model_provider,
+            model_name=model_name,
+            vision_model=vision_model,
         )
 
         return results
@@ -343,8 +359,9 @@ class SmartQCProcessor:
             year_built=legacy.get("yearBuilt"),
         )
         
+        sales_count = legacy.get("comparableCount")
         sales = SalesComparisonSection(
-            comparables_count_sales=legacy.get("comparableCount", 0),
+            comparables_count_sales=sales_count if sales_count else None,
         )
 
         return AppraisalReport(
@@ -354,6 +371,38 @@ class SmartQCProcessor:
             improvements=improvements,
             sales_comparison=sales,
         )
+
+    def _apply_comparables_from_field_meta(
+        self,
+        report: AppraisalReport,
+        field_meta: Optional[Dict[str, object]],
+    ) -> None:
+        """Populate comparable sales from Phase 2 extraction instead of defaulting to zero."""
+        if not field_meta:
+            return
+
+        comparables: List[Comparable] = []
+        for i in range(1, 4):
+            address_meta = field_meta.get(f"comp_{i}_address")
+            price_meta = field_meta.get(f"comp_{i}_sale_price")
+            address = getattr(address_meta, "value", None)
+            price_raw = getattr(price_meta, "value", None)
+
+            if not address and not price_raw:
+                continue
+
+            price = None
+            if price_raw:
+                try:
+                    price = float(re.sub(r"[,$]", "", str(price_raw)))
+                except (TypeError, ValueError):
+                    price = None
+
+            comparables.append(Comparable(address=address, sale_price=price))
+
+        if comparables:
+            report.sales_comparison.comparables = comparables
+            report.sales_comparison.comparables_count_sales = len(comparables)
 
     def _map_engagement_letter(self, eng_extract) -> EngagementLetter:
         """Map EngagementLetterExtract to EngagementLetter model."""
@@ -379,6 +428,9 @@ class SmartQCProcessor:
         document_id: Optional[str] = None,
         cache_hit: bool = False,
         field_meta: Optional[Dict] = None,
+        model_provider: str = "ollama",
+        model_name: Optional[str] = None,
+        vision_model: Optional[str] = None,
     ) -> QCResults:
         """Assemble final QC results."""
         
@@ -444,12 +496,16 @@ class SmartQCProcessor:
             extraction_method=primary_method,
             document_id=document_id,
             cache_hit=cache_hit,
+            model_provider=model_provider,
+            model_name=model_name or "llama3:8b-instruct-q4_0",
+            vision_model=vision_model or "moondream2",
             extracted_fields=s_extract.model_dump(),
             field_confidence=field_confidence,
             total_rules=len(rule_results),
             passed=status_counts[RuleStatus.PASS],
             failed=status_counts[RuleStatus.FAIL],
-            verify=status_counts[RuleStatus.VERIFY] + status_counts[RuleStatus.WARNING],
+            verify=status_counts[RuleStatus.VERIFY],
+            warnings=status_counts[RuleStatus.WARNING],
             skipped=status_counts[RuleStatus.SKIPPED],
             system_errors=status_counts[RuleStatus.SYSTEM_ERROR],
             rule_results=qc_items,

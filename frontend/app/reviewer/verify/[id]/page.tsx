@@ -24,6 +24,10 @@ const SEV_STYLE: Record<string, string> = {
   ADVISORY: "bg-slate-800/50 border-slate-700/50 text-slate-500",
 };
 
+function ruleStatus(status: string) {
+  return status === "MANUAL_PASS" ? status : status.toLowerCase();
+}
+
 export default function VerifyFilePage() {
   const { id } = useParams<{ id: string }>();
   const qcResultId = Number(id);
@@ -43,7 +47,7 @@ export default function VerifyFilePage() {
     setLoading(true);
     try {
       const [rulesData, prog] = await Promise.all([getQCRules(qcResultId), getQCProgress(qcResultId)]);
-      setRules(rulesData); setProgress(prog);
+      setRules(rulesData.map(r => ({ ...r, status: ruleStatus(r.status) }))); setProgress(prog);
       const dec: Record<number, Decision> = {}; const com: Record<number, string> = {};
       for (const r of rulesData) {
         if (r.reviewerVerified === true)  dec[r.id] = "ACCEPT";
@@ -62,7 +66,10 @@ export default function VerifyFilePage() {
       }).catch(() => setPdfError(true));
   }, [qcResultId]);
 
-  useEffect(() => { loadRules(); }, [loadRules]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadRules(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadRules]);
 
   async function handleDecision(ruleId: number, decision: Decision) {
     setDecisions(prev => ({ ...prev, [ruleId]: decision })); setSaving(ruleId);
@@ -187,8 +194,9 @@ function RuleCard({ rule, decision, comment, saving, savedNow, onDecision, onCom
   rule: QCRuleResult; decision?: Decision; comment: string; saving: boolean; savedNow: boolean;
   onDecision: (d: Decision) => void; onComment: (c: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(rule.status === "fail" || rule.status === "verify" || rule.status === "warning");
-  const s = STATUS_STYLE[rule.status] ?? STATUS_STYLE["skipped"];
+  const normalizedStatus = ruleStatus(rule.status);
+  const [expanded, setExpanded] = useState(normalizedStatus === "fail" || normalizedStatus === "verify" || normalizedStatus === "warning");
+  const s = STATUS_STYLE[normalizedStatus] ?? STATUS_STYLE["skipped"];
   const sev = rule.severity ?? "STANDARD";
 
   return (
@@ -251,9 +259,9 @@ function RuleCard({ rule, decision, comment, saving, savedNow, onDecision, onCom
             </div>
           ) : (
             <div className={`flex items-center gap-1.5 text-xs ${s.text} opacity-60`}>
-              {rule.status === "pass" || rule.status === "MANUAL_PASS"
+              {normalizedStatus === "pass" || normalizedStatus === "MANUAL_PASS"
                 ? <><CheckCircle2 size={11} /> No action required</>
-                : rule.status === "skipped" ? <><SkipForward size={11} /> Not applicable</>
+                : normalizedStatus === "skipped" ? <><SkipForward size={11} /> Not applicable</>
                 : null}
             </div>
           )}
