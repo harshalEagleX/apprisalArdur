@@ -1,7 +1,9 @@
 package com.apprisal.qc.controller.api;
 
+import com.apprisal.common.entity.BatchFile;
 import com.apprisal.common.entity.BatchStatus;
 import com.apprisal.common.entity.QCResult;
+import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.qc.service.PythonClientService;
@@ -19,6 +21,7 @@ import org.springframework.lang.NonNull;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Comparator;
 
 /**
  * REST API for QC processing — ADMIN triggers, REVIEWER+ADMIN reads results.
@@ -33,6 +36,7 @@ public class QCApiController {
     private final QCResultRepository qcResultRepository;
     private final PythonClientService pythonClientService;
     private final BatchRepository batchRepository;
+    private final BatchFileRepository batchFileRepository;
     private final StuckBatchReconciler reconciler;
 
     public QCApiController(
@@ -40,11 +44,13 @@ public class QCApiController {
             QCResultRepository qcResultRepository,
             PythonClientService pythonClientService,
             BatchRepository batchRepository,
+            BatchFileRepository batchFileRepository,
             StuckBatchReconciler reconciler) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
         this.pythonClientService = pythonClientService;
         this.batchRepository = batchRepository;
+        this.batchFileRepository = batchFileRepository;
         this.reconciler = reconciler;
     }
 
@@ -207,17 +213,40 @@ public class QCApiController {
      */
     @GetMapping("/file/{qcResultId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getQCResult(@PathVariable @NonNull Long qcResultId) {
-        return qcResultRepository.findById(qcResultId)
-                .map(r -> ResponseEntity.ok(Map.of(
-                        "id", r.getId(),
-                        "qcDecision", r.getQcDecision() != null ? r.getQcDecision().name() : null,
-                        "batchFile", r.getBatchFile() != null ? Map.of(
-                                "id", r.getBatchFile().getId(),
-                                "filename", r.getBatchFile().getFilename() != null ? r.getBatchFile().getFilename() : ""
-                        ) : null
-                )))
+        return qcResultRepository.findWithBatchFileAndBatchById(qcResultId)
+                .map(r -> {
+                    BatchFile primary = r.getBatchFile();
+                    List<BatchFile> documents = List.of();
+                    if (primary != null && primary.getBatch() != null) {
+                        Long batchId = primary.getBatch().getId();
+                        documents = batchFileRepository.findByBatchId(batchId);
+                    }
+
+                    List<Map<String, Object>> documentDtos = documents.stream()
+                            .sorted(Comparator
+                                    .comparing((BatchFile f) -> f.getFileType() != null ? f.getFileType().ordinal() : 99)
+                                    .thenComparing(f -> f.getFilename() != null ? f.getFilename() : ""))
+                            .map(this::toBatchFileDto)
+                            .toList();
+
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("id", r.getId());
+                    body.put("qcDecision", r.getQcDecision() != null ? r.getQcDecision().name() : null);
+                    body.put("batchFile", primary != null ? toBatchFileDto(primary) : null);
+                    body.put("documents", documentDtos);
+                    return ResponseEntity.ok(body);
+                })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    private Map<String, Object> toBatchFileDto(BatchFile file) {
+        return Map.of(
+                "id", file.getId(),
+                "filename", file.getFilename() != null ? file.getFilename() : "",
+                "fileType", file.getFileType() != null ? file.getFileType().name() : ""
+        );
     }
 
     /** Python service health check. */

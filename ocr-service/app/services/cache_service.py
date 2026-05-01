@@ -261,6 +261,11 @@ def save_rule_results(document_id: str, rule_results: list):
                     appraisal_value=r.appraisal_value,
                     engagement_value=r.engagement_value,
                     review_required=r.review_required,
+                    source_page=getattr(r, "source_page", None),
+                    bbox_x=getattr(r, "bbox_x", None),
+                    bbox_y=getattr(r, "bbox_y", None),
+                    bbox_w=getattr(r, "bbox_w", None),
+                    bbox_h=getattr(r, "bbox_h", None),
                 )
                 db.add(record)
     except Exception as e:

@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
@@ -35,11 +36,12 @@ public class FileController {
     }
 
     @GetMapping("/files/{batchFileId}")
+    @Transactional(readOnly = true)
     public ResponseEntity<Resource> serveFile(
             @PathVariable @NonNull Long batchFileId,
             @AuthenticationPrincipal UserPrincipal principal) {
 
-        BatchFile batchFile = batchFileRepository.findById(batchFileId).orElse(null);
+        BatchFile batchFile = batchFileRepository.findWithBatchAndReviewerById(batchFileId).orElse(null);
 
         if (batchFile == null || batchFile.getStoragePath() == null) {
             return ResponseEntity.notFound().build();

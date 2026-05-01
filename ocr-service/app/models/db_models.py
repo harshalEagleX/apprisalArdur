@@ -102,6 +102,11 @@ class RuleResultRecord(Base):
     appraisal_value  = Column(Text)
     engagement_value = Column(Text)
     review_required  = Column(Boolean, default=False)
+    source_page      = Column(Integer)
+    bbox_x           = Column(Float)
+    bbox_y           = Column(Float)
+    bbox_w           = Column(Float)
+    bbox_h           = Column(Float)
     created_at       = Column(DateTime, default=datetime.utcnow)
 
     document = relationship("Document", back_populates="rule_results")

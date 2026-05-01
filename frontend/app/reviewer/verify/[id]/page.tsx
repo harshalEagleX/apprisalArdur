@@ -1,13 +1,21 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2, SkipForward } from "lucide-react";
-import { getQCRules, getQCProgress, saveDecision, getPdfUrl, type QCRuleResult } from "@/lib/api";
+import { ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2, SkipForward, Crosshair, ZoomIn, ZoomOut } from "lucide-react";
+import { getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, getRealtimeUrl, type BatchFile, type QCRuleResult } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
+  ssr: false,
+  loading: () => <PageSpinner label="Loading document viewer..." />,
+});
+
 type Decision = "ACCEPT" | "REJECT";
 type Filter = "all" | "fail" | "verify" | "pass";
+type RuleFocus = { ruleId: string; page: number; documentType: string; note: string };
+type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: number };
 
 const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
   pass:         { border: "border-green-800/40",  bg: "bg-green-950/20",  text: "text-green-300" },
@@ -28,6 +36,32 @@ function ruleStatus(status: string) {
   return status === "MANUAL_PASS" ? status : status.toLowerCase();
 }
 
+function focusForRule(rule: QCRuleResult): RuleFocus {
+  const ruleId = rule.ruleId;
+  const section = ruleId.split("-")[0].toUpperCase();
+  const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
+  const withPage = (focus: RuleFocus): RuleFocus => backendPage
+    ? { ...focus, page: backendPage, documentType: "APPRAISAL" }
+    : focus;
+
+  if (section === "C") return { ruleId, page: 1, documentType: "CONTRACT", note: "Contract and sale terms" };
+  if (["S-1", "S-2", "S-10"].includes(ruleId)) {
+    return withPage({ ruleId, page: 1, documentType: "ENGAGEMENT", note: backendPage ? "OCR evidence location" : "Order form comparison" });
+  }
+  if (section === "S" || section === "N" || section === "ST" || section === "I") {
+    return withPage({ ruleId, page: 1, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "URAR page 1 fields" });
+  }
+  if (section === "SCA" || section === "R" || section === "CA" || section === "IA") {
+    return withPage({ ruleId, page: 2, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Sales/comparison and approach sections" });
+  }
+  if (section === "SIG") return withPage({ ruleId, page: 6, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Signature certification page" });
+  if (section === "PH") return withPage({ ruleId, page: 16, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Photo pages" });
+  if (section === "ADD" || section === "DOC" || section === "FHA" || section === "COM") {
+    return withPage({ ruleId, page: 10, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Addenda and commentary pages" });
+  }
+  return withPage({ ruleId, page: 1, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Best available document location" });
+}
+
 export default function VerifyFilePage() {
   const { id } = useParams<{ id: string }>();
   const qcResultId = Number(id);
@@ -38,10 +72,19 @@ export default function VerifyFilePage() {
   const [comments, setComments]   = useState<Record<number, string>>({});
   const [saving, setSaving]       = useState<number | null>(null);
   const [saved, setSaved]         = useState<Set<number>>(new Set());
-  const [progress, setProgress]   = useState<{ pending: number; canSubmit: boolean; totalToVerify: number } | null>(null);
-  const [pdfFileId, setPdfFileId] = useState<number | null>(null);
+  const [progress, setProgress]   = useState<ReviewProgress | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [documents, setDocuments] = useState<BatchFile[]>([]);
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
   const [pdfError, setPdfError]   = useState(false);
+  const [activeFocus, setActiveFocus] = useState<RuleFocus | null>(null);
+  const [activePage, setActivePage] = useState(1);
+  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [viewerWidth, setViewerWidth] = useState(720);
+  const [zoom, setZoom] = useState(1);
+  const [highlighting, setHighlighting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const viewerRef = useRef<HTMLDivElement | null>(null);
 
   const loadRules = useCallback(async () => {
     setLoading(true);
@@ -59,17 +102,98 @@ export default function VerifyFilePage() {
   }, [qcResultId]);
 
   useEffect(() => {
-    fetch(`${JAVA}/api/qc/file/${qcResultId}`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: { batchFile?: { id: number } } | null) => {
-        if (d?.batchFile?.id) setPdfFileId(d.batchFile.id); else setPdfError(true);
-      }).catch(() => setPdfError(true));
+    getQCFileInfo(qcResultId)
+      .then(d => {
+        const docs = d.documents?.length ? d.documents : d.batchFile ? [d.batchFile] : [];
+        setDocuments(docs);
+        setActiveDocumentId(d.batchFile?.id ?? docs[0]?.id ?? null);
+        setPdfError(docs.length === 0);
+      })
+      .catch(() => setPdfError(true));
   }, [qcResultId]);
+
+  const activeDocument = useMemo(
+    () => documents.find(doc => doc.id === activeDocumentId) ?? documents[0],
+    [documents, activeDocumentId]
+  );
+  const activeDocumentUrl = activeDocument ? getPdfUrl(activeDocument.id) : undefined;
+
+  useEffect(() => {
+    if (!viewerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width;
+        if (width) setViewerWidth(Math.max(320, Math.floor(width - 48)));
+    });
+    observer.observe(viewerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  function focusRule(rule: QCRuleResult) {
+    const nextFocus = focusForRule(rule);
+    const preferredDoc = documents.find(doc => doc.fileType === nextFocus.documentType) ?? documents.find(doc => doc.fileType === "APPRAISAL") ?? documents[0];
+    if (preferredDoc) setActiveDocumentId(preferredDoc.id);
+    setActiveFocus(nextFocus);
+    setActivePage(nextFocus.page);
+    setHighlighting(true);
+    window.setTimeout(() => setHighlighting(false), 2600);
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadRules(); }, 0);
     return () => window.clearTimeout(timer);
   }, [loadRules]);
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let closed = false;
+    const progressTopic = `/topic/reviewer/qc/${qcResultId}/progress`;
+    const decisionTopic = `/topic/reviewer/qc/${qcResultId}/decision`;
+
+    const connect = () => {
+      ws = new WebSocket(getRealtimeUrl());
+      ws.onopen = () => {
+        setRealtimeConnected(true);
+        ws?.send(`subscribe:${progressTopic}`);
+        ws?.send(`subscribe:${decisionTopic}`);
+      };
+      ws.onclose = () => {
+        setRealtimeConnected(false);
+        if (!closed) {
+          reconnectTimer = window.setTimeout(connect, 2500);
+        }
+      };
+      ws.onerror = () => {
+        setRealtimeConnected(false);
+      };
+      ws.onmessage = event => {
+        try {
+          const message = JSON.parse(event.data) as { topic?: string; payload?: unknown };
+          if (message.topic === progressTopic && message.payload && typeof message.payload === "object") {
+            const next = message.payload as ReviewProgress;
+            setProgress({
+              pending: Number(next.pending ?? 0),
+              canSubmit: Boolean(next.canSubmit),
+              totalToVerify: Number(next.totalToVerify ?? 0),
+            });
+          }
+          if (message.topic === decisionTopic) {
+            void loadRules();
+          }
+        } catch {
+          // Ignore malformed realtime messages; REST polling remains the fallback.
+        }
+      };
+    };
+
+    connect();
+    return () => {
+      closed = true;
+      setRealtimeConnected(false);
+      if (reconnectTimer != null) window.clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, [loadRules, qcResultId]);
 
   async function handleDecision(ruleId: number, decision: Decision) {
     setDecisions(prev => ({ ...prev, [ruleId]: decision })); setSaving(ruleId);
@@ -129,6 +253,7 @@ export default function VerifyFilePage() {
               <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${reviewProgress}%` }} />
             </div>
             <span className="text-[11px] text-slate-500 font-mono">{reviewedCount}/{progress.totalToVerify}</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-green-400" : "bg-slate-600"}`} title={realtimeConnected ? "Live updates connected" : "Live updates reconnecting"} />
           </div>
         )}
         <button onClick={handleSubmit} disabled={!progress?.canSubmit || submitting}
@@ -143,10 +268,78 @@ export default function VerifyFilePage() {
         <div className="w-[55%] flex-shrink-0 border-r border-slate-800 flex flex-col">
           <div className="flex-shrink-0 px-4 py-2 border-b border-slate-800 flex items-center gap-2">
             <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span className="text-xs text-slate-500">Appraisal document</span>
+            <span className="text-xs text-slate-500 flex-shrink-0">Documents</span>
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {documents.map(doc => (
+                <button key={doc.id} onClick={() => { setActiveDocumentId(doc.id); setPageCount(null); setPdfError(false); setActiveFocus(null); setActivePage(1); }}
+                  className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                    activeDocument?.id === doc.id
+                      ? "bg-blue-600/20 border-blue-500/50 text-blue-200"
+                      : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300"
+                  }`}>
+                  {doc.fileType === "APPRAISAL" ? "Report" : doc.fileType === "ENGAGEMENT" ? "Order" : doc.fileType === "CONTRACT" ? "Contract" : "PDF"}
+                </button>
+              ))}
+            </div>
+            {activeDocument && (
+              <div className="ml-auto flex items-center gap-1 text-[11px] text-slate-500">
+                <button
+                  onClick={() => setZoom(value => Math.max(0.6, Math.round((value - 0.1) * 10) / 10))}
+                  disabled={zoom <= 0.6}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 disabled:opacity-30 hover:text-white"
+                  title="Zoom out"
+                >
+                  <ZoomOut size={13} />
+                </button>
+                <button
+                  onClick={() => setZoom(1)}
+                  className="h-7 min-w-12 rounded-md border border-slate-800 bg-slate-900 px-2 font-mono text-slate-400 hover:text-white"
+                  title="Reset zoom"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  onClick={() => setZoom(value => Math.min(1.8, Math.round((value + 0.1) * 10) / 10))}
+                  disabled={zoom >= 1.8}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 disabled:opacity-30 hover:text-white"
+                  title="Zoom in"
+                >
+                  <ZoomIn size={13} />
+                </button>
+              </div>
+            )}
           </div>
-          {pdfFileId ? (
-            <iframe src={getPdfUrl(pdfFileId)} className="flex-1 w-full" title="Appraisal PDF" />
+          {activeDocument ? (
+            <div ref={viewerRef} className={`relative flex-1 overflow-auto bg-slate-950 ${highlighting ? "ring-2 ring-amber-400 ring-inset" : ""}`}>
+              {activeFocus && (
+                <div className={`absolute left-4 top-4 z-10 max-w-sm rounded-lg border px-3 py-2 shadow-xl transition-opacity ${
+                  highlighting ? "opacity-100 bg-amber-400/95 border-amber-200 text-slate-950" : "opacity-80 bg-slate-900/95 border-slate-700 text-slate-200"
+                }`}>
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <Crosshair size={13} />
+                    {activeFocus.ruleId}
+                  </div>
+                  <div className="mt-0.5 text-[11px] opacity-80">{activeFocus.note}</div>
+                </div>
+              )}
+              <div className="min-h-full flex justify-center px-4 py-12">
+                <div className="relative">
+                  <PdfDocumentViewer
+                    key={activeDocument.id}
+                    fileUrl={activeDocumentUrl}
+                    targetPage={activePage}
+                    width={Math.round(viewerWidth * zoom)}
+                    highlighting={highlighting}
+                    onLoadSuccess={(numPages) => {
+                      setPageCount(numPages);
+                      setPdfError(false);
+                      setActivePage(page => Math.min(Math.max(page, 1), numPages));
+                    }}
+                    onLoadError={() => setPdfError(true)}
+                  />
+                </div>
+              </div>
+            </div>
           ) : pdfError ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-500">
               <AlertTriangle size={18} className="text-amber-500" />
@@ -177,6 +370,8 @@ export default function VerifyFilePage() {
             ) : filtered.map(rule => (
               <RuleCard key={rule.id} rule={rule} decision={decisions[rule.id]} comment={comments[rule.id] ?? ""}
                 saving={saving === rule.id} savedNow={saved.has(rule.id)}
+                active={activeFocus?.ruleId === rule.ruleId}
+                onSelect={() => focusRule(rule)}
                 onDecision={d => handleDecision(rule.id, d)} onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))} />
             ))}
           </div>
@@ -190,9 +385,9 @@ function CountBadge({ label, count, style }: { label: string; count: number; sty
   return <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${style}`}>{count} {label}</span>;
 }
 
-function RuleCard({ rule, decision, comment, saving, savedNow, onDecision, onComment }: {
+function RuleCard({ rule, decision, comment, saving, savedNow, active, onSelect, onDecision, onComment }: {
   rule: QCRuleResult; decision?: Decision; comment: string; saving: boolean; savedNow: boolean;
-  onDecision: (d: Decision) => void; onComment: (c: string) => void;
+  active?: boolean; onSelect: () => void; onDecision: (d: Decision) => void; onComment: (c: string) => void;
 }) {
   const normalizedStatus = ruleStatus(rule.status);
   const [expanded, setExpanded] = useState(normalizedStatus === "fail" || normalizedStatus === "verify" || normalizedStatus === "warning");
@@ -200,8 +395,8 @@ function RuleCard({ rule, decision, comment, saving, savedNow, onDecision, onCom
   const sev = rule.severity ?? "STANDARD";
 
   return (
-    <div className={`rounded-xl border p-3 ${s.border} ${s.bg}`}>
-      <button onClick={() => setExpanded(!expanded)} className="w-full text-left">
+    <div className={`rounded-xl border p-3 ${s.border} ${s.bg} ${active ? "ring-1 ring-amber-400/70" : ""}`}>
+      <button onClick={() => { setExpanded(!expanded); onSelect(); }} className="w-full text-left">
         <div className="flex items-start gap-2">
           <span className="font-mono text-[10px] bg-slate-800/60 border border-slate-700/40 px-1.5 py-0.5 rounded text-slate-400 flex-shrink-0 mt-0.5">{rule.ruleId}</span>
           <div className="flex-1 min-w-0">

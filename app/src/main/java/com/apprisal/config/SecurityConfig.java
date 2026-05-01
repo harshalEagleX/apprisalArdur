@@ -115,7 +115,10 @@ public class SecurityConfig {
                         .requestMatchers("/reviewer/**").hasAnyRole("ADMIN", "REVIEWER")
                         .anyRequest().authenticated())
                 .headers(headers -> headers
-                        .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                        // X-Frame-Options cannot allow the Next.js app on a different port.
+                        // CSP frame-ancestors keeps embedding limited to configured app origins.
+                        .frameOptions(frameOptions -> frameOptions.disable())
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(frameAncestorsPolicy()))
                         // SECURITY: X-Content-Type-Options prevents MIME sniffing
                         .contentTypeOptions(contentType -> {})
                         // SECURITY: enable HSTS in production behind HTTPS
@@ -141,6 +144,14 @@ public class SecurityConfig {
                 .authenticationProvider(authenticationProvider());
 
         return http.build();
+    }
+
+    private String frameAncestorsPolicy() {
+        String frameAncestors = List.of(allowedOriginsConfig.split(",")).stream()
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .reduce("'self'", (policy, origin) -> policy + " " + origin);
+        return "frame-ancestors " + frameAncestors;
     }
 
     /**

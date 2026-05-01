@@ -30,6 +30,14 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
      */
     List<BatchFile> findByBatchIdAndOrderId(Long batchId, String orderId);
 
+    @Query("""
+        SELECT bf FROM BatchFile bf
+        JOIN FETCH bf.batch b
+        LEFT JOIN FETCH b.assignedReviewer
+        WHERE bf.id = :batchFileId
+        """)
+    java.util.Optional<BatchFile> findWithBatchAndReviewerById(@Param("batchFileId") Long batchFileId);
+
     @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.id = :batchId")
     long countByBatchId(@Param("batchId") Long batchId);
 

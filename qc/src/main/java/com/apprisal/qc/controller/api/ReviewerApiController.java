@@ -6,6 +6,7 @@ import com.apprisal.common.entity.QCRuleResult;
 import com.apprisal.common.entity.Role;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.security.UserPrincipal;
+import com.apprisal.common.realtime.RealtimeEventPublisher;
 import com.apprisal.qc.service.VerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,11 +33,14 @@ public class ReviewerApiController {
 
     private final VerificationService verificationService;
     private final QCResultRepository qcResultRepository;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     public ReviewerApiController(VerificationService verificationService,
-                                 QCResultRepository qcResultRepository) {
+                                 QCResultRepository qcResultRepository,
+                                 RealtimeEventPublisher realtimeEventPublisher) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
+        this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
     // ── Pending queue ──────────────────────────────────────────────────────────
@@ -113,6 +117,10 @@ public class ReviewerApiController {
             response.put("decision", request.decision());
             response.put("savedAt", result.getVerifiedAt().toString());
 
+            Long qcResultId = result.getQcResult().getId();
+            realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/decision", response);
+            realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/progress", progressPayload(qcResultId));
+
             log.info("Decision saved: ruleResultId={}, decision={}", request.ruleResultId(), request.decision());
             return ResponseEntity.ok(response);
         } catch (SecurityException e) {
@@ -151,6 +159,11 @@ public class ReviewerApiController {
                 ruleMap.put("reviewerVerified",rule.getReviewerVerified());
                 ruleMap.put("reviewerComment", rule.getReviewerComment());
                 ruleMap.put("severity",        rule.getSeverity() != null ? rule.getSeverity() : "STANDARD");
+                ruleMap.put("pdfPage",         rule.getPdfPage());
+                ruleMap.put("bboxX",           rule.getBboxX());
+                ruleMap.put("bboxY",           rule.getBboxY());
+                ruleMap.put("bboxW",           rule.getBboxW());
+                ruleMap.put("bboxH",           rule.getBboxH());
                 return ruleMap;
             }).toList();
 
@@ -174,23 +187,27 @@ public class ReviewerApiController {
                 verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
             }
 
-            List<QCRuleResult> allRules          = verificationService.getAllRuleResults(qcResultId);
-            List<QCRuleResult> pendingItems       = verificationService.getPendingItems(qcResultId);
-            List<QCRuleResult> verificationItems  = verificationService.getVerificationItems(qcResultId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("totalRules",    allRules.size());
-            response.put("totalToVerify", verificationItems.size());
-            response.put("pending",       pendingItems.size());
-            response.put("completed",     verificationItems.size() - pendingItems.size());
-            response.put("canSubmit",     pendingItems.isEmpty() && !verificationItems.isEmpty());
-
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(progressPayload(qcResultId));
         } catch (SecurityException e) {
             return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to get progress: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private Map<String, Object> progressPayload(Long qcResultId) {
+        List<QCRuleResult> allRules = verificationService.getAllRuleResults(qcResultId);
+        List<QCRuleResult> pendingItems = verificationService.getPendingItems(qcResultId);
+        List<QCRuleResult> verificationItems = verificationService.getVerificationItems(qcResultId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("qcResultId", qcResultId);
+        response.put("totalRules", allRules.size());
+        response.put("totalToVerify", verificationItems.size());
+        response.put("pending", pendingItems.size());
+        response.put("completed", verificationItems.size() - pendingItems.size());
+        response.put("canSubmit", pendingItems.isEmpty() && !verificationItems.isEmpty());
+        return response;
     }
 }

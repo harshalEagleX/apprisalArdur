@@ -21,6 +21,15 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
      */
     Optional<QCResult> findByBatchFileId(Long batchFileId);
 
+    @Query("""
+        SELECT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN FETCH bf.batch b
+        LEFT JOIN FETCH b.assignedReviewer
+        WHERE qr.id = :qcResultId
+        """)
+    Optional<QCResult> findWithBatchFileAndBatchById(@Param("qcResultId") Long qcResultId);
+
     /**
      * Find all QC results for a batch.
      */
@@ -39,17 +48,27 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     /**
      * Find all TO_VERIFY results that haven't been reviewed (ADMIN: all).
      */
-    @Query("SELECT qr FROM QCResult qr WHERE qr.qcDecision = 'TO_VERIFY' AND qr.finalDecision IS NULL")
+    @Query("""
+        SELECT DISTINCT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN FETCH bf.batch b
+        LEFT JOIN FETCH b.assignedReviewer
+        WHERE qr.qcDecision = 'TO_VERIFY'
+          AND qr.finalDecision IS NULL
+        """)
     List<QCResult> findPendingVerification();
 
     /**
      * Find TO_VERIFY results assigned to a specific reviewer (REVIEWER: own batches only).
      */
     @Query("""
-        SELECT qr FROM QCResult qr
+        SELECT DISTINCT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN FETCH bf.batch b
+        JOIN FETCH b.assignedReviewer reviewer
         WHERE qr.qcDecision = 'TO_VERIFY'
           AND qr.finalDecision IS NULL
-          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+          AND reviewer.id = :reviewerId
         """)
     List<QCResult> findPendingVerificationForReviewer(@Param("reviewerId") Long reviewerId);
 

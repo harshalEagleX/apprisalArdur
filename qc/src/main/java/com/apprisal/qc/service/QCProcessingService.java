@@ -7,6 +7,7 @@ import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.ProcessingMetricsRepository;
 import com.apprisal.common.repository.QCResultRepository;
+import com.apprisal.common.realtime.RealtimeEventPublisher;
 import com.apprisal.common.service.FileMatchingService;
 import com.apprisal.common.service.FileMatchingService.FilePair;
 import tools.jackson.core.JacksonException;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
@@ -47,8 +49,10 @@ public class QCProcessingService {
     private final BatchFileRepository batchFileRepository;
     private final ProcessingMetricsRepository metricsRepository;
     private final ObjectMapper objectMapper;
+    private final RealtimeEventPublisher realtimeEventPublisher;
     private final Map<Long, QCProgress> progressByBatch = new ConcurrentHashMap<>();
     private final Map<Long, Thread> runningThreads = new ConcurrentHashMap<>();
+    private final Set<Long> activeBatches = ConcurrentHashMap.newKeySet();
     private final Set<Long> cancellationRequests = ConcurrentHashMap.newKeySet();
 
     /**
@@ -71,7 +75,8 @@ public class QCProcessingService {
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             ProcessingMetricsRepository metricsRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RealtimeEventPublisher realtimeEventPublisher) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
@@ -79,6 +84,7 @@ public class QCProcessingService {
         this.batchFileRepository = batchFileRepository;
         this.metricsRepository = metricsRepository;
         this.objectMapper = objectMapper;
+        this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
     /**
@@ -101,10 +107,20 @@ public class QCProcessingService {
     @Async("qcTaskExecutor")
     public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId, QCModelConfig modelConfig) {
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        runningThreads.put(batchId, Thread.currentThread());
+        if (!activeBatches.contains(batchId) && !activeBatches.add(batchId)) {
+            log.warn("QC processing for batch {} is already active; ignoring duplicate async request", batchId);
+            return CompletableFuture.failedFuture(new IllegalStateException("QC is already running for this batch"));
+        }
+        Thread existingWorker = runningThreads.putIfAbsent(batchId, Thread.currentThread());
+        if (existingWorker != null) {
+            log.warn("QC processing for batch {} is already running on thread {}", batchId, existingWorker.getName());
+            return CompletableFuture.failedFuture(new IllegalStateException("QC is already running for this batch"));
+        }
         try {
             updateProgress(batchId, "queued", "QC job queued", 0, 1, true, safeModelConfig);
-            // Call via self (proxy) so @Transactional on processBatch is applied
+            // Call via self (proxy) so transactional helper calls inside processBatch
+            // still go through Spring AOP. processBatch itself intentionally does not
+            // keep one transaction open during the long Python OCR call.
             QCProcessingSummary result = self.processBatch(batchId, safeModelConfig);
             return CompletableFuture.completedFuture(result);
         } catch (CancellationException e) {
@@ -118,13 +134,14 @@ public class QCProcessingService {
                 // FIX: use @Transactional helper so the re-fetch and save share one session,
                 // avoiding the stale-@Version OptimisticLockingFailureException that occurred
                 // when the lambda called findById() (detached) + save() in separate transactions.
-                markBatchError(batchId, "Processing failed: " + e.getMessage());
+                self.markBatchError(batchId, "Processing failed: " + e.getMessage());
             } catch (Exception saveEx) {
                 log.error("Failed to persist error status for batch {}: {}", batchId, saveEx.getMessage());
             }
             return CompletableFuture.failedFuture(e);
         } finally {
             runningThreads.remove(batchId);
+            activeBatches.remove(batchId);
             cancellationRequests.remove(batchId);
         }
     }
@@ -132,6 +149,10 @@ public class QCProcessingService {
     @Transactional
     public boolean claimBatchForProcessing(@NonNull Long batchId, QCModelConfig modelConfig) {
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        if (!activeBatches.add(batchId)) {
+            log.warn("QC claim rejected for batch {} because another worker is active", batchId);
+            return false;
+        }
         cancellationRequests.remove(batchId);
         int updated = batchRepository.markQcProcessingIfTriggerable(batchId);
         if (updated > 0) {
@@ -139,6 +160,7 @@ public class QCProcessingService {
             log.info("Claimed batch {} for QC processing using {}", batchId, safeModelConfig.label());
             return true;
         }
+        activeBatches.remove(batchId);
         return false;
     }
 
@@ -152,6 +174,7 @@ public class QCProcessingService {
 
         String message = "QC stopped by admin. Click Run QC to start again.";
         int updated = batchRepository.markUploadedIfQcProcessing(batchId, message);
+        activeBatches.remove(batchId);
         updateProgress(batchId, "stopped", message, 0, 1, false, QCModelConfig.defaults());
         if (updated > 0) {
             log.warn("QC stop requested for batch {}{}", batchId, worker != null ? " and worker interrupted" : "");
@@ -166,16 +189,20 @@ public class QCProcessingService {
      * findById() and save() share one Hibernate session so the @Version field is
      * consistent and no OptimisticLockingFailureException is thrown.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markBatchError(@NonNull Long batchId, String errorMessage) {
         batchRepository.findById(batchId).ifPresent(b -> {
             b.setStatus(BatchStatus.ERROR);
             b.setErrorMessage(errorMessage);
-            // batchRepository.save() not strictly needed here (b is a managed entity
-            // inside the @Transactional context and will be flushed on commit),
-            // but kept explicit for clarity.
-            batchRepository.save(b);
         });
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveFinalBatchStatus(@NonNull Long batchId, @NonNull BatchStatus status, String errorMessage) {
+        Batch batch = batchRepository.findById(batchId)
+                .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
+        batch.setStatus(status);
+        batch.setErrorMessage(errorMessage);
     }
 
     /**
@@ -187,12 +214,10 @@ public class QCProcessingService {
      * Individual DB saves (setQcProcessing, processFilePair, saveFinalStatus) are
      * each handled inside their own proper transaction through the proxy.
      */
-    @Transactional
     public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId) {
         return processBatch(batchId, QCModelConfig.defaults());
     }
 
-    @Transactional
     public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId, QCModelConfig modelConfig) {
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         log.info("Starting QC processing for batch {}", batchId);
@@ -203,8 +228,7 @@ public class QCProcessingService {
                 .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
 
         if (batch.getStatus() != BatchStatus.QC_PROCESSING) {
-            batch.setStatus(BatchStatus.QC_PROCESSING); // Python OCR + rules running
-            batch = batchRepository.save(batch);
+            self.saveFinalBatchStatus(batchId, BatchStatus.QC_PROCESSING, null); // Python OCR + rules running
         }
         updateProgress(batchId, "matching", "Matching appraisal, engagement, and contract files", 0, 1, true, safeModelConfig);
 
@@ -215,8 +239,7 @@ public class QCProcessingService {
 
         if (pairs.isEmpty()) {
             log.warn("Batch {} has no matched appraisal-engagement pairs — check folder structure", batchId);
-            batch.setStatus(BatchStatus.ERROR);
-            batch = batchRepository.save(batch); // FIX: capture updated @Version
+            self.markBatchError(batchId, "No matched appraisal files found");
             updateProgress(batchId, "error", "No matched appraisal files found", 0, 1, false, safeModelConfig);
             return new QCProcessingSummary(0, 0, 0, 0, 0, BatchStatus.ERROR);
         }
@@ -233,9 +256,7 @@ public class QCProcessingService {
                 // PIPELINE: check if Python service is available before looping
                 if (!pythonClient.isHealthy()) {
                     log.error("Python OCR service is down — aborting batch {} after {} pairs", batchId, errorCount);
-                    batch.setStatus(BatchStatus.ERROR);
-                    batch.setErrorMessage("Python OCR service unavailable — check that ocr-service is running on port 5001");
-                    batch = batchRepository.save(batch); // FIX: capture updated @Version
+                    self.markBatchError(batchId, "Python OCR service unavailable — check that ocr-service is running on port 5001");
                     updateProgress(batchId, "error", "Python OCR service unavailable", index, pairs.size(), false, safeModelConfig);
                     throw new RuntimeException("Python OCR service unavailable");
                 }
@@ -265,8 +286,7 @@ public class QCProcessingService {
         }
 
         BatchStatus newStatus = determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
-        batch.setStatus(newStatus);
-        batch = batchRepository.save(batch); // FIX: capture updated @Version
+        self.saveFinalBatchStatus(batchId, newStatus, newStatus == BatchStatus.ERROR ? "All appraisal files failed QC processing" : null);
 
         log.info("Batch {} QC completed: autoPass={}, toVerify={}, autoFail={}, errors={}. New status: {}",
                 batchId, autoPassCount, toVerifyCount, autoFailCount, errorCount, newStatus);
@@ -297,7 +317,7 @@ public class QCProcessingService {
         int safeTotal = Math.max(total, 1);
         int safeCurrent = Math.max(0, Math.min(current, safeTotal));
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        progressByBatch.compute(batchId, (id, existing) -> new QCProgress(
+        QCProgress progress = progressByBatch.compute(batchId, (id, existing) -> new QCProgress(
                 stage,
                 message,
                 safeCurrent,
@@ -309,6 +329,24 @@ public class QCProcessingService {
                 existing != null ? existing.startedAt() : Instant.now().toString(),
                 Instant.now().toString()
         ));
+        realtimeEventPublisher.publish("/topic/qc/batch/" + batchId + "/progress", progressPayload(batchId, progress));
+    }
+
+    private Map<String, Object> progressPayload(Long batchId, QCProgress progress) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("batchId", batchId);
+        payload.put("stage", progress.stage());
+        payload.put("message", progress.message());
+        payload.put("current", progress.current());
+        payload.put("total", progress.total());
+        payload.put("percent", progress.percent());
+        payload.put("running", progress.running());
+        payload.put("modelProvider", progress.modelProvider());
+        payload.put("modelName", progress.modelName());
+        payload.put("visionModel", progress.visionModel());
+        payload.put("startedAt", progress.startedAt());
+        payload.put("updatedAt", progress.updatedAt());
+        return payload;
     }
 
     /**
@@ -355,6 +393,17 @@ public class QCProcessingService {
                 modelConfig);
         throwIfCancelled(appraisal.getBatch().getId());
 
+        // A duplicate worker can pass the first exists check, spend time in Python,
+        // and only then discover that another worker already saved the result.
+        // Re-check after the long call so the unique constraint is a backstop, not
+        // the normal control flow.
+        var existingResult = qcResultRepository.findByBatchFileId(appraisal.getId());
+        if (existingResult.isPresent()) {
+            log.warn("File {} received a QC result while Python was running, reusing existing result",
+                    appraisal.getFilename());
+            return existingResult.get();
+        }
+
         // Determine decision
         QCDecision decision = determineDecision(pythonResponse);
 
@@ -391,6 +440,11 @@ public class QCProcessingService {
                         .reviewRequired(pr.reviewRequired() || pr.needsVerification())
                         .appraisalValue(pr.appraisalValue())
                         .engagementValue(pr.engagementValue())
+                        .pdfPage(pr.sourcePage())
+                        .bboxX(pr.bboxX())
+                        .bboxY(pr.bboxY())
+                        .bboxW(pr.bboxW())
+                        .bboxH(pr.bboxH())
                         .build();
                 qcResult.addRuleResult(ruleResult);
             }

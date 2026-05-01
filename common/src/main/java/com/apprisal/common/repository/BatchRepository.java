@@ -2,6 +2,7 @@ package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.Batch;
 import com.apprisal.common.entity.BatchStatus;
+import com.apprisal.common.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -100,6 +101,24 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
           AND b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING
         """)
     int markUploadedIfQcProcessing(@Param("batchId") Long batchId, @Param("message") String message);
+
+    /**
+     * Assign a reviewer without loading and saving the full Batch row.
+     *
+     * This avoids optimistic-lock failures when QC completion updates the same
+     * batch status at nearly the same time an admin assigns a reviewer.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.assignedReviewer = :reviewer,
+            b.status = com.apprisal.common.entity.BatchStatus.REVIEW_PENDING,
+            b.updatedAt = CURRENT_TIMESTAMP,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status <> com.apprisal.common.entity.BatchStatus.QC_PROCESSING
+        """)
+    int assignReviewerIfNotProcessing(@Param("batchId") Long batchId, @Param("reviewer") User reviewer);
 
     /**
      * Find batches stuck in QC_PROCESSING whose updatedAt is older than the given cutoff.

@@ -41,6 +41,10 @@ class RuleResult(BaseModel):
     # Phase 3 additions
     severity: RuleSeverity = RuleSeverity.STANDARD
     source_page: Optional[int] = None          # PDF page where the triggering field was found
+    bbox_x: Optional[float] = None             # Normalized 0-1 coordinates; currently null until OCR blocks expose boxes
+    bbox_y: Optional[float] = None
+    bbox_w: Optional[float] = None
+    bbox_h: Optional[float] = None
     field_confidence: Optional[float] = None   # Confidence of extracted value(s) used
     auto_correctable: bool = False             # True if system can fix without human
     rule_version: str = "1.0"

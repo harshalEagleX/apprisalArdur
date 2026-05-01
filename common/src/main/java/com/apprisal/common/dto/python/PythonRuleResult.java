@@ -20,7 +20,12 @@ public record PythonRuleResult(
         Map<String, Object> details,
         @JsonProperty("appraisal_value")  String appraisalValue,
         @JsonProperty("engagement_value") String engagementValue,
-        @JsonProperty("review_required")  boolean reviewRequired
+        @JsonProperty("review_required")  boolean reviewRequired,
+        @JsonProperty("source_page")      Integer sourcePage,
+        @JsonProperty("bbox_x")           Float bboxX,
+        @JsonProperty("bbox_y")           Float bboxY,
+        @JsonProperty("bbox_w")           Float bboxW,
+        @JsonProperty("bbox_h")           Float bboxH
 ) {
     /** True when this rule result requires a human reviewer to make a decision. */
     public boolean needsVerification() {

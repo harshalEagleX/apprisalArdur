@@ -58,6 +58,10 @@ class QCResultItem(BaseModel):
     # Phase 3 additions
     severity: str = "STANDARD"
     source_page: Optional[int] = None
+    bbox_x: Optional[float] = None
+    bbox_y: Optional[float] = None
+    bbox_w: Optional[float] = None
+    bbox_h: Optional[float] = None
     field_confidence: Optional[float] = None
     auto_correctable: bool = False
     rule_version: str = "1.0"
@@ -462,6 +466,10 @@ class SmartQCProcessor:
                 review_required=result.review_required,
                 severity=result.severity.value if hasattr(result.severity, "value") else str(result.severity),
                 source_page=result.source_page,
+                bbox_x=getattr(result, "bbox_x", None),
+                bbox_y=getattr(result, "bbox_y", None),
+                bbox_w=getattr(result, "bbox_w", None),
+                bbox_h=getattr(result, "bbox_h", None),
                 field_confidence=result.field_confidence,
                 auto_correctable=result.auto_correctable,
                 rule_version=result.rule_version,

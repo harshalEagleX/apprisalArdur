@@ -414,15 +414,22 @@ public class BatchService {
         if (reviewer == null) {
             throw new ValidationException("reviewer", "Reviewer is required");
         }
-        Batch batch = batchRepository.findById(batchId)
-                .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
-        if (batch.getStatus() == BatchStatus.QC_PROCESSING) {
+        if (reviewer.getRole() != Role.REVIEWER) {
+            throw new ValidationException("reviewer", "Assigned user must have REVIEWER role");
+        }
+
+        if (!batchRepository.existsById(batchId)) {
+            throw new ResourceNotFoundException("Batch", "id", batchId);
+        }
+
+        int updated = batchRepository.assignReviewerIfNotProcessing(batchId, reviewer);
+        if (updated == 0) {
             throw new ValidationException("batch", "Reviewer can be assigned after QC processing completes");
         }
-        batch.setAssignedReviewer(reviewer);
-        batch.setStatus(BatchStatus.REVIEW_PENDING);
+
         log.info("Assigned batch {} to reviewer {}", batchId, reviewer.getUsername());
-        return batchRepository.save(batch);
+        return batchRepository.findById(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
     }
 
     // Statistics methods

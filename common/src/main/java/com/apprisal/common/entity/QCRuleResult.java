@@ -73,6 +73,21 @@ public class QCRuleResult {
     @Column(name = "severity")
     private String severity = "STANDARD"; // BLOCKING | STANDARD | ADVISORY
 
+    @Column(name = "pdf_page")
+    private Integer pdfPage;
+
+    @Column(name = "bbox_x")
+    private Float bboxX;
+
+    @Column(name = "bbox_y")
+    private Float bboxY;
+
+    @Column(name = "bbox_w")
+    private Float bboxW;
+
+    @Column(name = "bbox_h")
+    private Float bboxH;
+
     public QCRuleResult() {
     }
 
@@ -214,6 +229,46 @@ public class QCRuleResult {
         this.severity = severity;
     }
 
+    public Integer getPdfPage() {
+        return pdfPage;
+    }
+
+    public void setPdfPage(Integer pdfPage) {
+        this.pdfPage = pdfPage;
+    }
+
+    public Float getBboxX() {
+        return bboxX;
+    }
+
+    public void setBboxX(Float bboxX) {
+        this.bboxX = bboxX;
+    }
+
+    public Float getBboxY() {
+        return bboxY;
+    }
+
+    public void setBboxY(Float bboxY) {
+        this.bboxY = bboxY;
+    }
+
+    public Float getBboxW() {
+        return bboxW;
+    }
+
+    public void setBboxW(Float bboxW) {
+        this.bboxW = bboxW;
+    }
+
+    public Float getBboxH() {
+        return bboxH;
+    }
+
+    public void setBboxH(Float bboxH) {
+        this.bboxH = bboxH;
+    }
+
     // Builder pattern
     public static QCRuleResultBuilder builder() {
         return new QCRuleResultBuilder();
@@ -232,6 +287,11 @@ public class QCRuleResult {
         private String engagementValue;
         private Boolean reviewRequired = false;
         private String severity = "STANDARD";
+        private Integer pdfPage;
+        private Float bboxX;
+        private Float bboxY;
+        private Float bboxW;
+        private Float bboxH;
 
         public QCRuleResultBuilder qcResult(QCResult qcResult) {
             this.qcResult = qcResult;
@@ -293,6 +353,31 @@ public class QCRuleResult {
             return this;
         }
 
+        public QCRuleResultBuilder pdfPage(Integer pdfPage) {
+            this.pdfPage = pdfPage;
+            return this;
+        }
+
+        public QCRuleResultBuilder bboxX(Float bboxX) {
+            this.bboxX = bboxX;
+            return this;
+        }
+
+        public QCRuleResultBuilder bboxY(Float bboxY) {
+            this.bboxY = bboxY;
+            return this;
+        }
+
+        public QCRuleResultBuilder bboxW(Float bboxW) {
+            this.bboxW = bboxW;
+            return this;
+        }
+
+        public QCRuleResultBuilder bboxH(Float bboxH) {
+            this.bboxH = bboxH;
+            return this;
+        }
+
         public QCRuleResult build() {
             QCRuleResult result = new QCRuleResult();
             result.qcResult = this.qcResult;
@@ -307,6 +392,11 @@ public class QCRuleResult {
             result.engagementValue = this.engagementValue;
             result.reviewRequired = this.reviewRequired;
             result.severity = this.severity;
+            result.pdfPage = this.pdfPage;
+            result.bboxX = this.bboxX;
+            result.bboxY = this.bboxY;
+            result.bboxW = this.bboxW;
+            result.bboxH = this.bboxH;
             return result;
         }
     }

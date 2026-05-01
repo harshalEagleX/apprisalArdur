@@ -5,6 +5,19 @@
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text();
+  if (!text) return fallback;
+
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+    const message = typeof parsed.error === "string" ? parsed.error : parsed.message;
+    return typeof message === "string" && message.trim() ? message : fallback;
+  } catch {
+    return text;
+  }
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${JAVA}${path}`, {
     credentials: "include",
@@ -19,8 +32,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   if (res.status === 403) throw new Error("Access denied");
 
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(body || `HTTP ${res.status}`);
+    throw new Error(await readErrorMessage(res, `Request failed (${res.status})`));
   }
 
   const text = await res.text();
@@ -113,8 +125,7 @@ export async function uploadBatch(
     body: fd,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as Record<string, string>).error ?? `Upload failed ${res.status}`);
+    throw new Error(await readErrorMessage(res, `Upload failed (${res.status})`));
   }
   return res.json();
 }
@@ -179,6 +190,9 @@ export const getQCProgress = (qcResultId: number) =>
     `/api/reviewer/qc/${qcResultId}/progress`
   );
 
+export const getQCFileInfo = (qcResultId: number) =>
+  apiFetch<QCFileInfo>(`/api/qc/file/${qcResultId}`);
+
 export const saveDecision = (ruleResultId: number, decision: "ACCEPT" | "REJECT", comment?: string) =>
   apiFetch("/api/reviewer/decision/save", {
     method: "POST",
@@ -186,6 +200,8 @@ export const saveDecision = (ruleResultId: number, decision: "ACCEPT" | "REJECT"
   });
 
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
+
+export const getRealtimeUrl = () => `${JAVA.replace(/^http/, "ws")}/ws/qc`;
 
 // ── Analytics (ADMIN only) ────────────────────────────────────────────────────
 export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/overview?days=${days}`);
@@ -264,4 +280,16 @@ export interface QCRuleResult {
   reviewerVerified?: boolean;
   reviewerComment?: string;
   severity?: string;
+  pdfPage?: number | null;
+  bboxX?: number | null;
+  bboxY?: number | null;
+  bboxW?: number | null;
+  bboxH?: number | null;
+}
+
+export interface QCFileInfo {
+  id: number;
+  qcDecision?: "AUTO_PASS" | "TO_VERIFY" | "AUTO_FAIL";
+  batchFile?: BatchFile;
+  documents?: BatchFile[];
 }
