@@ -84,8 +84,8 @@ class RuleEngine:
                 self.logger.log_result(res)
                 continue
 
-            # Attach field metadata for source_page + confidence lookup
-            field_conf, src_page = self._extract_meta(context, rule_id)
+            # Attach field metadata for source_page + bbox + confidence lookup
+            field_conf, src_page, field_meta = self._extract_meta(context, rule_id)
 
             try:
                 result = rule_func(context)
@@ -96,6 +96,11 @@ class RuleEngine:
                         result.severity = RuleSeverity(cfg.severity)
                 if result.source_page is None and src_page:
                     result.source_page = src_page
+                if field_meta and result.bbox_x is None:
+                    result.bbox_x = getattr(field_meta, "bbox_x", None)
+                    result.bbox_y = getattr(field_meta, "bbox_y", None)
+                    result.bbox_w = getattr(field_meta, "bbox_w", None)
+                    result.bbox_h = getattr(field_meta, "bbox_h", None)
                 if result.field_confidence is None and field_conf is not None:
                     result.field_confidence = field_conf
 
@@ -146,20 +151,36 @@ class RuleEngine:
             "S-7":  "occupant_status",   "S-8":  "special_assessments",
             "S-9":  "hoa_dues",          "S-10": "lender_name",
             "S-11": "property_rights",   "S-12": "offered_for_sale_12mo",
-            "C-1":  None, "C-2":  None, "C-3":  None,
-            "C-4":  None, "C-5":  None,
+            "C-1":  "contract_analyzed", "C-2":  "contract_price", "C-3":  "owner_of_public_record",
+            "C-4":  "financial_assistance", "C-5":  "personal_property",
             "N-1":  "neighborhood_description",
             "N-2":  "market_conditions_commentary",
+            "N-3":  "one_unit_housing_price_low", "N-4": "present_land_use_total",
+            "N-5":  "neighborhood_boundaries", "N-6": "neighborhood_description",
+            "N-7":  "market_conditions_commentary",
+            "ST-1": "site_dimensions", "ST-2": "site_area", "ST-3": "site_shape",
+            "ST-4": "view", "ST-5": "zoning_classification", "ST-6": "highest_best_use",
+            "ST-7": "utilities", "ST-8": "flood_hazard", "ST-9": "utilities_typical",
+            "I-1":  "effective_age", "I-3": "roof_surface", "I-5": "utilities",
+            "I-7":  "gla", "SCA-1": "comparable_market_summary",
+            "SCA-2": "comparable_count", "SCA-5": "comparable_data_sources",
+            "PH-1": "subject_photos", "PH-4": "fha_photo_requirements",
+            "SK-1": "sketch_floor_plan", "FHA-2": "fha_case_number",
+            "FHA-3": "fha_intended_use", "COM-2": "market_conditions_commentary",
+            "COM-3": "comparable_selection_commentary",
+            "COM-4": "sales_comparison_commentary",
+            "COM-5": "reconciliation_commentary",
+            "COM-7": "offered_for_sale_12mo",
         }
 
         field_name = RULE_FIELD_MAP.get(rule_id)
         if not field_name or not context.field_meta:
-            return None, None
+            return None, None, None
 
         meta = context.field_meta.get(field_name)
         if meta and hasattr(meta, "effective_confidence"):
-            return meta.effective_confidence, meta.source_page
-        return None, None
+            return meta.effective_confidence, meta.source_page, meta
+        return None, None, None
 
     def _is_applicable(self, context: ValidationContext, applicable_loan_types: str) -> bool:
         tokens = {

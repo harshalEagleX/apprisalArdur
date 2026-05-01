@@ -89,12 +89,16 @@ class Phase2ExtractionEngine:
     def __init__(self):
         # Page images for moondream checkbox fallback — set per extract_subject() call
         self._page_images: Dict[int, object] = {}
+        self._page_index: Dict[int, str] = {}
+        self._page_positions: List[Tuple[int, int]] = []
+        self._word_index: Dict[int, List[object]] = {}
 
     def extract_subject(
         self,
         full_text: str,
         page_index: Dict[int, str],
         page_images: Optional[Dict[int, object]] = None,
+        word_index: Optional[Dict[int, List[object]]] = None,
     ) -> Tuple[SubjectSectionExtract, Dict[str, FieldMetaResult]]:
         """
         Extract Subject Section fields with full per-field metadata.
@@ -105,6 +109,8 @@ class Phase2ExtractionEngine:
         # Store page images for moondream checkbox fallback (Step 2)
         # Page 1 is the main form page — checkboxes are almost always on pages 1-3
         self._page_images = page_images or {}
+        self._page_index = page_index
+        self._word_index = word_index or {}
 
         # Apply OCR corrections to the full text before any regex
         corrected_text, correction_count = self._correct_text(full_text)
@@ -113,6 +119,7 @@ class Phase2ExtractionEngine:
 
         # Build position → page map
         page_pos = build_page_position_map(page_index)
+        self._page_positions = page_pos
 
         # Anchor to report start
         report_start = re.search(r"Uniform Residential Appraisal Report", corrected_text, re.I)
@@ -403,11 +410,13 @@ class Phase2ExtractionEngine:
             state_ind = re.search(r'(?:State)[:\s]*\n*\s*([A-Z]{2})\b', search_zone, re.I)
             city_ind  = re.search(r'(?:City)[:\s]*\n*\s*([A-Za-z][A-Za-z\s]{2,30}?)(?:\n|County|State|Zip|$)', search_zone, re.I)
 
+            anchor_pos = addr_line_match.start() + pos_offset
             zip_m   = FieldMetaResult("zip_code",
                 raw_value=zip_ind.group(1) if zip_ind else None,
                 corrected_value=zip_ind.group(1) if zip_ind else None,
                 confidence=0.80 if zip_ind else 0.0,
                 source_page=base_page,
+                **self._bbox_kwargs(anchor_pos, zip_ind.group(1) if zip_ind else None),
                 extraction_method="spatial_anchor" if zip_ind else "not_found")
 
             state_m = FieldMetaResult("state",
@@ -415,6 +424,7 @@ class Phase2ExtractionEngine:
                 corrected_value=state_ind.group(1).upper() if state_ind else None,
                 confidence=0.80 if state_ind else 0.0,
                 source_page=base_page,
+                **self._bbox_kwargs(anchor_pos, state_ind.group(1) if state_ind else None),
                 extraction_method="spatial_anchor" if state_ind else "not_found")
 
             city_m  = FieldMetaResult("city",
@@ -422,6 +432,7 @@ class Phase2ExtractionEngine:
                 corrected_value=city_ind.group(1).strip() if city_ind else None,
                 confidence=0.75 if city_ind else 0.0,
                 source_page=base_page,
+                **self._bbox_kwargs(anchor_pos, city_ind.group(1) if city_ind else None),
                 extraction_method="spatial_anchor" if city_ind else "not_found")
 
             # Street is the address line itself
@@ -430,6 +441,7 @@ class Phase2ExtractionEngine:
             street_m = FieldMetaResult("property_address",
                 raw_value=raw_street, corrected_value=corr_street,
                 confidence=0.80, source_page=base_page,
+                **self._bbox_kwargs(anchor_pos, raw_street),
                 correction_applied=sf, extraction_method=method)
             return street_m, city_m, state_m, zip_m
 
@@ -440,6 +452,7 @@ class Phase2ExtractionEngine:
         zip_m = FieldMetaResult(
             "zip_code", raw_value=raw_zip, corrected_value=corr_zip,
             confidence=0.92, source_page=base_page,
+            **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_zip),
             correction_applied=zip_fixed, extraction_method=method
         )
 
@@ -452,7 +465,9 @@ class Phase2ExtractionEngine:
             raw_state = state_match.group(1).upper()
             state_m = FieldMetaResult(
                 "state", raw_value=raw_state, corrected_value=raw_state,
-                confidence=0.90, source_page=base_page, extraction_method=method
+                confidence=0.90, source_page=base_page,
+                **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_state),
+                extraction_method=method
             )
             before_state = before_zip[:state_match.start()].strip()
         else:
@@ -470,6 +485,7 @@ class Phase2ExtractionEngine:
             city_m = FieldMetaResult(
                 "city", raw_value=raw_city, corrected_value=corr_city,
                 confidence=0.85, source_page=base_page,
+                **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_city),
                 correction_applied=city_fixed, extraction_method=method
             )
             # Street = everything before "City" keyword
@@ -488,6 +504,7 @@ class Phase2ExtractionEngine:
                 "city", raw_value=raw_city, corrected_value=raw_city,
                 confidence=0.55 if raw_city else 0.0,
                 source_page=base_page,
+                **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_city),
                 extraction_method="regex_fallback" if raw_city else "not_found"
             )
 
@@ -497,6 +514,7 @@ class Phase2ExtractionEngine:
         street_m = FieldMetaResult(
             "property_address", raw_value=raw_street, corrected_value=corr_street,
             confidence=0.85, source_page=base_page,
+            **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_street),
             correction_applied=street_fixed, extraction_method=method
         )
 
@@ -541,6 +559,7 @@ class Phase2ExtractionEngine:
                     corrected_value=corr_value,
                     confidence=confidence,
                     source_page=source_page,
+                    **self._bbox_kwargs(match.start() + pos_offset, raw_value),
                     correction_applied=was_corrected,
                     extraction_method=method,
                 )
@@ -567,9 +586,95 @@ class Phase2ExtractionEngine:
                     corrected_value=raw_value,
                     confidence=0.75,
                     source_page=source_page,
+                    **self._bbox_kwargs(match.start() + pos_offset, raw_value),
                     extraction_method="regex_primary",
                 )
         return FieldMetaResult(field_name=field_name, confidence=0.0, extraction_method="not_found")
+
+    def _bbox_kwargs(self, absolute_pos: int, value: Optional[str]) -> Dict[str, float]:
+        """
+        Build a normalized approximate bbox from text position.
+
+        The current OCR cache stores page text but not Tesseract/PDF word boxes.
+        This gives the reviewer a stable field-neighborhood highlight now; true
+        OCR geometry can replace these values later without changing the API.
+        """
+        if not value or not self._page_positions:
+            return {}
+
+        starts = [p[0] for p in self._page_positions]
+        idx = max(0, bisect_right(starts, absolute_pos) - 1)
+        page_start, page_num = self._page_positions[idx]
+        word_bbox = self._word_bbox(page_num, value)
+        if word_bbox:
+            return word_bbox
+
+        page_text = self._page_index.get(page_num, "")
+        if not page_text:
+            return {}
+
+        page_offset = max(0, absolute_pos - page_start)
+        before = page_text[: min(page_offset, len(page_text))]
+        line_index = before.count("\n")
+        line_start = before.rfind("\n") + 1
+        col = max(0, len(before) - line_start)
+        line_count = max(1, page_text.count("\n") + 1)
+
+        x = min(0.92, max(0.02, col / 100.0))
+        y = min(0.96, max(0.02, line_index / max(line_count, 1)))
+        w = min(0.90 - x, max(0.08, min(0.70, len(value.strip()) / 95.0)))
+        h = max(0.018, min(0.08, 1.6 / max(line_count, 1)))
+
+        return {
+            "bbox_x": round(x, 4),
+            "bbox_y": round(y, 4),
+            "bbox_w": round(max(0.04, w), 4),
+            "bbox_h": round(h, 4),
+        }
+
+    def _word_bbox(self, page_num: int, value: str) -> Optional[Dict[str, float]]:
+        """Find a matched value in the OCR/native word stream and merge its boxes."""
+        words = self._word_index.get(page_num) or []
+        target_tokens = self._tokens(value)
+        if not words or not target_tokens:
+            return None
+
+        word_tokens = [self._tokens(getattr(word, "text", ""))[:1] for word in words]
+        flat_tokens = [tokens[0] if tokens else "" for tokens in word_tokens]
+        max_span = min(len(target_tokens), 12)
+
+        for start in range(len(flat_tokens)):
+            if flat_tokens[start] != target_tokens[0]:
+                continue
+            end = min(len(flat_tokens), start + max_span)
+            candidate = [token for token in flat_tokens[start:end] if token]
+            if candidate[: len(target_tokens)] == target_tokens[: len(candidate)]:
+                selected = words[start:end]
+                return self._merge_word_boxes(selected)
+
+        # Fallback: highlight the first token if the full value was normalized or
+        # split oddly by OCR.
+        for i, token in enumerate(flat_tokens):
+            if token == target_tokens[0]:
+                return self._merge_word_boxes(words[i:i + 1])
+        return None
+
+    def _tokens(self, text: str) -> List[str]:
+        return re.findall(r"[a-z0-9]+", (text or "").lower())
+
+    def _merge_word_boxes(self, words: List[object]) -> Optional[Dict[str, float]]:
+        if not words:
+            return None
+        x1 = min(float(getattr(w, "bbox_x", 0.0)) for w in words)
+        y1 = min(float(getattr(w, "bbox_y", 0.0)) for w in words)
+        x2 = max(float(getattr(w, "bbox_x", 0.0)) + float(getattr(w, "bbox_w", 0.0)) for w in words)
+        y2 = max(float(getattr(w, "bbox_y", 0.0)) + float(getattr(w, "bbox_h", 0.0)) for w in words)
+        return {
+            "bbox_x": round(max(0.0, min(1.0, x1)), 4),
+            "bbox_y": round(max(0.0, min(1.0, y1)), 4),
+            "bbox_w": round(max(0.001, min(1.0, x2 - x1)), 4),
+            "bbox_h": round(max(0.001, min(1.0, y2 - y1)), 4),
+        }
 
     def _detect_checkbox(self, text: str, options: Dict[str, str]) -> Optional[str]:
         """

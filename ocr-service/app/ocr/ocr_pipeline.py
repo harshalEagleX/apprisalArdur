@@ -48,6 +48,18 @@ class ExtractionMethod(str, Enum):
 
 
 @dataclass
+class OcrWord:
+    """Single OCR/native text word with normalized page coordinates."""
+    text: str
+    page: int
+    bbox_x: float
+    bbox_y: float
+    bbox_w: float
+    bbox_h: float
+    confidence: float = 1.0
+
+
+@dataclass
 class PageText:
     """Extracted text from a single page with metadata."""
     page_number: int
@@ -56,6 +68,7 @@ class PageText:
     confidence: float = 1.0  # 0.0 to 1.0
     word_count: int = 0
     has_tables: bool = False
+    words: List[OcrWord] = field(default_factory=list)
 
 
 @dataclass
@@ -70,6 +83,7 @@ class ExtractionResult:
     # PIL Images per page — used for moondream checkbox detection (Phase 2 Step 2)
     # Stored as grayscale PIL.Image objects, keyed by 1-indexed page number
     page_images: Dict[int, "Image.Image"] = field(default_factory=dict)
+    word_index: Dict[int, List[OcrWord]] = field(default_factory=dict)
 
 
 class OCRPipeline:
@@ -143,6 +157,7 @@ class OCRPipeline:
 
                 embedded_text = page.get_text("text")
                 embedded_wc = len(embedded_text.split())
+                embedded_words = self._embedded_words(page, page_num)
                 has_tables = self._detect_tables(page)
 
                 # Decide whether OCR render is needed
@@ -166,6 +181,7 @@ class OCRPipeline:
                     "page_num":      page_num,
                     "embedded_text": embedded_text,
                     "embedded_wc":   embedded_wc,
+                    "embedded_words": embedded_words,
                     "has_tables":    has_tables,
                     "pil_img":       pil_img,
                     "force":         use_force,
@@ -183,20 +199,24 @@ class OCRPipeline:
                 pn       = job["page_num"]
                 emb_text = job["embedded_text"]
                 emb_wc   = job["embedded_wc"]
+                emb_words = job["embedded_words"]
                 htables  = job["has_tables"]
                 img      = job["pil_img"]
                 force    = job["force"]
 
-                def _tess(image) -> Tuple[str, int]:
-                    text = pytesseract.image_to_string(image, config="--psm 6")
-                    return text, len(text.split())
+                def _tess(image) -> Tuple[str, int, List[OcrWord]]:
+                    words = self._tesseract_words(image, pn, config="--psm 6")
+                    text = self._words_to_text(words)
+                    if not text:
+                        text = pytesseract.image_to_string(image, config="--psm 6")
+                    return text, len(text.split()), words
 
                 # Force path: always Tesseract
                 if force and img is not None:
                     try:
-                        text, wc = _tess(img)
+                        text, wc, words = _tess(img)
                         return PageText(pn, text, ExtractionMethod.TESSERACT,
-                                        self._estimate_confidence(text), wc, htables)
+                                        self._estimate_confidence(text), wc, htables, words)
                     except Exception as e:
                         logger.warning("Forced Tesseract failed page %d: %s", pn, e)
                         # Fall through to embedded
@@ -204,21 +224,21 @@ class OCRPipeline:
                 # Embedded text good enough
                 if emb_wc >= self.MIN_WORDS_THRESHOLD:
                     return PageText(pn, emb_text, ExtractionMethod.EMBEDDED,
-                                    self._estimate_confidence(emb_text), emb_wc, htables)
+                                    self._estimate_confidence(emb_text), emb_wc, htables, emb_words)
 
                 # Hybrid zone or OCR-required zone
                 if img is not None:
                     try:
-                        text, wc = _tess(img)
+                        text, wc, words = _tess(img)
                         if wc > emb_wc:
                             return PageText(pn, text, ExtractionMethod.TESSERACT,
-                                            self._estimate_confidence(text), wc, htables)
+                                            self._estimate_confidence(text), wc, htables, words)
                     except Exception as e:
                         logger.warning("Tesseract fallback failed page %d: %s", pn, e)
 
                 # Last resort: return whatever embedded gave us
                 conf = 0.5 if emb_wc < 10 else 0.7
-                return PageText(pn, emb_text, ExtractionMethod.EMBEDDED, conf, emb_wc, htables)
+                return PageText(pn, emb_text, ExtractionMethod.EMBEDDED, conf, emb_wc, htables, emb_words)
 
             workers = min(self.MAX_WORKERS, len(page_jobs))
             with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -228,6 +248,8 @@ class OCRPipeline:
             for pt in page_results:
                 result.page_index[pt.page_number] = pt.text
                 result.page_details.append(pt)
+                if pt.words:
+                    result.word_index[pt.page_number] = pt.words
 
         except Exception as e:
             logger.error("Failed to process PDF: %s", e)
@@ -235,6 +257,85 @@ class OCRPipeline:
 
         result.extraction_time_ms = int((time.time() - start_time) * 1000)
         return result
+
+    def extract_word_geometry(self, pdf_path: str) -> Dict[int, List[OcrWord]]:
+        """Extract per-page word geometry without changing cached page text."""
+        word_index: Dict[int, List[OcrWord]] = {}
+        try:
+            doc = fitz.open(pdf_path)
+            for i, page in enumerate(doc):
+                page_num = i + 1
+                words = self._embedded_words(page, page_num)
+                if not words and self.use_tesseract:
+                    mat = fitz.Matrix(300 / 72, 300 / 72)
+                    pix = page.get_pixmap(matrix=mat)
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples).convert("L")
+                    words = self._tesseract_words(img, page_num, config="--psm 6")
+                if words:
+                    word_index[page_num] = words
+            doc.close()
+        except Exception as e:
+            logger.warning("Word geometry extraction failed: %s", e)
+        return word_index
+
+    def _embedded_words(self, page: fitz.Page, page_number: int) -> List[OcrWord]:
+        """Use native PDF text word boxes when embedded text exists."""
+        rect = page.rect
+        page_w = max(float(rect.width), 1.0)
+        page_h = max(float(rect.height), 1.0)
+        words: List[OcrWord] = []
+        try:
+            for item in page.get_text("words"):
+                x0, y0, x1, y1, text = item[:5]
+                clean = str(text).strip()
+                if not clean:
+                    continue
+                words.append(OcrWord(
+                    text=clean,
+                    page=page_number,
+                    bbox_x=max(0.0, min(1.0, float(x0) / page_w)),
+                    bbox_y=max(0.0, min(1.0, float(y0) / page_h)),
+                    bbox_w=max(0.001, min(1.0, float(x1 - x0) / page_w)),
+                    bbox_h=max(0.001, min(1.0, float(y1 - y0) / page_h)),
+                    confidence=1.0,
+                ))
+        except Exception as e:
+            logger.debug("Embedded word extraction failed page %d: %s", page_number, e)
+        return words
+
+    def _tesseract_words(self, image, page_number: int, config: str = "--psm 6") -> List[OcrWord]:
+        """Use pytesseract.image_to_data so OCR text keeps exact word boxes."""
+        if not TESSERACT_AVAILABLE or image is None:
+            return []
+        page_w, page_h = image.size
+        words: List[OcrWord] = []
+        try:
+            data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, config=config)
+            for i, raw_text in enumerate(data.get("text", [])):
+                text = str(raw_text).strip()
+                if not text:
+                    continue
+                try:
+                    conf = float(data["conf"][i])
+                except Exception:
+                    conf = -1.0
+                if conf < 30:
+                    continue
+                words.append(OcrWord(
+                    text=text,
+                    page=page_number,
+                    bbox_x=float(data["left"][i]) / max(page_w, 1),
+                    bbox_y=float(data["top"][i]) / max(page_h, 1),
+                    bbox_w=float(data["width"][i]) / max(page_w, 1),
+                    bbox_h=float(data["height"][i]) / max(page_h, 1),
+                    confidence=max(0.0, min(1.0, conf / 100.0)),
+                ))
+        except Exception as e:
+            logger.debug("Tesseract word geometry failed page %d: %s", page_number, e)
+        return words
+
+    def _words_to_text(self, words: List[OcrWord]) -> str:
+        return " ".join(w.text for w in words)
     
     def _extract_page(self, page: fitz.Page, page_number: int, force_image: bool = False) -> PageText:
         """
@@ -328,9 +429,10 @@ class OCRPipeline:
                 # RGB
                 pil_img = PILImage.fromarray(image)
             
-            # Run Tesseract
-            text = pytesseract.image_to_string(pil_img, config=config)
-            return text
+            # Run Tesseract through image_to_data first so geometry-capable OCR
+            # and plain text extraction use the same recognition path.
+            words = self._tesseract_words(pil_img, 1, config=config or "--psm 6")
+            return self._words_to_text(words) or pytesseract.image_to_string(pil_img, config=config)
         
         # Otherwise, render PDF page to image
         if page is None:
@@ -346,10 +448,10 @@ class OCRPipeline:
         # Preprocessing: Convert to Grayscale
         img = img.convert('L')
         
-        # Run Tesseract with config
-        # --psm 6: Assume a single uniform block of text.
-        text = pytesseract.image_to_string(img, config=config)
-        return text
+        # Run Tesseract with image_to_data to preserve the same tokenization used
+        # by bbox extraction. --psm 6 assumes a single uniform block of text.
+        words = self._tesseract_words(img, 1, config=config or "--psm 6")
+        return self._words_to_text(words) or pytesseract.image_to_string(img, config=config)
     
     def _estimate_confidence(self, text: str) -> float:
         """

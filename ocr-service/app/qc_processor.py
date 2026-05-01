@@ -171,6 +171,10 @@ class SmartQCProcessor:
                 for pt in cached_pages:
                     extraction_result.page_index[pt.page_number] = pt.text
                     extraction_result.page_details.append(pt)
+                # Text cache is fast, but older cache rows do not include word
+                # geometry. Rebuild geometry from the PDF so rule findings can
+                # still produce true page-normalized bboxes on cache hits.
+                extraction_result.word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
 
         # ── Step 2: OCR Extraction (if not cached) ──────────────────────────
         if not cache_hit:
@@ -205,6 +209,7 @@ class SmartQCProcessor:
             full_text,
             extraction_result.page_index,
             page_images=extraction_result.page_images,
+            word_index=extraction_result.word_index,
         )
         # Contract: still uses original extraction service (not yet Phase 2)
         c_extract = extraction_service.extract_contract_section(full_text)

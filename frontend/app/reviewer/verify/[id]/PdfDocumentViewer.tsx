@@ -12,6 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL("react-pdf/node_modules/pdfjs-dist
 export function PdfDocumentViewer({
   fileUrl,
   targetPage,
+  targetBox,
   width,
   highlighting,
   onLoadSuccess,
@@ -19,6 +20,7 @@ export function PdfDocumentViewer({
 }: {
   fileUrl?: string;
   targetPage: number;
+  targetBox?: { x: number; y: number; w: number; h: number } | null;
   width: number;
   highlighting: boolean;
   onLoadSuccess: (numPages: number) => void;
@@ -57,8 +59,16 @@ export function PdfDocumentViewer({
               ref={node => { pageRefs.current[pageNumber] = node; }}
               className="relative"
             >
-              {highlighting && targetPage === pageNumber && (
-                <div className="pointer-events-none absolute inset-x-6 top-8 z-10 h-28 rounded-xl border-2 border-amber-300 bg-amber-300/20 shadow-[0_0_32px_rgba(251,191,36,0.45)]" />
+              {highlighting && targetPage === pageNumber && targetBox && (
+                <div
+                  className="pointer-events-none absolute z-20 rounded-[3px] border-2 border-amber-300 bg-amber-300/20 shadow-[0_0_32px_rgba(251,191,36,0.45)] transition-all"
+                  style={{
+                    left: `${targetBox.x * 100}%`,
+                    top: `${targetBox.y * 100}%`,
+                    width: `${targetBox.w * 100}%`,
+                    height: `${targetBox.h * 100}%`,
+                  }}
+                />
               )}
               <Page
                 pageNumber={pageNumber}

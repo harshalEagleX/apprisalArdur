@@ -14,7 +14,14 @@ const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
 
 type Decision = "ACCEPT" | "REJECT";
 type Filter = "all" | "fail" | "verify" | "pass";
-type RuleFocus = { ruleId: string; page: number; documentType: string; note: string };
+type RuleFocus = {
+  ruleId: string;
+  page: number;
+  documentType: string;
+  note: string;
+  bbox?: { x: number; y: number; w: number; h: number } | null;
+  located: boolean;
+};
 type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: number };
 
 const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
@@ -38,28 +45,31 @@ function ruleStatus(status: string) {
 
 function focusForRule(rule: QCRuleResult): RuleFocus {
   const ruleId = rule.ruleId;
-  const section = ruleId.split("-")[0].toUpperCase();
   const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
-  const withPage = (focus: RuleFocus): RuleFocus => backendPage
-    ? { ...focus, page: backendPage, documentType: "APPRAISAL" }
-    : focus;
+  const hasBox = [rule.bboxX, rule.bboxY, rule.bboxW, rule.bboxH].every(value => typeof value === "number");
 
-  if (section === "C") return { ruleId, page: 1, documentType: "CONTRACT", note: "Contract and sale terms" };
-  if (["S-1", "S-2", "S-10"].includes(ruleId)) {
-    return withPage({ ruleId, page: 1, documentType: "ENGAGEMENT", note: backendPage ? "OCR evidence location" : "Order form comparison" });
+  if (!backendPage) {
+    console.warn(`Rule ${rule.ruleId} has no pdfPage — bbox unavailable`);
+    return {
+      ruleId,
+      page: 1,
+      documentType: "APPRAISAL",
+      note: "Location not yet extracted",
+      bbox: null,
+      located: false,
+    };
   }
-  if (section === "S" || section === "N" || section === "ST" || section === "I") {
-    return withPage({ ruleId, page: 1, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "URAR page 1 fields" });
-  }
-  if (section === "SCA" || section === "R" || section === "CA" || section === "IA") {
-    return withPage({ ruleId, page: 2, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Sales/comparison and approach sections" });
-  }
-  if (section === "SIG") return withPage({ ruleId, page: 6, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Signature certification page" });
-  if (section === "PH") return withPage({ ruleId, page: 16, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Photo pages" });
-  if (section === "ADD" || section === "DOC" || section === "FHA" || section === "COM") {
-    return withPage({ ruleId, page: 10, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Addenda and commentary pages" });
-  }
-  return withPage({ ruleId, page: 1, documentType: "APPRAISAL", note: backendPage ? "OCR evidence location" : "Best available document location" });
+
+  return {
+    ruleId,
+    page: backendPage,
+    documentType: "APPRAISAL",
+    note: hasBox ? "OCR evidence location" : "Page located; field box unavailable",
+    bbox: hasBox
+      ? { x: rule.bboxX as number, y: rule.bboxY as number, w: rule.bboxW as number, h: rule.bboxH as number }
+      : null,
+    located: true,
+  };
 }
 
 export default function VerifyFilePage() {
@@ -130,6 +140,11 @@ export default function VerifyFilePage() {
 
   function focusRule(rule: QCRuleResult) {
     const nextFocus = focusForRule(rule);
+    if (!nextFocus.located) {
+      setActiveFocus(nextFocus);
+      setHighlighting(false);
+      return;
+    }
     const preferredDoc = documents.find(doc => doc.fileType === nextFocus.documentType) ?? documents.find(doc => doc.fileType === "APPRAISAL") ?? documents[0];
     if (preferredDoc) setActiveDocumentId(preferredDoc.id);
     setActiveFocus(nextFocus);
@@ -320,6 +335,9 @@ export default function VerifyFilePage() {
                     {activeFocus.ruleId}
                   </div>
                   <div className="mt-0.5 text-[11px] opacity-80">{activeFocus.note}</div>
+                  {!activeFocus.located && (
+                    <div className="mt-1 text-[11px] text-amber-300">Re-run QC after location extraction is available.</div>
+                  )}
                 </div>
               )}
               <div className="min-h-full flex justify-center px-4 py-12">
@@ -328,6 +346,7 @@ export default function VerifyFilePage() {
                     key={activeDocument.id}
                     fileUrl={activeDocumentUrl}
                     targetPage={activePage}
+                    targetBox={activeFocus?.bbox ?? null}
                     width={Math.round(viewerWidth * zoom)}
                     highlighting={highlighting}
                     onLoadSuccess={(numPages) => {

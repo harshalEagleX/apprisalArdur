@@ -35,6 +35,13 @@ class FieldMetaResult:
     # Which PDF page the value was found on (1-indexed)
     source_page: Optional[int] = None
 
+    # Normalized field location on the source page. These are 0.0-1.0 values
+    # and may be approximate when derived from text-only extraction.
+    bbox_x: Optional[float] = None
+    bbox_y: Optional[float] = None
+    bbox_w: Optional[float] = None
+    bbox_h: Optional[float] = None
+
     # True if apply_ocr_correction() changed the raw value
     correction_applied: bool = False
 
@@ -68,6 +75,10 @@ class FieldMetaResult:
             "field_value": self.value,
             "confidence_score": round(self.effective_confidence, 3),
             "source_page": self.source_page,
+            "bbox_x": self.bbox_x,
+            "bbox_y": self.bbox_y,
+            "bbox_w": self.bbox_w,
+            "bbox_h": self.bbox_h,
             "extraction_method": self.extraction_method,
             "raw_ocr_text": self.raw_value,
             "correction_applied": self.correction_applied,

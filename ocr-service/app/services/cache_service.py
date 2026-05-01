@@ -269,4 +269,5 @@ def save_rule_results(document_id: str, rule_results: list):
                 )
                 db.add(record)
     except Exception as e:
-        logger.warning("Rule results save failed: %s", e)
+        logger.error("CRITICAL — rule_results save failed for document %s: %s", document_id, e)
+        raise RuntimeError(f"Rule result persistence failed: {e}") from e
