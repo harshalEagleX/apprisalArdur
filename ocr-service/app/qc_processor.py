@@ -281,6 +281,12 @@ class SmartQCProcessor:
             page_index=extraction_result.page_index,
             vision_results=vision_results,
         )
+
+        try:
+            from app.services.llm_enrichment import enrich_context_sync
+            enrich_context_sync(ctx)
+        except Exception as e:
+            logger.info("LLM enrichment skipped before rules: %s", e)
         
         # Step 7: Execute rule engine
         logger.info("Executing rule engine")

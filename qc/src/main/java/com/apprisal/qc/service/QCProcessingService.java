@@ -422,6 +422,8 @@ public class QCProcessingService {
                 .extractionMethod(pythonResponse.extractionMethod())
                 .pythonDocumentId(pythonResponse.documentId())
                 .cacheHit(pythonResponse.cacheHit())
+                .sourceDocumentHash(appraisal.getContentHash())
+                .sourceDocumentVersion(appraisal.getContentVersion())
                 .build();
 
         // Create rule results

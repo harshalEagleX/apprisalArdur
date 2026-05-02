@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Lightbulb, Scale, TrendingUp, Users } from "lucide-react";
+import { ArrowLeft, Clock, FileText, Lightbulb, Scale, ShieldAlert, TrendingUp, Users } from "lucide-react";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
@@ -64,20 +64,25 @@ export default function AnalyticsPage() {
   const [ml,        setMl]        = useState<Record<string,unknown>>({});
   const [operators, setOperators] = useState<Record<string,unknown>>({});
   const [trend,     setTrend]     = useState<unknown[]>([]);
+  const [sla,       setSla]       = useState<Record<string,unknown>>({});
+  const [anomalies, setAnomalies] = useState<Record<string,unknown>>({});
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
 
   const load = useCallback(async (d: Days) => {
     setLoading(true); setError("");
     try {
-      const [ov, o, m, op, tr] = await Promise.all([
+      const [ov, o, m, op, tr, s, an] = await Promise.all([
         api<Record<string,unknown>>(`/api/analytics/overview?days=${d}`),
         api<Record<string,unknown>>(`/api/analytics/ocr?days=${d}`),
         api<Record<string,unknown>>(`/api/analytics/ml?days=${d}`),
         api<Record<string,unknown>>(`/api/analytics/operators?days=${d}`),
         api<unknown[]>(`/api/analytics/trend?days=${d}`),
+        api<Record<string,unknown>>(`/api/analytics/review-sla`),
+        api<Record<string,unknown>>(`/api/analytics/anomalies?days=${d}`),
       ]);
       setOverview(ov); setOcr(o); setMl(m); setOperators(op); setTrend(tr);
+      setSla(s); setAnomalies(an);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not load analytics");
     } finally { setLoading(false); }
@@ -95,6 +100,9 @@ export default function AnalyticsPage() {
   const mvRows            = (ml.modelVersions as unknown[]) ?? [];
   const trendRows         = (trend as Array<Record<string,unknown>>);
   const exMethods         = (ocr.extractionMethods as Array<{method:string;count:number}>) ?? [];
+  const overdueRows       = (sla.items as Array<{ruleResultId:number;qcResultId:number|string;ruleId:string;ruleName:string;firstPresentedAt:string;filename:string}>) ?? [];
+  const fastRows          = (anomalies.fastDecisionReviewers as Array<{userId:number;name:string;avgDecisionSeconds:number;decisionCount:number;flag:string}>) ?? [];
+  const overrideRows      = (anomalies.failOverrideReviewers as Array<{userId:number;name:string;overrideCount:number;flag:string}>) ?? [];
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -141,6 +149,7 @@ export default function AnalyticsPage() {
             <StatCard label="Avg Processing"    value={overview.avgProcessingSeconds != null ? `${overview.avgProcessingSeconds}s` : "—"} color="text-amber-400" sub="per file" />
             <StatCard label="Cache Hit Rate"    value={overview.cacheHitRate != null ? `${overview.cacheHitRate}%` : "—"} color="text-purple-400" sub="repeat files" />
             <StatCard label="Pending Review"    value={num("pendingReview")} color="text-rose-400" sub="need your attention" />
+            <StatCard label="VERIFY Over SLA"   value={Number(sla.over4Hours ?? 0)} color="text-orange-400" sub="4+ hours open" />
           </div>
 
           {/* ── Main grid ────────────────────────────────────────────────────── */}
@@ -269,6 +278,57 @@ export default function AnalyticsPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </Section>
+
+            {/* Supervisor SLA */}
+            <Section title="Review SLA Queue" Icon={Clock}>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="rounded-xl border border-orange-900/40 bg-orange-950/20 p-3">
+                  <div className="text-2xl font-semibold text-orange-300">{Number(sla.over4Hours ?? 0)}</div>
+                  <div className="text-xs text-orange-200/80">VERIFY items over 4 hours</div>
+                </div>
+                <div className="rounded-xl border border-red-900/40 bg-red-950/20 p-3">
+                  <div className="text-2xl font-semibold text-red-300">{Number(sla.over8Hours ?? 0)}</div>
+                  <div className="text-xs text-red-200/80">VERIFY items over 8 hours</div>
+                </div>
+              </div>
+              {overdueRows.length === 0 ? (
+                <p className="text-slate-500 text-sm">No overdue VERIFY items right now.</p>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {overdueRows.slice(0, 8).map(item => (
+                    <div key={item.ruleResultId} className="rounded-lg border border-slate-800 bg-slate-950/40 p-2.5 text-xs">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-200 font-medium">{item.ruleId} · {item.ruleName}</span>
+                        <span className="text-slate-500">QC {String(item.qcResultId)}</span>
+                      </div>
+                      <div className="text-slate-500 mt-1 truncate">{item.filename || "Unknown file"} · {item.firstPresentedAt || "not recorded"}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            {/* Anomaly Report */}
+            <Section title="Compliance Flags" Icon={ShieldAlert}>
+              {fastRows.length === 0 && overrideRows.length === 0 ? (
+                <p className="text-slate-500 text-sm">No weekly decision-speed or override flags.</p>
+              ) : (
+                <div className="space-y-3">
+                  {fastRows.map(row => (
+                    <div key={`fast-${row.userId}`} className="rounded-lg border border-amber-900/40 bg-amber-950/20 p-3 text-xs">
+                      <div className="text-amber-200 font-medium">{row.name}</div>
+                      <div className="text-amber-100/70 mt-1">{row.flag}: {row.avgDecisionSeconds}s average across {row.decisionCount} decisions.</div>
+                    </div>
+                  ))}
+                  {overrideRows.map(row => (
+                    <div key={`override-${row.userId}`} className="rounded-lg border border-red-900/40 bg-red-950/20 p-3 text-xs">
+                      <div className="text-red-200 font-medium">{row.name}</div>
+                      <div className="text-red-100/70 mt-1">{row.flag}: {row.overrideCount} override requests.</div>
+                    </div>
+                  ))}
                 </div>
               )}
             </Section>

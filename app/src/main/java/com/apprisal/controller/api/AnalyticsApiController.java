@@ -60,4 +60,19 @@ public class AnalyticsApiController {
             @RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(analyticsService.getDailyTrend(days));
     }
+
+    /** Supervisor queue hygiene: VERIFY items approaching/over SLA. */
+    @GetMapping("/review-sla")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> reviewSla() {
+        return ResponseEntity.ok(analyticsService.getReviewSlaDashboard());
+    }
+
+    /** Weekly compliance flags: fast decisions and frequent FAIL overrides. */
+    @GetMapping("/anomalies")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> anomalies(
+            @RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(analyticsService.getWeeklyAnomalyReport(days));
+    }
 }

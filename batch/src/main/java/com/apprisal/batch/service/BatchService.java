@@ -350,6 +350,7 @@ public class BatchService {
                 Path filePath = batchDir.resolve(fileType.name().toLowerCase()).resolve(filename);
                 Files.createDirectories(filePath.getParent());
                 Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                String contentHash = computeSha256(filePath);
 
                 BatchFile batchFile = BatchFile.builder()
                         .batch(batch)
@@ -358,6 +359,8 @@ public class BatchService {
                         .originalPath(entryName)
                         .storagePath(filePath.toString())
                         .fileSize(Files.size(filePath))
+                        .contentHash(contentHash)
+                        .contentVersion(1L)
                         .status(FileStatus.PENDING)
                         .orderId(FileMatchingService.extractOrderId(filename))
                         .build();
@@ -384,6 +387,17 @@ public class BatchService {
             return HexFormat.of().formatHex(hash);
         } catch (Exception e) {
             log.warn("Could not compute SHA-256 for file '{}': {}", file.getOriginalFilename(), e.getMessage());
+            return null;
+        }
+    }
+
+    private String computeSha256(Path file) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(Files.readAllBytes(file));
+            return HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            log.warn("Could not compute SHA-256 for file '{}': {}", file, e.getMessage());
             return null;
         }
     }

@@ -71,6 +71,12 @@ public class QCResult {
     @Column(name = "cache_hit")
     private Boolean cacheHit = false;
 
+    @Column(name = "source_document_hash", length = 64)
+    private String sourceDocumentHash;
+
+    @Column(name = "source_document_version")
+    private Long sourceDocumentVersion;
+
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
@@ -249,6 +255,12 @@ public class QCResult {
     public Boolean getCacheHit() { return cacheHit; }
     public void setCacheHit(Boolean cacheHit) { this.cacheHit = cacheHit; }
 
+    public String getSourceDocumentHash() { return sourceDocumentHash; }
+    public void setSourceDocumentHash(String sourceDocumentHash) { this.sourceDocumentHash = sourceDocumentHash; }
+
+    public Long getSourceDocumentVersion() { return sourceDocumentVersion; }
+    public void setSourceDocumentVersion(Long sourceDocumentVersion) { this.sourceDocumentVersion = sourceDocumentVersion; }
+
     public LocalDateTime getProcessedAt() {
         return processedAt;
     }
@@ -365,6 +377,8 @@ public class QCResult {
         private String  extractionMethod;
         private String  pythonDocumentId;      // IMPL FIX: was missing from builder
         private Boolean cacheHit = false;      // IMPL FIX: was missing from builder
+        private String sourceDocumentHash;
+        private Long sourceDocumentVersion;
 
         public QCResultBuilder batchFile(BatchFile batchFile) {
             this.batchFile = batchFile;
@@ -424,6 +438,8 @@ public class QCResult {
         public QCResultBuilder extractionMethod(String v)   { this.extractionMethod = v; return this; }
         public QCResultBuilder pythonDocumentId(String v)   { this.pythonDocumentId = v; return this; }
         public QCResultBuilder cacheHit(Boolean v)          { this.cacheHit = v;          return this; }
+        public QCResultBuilder sourceDocumentHash(String v) { this.sourceDocumentHash = v; return this; }
+        public QCResultBuilder sourceDocumentVersion(Long v){ this.sourceDocumentVersion = v; return this; }
 
         public QCResult build() {
             QCResult result = new QCResult();
@@ -441,6 +457,8 @@ public class QCResult {
             result.extractionMethod = this.extractionMethod;
             result.pythonDocumentId = this.pythonDocumentId;
             result.cacheHit         = this.cacheHit;
+            result.sourceDocumentHash = this.sourceDocumentHash;
+            result.sourceDocumentVersion = this.sourceDocumentVersion;
             return result;
         }
     }

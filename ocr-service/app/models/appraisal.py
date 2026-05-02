@@ -221,5 +221,6 @@ class ValidationContext(BaseModel):
     raw_text: Optional[str] = None
     page_index: Optional[Dict[int, str]] = None
     vision_results: Optional[List[Any]] = None
+    llm_enrichment: Optional[Dict[str, Any]] = None
 
     model_config = {"arbitrary_types_allowed": True}

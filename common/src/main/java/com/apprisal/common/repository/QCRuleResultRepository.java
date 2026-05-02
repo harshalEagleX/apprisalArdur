@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * Repository for QCRuleResult entities.
@@ -52,4 +53,38 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
      */
     @Query("SELECT rr.status, COUNT(rr) FROM QCRuleResult rr WHERE rr.qcResult.id = :qcResultId GROUP BY rr.status")
     List<Object[]> countByStatusForQcResult(@Param("qcResultId") Long qcResultId);
+
+    @Query("""
+        SELECT rr FROM QCRuleResult rr
+        JOIN FETCH rr.qcResult qr
+        JOIN FETCH qr.batchFile bf
+        WHERE rr.needsVerification = true
+          AND rr.reviewerVerified IS NULL
+          AND rr.firstPresentedAt IS NOT NULL
+          AND rr.firstPresentedAt < :cutoff
+        ORDER BY rr.firstPresentedAt ASC
+        """)
+    List<QCRuleResult> findOverdueReviewItems(@Param("cutoff") LocalDateTime cutoff);
+
+    @Query("""
+        SELECT rr.overrideRequestedBy.id, COUNT(rr)
+        FROM QCRuleResult rr
+        WHERE rr.overrideRequestedBy IS NOT NULL
+          AND rr.overrideRequestedAt >= :from
+        GROUP BY rr.overrideRequestedBy.id
+        ORDER BY COUNT(rr) DESC
+        """)
+    List<Object[]> countFailOverridesByReviewerSince(@Param("from") LocalDateTime from);
+
+    @Query("""
+        SELECT rr.qcResult.reviewedBy.id, AVG(rr.decisionLatencyMs), COUNT(rr)
+        FROM QCRuleResult rr
+        WHERE rr.decisionLatencyMs IS NOT NULL
+          AND rr.verifiedAt >= :from
+          AND rr.qcResult.reviewedBy IS NOT NULL
+        GROUP BY rr.qcResult.reviewedBy.id
+        HAVING COUNT(rr) >= 10
+        ORDER BY AVG(rr.decisionLatencyMs) ASC
+        """)
+    List<Object[]> averageDecisionLatencyByReviewerSince(@Param("from") LocalDateTime from);
 }

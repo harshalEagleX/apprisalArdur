@@ -44,6 +44,7 @@ public class VerificationService {
     public QCResult beginReviewSession(@NonNull Long qcResultId, @NonNull User reviewer,
             boolean acknowledgeExistingLock, String ipAddress, String userAgent) {
         QCResult qcResult = getForVerification(qcResultId);
+        assertDocumentCurrent(qcResult);
         LocalDateTime now = LocalDateTime.now();
         User lockedBy = qcResult.getReviewLockedBy();
         boolean activeLock = lockedBy != null
@@ -77,6 +78,7 @@ public class VerificationService {
     @Transactional
     public QCResult heartbeatReviewSession(@NonNull Long qcResultId, @NonNull String sessionToken) {
         QCResult qcResult = getForVerification(qcResultId);
+        assertDocumentCurrent(qcResult);
         assertSessionOwnsQcResult(qcResult, sessionToken);
         LocalDateTime now = LocalDateTime.now();
         qcResult.setReviewLastActiveAt(now);
@@ -155,6 +157,7 @@ public class VerificationService {
         QCRuleResult ruleResult = qcRuleResultRepository.findById(ruleResultId)
                 .orElseThrow(() -> new RuntimeException("Rule result not found: " + ruleResultId));
         QCResult qcResult = ruleResult.getQcResult();
+        assertDocumentCurrent(qcResult);
         assertSessionOwnsQcResult(qcResult, sessionToken);
         validateFreshDecision(ruleResult, sessionToken);
         validateEngagement(ruleResult, decisionLatencyMs, acknowledged);
@@ -315,6 +318,7 @@ public class VerificationService {
     @Transactional
     public QCResult completeSavedVerification(@NonNull Long qcResultId, @NonNull User reviewer, String notes) {
         QCResult qcResult = getForVerification(qcResultId);
+        assertDocumentCurrent(qcResult);
         List<QCRuleResult> verificationItems = qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId);
 
         boolean hasPending = verificationItems.stream()
@@ -421,6 +425,21 @@ public class VerificationService {
         }
         if (qcResult.getReviewLockExpiresAt() == null || qcResult.getReviewLockExpiresAt().isBefore(LocalDateTime.now())) {
             throw new IllegalStateException("This review session has timed out. Resume the report before saving decisions.");
+        }
+    }
+
+    private void assertDocumentCurrent(QCResult qcResult) {
+        if (qcResult == null || qcResult.getBatchFile() == null) {
+            return;
+        }
+        String processedHash = qcResult.getSourceDocumentHash();
+        String currentHash = qcResult.getBatchFile().getContentHash();
+        Long processedVersion = qcResult.getSourceDocumentVersion();
+        Long currentVersion = qcResult.getBatchFile().getContentVersion();
+        boolean hashMismatch = processedHash != null && currentHash != null && !processedHash.equals(currentHash);
+        boolean versionMismatch = processedVersion != null && currentVersion != null && currentVersion > processedVersion;
+        if (hashMismatch || versionMismatch) {
+            throw new IllegalStateException("A newer version of this appraisal was submitted after these QC results were generated. Restart QC review from the latest version.");
         }
     }
 

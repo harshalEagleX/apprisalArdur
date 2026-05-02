@@ -272,6 +272,7 @@ public class ReviewerApiController {
                 ruleMap.put("verifyQuestion",  rule.getVerifyQuestion());
                 ruleMap.put("rejectionText",   rule.getRejectionText());
                 ruleMap.put("evidence",        rule.getEvidence());
+                ruleMap.put("help",            ruleHelp(rule.getRuleId()));
                 ruleMap.put("reviewerVerified",rule.getReviewerVerified());
                 ruleMap.put("reviewerComment", rule.getReviewerComment());
                 ruleMap.put("firstPresentedAt", rule.getFirstPresentedAt() != null ? rule.getFirstPresentedAt().toString() : null);
@@ -357,5 +358,35 @@ public class ReviewerApiController {
         if (user == null) return null;
         if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
         return user.getUsername();
+    }
+
+    private Map<String, Object> ruleHelp(String ruleId) {
+        String prefix = ruleId == null ? "" : ruleId.split("-")[0];
+        return switch (prefix) {
+            case "S" -> Map.of(
+                    "summary", "Subject section checks compare the appraisal's subject property facts against the order and UAD requirements.",
+                    "terms", Map.of("PUD", "Planned Unit Development", "HOA", "Homeowners association dues", "APN", "Assessor parcel number"),
+                    "example", "Address, borrower, ownership, occupancy, PUD/HOA, and property-rights fields should match the supporting documents.");
+            case "C" -> Map.of(
+                    "summary", "Contract checks verify purchase/refinance treatment, final signature date, price, concessions, and personal property.",
+                    "terms", Map.of("fully executed", "signed by all required parties", "concession", "seller or financing assistance affecting the transaction"),
+                    "example", "For refinance assignments, contract fields should generally be blank/default.");
+            case "N" -> Map.of(
+                    "summary", "Neighborhood checks verify market trend, boundaries, price range, land use, and commentary specificity.",
+                    "terms", Map.of("1004MC", "Market Conditions Addendum", "DOM", "days on market"),
+                    "example", "If values are declining or increasing, time adjustments should be supported or explained.");
+            case "SCA" -> Map.of(
+                    "summary", "Sales comparison checks validate comparable counts, UAD formatting, dates, prices, adjustments, and data sources.",
+                    "terms", Map.of("comp", "comparable sale/listing", "DOM", "days on market", "UAD", "Uniform Appraisal Dataset"),
+                    "example", "Comparable sale prices outside the neighborhood range need explanation.");
+            case "FHA", "XF" -> Map.of(
+                    "summary", "Cross-field and FHA checks compare values across sections and pages to catch inconsistencies.",
+                    "terms", Map.of("REL", "remaining economic life", "case number", "FHA identifier expected in page headers"),
+                    "example", "FHA case number should appear consistently in required page headers.");
+            default -> Map.of(
+                    "summary", "Review the referenced values and document location, then decide whether the item is acceptable or needs correction.",
+                    "terms", Map.of(),
+                    "example", "Use Pass only when the evidence supports the rule.");
+        };
     }
 }

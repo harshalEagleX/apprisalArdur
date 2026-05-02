@@ -36,6 +36,12 @@ public class BatchFile {
     @Column(name = "file_size")
     private Long fileSize;
 
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    @Column(name = "content_version")
+    private Long contentVersion = 1L;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private FileStatus status = FileStatus.PENDING;
@@ -130,6 +136,22 @@ public class BatchFile {
         this.fileSize = fileSize;
     }
 
+    public String getContentHash() {
+        return contentHash;
+    }
+
+    public void setContentHash(String contentHash) {
+        this.contentHash = contentHash;
+    }
+
+    public Long getContentVersion() {
+        return contentVersion;
+    }
+
+    public void setContentVersion(Long contentVersion) {
+        this.contentVersion = contentVersion;
+    }
+
     public FileStatus getStatus() {
         return status;
     }
@@ -191,6 +213,8 @@ public class BatchFile {
         private String originalPath;
         private String storagePath;
         private Long fileSize;
+        private String contentHash;
+        private Long contentVersion = 1L;
         private FileStatus status = FileStatus.PENDING;
         private String orderId;
 
@@ -229,6 +253,16 @@ public class BatchFile {
             return this;
         }
 
+        public BatchFileBuilder contentHash(String contentHash) {
+            this.contentHash = contentHash;
+            return this;
+        }
+
+        public BatchFileBuilder contentVersion(Long contentVersion) {
+            this.contentVersion = contentVersion;
+            return this;
+        }
+
         public BatchFileBuilder status(FileStatus status) {
             this.status = status;
             return this;
@@ -248,6 +282,8 @@ public class BatchFile {
             file.originalPath = this.originalPath;
             file.storagePath = this.storagePath;
             file.fileSize = this.fileSize;
+            file.contentHash = this.contentHash;
+            file.contentVersion = this.contentVersion;
             file.status = this.status;
             file.orderId = this.orderId;
             return file;

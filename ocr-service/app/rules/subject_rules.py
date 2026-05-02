@@ -191,6 +191,23 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
             status=RuleStatus.PASS,
             message="Property address components match engagement letter."
         )
+
+    llm_address = ((ctx.llm_enrichment or {}).get("items") or {}).get("address_normalization") or {}
+    if llm_address.get("same_location") is True and llm_address.get("llm_confidence_score", 0.0) >= 0.75:
+        return RuleResult(
+            rule_id="S-1",
+            rule_name="Property Address Validation",
+            status=RuleStatus.VERIFY,
+            message="Address components differ, but LLM normalization indicates they may refer to the same physical location.",
+            appraisal_value=f"{subj.address}, {subj.city}, {subj.state} {subj.zip_code}",
+            engagement_value=f"{eng_street}, {eng_city}, {eng_state} {eng_zip}",
+            review_required=True,
+            action_item="Confirm whether the appraisal and engagement-letter addresses are the same property.",
+            details={
+                "mismatches": mismatches,
+                "llm_address_normalization": llm_address,
+            },
+        )
     
     return RuleResult(
         rule_id="S-1",

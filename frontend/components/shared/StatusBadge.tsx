@@ -17,7 +17,7 @@ const CONFIG: Record<string, { label: string; dot: string; text: string; bg: str
   verify:  { label: "Review",  dot: "bg-amber-400",  text: "text-amber-300",  bg: "bg-amber-950/50" },
   warning: { label: "Warning", dot: "bg-orange-400", text: "text-orange-300", bg: "bg-orange-950/50" },
   skipped: { label: "Skipped", dot: "bg-slate-400",  text: "text-slate-400",  bg: "bg-slate-800/50" },
-  MANUAL_PASS: { label: "Accepted",  dot: "bg-teal-400",   text: "text-teal-300",   bg: "bg-teal-950/50" },
+  MANUAL_PASS: { label: "Passed",    dot: "bg-teal-400",   text: "text-teal-300",   bg: "bg-teal-950/50" },
 };
 
 const FALLBACK = { label: "", dot: "bg-slate-400", text: "text-slate-400", bg: "bg-slate-800/50" };

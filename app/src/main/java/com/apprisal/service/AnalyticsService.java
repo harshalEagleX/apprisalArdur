@@ -20,17 +20,20 @@ public class AnalyticsService {
     private final OperatorSessionRepository   sessionRepo;
     private final BatchRepository             batchRepo;
     private final QCResultRepository          qcResultRepo;
+    private final QCRuleResultRepository      qcRuleResultRepo;
     private final UserRepository              userRepo;
 
     public AnalyticsService(ProcessingMetricsRepository metricsRepo,
                             OperatorSessionRepository   sessionRepo,
                             BatchRepository             batchRepo,
                             QCResultRepository          qcResultRepo,
+                            QCRuleResultRepository      qcRuleResultRepo,
                             UserRepository              userRepo) {
         this.metricsRepo  = metricsRepo;
         this.sessionRepo  = sessionRepo;
         this.batchRepo    = batchRepo;
         this.qcResultRepo = qcResultRepo;
+        this.qcRuleResultRepo = qcRuleResultRepo;
         this.userRepo     = userRepo;
     }
 
@@ -158,6 +161,70 @@ public class AnalyticsService {
             ));
         }
         return trend;
+    }
+
+    // ── Supervisor review controls ────────────────────────────────────────────
+
+    public Map<String, Object> getReviewSlaDashboard() {
+        LocalDateTime now = LocalDateTime.now();
+        List<QCRuleResult> fourHour = qcRuleResultRepo.findOverdueReviewItems(now.minusHours(4));
+        List<QCRuleResult> eightHour = qcRuleResultRepo.findOverdueReviewItems(now.minusHours(8));
+
+        List<Map<String, Object>> overdue = fourHour.stream().limit(50).map(rule -> {
+            QCResult qc = rule.getQcResult();
+            BatchFile file = qc != null ? qc.getBatchFile() : null;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ruleResultId", rule.getId());
+            item.put("qcResultId", qc != null ? qc.getId() : "");
+            item.put("ruleId", rule.getRuleId());
+            item.put("ruleName", rule.getRuleName());
+            item.put("firstPresentedAt", rule.getFirstPresentedAt() != null ? rule.getFirstPresentedAt().toString() : "");
+            item.put("filename", file != null ? file.getFilename() : "");
+            return item;
+        }).toList();
+
+        return Map.of(
+                "over4Hours", fourHour.size(),
+                "over8Hours", eightHour.size(),
+                "items", overdue
+        );
+    }
+
+    public Map<String, Object> getWeeklyAnomalyReport(int days) {
+        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        List<Map<String, Object>> fastReviewers = new ArrayList<>();
+        for (Object[] row : qcRuleResultRepo.averageDecisionLatencyByReviewerSince(from)) {
+            Long userId = toLong(row[0]);
+            Double avgMs = toDouble(row[1]);
+            Long count = toLong(row[2]);
+            if (userId == null || avgMs == null || avgMs >= 6000.0) continue;
+            userRepo.findById(userId).ifPresent(user -> fastReviewers.add(Map.of(
+                    "userId", userId,
+                    "name", user.getFullName() != null ? user.getFullName() : user.getUsername(),
+                    "avgDecisionSeconds", Math.round(avgMs / 100.0) / 10.0,
+                    "decisionCount", count != null ? count : 0L,
+                    "flag", "Average VERIFY decision time under 6 seconds"
+            )));
+        }
+
+        List<Map<String, Object>> overrideReviewers = new ArrayList<>();
+        for (Object[] row : qcRuleResultRepo.countFailOverridesByReviewerSince(from)) {
+            Long userId = toLong(row[0]);
+            Long count = toLong(row[1]);
+            if (userId == null || count == null || count < 3) continue;
+            userRepo.findById(userId).ifPresent(user -> overrideReviewers.add(Map.of(
+                    "userId", userId,
+                    "name", user.getFullName() != null ? user.getFullName() : user.getUsername(),
+                    "overrideCount", count,
+                    "flag", "FAIL override requests above review threshold"
+            )));
+        }
+
+        return Map.of(
+                "periodDays", days,
+                "fastDecisionReviewers", fastReviewers,
+                "failOverrideReviewers", overrideReviewers
+        );
     }
 
     // ── Entity history (Envers) ───────────────────────────────────────────────

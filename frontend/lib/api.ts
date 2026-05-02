@@ -227,6 +227,8 @@ export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string, unkn
 export const getAnalyticsOcr       = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/ocr?days=${days}`);
 export const getAnalyticsOperators = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/operators?days=${days}`);
 export const getAnalyticsTrend     = (days = 30) => apiFetch<unknown[]>(`/api/analytics/trend?days=${days}`);
+export const getAnalyticsReviewSla = () => apiFetch<Record<string, unknown>>("/api/analytics/review-sla");
+export const getAnalyticsAnomalies = (days = 7) => apiFetch<Record<string, unknown>>(`/api/analytics/anomalies?days=${days}`);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface User {
@@ -301,6 +303,7 @@ export interface QCRuleResult {
   verifyQuestion?: string | null;
   rejectionText?: string | null;
   evidence?: string | null;
+  help?: RuleHelp | null;
   reviewRequired: boolean;
   reviewerVerified?: boolean;
   reviewerComment?: string;
@@ -316,6 +319,12 @@ export interface QCRuleResult {
   bboxY?: number | null;
   bboxW?: number | null;
   bboxH?: number | null;
+}
+
+export interface RuleHelp {
+  summary?: string;
+  terms?: Record<string, string>;
+  example?: string;
 }
 
 export interface ReviewSession {

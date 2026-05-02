@@ -565,8 +565,21 @@ function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionR
           {isVerify && (
             <details className="rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-2 text-xs text-slate-400">
               <summary className="cursor-pointer text-slate-300 font-medium">Rule help</summary>
-              <div className="mt-2 leading-relaxed">
-                Review the referenced page and values before choosing Pass or Fail. Pass means the item is acceptable after human review. Fail means the appraisal still needs correction or support.
+              <div className="mt-2 space-y-2 leading-relaxed">
+                <p>{rule.help?.summary ?? "Review the referenced values and document location before choosing Pass or Fail."}</p>
+                {rule.help?.example && (
+                  <p className="text-slate-500">{rule.help.example}</p>
+                )}
+                {rule.help?.terms && Object.keys(rule.help.terms).length > 0 && (
+                  <div className="grid gap-1">
+                    {Object.entries(rule.help.terms).map(([term, meaning]) => (
+                      <div key={term} className="flex gap-2">
+                        <span className="font-mono text-slate-300 min-w-16">{term}</span>
+                        <span>{meaning}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </details>
           )}
