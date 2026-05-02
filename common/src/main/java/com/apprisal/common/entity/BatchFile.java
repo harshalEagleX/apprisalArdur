@@ -42,6 +42,9 @@ public class BatchFile {
     @Column(name = "content_version")
     private Long contentVersion = 1L;
 
+    @Column(name = "document_quality_flags", columnDefinition = "TEXT")
+    private String documentQualityFlags;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private FileStatus status = FileStatus.PENDING;
@@ -152,6 +155,14 @@ public class BatchFile {
         this.contentVersion = contentVersion;
     }
 
+    public String getDocumentQualityFlags() {
+        return documentQualityFlags;
+    }
+
+    public void setDocumentQualityFlags(String documentQualityFlags) {
+        this.documentQualityFlags = documentQualityFlags;
+    }
+
     public FileStatus getStatus() {
         return status;
     }
@@ -215,6 +226,7 @@ public class BatchFile {
         private Long fileSize;
         private String contentHash;
         private Long contentVersion = 1L;
+        private String documentQualityFlags;
         private FileStatus status = FileStatus.PENDING;
         private String orderId;
 
@@ -263,6 +275,11 @@ public class BatchFile {
             return this;
         }
 
+        public BatchFileBuilder documentQualityFlags(String documentQualityFlags) {
+            this.documentQualityFlags = documentQualityFlags;
+            return this;
+        }
+
         public BatchFileBuilder status(FileStatus status) {
             this.status = status;
             return this;
@@ -284,6 +301,7 @@ public class BatchFile {
             file.fileSize = this.fileSize;
             file.contentHash = this.contentHash;
             file.contentVersion = this.contentVersion;
+            file.documentQualityFlags = this.documentQualityFlags;
             file.status = this.status;
             file.orderId = this.orderId;
             return file;

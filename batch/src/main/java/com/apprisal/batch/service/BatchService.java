@@ -27,6 +27,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -351,6 +352,7 @@ public class BatchService {
                 Files.createDirectories(filePath.getParent());
                 Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 String contentHash = computeSha256(filePath);
+                String qualityFlags = documentQualityFlags(fileType, filename, contentHash, batch.getFiles());
 
                 BatchFile batchFile = BatchFile.builder()
                         .batch(batch)
@@ -361,6 +363,7 @@ public class BatchService {
                         .fileSize(Files.size(filePath))
                         .contentHash(contentHash)
                         .contentVersion(1L)
+                        .documentQualityFlags(qualityFlags)
                         .status(FileStatus.PENDING)
                         .orderId(FileMatchingService.extractOrderId(filename))
                         .build();
@@ -378,6 +381,25 @@ public class BatchService {
         if (batch.getFiles().isEmpty()) {
             throw new ValidationException("No valid PDF files found in the batch");
         }
+    }
+
+    private String documentQualityFlags(FileType fileType, String filename, String contentHash, List<BatchFile> existingFiles) {
+        List<String> flags = new ArrayList<>();
+        boolean duplicateHash = existingFiles.stream()
+                .anyMatch(file -> contentHash != null && contentHash.equals(file.getContentHash()));
+        if (duplicateHash) {
+            flags.add("This uploaded PDF has the same fingerprint as another document in this batch.");
+        }
+
+        String lowerName = filename == null ? "" : filename.toLowerCase();
+        if (fileType == FileType.ENGAGEMENT && !lowerName.matches(".*\\d{2,}.*")) {
+            flags.add("The engagement/order document filename has no visible order number; verify the order details carefully.");
+        }
+        if (fileType == FileType.CONTRACT && !lowerName.matches(".*(contract|purchase|agreement).*")) {
+            flags.add("The contract document filename does not clearly identify the document type.");
+        }
+
+        return flags.isEmpty() ? null : String.join("\n", flags);
     }
 
     private String computeSha256(MultipartFile file) {

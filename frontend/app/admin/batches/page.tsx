@@ -35,13 +35,8 @@ interface BatchProgress {
 const MODEL_OPTIONS: Record<QCModelSelection["provider"], { label: string; text: string[]; vision: string[] }> = {
   ollama: {
     label: "Ollama",
-    text: ["llama3:8b-instruct-q4_0", "llama3.1:8b", "mistral:7b"],
-    vision: ["moondream2", "moondream"],
-  },
-  claude: {
-    label: "Claude",
-    text: ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
-    vision: ["moondream"],
+    text: ["llava:13b"],
+    vision: ["llava:13b"],
   },
 };
 
@@ -389,15 +384,9 @@ export default function BatchesPage() {
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">QC model</span>
-        <select
-          value={modelProvider}
-          onChange={e => setModelProvider(e.target.value as QCModelSelection["provider"])}
-          className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          {Object.entries(MODEL_OPTIONS).map(([value, option]) => (
-            <option key={value} value={value}>{option.label}</option>
-          ))}
-        </select>
+        <span className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs leading-8 text-slate-300">
+          Ollama
+        </span>
         <select
           value={textModel}
           onChange={e => setTextModel(e.target.value)}
@@ -407,15 +396,9 @@ export default function BatchesPage() {
             <option key={model} value={model}>{model}</option>
           ))}
         </select>
-        <select
-          value={visionModel}
-          onChange={e => setVisionModel(e.target.value)}
-          className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          {MODEL_OPTIONS[modelProvider].vision.map(model => (
-            <option key={model} value={model}>{model}</option>
-          ))}
-        </select>
+        <span className="h-8 rounded-md border border-slate-700 bg-slate-950 px-2 text-xs leading-8 text-slate-300">
+          Vision: {visionModel}
+        </span>
       </div>
 
       {/* Table */}

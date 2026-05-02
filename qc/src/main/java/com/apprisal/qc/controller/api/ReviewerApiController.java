@@ -120,6 +120,7 @@ public class ReviewerApiController {
             body.put("startedAt", result.getReviewStartedAt() != null ? result.getReviewStartedAt().toString() : null);
             body.put("expiresAt", result.getReviewLockExpiresAt() != null ? result.getReviewLockExpiresAt().toString() : null);
             body.put("lockAcknowledged", Boolean.TRUE.equals(result.getReviewLockAcknowledged()));
+            body.put("priorActionCount", verificationService.priorActionCount(qcResultId));
             realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/presence", body);
             return ResponseEntity.ok(body);
         } catch (SecurityException e) {
@@ -188,6 +189,8 @@ public class ReviewerApiController {
             response.put("ruleId", result.getRuleId());
             response.put("decision", request.decision());
             response.put("savedAt", result.getVerifiedAt().toString());
+            response.put("status", normalizeStatus(result.getStatus()));
+            response.put("reviewerVerified", result.getReviewerVerified());
             response.put("overridePending", Boolean.TRUE.equals(result.getOverridePending()));
 
             Long qcResultId = result.getQcResult().getId();
@@ -282,6 +285,7 @@ public class ReviewerApiController {
                 ruleMap.put("overrideRequestedBy", rule.getOverrideRequestedBy() != null ? displayName(rule.getOverrideRequestedBy()) : null);
                 ruleMap.put("overrideRequestedAt", rule.getOverrideRequestedAt() != null ? rule.getOverrideRequestedAt().toString() : null);
                 ruleMap.put("severity",        rule.getSeverity() != null ? rule.getSeverity() : "STANDARD");
+                ruleMap.put("verifiedAt",      rule.getVerifiedAt() != null ? rule.getVerifiedAt().toString() : null);
                 ruleMap.put("pdfPage",         rule.getPdfPage());
                 ruleMap.put("bboxX",           rule.getBboxX());
                 ruleMap.put("bboxY",           rule.getBboxY());

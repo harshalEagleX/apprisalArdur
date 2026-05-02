@@ -242,11 +242,12 @@ public class QCApiController {
     }
 
     private Map<String, Object> toBatchFileDto(BatchFile file) {
-        return Map.of(
-                "id", file.getId(),
-                "filename", file.getFilename() != null ? file.getFilename() : "",
-                "fileType", file.getFileType() != null ? file.getFileType().name() : ""
-        );
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", file.getId());
+        body.put("filename", file.getFilename() != null ? file.getFilename() : "");
+        body.put("fileType", file.getFileType() != null ? file.getFileType().name() : "");
+        body.put("documentQualityFlags", file.getDocumentQualityFlags());
+        return body;
     }
 
     /** Python service health check. */

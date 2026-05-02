@@ -28,14 +28,14 @@ from app.services.ocr_correction import apply_ocr_correction
 
 logger = logging.getLogger(__name__)
 
-# moondream vision fallback for uncertain checkboxes
+# LLaVA vision fallback for uncertain checkboxes
 try:
-    from app.services.ollama_service import detect_checkbox_vision, is_moondream_available
-    _MOONDREAM_OK = is_moondream_available()
-    if _MOONDREAM_OK:
-        logger.info("moondream2 available — checkbox vision fallback enabled")
+    from app.services.ollama_service import detect_checkbox_vision, is_vision_model_available
+    _VISION_OK = is_vision_model_available()
+    if _VISION_OK:
+        logger.info("LLaVA available — checkbox vision fallback enabled")
 except Exception:
-    _MOONDREAM_OK = False
+    _VISION_OK = False
     detect_checkbox_vision = None
 
 # State → expected first digit(s) of zip code
@@ -87,7 +87,7 @@ class Phase2ExtractionEngine:
     Phase 2 field extraction with metadata (source page, confidence, correction).
     """
     def __init__(self):
-        # Page images for moondream checkbox fallback — set per extract_subject() call
+        # Page images for LLaVA checkbox fallback — set per extract_subject() call
         self._page_images: Dict[int, object] = {}
         self._page_index: Dict[int, str] = {}
         self._page_positions: List[Tuple[int, int]] = []
@@ -106,7 +106,7 @@ class Phase2ExtractionEngine:
         Returns:
             (SubjectSectionExtract, dict of field_name → FieldMetaResult)
         """
-        # Store page images for moondream checkbox fallback (Step 2)
+        # Store page images for LLaVA checkbox fallback (Step 2)
         # Page 1 is the main form page — checkboxes are almost always on pages 1-3
         self._page_images = page_images or {}
         self._page_index = page_index
@@ -703,14 +703,14 @@ class Phase2ExtractionEngine:
 
     def _checkbox_state(self, text: str, label: str) -> Optional[bool]:
         """
-        Three-state checkbox detection with moondream vision fallback.
+        Three-state checkbox detection with LLaVA vision fallback.
 
         Step 1: OCR text patterns (instant, always runs first)
           [X] or [x] near label → True  (YES, checked)
           [ ] near label        → False (NO, explicitly unchecked)
 
-        Step 2: moondream2 vision (only when Step 1 returns None)
-          Sends the page image crop to local moondream model
+        Step 2: LLaVA vision (only when Step 1 returns None)
+          Sends the page image crop to local LLaVA model
           Asks: "Is the checkbox next to '{label}' checked? YES or NO only."
 
         Returns None only when both steps fail → VERIFY in rules.
@@ -726,8 +726,8 @@ class Phase2ExtractionEngine:
         if re.search(unchecked, text, re.I):
             return False
 
-        # Step 2: moondream vision (page_image stored in self._page_images by extract_subject)
-        if _MOONDREAM_OK and detect_checkbox_vision and self._page_images:
+        # Step 2: LLaVA vision (page_image stored in self._page_images by extract_subject)
+        if _VISION_OK and detect_checkbox_vision and self._page_images:
             # Try page 1 first (main form), then pages 2 and 3
             for pg_num in [1, 2, 3]:
                 page_img = self._page_images.get(pg_num)
@@ -735,7 +735,7 @@ class Phase2ExtractionEngine:
                     result = detect_checkbox_vision(page_img, label)
                     if result is not None:
                         logger.debug(
-                            "moondream checkbox '%s' page %d → %s",
+                            "LLaVA checkbox '%s' page %d -> %s",
                             label, pg_num, result
                         )
                         return result

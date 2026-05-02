@@ -137,7 +137,7 @@ export const reconcileStuckBatches = () =>
   );
 
 export interface QCModelSelection {
-  provider: "ollama" | "claude";
+  provider: "ollama";
   textModel?: string;
   visionModel?: string;
 }
@@ -213,7 +213,7 @@ export const saveDecision = (
   decisionLatencyMs: number,
   acknowledged: boolean,
 ) =>
-  apiFetch("/api/reviewer/decision/save", {
+  apiFetch<DecisionSaveResponse>("/api/reviewer/decision/save", {
     method: "POST",
     body: JSON.stringify({ ruleResultId, decision, comment, sessionToken, decisionLatencyMs, acknowledged }),
   });
@@ -271,6 +271,7 @@ export interface BatchFile {
   fileSize: number;
   status: string;
   orderId?: string;
+  documentQualityFlags?: string | null;
 }
 
 export interface QCResult {
@@ -313,6 +314,7 @@ export interface QCRuleResult {
   overridePending?: boolean;
   overrideRequestedBy?: string | null;
   overrideRequestedAt?: string | null;
+  verifiedAt?: string | null;
   severity?: string;
   pdfPage?: number | null;
   bboxX?: number | null;
@@ -327,6 +329,17 @@ export interface RuleHelp {
   example?: string;
 }
 
+export interface DecisionSaveResponse {
+  success: boolean;
+  ruleResultId: number;
+  ruleId: string;
+  decision: "PASS" | "FAIL";
+  savedAt: string;
+  status: string;
+  reviewerVerified?: boolean | null;
+  overridePending?: boolean;
+}
+
 export interface ReviewSession {
   success: boolean;
   sessionToken: string;
@@ -334,6 +347,7 @@ export interface ReviewSession {
   startedAt?: string;
   expiresAt?: string;
   lockAcknowledged?: boolean;
+  priorActionCount?: number;
 }
 
 export interface QCFileInfo {

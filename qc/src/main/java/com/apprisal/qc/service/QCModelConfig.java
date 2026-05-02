@@ -3,9 +3,8 @@ package com.apprisal.qc.service;
 /**
  * Model selection carried from the admin UI into the Python QC service.
  *
- * Provider support is intentionally explicit. The Python service currently
- * executes Ollama-backed helpers; Claude can be selected in the UI for future
- * wiring and is logged/displayed so admins can see what was requested.
+ * QC is intentionally pinned to one local Ollama model so text and vision
+ * decisions cannot drift between model families.
  */
 public record QCModelConfig(
         String provider,
@@ -13,13 +12,13 @@ public record QCModelConfig(
         String visionModel) {
 
     public static QCModelConfig defaults() {
-        return new QCModelConfig("ollama", "llama3:8b-instruct-q4_0", "moondream2");
+        return new QCModelConfig("ollama", "llava:13b", "llava:13b");
     }
 
     public QCModelConfig {
-        provider = clean(provider, "ollama").toLowerCase();
-        textModel = clean(textModel, provider.equals("claude") ? "claude-3-5-sonnet-latest" : "llama3:8b-instruct-q4_0");
-        visionModel = clean(visionModel, "moondream2");
+        provider = "ollama";
+        textModel = "llava:13b";
+        visionModel = "llava:13b";
     }
 
     public String label() {

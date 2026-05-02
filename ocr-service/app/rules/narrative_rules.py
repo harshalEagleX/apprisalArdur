@@ -2,7 +2,7 @@
 Narrative / Commentary Rules — N-1 through N-7 (Phase 4)
 
 These rules evaluate the QUALITY of appraiser commentary using:
-  Tier 1: LLM (ollama/llama3) — most accurate
+  Tier 1: LLM (ollama/llava:13b) — most accurate
   Tier 2: Keyword/pattern matching — always available fallback
 
 They always run LAST (execution_order 210–270) because they are the slowest.

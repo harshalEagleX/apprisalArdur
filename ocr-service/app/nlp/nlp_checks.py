@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Tier 1: Ollama / llama3 (best quality, requires local ollama server)
+# Tier 1: Ollama / LLaVA (best quality, requires local ollama server)
 try:
     from app.services.ollama_service import (
         classify_commentary,
@@ -26,7 +26,7 @@ try:
     )
     OLLAMA_AVAILABLE = is_ollama_available()
     if OLLAMA_AVAILABLE:
-        logger.info("Ollama available — using llama3:8b-instruct-q4_0 for commentary analysis")
+        logger.info("Ollama available — using llava:13b for commentary analysis")
     else:
         logger.info("Ollama not running — falling back to embedding/rule-based checks")
 except ImportError:
@@ -169,7 +169,7 @@ class NLPChecker:
         """
         Detect if commentary appears to be generic/canned.
 
-        Tier 1: ollama/llama3 (most accurate)
+        Tier 1: ollama/llava:13b (most accurate)
         Tier 2: sentence-transformers similarity
         Tier 3: rule-based template matching (always available)
         """

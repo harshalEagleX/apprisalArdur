@@ -10,7 +10,7 @@ import logging
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 logger = logging.getLogger(__name__)
@@ -72,3 +72,33 @@ def create_all_tables():
     """Create all tables if they don't exist (idempotent, used for tests)."""
     from app.models.db_models import Base as DBBase  # noqa: import triggers registration
     DBBase.metadata.create_all(bind=engine)
+
+
+def ensure_schema_compatibility():
+    """
+    Apply tiny, idempotent compatibility fixes for dev databases that were
+    created before newer cache columns existed. Alembic remains the source of
+    truth; this prevents stale local DBs from disabling OCR cache at runtime.
+    """
+    try:
+        inspector = inspect(engine)
+        table_names = set(inspector.get_table_names())
+        if "page_ocr_results" not in table_names:
+            return
+
+        columns = {column["name"] for column in inspector.get_columns("page_ocr_results")}
+        statements = []
+        if "hocr_text" not in columns:
+            statements.append("ALTER TABLE page_ocr_results ADD COLUMN hocr_text TEXT")
+        if "word_json" not in columns:
+            statements.append("ALTER TABLE page_ocr_results ADD COLUMN word_json TEXT")
+
+        if not statements:
+            return
+
+        with engine.begin() as conn:
+            for statement in statements:
+                conn.execute(text(statement))
+        logger.info("Applied OCR cache schema compatibility fixes: %s", ", ".join(statements))
+    except Exception as exc:
+        logger.info("OCR schema compatibility check skipped: %s", exc)

@@ -42,7 +42,9 @@ from app.ocr.ocr_pipeline import OCRPipeline
 import app.rules  # noqa: F401  (side-effect import)
 
 # Seed DB rule config (idempotent — does nothing if already seeded)
+from app.database import ensure_schema_compatibility
 from app.rule_engine.rules_db import seed_rules_config
+ensure_schema_compatibility()
 seed_rules_config()
 
 # Try to import Tesseract, but make it optional

@@ -37,7 +37,8 @@ const SEV_STYLE: Record<string, string> = {
 };
 
 function ruleStatus(status: string) {
-  return status === "MANUAL_PASS" ? status : status.toLowerCase();
+  const normalized = status.toLowerCase();
+  return normalized === "manual_pass" ? "MANUAL_PASS" : normalized;
 }
 
 function focusForRule(rule: QCRuleResult): RuleFocus {
@@ -93,6 +94,7 @@ export default function VerifyFilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [sessionAckRequired, setSessionAckRequired] = useState(false);
   const [offline, setOffline] = useState(false);
   const [acknowledged, setAcknowledged] = useState<Record<number, boolean>>({});
   const viewerRef = useRef<HTMLDivElement | null>(null);
@@ -124,20 +126,32 @@ export default function VerifyFilePage() {
     };
   }, []);
 
+  const beginSession = useCallback(async (acknowledgeExistingLock = false) => {
+    try {
+      const session = await startReviewSession(qcResultId, acknowledgeExistingLock);
+      setSessionToken(session.sessionToken);
+      setSessionAckRequired(false);
+      const priorCount = Number(session.priorActionCount ?? 0);
+      setSessionError(
+        session.lockAcknowledged || priorCount > 0
+          ? `You are continuing a report with ${priorCount} prior saved decision${priorCount === 1 ? "" : "s"}. Review existing decisions before sign-off.`
+          : null
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to start review session.";
+      setSessionToken(null);
+      setSessionError(message);
+      setSessionAckRequired(message.includes("previous review session") || message.includes("server-saved decision"));
+    }
+  }, [qcResultId]);
+
   useEffect(() => {
     let cancelled = false;
-    startReviewSession(qcResultId)
-      .then(session => {
-        if (cancelled) return;
-        setSessionToken(session.sessionToken);
-        setSessionError(session.lockAcknowledged ? "Continuing a report that had prior review activity. Review existing decisions before sign-off." : null);
-      })
-      .catch(error => {
-        if (cancelled) return;
-        setSessionError(error instanceof Error ? error.message : "Unable to start review session.");
-      });
+    beginSession().finally(() => {
+      if (cancelled) setSessionToken(null);
+    });
     return () => { cancelled = true; };
-  }, [qcResultId]);
+  }, [beginSession]);
 
   useEffect(() => {
     if (!sessionToken) return;
@@ -164,6 +178,13 @@ export default function VerifyFilePage() {
     () => documents.find(doc => doc.id === activeDocumentId) ?? documents[0],
     [documents, activeDocumentId]
   );
+  const documentWarnings = useMemo(() => documents.flatMap(doc =>
+    (doc.documentQualityFlags ?? "")
+      .split("\n")
+      .map(flag => flag.trim())
+      .filter(Boolean)
+      .map(flag => `${doc.fileType === "ENGAGEMENT" ? "Order" : doc.fileType === "APPRAISAL" ? "Report" : "Contract"}: ${flag}`)
+  ), [documents]);
   const activeDocumentUrl = activeDocument ? getPdfUrl(activeDocument.id) : undefined;
 
   useEffect(() => {
@@ -231,7 +252,7 @@ export default function VerifyFilePage() {
             });
           }
           if (message.topic === decisionTopic) {
-            void loadRules();
+            void getQCProgress(qcResultId).then(setProgress).catch(() => undefined);
           }
         } catch {
           // Ignore malformed realtime messages; REST polling remains the fallback.
@@ -261,11 +282,18 @@ export default function VerifyFilePage() {
     const latencyMs = Math.max(0, Date.now() - presentedAt);
     setSaving(rule.id);
     try {
-      await saveDecision(rule.id, decision, comments[rule.id], sessionToken, latencyMs, Boolean(acknowledged[rule.id]));
+      const savedDecision = await saveDecision(rule.id, decision, comments[rule.id], sessionToken, latencyMs, Boolean(acknowledged[rule.id]));
       setDecisions(prev => ({ ...prev, [rule.id]: decision }));
       setSaved(prev => new Set(prev).add(rule.id));
+      setRules(prev => prev.map(item => item.id === rule.id ? {
+        ...item,
+        status: ruleStatus(savedDecision.status),
+        reviewerVerified: savedDecision.reviewerVerified ?? undefined,
+        reviewerComment: comments[rule.id],
+        overridePending: Boolean(savedDecision.overridePending),
+        verifiedAt: savedDecision.savedAt,
+      } : item));
       const prog = await getQCProgress(qcResultId); setProgress(prog);
-      void loadRules();
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : "Decision was not saved. Try again.");
     }
@@ -283,6 +311,12 @@ export default function VerifyFilePage() {
       setSessionError(`There are still ${freshProgress.pending} item(s) waiting for server-confirmed decisions.`);
       return;
     }
+    const passed = Object.values(decisions).filter(value => value === "PASS").length;
+    const failed = Object.values(decisions).filter(value => value === "FAIL").length;
+    const confirmed = window.confirm(
+      `You are about to sign off on this report.\n\nReviewed VERIFY items: ${freshProgress.totalToVerify}\nPassed: ${passed}\nFailed: ${failed}\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
     const expected = String(qcResultId).slice(-4);
     const typed = window.prompt(`You are about to sign off on this report. Type the last 4 digits of QC Result #${qcResultId} to confirm.`);
     if (typed !== expected) {
@@ -320,8 +354,21 @@ export default function VerifyFilePage() {
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
       {(offline || sessionError) && (
-        <div className={`px-4 py-2 text-xs border-b ${offline ? "bg-red-950/60 border-red-800/50 text-red-200" : "bg-amber-950/60 border-amber-800/50 text-amber-100"}`}>
-          {offline ? "You're offline. Decisions are frozen until the connection is restored." : sessionError}
+        <div className={`flex items-center gap-3 px-4 py-2 text-xs border-b ${offline ? "bg-red-950/60 border-red-800/50 text-red-200" : "bg-amber-950/60 border-amber-800/50 text-amber-100"}`}>
+          <span className="flex-1">{offline ? "You're offline. Decisions are frozen until the connection is restored." : sessionError}</span>
+          {sessionAckRequired && (
+            <button onClick={() => beginSession(true)} className="h-7 rounded-md border border-amber-700/60 bg-amber-900/30 px-2.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-800/40">
+              Review prior decisions and continue
+            </button>
+          )}
+        </div>
+      )}
+      {documentWarnings.length > 0 && (
+        <div className="border-b border-red-800/40 bg-red-950/40 px-4 py-2 text-xs text-red-100">
+          <div className="font-semibold">Document quality warning</div>
+          <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1">
+            {documentWarnings.map((warning, index) => <span key={index}>{warning}</span>)}
+          </div>
         </div>
       )}
       {/* Top bar */}
@@ -345,7 +392,7 @@ export default function VerifyFilePage() {
             <span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-green-400" : "bg-slate-600"}`} title={realtimeConnected ? "Live updates connected" : "Live updates reconnecting"} />
           </div>
         )}
-        <button onClick={handleSubmit} disabled={!progress?.canSubmit || submitting}
+        <button onClick={handleSubmit} disabled={!progress?.canSubmit || submitting || offline || !sessionToken}
           className="flex-shrink-0 flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-semibold transition-colors">
           {submitting ? <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : null}
           {submitting ? "Submitting…" : progress?.pending ? `Submit (${progress.pending} left)` : "Submit review"}
@@ -500,16 +547,24 @@ function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionR
   const elapsedMs = Math.max(0, now - presentedAt);
   const waitMs = isVerify ? Math.max(0, 8000 - elapsedMs) : 0;
   const waitSeconds = Math.ceil(waitMs / 1000);
+  const slaMs = rule.reviewRequired ? (4 * 60 * 60 * 1000) - elapsedMs : null;
+  const slaExpired = slaMs != null && slaMs <= 0;
+  const slaUnderHour = slaMs != null && slaMs > 0 && slaMs <= 60 * 60 * 1000;
+  const slaLabel = slaMs == null
+    ? null
+    : slaExpired
+      ? "Needs supervisor attention"
+      : `${Math.floor(slaMs / 3_600_000)}h ${Math.floor((slaMs % 3_600_000) / 60_000)}m remaining`;
   const overrideReasonOk = !isFail || comment.trim().length >= 20;
   const canAct = sessionReady && !offline && !saving && waitMs === 0 && (!isBlockingVerify || acknowledged);
   const canPass = canAct && overrideReasonOk;
   const canFail = canAct && isVerify;
 
   useEffect(() => {
-    if (!isVerify || waitMs === 0) return;
+    if (!rule.reviewRequired && (!isVerify || waitMs === 0)) return;
     const timer = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(timer);
-  }, [isVerify, waitMs]);
+  }, [isVerify, rule.reviewRequired, waitMs]);
 
   return (
     <div className={`rounded-xl border p-3 ${s.border} ${s.bg} ${active ? "ring-1 ring-amber-400/70" : ""}`}>
@@ -522,6 +577,17 @@ function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionR
               <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${SEV_STYLE[sev] ?? SEV_STYLE.STANDARD}`}>{sev}</span>
               {savedNow && <span className="text-[10px] text-teal-400 flex items-center gap-0.5"><CheckCircle2 size={9} />saved</span>}
               {rule.overridePending && <span className="text-[10px] text-blue-300 border border-blue-800/50 bg-blue-950/40 rounded px-1.5 py-0.5">second approval pending</span>}
+              {slaLabel && (
+                <span className={`text-[10px] rounded border px-1.5 py-0.5 ${
+                  slaExpired
+                    ? "border-red-700/60 bg-red-950/50 text-red-200"
+                    : slaUnderHour
+                      ? "border-amber-700/50 bg-amber-950/40 text-amber-200"
+                      : "border-slate-700/50 bg-slate-900/60 text-slate-400"
+                }`}>
+                  {slaLabel}
+                </span>
+              )}
             </div>
             <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>
               {normalizedStatus === "verify" && rule.verifyQuestion ? rule.verifyQuestion : normalizedStatus === "fail" && rule.rejectionText ? rule.rejectionText : rule.message}

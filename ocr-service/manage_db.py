@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from sqlalchemy import inspect, text
-from app.database import engine
+from app.database import engine, ensure_schema_compatibility
 
 # Import all models so their metadata is registered before we touch the DB
 from app.models.db_models import Base as DBBase  # noqa: F401
@@ -74,6 +74,12 @@ def cmd_create() -> None:
         print("✓ All tables already exist — nothing to create.")
 
 
+def cmd_update() -> None:
+    """Apply safe, additive schema updates for existing local dev databases."""
+    ensure_schema_compatibility()
+    print("✓ Applied safe schema compatibility updates.")
+
+
 def cmd_drop() -> None:
     """DROP all model-managed tables (DESTRUCTIVE — all data is lost)."""
     existing = set(_get_existing_tables())
@@ -122,6 +128,7 @@ def cmd_recreate() -> None:
 COMMANDS = {
     "status":   cmd_status,
     "create":   cmd_create,
+    "update":   cmd_update,
     "drop":     cmd_drop,
     "recreate": cmd_recreate,
 }

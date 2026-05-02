@@ -1,10 +1,10 @@
 """
 Ollama Service — local LLM inference for appraisal QC commentary analysis.
 
-Model: llama3:8b-instruct-q4_0  (fast on CPU/M1, ~5 GB RAM)
+Model: llava:13b
 
 Setup (one-time):
-    ollama pull llama3:8b-instruct-q4_0
+    ollama pull llava:13b
 
 All calls are synchronous (this service runs inside a threadpool in FastAPI).
 Temperature is fixed at 0 for deterministic QC decisions.
@@ -12,6 +12,7 @@ Temperature is fixed at 0 for deterministic QC decisions.
 
 import json
 import logging
+import os
 import re
 import asyncio
 import base64
@@ -25,15 +26,17 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llama3:8b-instruct-q4_0"
-OLLAMA_VISION_MODEL = "moondream2"          # for checkbox detection
+OLLAMA_MODEL = "llava:13b"
+OLLAMA_VISION_MODEL = "llava:13b"
 OLLAMA_TIMEOUT = 60.0  # seconds
 OLLAMA_TEXT_NUM_CTX = 2048
 OLLAMA_VISION_NUM_CTX = 2048
 OLLAMA_TEXT_KEEP_ALIVE = "0s"
 OLLAMA_VISION_KEEP_ALIVE = "30s"
+OLLAMA_MAX_CONCURRENCY = int(os.getenv("OLLAMA_MAX_CONCURRENCY", "1"))
 _TEXT_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_text_model", default=None)
 _VISION_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_vision_model", default=None)
+_OLLAMA_SEMAPHORE = asyncio.Semaphore(OLLAMA_MAX_CONCURRENCY)
 
 
 def get_active_text_model() -> str:
@@ -46,8 +49,8 @@ def get_active_vision_model() -> str:
 
 @contextmanager
 def use_model_selection(text_model: Optional[str] = None, vision_model: Optional[str] = None):
-    text_token = _TEXT_MODEL_OVERRIDE.set(text_model.strip() if text_model else None)
-    vision_token = _VISION_MODEL_OVERRIDE.set(vision_model.strip() if vision_model else None)
+    text_token = _TEXT_MODEL_OVERRIDE.set(text_model or OLLAMA_MODEL)
+    vision_token = _VISION_MODEL_OVERRIDE.set(vision_model or OLLAMA_VISION_MODEL)
     try:
         yield
     finally:
@@ -118,24 +121,24 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Checkbox detection via moondream2 vision (STEP 2 fallback)
+# Checkbox detection via LLaVA vision (STEP 2 fallback)
 # Only called when OCR text-pattern detection returned None (uncertain)
 # ---------------------------------------------------------------------------
 
 def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
     """
-    Use moondream2 to detect checkbox state on a page image.
+    Use LLaVA to detect checkbox state on a page image.
 
     Strategy:
       1. Use pytesseract.image_to_data to locate the label text on the page
       2. Crop a region around/left-of the label (where checkboxes appear in UAD forms)
-      3. Send the crop to moondream: "Is the checkbox checked? YES or NO only."
+      3. Send the crop to LLaVA: "Is the checkbox checked? YES or NO only."
       4. Cache by (page_hash + label) to avoid repeat calls
 
     Returns:
-        True  = moondream says checkbox is checked
-        False = moondream says checkbox is NOT checked
-        None  = moondream unavailable or uncertain
+        True  = LLaVA says checkbox is checked
+        False = LLaVA says checkbox is NOT checked
+        None  = LLaVA unavailable or uncertain
     """
     try:
         import base64
@@ -209,12 +212,12 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
         return None
 
     except Exception as e:
-        logger.debug("moondream checkbox detection failed for '%s': %s", label_text, e)
+        logger.debug("LLaVA checkbox detection failed for '%s': %s", label_text, e)
         return None
 
 
-def is_moondream_available() -> bool:
-    """Check if moondream vision model is loaded in Ollama."""
+def is_vision_model_available() -> bool:
+    """Check if the single configured LLaVA model is loaded in Ollama."""
     try:
         r = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
         models = [m.get("name", "") for m in r.json().get("models", [])]
@@ -249,12 +252,16 @@ async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -
         },
     }
     try:
-        async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
-            response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
-            response.raise_for_status()
-            return response.json().get("response", "").strip()
+        async with _OLLAMA_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+                response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+                response.raise_for_status()
+                return response.json().get("response", "").strip()
+    except httpx.TimeoutException:
+        logger.info("Async Ollama request timed out (model=%s)", get_active_text_model())
+        return None
     except Exception as exc:
-        logger.info("Async Ollama call failed: %s", exc)
+        logger.info("Async Ollama call failed: %s: %s", exc.__class__.__name__, exc)
         return None
 
 
@@ -280,10 +287,11 @@ async def analyze_photo_llava(page_image, prompt: str) -> Optional[str]:
             "keep_alive": OLLAMA_VISION_KEEP_ALIVE,
             "options": {"temperature": 0.0, "num_ctx": OLLAMA_VISION_NUM_CTX, "num_predict": 120},
         }
-        async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
-            response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
-            response.raise_for_status()
-            return response.json().get("response", "").strip()
+        async with _OLLAMA_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+                response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+                response.raise_for_status()
+                return response.json().get("response", "").strip()
     except Exception as exc:
         logger.debug("LLaVA photo analysis failed: %s", exc)
         return None
@@ -301,7 +309,7 @@ CANNED_SYSTEM = (
 
 def classify_commentary(text: str) -> Optional[bool]:
     """
-    Classify commentary as canned or specific using llama3.
+    Classify commentary as canned or specific using the configured LLaVA model.
 
     Returns:
         True  = canned (generic)

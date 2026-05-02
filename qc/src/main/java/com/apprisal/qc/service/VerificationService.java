@@ -50,10 +50,16 @@ public class VerificationService {
         boolean activeLock = lockedBy != null
                 && qcResult.getReviewLockExpiresAt() != null
                 && qcResult.getReviewLockExpiresAt().isAfter(now);
+        int priorActionCount = priorActionCount(qcResultId);
 
-        if (activeLock && !Objects.equals(lockedBy.getId(), reviewer.getId()) && !acknowledgeExistingLock) {
+        if (activeLock && !Objects.equals(lockedBy.getId(), reviewer.getId())) {
             throw new IllegalStateException("This report is currently being reviewed by "
-                    + displayName(lockedBy) + ".");
+                    + displayName(lockedBy) + ". You can wait for the session to expire before continuing.");
+        }
+
+        if (!activeLock && priorActionCount > 0 && !acknowledgeExistingLock) {
+            throw new IllegalStateException("This report has " + priorActionCount
+                    + " server-saved decision(s) from a previous review session. Review those decisions before continuing.");
         }
 
         if (!activeLock || !Objects.equals(lockedBy != null ? lockedBy.getId() : null, reviewer.getId())) {
@@ -73,6 +79,13 @@ public class VerificationService {
         auditLogService.log(reviewer, "REVIEW_SESSION_STARTED", "QCResult", qcResultId,
                 "sessionToken=" + saved.getReviewSessionToken(), ipAddress, userAgent);
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public int priorActionCount(@NonNull Long qcResultId) {
+        return (int) qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId).stream()
+                .filter(item -> item.getReviewerVerified() != null || Boolean.TRUE.equals(item.getOverridePending()))
+                .count();
     }
 
     @Transactional
@@ -455,7 +468,11 @@ public class VerificationService {
     private void validateEngagement(QCRuleResult ruleResult, Long decisionLatencyMs, Boolean acknowledged) {
         String status = normalizedStatus(ruleResult.getStatus());
         if ("verify".equals(status)) {
-            long latency = decisionLatencyMs == null ? 0L : decisionLatencyMs;
+            long clientLatency = decisionLatencyMs == null ? 0L : decisionLatencyMs;
+            long serverLatency = ruleResult.getFirstPresentedAt() == null
+                    ? 0L
+                    : Duration.between(ruleResult.getFirstPresentedAt(), LocalDateTime.now()).toMillis();
+            long latency = Math.max(clientLatency, serverLatency);
             if (latency < MIN_VERIFY_DECISION_MS) {
                 throw new IllegalStateException("Please review the referenced sections before saving this decision.");
             }

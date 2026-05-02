@@ -1,4 +1,7 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ardurApprisal}
     username: ${DB_USERNAME:harshalsmac}
@@ -28,8 +31,12 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:25MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:25MB}
+
+server:
+  tomcat:
+    basedir: ${TOMCAT_BASEDIR:/private/tmp/apprisal-tomcat}
 
   session:
     cookie:

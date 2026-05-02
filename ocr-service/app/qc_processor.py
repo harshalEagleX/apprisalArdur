@@ -82,8 +82,8 @@ class QCResults(BaseModel):
     document_id: Optional[str] = None     # DB record ID — None if DB unavailable
     cache_hit: bool = False               # True if OCR was served from cache
     model_provider: str = "ollama"
-    model_name: str = "llama3:8b-instruct-q4_0"
-    vision_model: str = "moondream2"
+    model_name: str = "llava:13b"
+    vision_model: str = "llava:13b"
     
     # Extracted fields summary
     extracted_fields: Dict[str, Any] = {}
@@ -150,6 +150,9 @@ class SmartQCProcessor:
         """
         start_time = time.time()
         document_id: Optional[str] = None
+        model_provider = "ollama"
+        model_name = "llava:13b"
+        vision_model = "llava:13b"
 
         # ── Step 1: Check OCR Cache ─────────────────────────────────────────
         import fitz as _fitz
@@ -200,15 +203,15 @@ class SmartQCProcessor:
                 total_pages=0,
                 extraction_method="none",
                 model_provider=model_provider,
-                model_name=model_name or "llama3:8b-instruct-q4_0",
-                vision_model=vision_model or "moondream2",
+                model_name="llava:13b",
+                vision_model="llava:13b",
                 processing_notices=["Failed to extract any text from PDF"]
             )
 
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
 
         # Step 2: Phase 2 Multi-Layer Extraction
-        # Source A: Phase 2 engine — pass page_images for moondream checkbox fallback
+        # Source A: Phase 2 engine — pass page_images for LLaVA checkbox fallback
         s_extract, field_meta = phase2_engine.extract_subject(
             full_text,
             extraction_result.page_index,
@@ -464,6 +467,9 @@ class SmartQCProcessor:
         vision_model: Optional[str] = None,
     ) -> QCResults:
         """Assemble final QC results."""
+        model_provider = "ollama"
+        model_name = "llava:13b"
+        vision_model = "llava:13b"
         
         # Count strict output statuses.
         status_counts = {"pass": 0, "fail": 0, "verify": 0}
@@ -533,8 +539,8 @@ class SmartQCProcessor:
             document_id=document_id,
             cache_hit=cache_hit,
             model_provider=model_provider,
-            model_name=model_name or "llama3:8b-instruct-q4_0",
-            vision_model=vision_model or "moondream2",
+            model_name="llava:13b",
+            vision_model="llava:13b",
             extracted_fields=s_extract.model_dump(),
             field_confidence=field_confidence,
             total_rules=len(rule_results),
