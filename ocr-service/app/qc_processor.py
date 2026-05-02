@@ -266,6 +266,7 @@ class SmartQCProcessor:
             purchase_agreement=purchase_agreement,
             field_meta=field_meta,
             raw_text=full_text,
+            page_index=extraction_result.page_index,
         )
         
         # Step 7: Execute rule engine

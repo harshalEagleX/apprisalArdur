@@ -10,6 +10,7 @@ Improvements over previous version:
 """
 
 import logging
+import re
 from typing import List, Callable, Dict, Optional
 
 from app.models.appraisal import ValidationContext
@@ -101,6 +102,10 @@ class RuleEngine:
                     result.bbox_y = getattr(field_meta, "bbox_y", None)
                     result.bbox_w = getattr(field_meta, "bbox_w", None)
                     result.bbox_h = getattr(field_meta, "bbox_h", None)
+                if result.source_page is None:
+                    inferred_page = self._infer_source_page(context, rule_id, result)
+                    if inferred_page:
+                        result.source_page = inferred_page
                 if result.field_confidence is None and field_conf is not None:
                     result.field_confidence = field_conf
 
@@ -206,6 +211,82 @@ class RuleEngine:
             active.add("REFINANCE")
 
         return bool(tokens & active)
+
+    def _infer_source_page(self, context: ValidationContext, rule_id: str, result: RuleResult):
+        """Best-effort page fallback for rules that do not map to a single extracted field."""
+        page_index = context.page_index or {}
+        if not page_index:
+            return None
+
+        for term in self._rule_search_terms(rule_id, result):
+            term_l = term.lower().strip()
+            if not term_l:
+                continue
+            for page_num in sorted(page_index.keys()):
+                if term_l in (page_index.get(page_num) or "").lower():
+                    return page_num
+        return None
+
+    def _rule_search_terms(self, rule_id: str, result: RuleResult) -> List[str]:
+        terms = []
+        if result.appraisal_value:
+            terms.append(result.appraisal_value)
+        if result.message:
+            terms.extend(re.findall(r"'([^']{3,80})'", result.message))
+
+        defaults = {
+            "S-1": ["Property Address", "Subject", "City", "County"],
+            "S-2": ["Borrower"],
+            "S-3": ["Owner of Public Record"],
+            "S-4": ["Legal Description", "Assessor", "Tax Year"],
+            "S-5": ["Neighborhood Name", "Neighborhood"],
+            "S-6": ["Map Reference", "Census Tract"],
+            "S-7": ["Occupant", "Vacant", "Owner", "Tenant"],
+            "S-8": ["Special Assessments"],
+            "S-9": ["PUD", "HOA"],
+            "S-10": ["Lender", "Client"],
+            "S-11": ["Property Rights", "Fee Simple", "Leasehold"],
+            "S-12": ["offered for sale", "Prior Sale", "Days on Market"],
+            "C-1": ["Analyze Contract", "Contract"],
+            "C-2": ["Contract Price", "Date of Contract", "Sale Price"],
+            "C-3": ["Owner of Record", "Data Source"],
+            "N-1": ["Neighborhood Characteristics", "Location", "Built-Up", "Growth"],
+            "N-2": ["Housing Trends", "Property Values", "Demand", "Marketing Time"],
+            "N-3": ["One-Unit Housing", "PRICE", "AGE"],
+            "N-4": ["Present Land Use", "Land Use"],
+            "N-5": ["Neighborhood Boundaries"],
+            "N-6": ["Neighborhood Description"],
+            "N-7": ["Market Conditions"],
+            "ST-1": ["Dimensions", "Site Area", "Shape"],
+            "ST-2": ["Site Area"],
+            "ST-3": ["Shape"],
+            "ST-4": ["View"],
+            "ST-5": ["Zoning", "Legal"],
+            "ST-6": ["Highest and Best Use"],
+            "ST-7": ["Utilities", "Off-site Improvements"],
+            "ST-8": ["FEMA", "Flood"],
+            "ST-9": ["Utilities typical", "Public", "Private"],
+            "I-1": ["General Description", "Effective Age"],
+            "I-3": ["Exterior", "Roof Surface"],
+            "I-5": ["Utilities", "inspection"],
+            "I-7": ["Above Grade", "GLA", "Gross Living Area"],
+            "SCA-1": ["Comparable", "currently offered", "sold"],
+            "SCA-2": ["Comparable", "Sale Price"],
+            "SCA-5": ["Data Source", "MLS", "DOM"],
+            "PH-1": ["Subject Front", "Subject Rear", "Subject Street"],
+            "PH-4": ["Attic", "Crawl", "FHA"],
+            "SK-1": ["Sketch", "Floor Plan"],
+            "FHA-2": ["FHA Case", "Case Number"],
+            "FHA-3": ["FHA", "Intended Use", "Intended User"],
+            "COM-2": ["Market Conditions", "1004MC"],
+            "COM-3": ["Comparable Selection", "comparables were selected"],
+            "COM-4": ["adjustment", "Sales Comparison"],
+            "COM-5": ["Reconciliation"],
+            "COM-6": ["Addendum", "Additional Comments", "Certification"],
+            "COM-7": ["Prior Sale", "offered for sale", "Days on Market"],
+        }
+        terms.extend(defaults.get(rule_id, []))
+        return terms
 
     def get_improvement_suggestions(self):
         return self.logger.analyze_improvements()

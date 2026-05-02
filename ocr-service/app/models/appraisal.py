@@ -219,5 +219,6 @@ class ValidationContext(BaseModel):
     # Rules can inspect this to decide VERIFY vs FAIL based on extraction confidence.
     field_meta: Optional[Dict[str, Any]] = None
     raw_text: Optional[str] = None
+    page_index: Optional[Dict[int, str]] = None
 
     model_config = {"arbitrary_types_allowed": True}

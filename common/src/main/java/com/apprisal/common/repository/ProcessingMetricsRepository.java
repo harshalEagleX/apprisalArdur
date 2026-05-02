@@ -16,6 +16,8 @@ public interface ProcessingMetricsRepository extends JpaRepository<ProcessingMet
 
     Optional<ProcessingMetrics> findByQcResultId(Long qcResultId);
 
+    void deleteByQcResultId(Long qcResultId);
+
     @Transactional(readOnly = true)
     @Query("SELECT AVG(m.ocrConfidenceAvg) FROM ProcessingMetrics m WHERE m.createdAt >= :from")
     Double avgOcrConfidenceSince(@Param("from") LocalDateTime from);

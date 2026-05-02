@@ -433,22 +433,90 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
 @rule(id="COM-6", name="Addenda Consistency")
 def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
     """
-    N-6: Do addenda contradict the main form values?
-    Currently checks the most common contradiction: market value discrepancy.
-    Full addenda cross-reference requires Phase 5 UI to surface conflicts.
+    COM-6: Do addenda contradict key main-form values?
+
+    This lightweight automated check scans addenda/certification text for common
+    cross-reference problems: different subject address, borrower/lender mismatch,
+    or a final value that differs from the main form extraction.
     """
-    # Basic check: if both a market value and a summary commentary exist,
-    # verify the commentary doesn't contradict the market value direction
-    mv = ctx.report.sales_comparison  # simplified — full check in Phase 5
+    raw_text = ctx.raw_text or ""
+    if not raw_text.strip():
+        return RuleResult(
+            rule_id="COM-6", rule_name="Addenda Consistency",
+            status=RuleStatus.VERIFY,
+            message="Addenda text was not available for consistency analysis.",
+            action_item="Manually compare addenda against the main report fields.",
+            review_required=True,
+            severity=RuleSeverity.ADVISORY,
+        )
+
+    lower = raw_text.lower()
+    starts = [
+        lower.find("addendum"),
+        lower.find("additional comments"),
+        lower.find("supplemental addendum"),
+        lower.find("certification"),
+    ]
+    starts = [pos for pos in starts if pos >= 0]
+    addenda_text = raw_text[min(starts):] if starts else raw_text[-5000:]
+
+    subject = ctx.report.subject
+    field_meta = ctx.field_meta or {}
+    issues = []
+
+    if subject.address and not _contains_normalized(addenda_text, subject.address):
+        if re.search(r"\b\d{2,6}\s+[A-Za-z0-9 .'-]{3,80}\b", addenda_text):
+            issues.append("Addenda contains an address-like value that does not match the subject address.")
+
+    if subject.borrower and re.search(r"\bborrower\b", addenda_text, re.I):
+        if not _contains_normalized(addenda_text, subject.borrower):
+            issues.append("Borrower reference in addenda does not match the main form borrower.")
+
+    if subject.lender_name and re.search(r"\b(?:lender|client)\b", addenda_text, re.I):
+        if not _contains_normalized(addenda_text, subject.lender_name):
+            issues.append("Lender/client reference in addenda does not match the main form lender.")
+
+    mv_meta = field_meta.get("market_value_opinion")
+    market_value = getattr(mv_meta, "value", None) if mv_meta else None
+    if market_value:
+        expected_amount = _money_digits(str(market_value))
+        addenda_amounts = {_money_digits(m.group(0)) for m in re.finditer(r"\$\s*\d[\d,]{3,}", addenda_text)}
+        addenda_amounts.discard("")
+        if expected_amount and addenda_amounts and expected_amount not in addenda_amounts:
+            issues.append("Dollar amount in addenda may conflict with the extracted final value.")
+
+    if issues:
+        return RuleResult(
+            rule_id="COM-6", rule_name="Addenda Consistency",
+            status=RuleStatus.WARNING,
+            message="Addenda consistency issue found: " + " ".join(issues),
+            action_item="Review addenda and correct any references that conflict with the main report.",
+            review_required=True,
+            severity=RuleSeverity.ADVISORY,
+        )
 
     return RuleResult(
         rule_id="COM-6", rule_name="Addenda Consistency",
-        status=RuleStatus.VERIFY,
-        message="Addenda cross-reference requires manual review. "
-                "Automated addenda consistency check will be available in Phase 5.",
-        review_required=True,
+        status=RuleStatus.PASS,
+        message="Automated addenda consistency check found no obvious conflicts with main report fields.",
+        review_required=False,
         severity=RuleSeverity.ADVISORY,
     )
+
+
+def _normalize_for_compare(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+
+
+def _contains_normalized(haystack: str, needle: str) -> bool:
+    normalized_needle = _normalize_for_compare(needle)
+    if not normalized_needle:
+        return True
+    return normalized_needle in _normalize_for_compare(haystack)
+
+
+def _money_digits(value: str) -> str:
+    return re.sub(r"\D", "", value or "").lstrip("0")
 
 
 # ── N-7: Prior Sales Disclosure ───────────────────────────────────────────────

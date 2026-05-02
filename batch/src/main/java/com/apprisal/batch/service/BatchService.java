@@ -146,6 +146,13 @@ public class BatchService {
 
         log.info("Deleting batch {} with {} files", batch.getParentBatchId(), batch.getFiles().size());
 
+        List<QCResult> qcResults = qcResultRepository.findByBatchId(batchId);
+        for (QCResult qcResult : qcResults) {
+            metricsRepository.deleteByQcResultId(qcResult.getId());
+        }
+        qcResultRepository.deleteAll(qcResults);
+        qcResultRepository.flush();
+
         // Delete storage files
         for (BatchFile file : batch.getFiles()) {
             if (file.getStoragePath() != null) {
@@ -174,16 +181,6 @@ public class BatchService {
             }
         } catch (IOException e) {
             log.warn("Failed to clean up batch directory: {}", e.getMessage());
-        }
-
-        // QCResult owns a FK to BatchFile, so remove QC data before deleting files.
-        List<QCResult> qcResults = qcResultRepository.findByBatchId(batchId);
-        for (QCResult qcResult : qcResults) {
-            metricsRepository.findByQcResultId(qcResult.getId()).ifPresent(metricsRepository::delete);
-        }
-        if (!qcResults.isEmpty()) {
-            qcResultRepository.deleteAll(qcResults);
-            qcResultRepository.flush();
         }
 
         // Database will cascade delete files due to orphanRemoval.
