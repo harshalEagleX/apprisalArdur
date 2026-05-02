@@ -19,7 +19,7 @@ def validate_usda_cost_approach(ctx: ValidationContext) -> RuleResult:
 @rule(id="MF-1", name="Subject Rent Matching")
 def validate_mf_rent_matching(ctx: ValidationContext) -> RuleResult:
     if re.search(r"gross monthly rent|subject rent schedule|1007", _text(ctx), re.I):
-        return RuleResult(rule_id="MF-1", rule_name="Subject Rent Matching", status=RuleStatus.WARNING, message="Rent schedule evidence found. Verify rent matches income approach.")
+        return RuleResult(rule_id="MF-1", rule_name="Subject Rent Matching", status=RuleStatus.VERIFY, message="Rent schedule evidence found. Verify rent matches income approach.")
     return _verify("MF-1", "Subject Rent Matching", "Subject rent schedule evidence not detected. Verify if applicable.")
 
 

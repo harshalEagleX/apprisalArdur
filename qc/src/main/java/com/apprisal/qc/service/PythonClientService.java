@@ -97,8 +97,8 @@ public class PythonClientService {
             if (result == null) {
                 throw new RuntimeException("Python QC service returned empty response body");
             }
-            log.info("Python QC completed: passed={}, failed={}, warnings={}, total_rules={}",
-                    result.passed(), result.failed(), result.warnings(), result.totalRules());
+            log.info("Python QC completed: passed={}, failed={}, verify={}, total_rules={}",
+                    result.passed(), result.failed(), result.verify(), result.totalRules());
             return result;
 
         } catch (org.springframework.web.client.ResourceAccessException e) {

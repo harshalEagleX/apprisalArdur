@@ -12,9 +12,10 @@ Strategy (Phase 1):
 
 import re
 import logging
+import html
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 
 import fitz  # PyMuPDF
@@ -27,7 +28,7 @@ try:
     TESSERACT_AVAILABLE = True
 except ImportError:
     TESSERACT_AVAILABLE = False
-    logging.warning("pytesseract not available. Install with: pip install pytesseract pillow")
+    logging.notice("pytesseract not available. Install with: pip install pytesseract pillow")
 
 # Import image preprocessor
 try:
@@ -35,9 +36,15 @@ try:
     PREPROCESSOR_AVAILABLE = True
 except ImportError:
     PREPROCESSOR_AVAILABLE = False
-    logging.warning("ImagePreprocessor not available. Image preprocessing will be disabled.")
+    logging.notice("ImagePreprocessor not available. Image preprocessing will be disabled.")
 
 logger = logging.getLogger(__name__)
+
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except Exception:
+    PDFPLUMBER_AVAILABLE = False
 
 
 class ExtractionMethod(str, Enum):
@@ -69,6 +76,7 @@ class PageText:
     word_count: int = 0
     has_tables: bool = False
     words: List[OcrWord] = field(default_factory=list)
+    hocr_text: Optional[str] = None
 
 
 @dataclass
@@ -79,11 +87,50 @@ class ExtractionResult:
     total_pages: int = 0
     images: List[Tuple[int, bytes]] = field(default_factory=list)  # (page_num, image_bytes)
     extraction_time_ms: int = 0
-    warnings: List[str] = field(default_factory=list)
+    notices: List[str] = field(default_factory=list)
     # PIL Images per page — used for moondream checkbox detection (Phase 2 Step 2)
     # Stored as grayscale PIL.Image objects, keyed by 1-indexed page number
     page_images: Dict[int, "Image.Image"] = field(default_factory=dict)
     word_index: Dict[int, List[OcrWord]] = field(default_factory=dict)
+
+
+class SpatialWordIndex:
+    """Simple per-page spatial lookup for OCR/native PDF words."""
+
+    def __init__(self, word_index: Dict[int, List[OcrWord]]):
+        self.word_index = word_index or {}
+
+    def words_in_box(self, page: int, x: float, y: float, w: float, h: float) -> List[OcrWord]:
+        x2 = x + w
+        y2 = y + h
+        return [
+            word for word in self.word_index.get(page, [])
+            if word.bbox_x >= x and word.bbox_y >= y
+            and word.bbox_x + word.bbox_w <= x2
+            and word.bbox_y + word.bbox_h <= y2
+        ]
+
+    def words_near_anchor(self, page: int, anchor: str, radius: float = 0.05) -> List[OcrWord]:
+        anchor_l = anchor.lower()
+        page_words = self.word_index.get(page, [])
+        matches = [word for word in page_words if anchor_l in word.text.lower()]
+        if not matches:
+            return []
+        first = matches[0]
+        return self.words_in_box(
+            page,
+            max(0.0, first.bbox_x - radius),
+            max(0.0, first.bbox_y - radius),
+            min(1.0, first.bbox_w + radius * 4),
+            min(1.0, first.bbox_h + radius * 2),
+        )
+
+    def average_confidence(self, page: int, text: str) -> float:
+        tokens = {t.lower() for t in re.findall(r"[A-Za-z0-9$.,/-]+", text or "")}
+        if not tokens:
+            return 0.0
+        matched = [w.confidence for w in self.word_index.get(page, []) if w.text.lower() in tokens]
+        return sum(matched) / len(matched) if matched else 0.0
 
 
 class OCRPipeline:
@@ -119,10 +166,10 @@ class OCRPipeline:
         else:
             self.preprocessor = None
             if use_preprocessing and not (PREPROCESSOR_AVAILABLE and TESSERACT_AVAILABLE):
-                logger.warning("Image preprocessing requested but dependencies not available. Falling back to standard mode.")
+                logger.notice("Image preprocessing requested but dependencies not available. Falling back to standard mode.")
         
         if force_image_ocr and not TESSERACT_AVAILABLE:
-            logger.warning("Force Image OCR requested but Tesseract not available. Falling back to hybrid mode.")
+            logger.notice("Force Image OCR requested but Tesseract not available. Falling back to hybrid mode.")
 
     def extract_all_pages(self, pdf_path: str, force_ocr: bool = None) -> ExtractionResult:
         """
@@ -155,9 +202,10 @@ class OCRPipeline:
                 page = doc[i]
                 page_num = i + 1
 
-                embedded_text = page.get_text("text")
+                plumber_text, plumber_words = self._pdfplumber_page(pdf_path, i)
+                embedded_text = plumber_text or page.get_text("text")
                 embedded_wc = len(embedded_text.split())
-                embedded_words = self._embedded_words(page, page_num)
+                embedded_words = plumber_words or self._embedded_words(page, page_num)
                 has_tables = self._detect_tables(page)
 
                 # Decide whether OCR render is needed
@@ -204,21 +252,24 @@ class OCRPipeline:
                 img      = job["pil_img"]
                 force    = job["force"]
 
-                def _tess(image) -> Tuple[str, int, List[OcrWord]]:
-                    words = self._tesseract_words(image, pn, config="--psm 6")
+                def _tess(image) -> Tuple[str, int, List[OcrWord], Optional[str]]:
+                    ocr_image = self._preprocess_pil_for_ocr(image)
+                    hocr_text, words = self._tesseract_hocr_words(ocr_image, pn, config="--oem 3 --psm 6")
+                    if not words:
+                        words = self._tesseract_words(ocr_image, pn, config="--oem 3 --psm 6")
                     text = self._words_to_text(words)
                     if not text:
-                        text = pytesseract.image_to_string(image, config="--psm 6")
-                    return text, len(text.split()), words
+                        text = pytesseract.image_to_string(ocr_image, config="--oem 3 --psm 6")
+                    return text, len(text.split()), words, hocr_text
 
                 # Force path: always Tesseract
                 if force and img is not None:
                     try:
-                        text, wc, words = _tess(img)
+                        text, wc, words, hocr_text = _tess(img)
                         return PageText(pn, text, ExtractionMethod.TESSERACT,
-                                        self._estimate_confidence(text), wc, htables, words)
+                                        self._estimate_confidence(text), wc, htables, words, hocr_text)
                     except Exception as e:
-                        logger.warning("Forced Tesseract failed page %d: %s", pn, e)
+                        logger.notice("Forced Tesseract failed page %d: %s", pn, e)
                         # Fall through to embedded
 
                 # Embedded text good enough
@@ -229,12 +280,12 @@ class OCRPipeline:
                 # Hybrid zone or OCR-required zone
                 if img is not None:
                     try:
-                        text, wc, words = _tess(img)
+                        text, wc, words, hocr_text = _tess(img)
                         if wc > emb_wc:
                             return PageText(pn, text, ExtractionMethod.TESSERACT,
-                                            self._estimate_confidence(text), wc, htables, words)
+                                            self._estimate_confidence(text), wc, htables, words, hocr_text)
                     except Exception as e:
-                        logger.warning("Tesseract fallback failed page %d: %s", pn, e)
+                        logger.notice("Tesseract fallback failed page %d: %s", pn, e)
 
                 # Last resort: return whatever embedded gave us
                 conf = 0.5 if emb_wc < 10 else 0.7
@@ -253,10 +304,22 @@ class OCRPipeline:
 
         except Exception as e:
             logger.error("Failed to process PDF: %s", e)
-            result.warnings.append(f"PDF processing error: {str(e)}")
+            result.notices.append(f"PDF processing error: {str(e)}")
 
         result.extraction_time_ms = int((time.time() - start_time) * 1000)
         return result
+
+    def _preprocess_pil_for_ocr(self, image):
+        """Apply OpenCV preprocessing to a rendered PIL page image when enabled."""
+        if not self.use_preprocessing or not self.preprocessor or image is None:
+            return image
+        try:
+            import numpy as np
+            clean = self.preprocessor.preprocess_image(np.array(image))
+            return PILImage.fromarray(clean).convert("L")
+        except Exception as e:
+            logger.debug("OCR preprocessing failed, using rendered grayscale image: %s", e)
+            return image
 
     def extract_word_geometry(self, pdf_path: str) -> Dict[int, List[OcrWord]]:
         """Extract per-page word geometry without changing cached page text."""
@@ -275,7 +338,7 @@ class OCRPipeline:
                     word_index[page_num] = words
             doc.close()
         except Exception as e:
-            logger.warning("Word geometry extraction failed: %s", e)
+            logger.notice("Word geometry extraction failed: %s", e)
         return word_index
 
     def _embedded_words(self, page: fitz.Page, page_number: int) -> List[OcrWord]:
@@ -302,6 +365,80 @@ class OCRPipeline:
         except Exception as e:
             logger.debug("Embedded word extraction failed page %d: %s", page_number, e)
         return words
+
+    def _pdfplumber_page(self, pdf_path: str, page_index: int) -> Tuple[str, List[OcrWord]]:
+        """Use pdfplumber when available for digital PDFs with live text + coordinates."""
+        if not PDFPLUMBER_AVAILABLE:
+            return "", []
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                if page_index >= len(pdf.pages):
+                    return "", []
+                page = pdf.pages[page_index]
+                chars = page.chars or []
+                if len(chars) < 20:
+                    return "", []
+                text = page.extract_text(x_tolerance=1, y_tolerance=3) or ""
+                words = []
+                page_w = max(float(page.width), 1.0)
+                page_h = max(float(page.height), 1.0)
+                for item in page.extract_words() or []:
+                    value = str(item.get("text", "")).strip()
+                    if not value:
+                        continue
+                    x0 = float(item.get("x0", 0.0))
+                    x1 = float(item.get("x1", x0))
+                    top = float(item.get("top", 0.0))
+                    bottom = float(item.get("bottom", top))
+                    words.append(OcrWord(
+                        text=value,
+                        page=page_index + 1,
+                        bbox_x=max(0.0, min(1.0, x0 / page_w)),
+                        bbox_y=max(0.0, min(1.0, top / page_h)),
+                        bbox_w=max(0.001, min(1.0, (x1 - x0) / page_w)),
+                        bbox_h=max(0.001, min(1.0, (bottom - top) / page_h)),
+                        confidence=1.0,
+                    ))
+                return text, words
+        except Exception as e:
+            logger.debug("pdfplumber extraction failed page %d: %s", page_index + 1, e)
+            return "", []
+
+    def _tesseract_hocr_words(self, image, page_number: int, config: str = "--psm 6") -> Tuple[Optional[str], List[OcrWord]]:
+        """Capture hOCR output and parse word boxes/confidence from it."""
+        if not TESSERACT_AVAILABLE or image is None:
+            return None, []
+        page_w, page_h = image.size
+        try:
+            hocr_bytes = pytesseract.image_to_pdf_or_hocr(image, extension="hocr", config=config)
+            hocr_text = hocr_bytes.decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.debug("Tesseract hOCR failed page %d: %s", page_number, e)
+            return None, []
+
+        words: List[OcrWord] = []
+        pattern = re.compile(
+            r"<span[^>]*class=['\"]ocrx_word['\"][^>]*title=['\"][^'\"]*bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+);?\s*x_wconf\s+([0-9.]+)[^'\"]*['\"][^>]*>(.*?)</span>",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in pattern.finditer(hocr_text):
+            x0, y0, x1, y1, conf, raw = match.groups()
+            text = html.unescape(re.sub(r"<[^>]+>", "", raw)).strip()
+            if not text:
+                continue
+            confidence = max(0.0, min(1.0, float(conf) / 100.0))
+            if confidence < 0.30:
+                continue
+            words.append(OcrWord(
+                text=text,
+                page=page_number,
+                bbox_x=float(x0) / max(page_w, 1),
+                bbox_y=float(y0) / max(page_h, 1),
+                bbox_w=float(int(x1) - int(x0)) / max(page_w, 1),
+                bbox_h=float(int(y1) - int(y0)) / max(page_h, 1),
+                confidence=confidence,
+            ))
+        return hocr_text, words
 
     def _tesseract_words(self, image, page_number: int, config: str = "--psm 6") -> List[OcrWord]:
         """Use pytesseract.image_to_data so OCR text keeps exact word boxes."""
@@ -357,7 +494,7 @@ class OCRPipeline:
                     has_tables=self._detect_tables(page)
                 )
             except Exception as e:
-                logger.warning(f"Forced Tesseract extraction failed for page {page_number}: {e}")
+                logger.notice(f"Forced Tesseract extraction failed for page {page_number}: {e}")
                 # Fallback to embedded
         
         # Pass 1: Try embedded text extraction (fastest)
@@ -391,7 +528,7 @@ class OCRPipeline:
                         has_tables=self._detect_tables(page)
                     )
             except Exception as e:
-                logger.warning(f"Tesseract extraction failed for page {page_number}: {e}")
+                logger.notice(f"Tesseract extraction failed for page {page_number}: {e}")
         
         # Return whatever we got from embedded extraction
         return PageText(
@@ -524,7 +661,7 @@ class OCRPipeline:
                         image_ext = base_image["ext"]
                         images.append((page_num + 1, image_bytes, image_ext))
                     except Exception as e:
-                        logger.warning(f"Failed to extract image {img_idx} from page {page_num + 1}: {e}")
+                        logger.notice(f"Failed to extract image {img_idx} from page {page_num + 1}: {e}")
                         
             doc.close()
             
@@ -552,7 +689,7 @@ class OCRPipeline:
         start_time = time.time()
         
         if not self.use_preprocessing or not self.preprocessor:
-            logger.warning("Preprocessing not available. Falling back to standard extraction.")
+            logger.notice("Preprocessing not available. Falling back to standard extraction.")
             return self.extract_all_pages(pdf_path)
         
         logger.info(f"Extracting with image preprocessing: {pdf_path}")
@@ -594,7 +731,7 @@ class OCRPipeline:
             
         except Exception as e:
             logger.error(f"Preprocessing extraction failed: {e}")
-            result.warnings.append(f"Preprocessing error: {str(e)}")
+            result.notices.append(f"Preprocessing error: {str(e)}")
             # Fallback to standard extraction
             logger.info("Falling back to standard extraction...")
             return self.extract_all_pages(pdf_path)

@@ -12,6 +12,7 @@ Also saves per-field extracted values with confidence scores.
 
 import logging
 import uuid
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -75,7 +76,7 @@ def get_cached_ocr(file_hash: str, expected_pages: int):
         return None
 
     try:
-        from app.ocr.ocr_pipeline import PageText, ExtractionMethod
+        from app.ocr.ocr_pipeline import PageText, ExtractionMethod, OcrWord
 
         # Read ALL column values INSIDE the session — once the session closes,
         # SQLAlchemy ORM objects become detached and attribute access raises an error.
@@ -99,6 +100,11 @@ def get_cached_ocr(file_hash: str, expected_pages: int):
                     confidence=r.confidence_score or 0.5,
                     word_count=r.word_count or 0,
                     has_tables=r.has_tables or False,
+                    words=[
+                        OcrWord(**word)
+                        for word in json.loads(r.word_json or "[]")
+                    ],
+                    hocr_text=r.hocr_text,
                 )
                 for r in rows
             ]
@@ -160,6 +166,8 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
                         "confidence_score": pt.confidence,
                         "extraction_method": pt.method.value,
                         "has_tables": pt.has_tables,
+                        "hocr_text": getattr(pt, "hocr_text", None),
+                        "word_json": json.dumps([w.__dict__ for w in getattr(pt, "words", [])]),
                     })
                 else:
                     page_row = PageOCRResult(
@@ -170,6 +178,8 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
                         word_count=pt.word_count,
                         confidence_score=pt.confidence,
                         raw_text=pt.text,
+                        hocr_text=getattr(pt, "hocr_text", None),
+                        word_json=json.dumps([w.__dict__ for w in getattr(pt, "words", [])]),
                         has_tables=pt.has_tables,
                     )
                     db.add(page_row)

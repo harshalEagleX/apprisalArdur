@@ -21,7 +21,7 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
     
     HomeVision Logic:
     - NEVER return ERROR for checkbox detection failure
-    - Return WARNING if checkbox state unclear
+    - Return VERIFY if checkbox state unclear
     - Return FAIL only for definite business rule violation
     """
     # Check if this is a Refinance transaction
@@ -44,12 +44,12 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
         )
     
     # For Purchase transactions
-    # If checkbox state is unknown (not detected), return WARNING not ERROR
+    # If checkbox state is unknown (not detected), return VERIFY not ERROR
     if ctx.report.contract.did_analyze_contract is None:
         return RuleResult(
             rule_id="C-1",
             rule_name="Contract Analysis Requirement",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Did/Did Not Analyze Contract checkbox not detected. Please verify manually."
         )
     
@@ -67,7 +67,7 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-1",
             rule_name="Contract Analysis Requirement",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Appraiser must provide detailed reasoning and analysis of the contract including sale type and results."
         )
     
@@ -76,7 +76,7 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-1",
             rule_name="Contract Analysis Requirement",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Please identify the sale type (Arms-Length, Non Arms-Length, REO, Short Sale, or Court Ordered Sale)."
         )
     
@@ -99,7 +99,7 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
     - Skip for Refinance transactions
     - If Purchase Agreement not provided, verify contract fields exist in report
     - Compare with engagement letter if available
-    - Never ERROR for missing documents - use WARNING
+    - Never ERROR for missing documents - use VERIFY
     """
     # Skip for Refinance
     if ctx.engagement_letter and ctx.engagement_letter.assignment_type == "Refinance":
@@ -117,7 +117,7 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-2",
             rule_name="Contract Price and Date",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Contract Price not extracted from report. Please verify manually."
         )
     
@@ -195,11 +195,11 @@ def validate_owner_record_source(ctx: ValidationContext) -> RuleResult:
     c = ctx.report.contract
     
     if c.is_seller_owner is None:
-        # Checkbox not detected - return WARNING not ERROR
+        # Checkbox not detected - return VERIFY not ERROR
         return RuleResult(
             rule_id="C-3",
             rule_name="Owner of Record Data Source",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Is Seller Owner of Public Record checkbox not detected. Please verify manually."
         )
     
@@ -255,7 +255,7 @@ def validate_financial_assistance(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-4",
             rule_name="Financial Assistance",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Financial Assistance checkbox (Yes/No) not detected. Please verify manually."
         )
     
@@ -275,7 +275,7 @@ def validate_financial_assistance(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="C-4",
                 rule_name="Financial Assistance",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Financial Assistance is marked 'Yes', but no amount is specified."
             )
         
@@ -284,7 +284,7 @@ def validate_financial_assistance(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="C-4",
                 rule_name="Financial Assistance",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message=f"Financial assistance amount (${c.financial_assistance_amount:,.2f}) is noted, but description of items is missing or incomplete."
             )
     
@@ -354,7 +354,7 @@ def validate_personal_property(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="C-5",
                 rule_name="Personal Property Analysis",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message=f"Personal property items from contract may not be fully addressed in commentary. Items: {', '.join(missing_items)}"
             )
         
@@ -366,7 +366,7 @@ def validate_personal_property(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="C-5",
                 rule_name="Personal Property Analysis",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Please state whether personal property items contribute to the appraised value."
             )
     
@@ -376,7 +376,7 @@ def validate_personal_property(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="C-5",
                 rule_name="Personal Property Analysis",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Personal property items are listed. Please explicitly state whether they contribute to value."
             )
     

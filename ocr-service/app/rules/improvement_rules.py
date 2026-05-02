@@ -140,7 +140,7 @@ def validate_condition_rating(ctx: ValidationContext) -> RuleResult:
 def validate_adverse_livability(ctx: ValidationContext) -> RuleResult:
     imp = _improvements(ctx)
     if imp.adverse_conditions:
-        return RuleResult(rule_id="I-10", rule_name="Adverse Conditions Affecting Livability", status=RuleStatus.WARNING, message="Adverse conditions affecting livability are indicated. Verify supporting commentary.")
+        return RuleResult(rule_id="I-10", rule_name="Adverse Conditions Affecting Livability", status=RuleStatus.VERIFY, message="Adverse conditions affecting livability are indicated. Verify supporting commentary.")
     if not re.search(r"adverse conditions.*(?:Yes|No)|livability|soundness|structural integrity", _raw(ctx), re.I | re.S):
         return _verify("I-10", "Adverse Conditions Affecting Livability", "Adverse livability Yes/No field not extracted. Verify manually.")
     return RuleResult(rule_id="I-10", rule_name="Adverse Conditions Affecting Livability", status=RuleStatus.PASS, message="No adverse livability issue indicated.")
@@ -151,7 +151,7 @@ def validate_neighborhood_conformity(ctx: ValidationContext) -> RuleResult:
     imp = _improvements(ctx)
     text = _raw(ctx)
     if imp.conforms_to_neighborhood is False:
-        return RuleResult(rule_id="I-11", rule_name="Neighborhood Conformity", status=RuleStatus.WARNING, message="Property does not conform to neighborhood. Extensive commentary is required.")
+        return RuleResult(rule_id="I-11", rule_name="Neighborhood Conformity", status=RuleStatus.VERIFY, message="Property does not conform to neighborhood. Extensive commentary is required.")
     if imp.conforms_to_neighborhood is None and not re.search(r"conform to the neighborhood.*(?:Yes|No)|property generally conform", text, re.I | re.S):
         return _verify("I-11", "Neighborhood Conformity", "Neighborhood conformity Yes/No field not extracted.")
     return RuleResult(rule_id="I-11", rule_name="Neighborhood Conformity", status=RuleStatus.PASS, message="Property conforms to neighborhood.")
@@ -160,12 +160,12 @@ def validate_neighborhood_conformity(ctx: ValidationContext) -> RuleResult:
 @rule(id="I-12", name="Additions to Subject")
 def validate_additions(ctx: ValidationContext) -> RuleResult:
     if re.search(r"\b(addition|converted|unpermitted|permit)\b", _raw(ctx), re.I):
-        return RuleResult(rule_id="I-12", rule_name="Additions to Subject", status=RuleStatus.WARNING, message="Possible addition/permit language found. Verify permits, conformity, marketability impact, and zoning compliance.")
+        return RuleResult(rule_id="I-12", rule_name="Additions to Subject", status=RuleStatus.VERIFY, message="Possible addition/permit language found. Verify permits, conformity, marketability impact, and zoning compliance.")
     return _verify("I-12", "Additions to Subject", "Automated addition detection is inconclusive. Verify whether additions exist and whether required commentary is present.")
 
 
 @rule(id="I-13", name="Security Bars")
 def validate_security_bars(ctx: ValidationContext) -> RuleResult:
     if re.search(r"security bars?|window bars?|release latch", _raw(ctx), re.I):
-        return RuleResult(rule_id="I-13", rule_name="Security Bars", status=RuleStatus.WARNING, message="Security bar language found. Verify release latches and local code compliance.")
+        return RuleResult(rule_id="I-13", rule_name="Security Bars", status=RuleStatus.VERIFY, message="Security bar language found. Verify release latches and local code compliance.")
     return RuleResult(rule_id="I-13", rule_name="Security Bars", status=RuleStatus.PASS, message="No security bar language detected in OCR text.")

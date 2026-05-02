@@ -19,7 +19,7 @@ def validate_commentary_standards(ctx: ValidationContext) -> RuleResult:
     if not re.search(r"addendum|comments?|sales comparison|reconciliation", text, re.I):
         return _verify("ADD-1", "Commentary Standards", "Addendum/commentary text not extracted. Verify headers and report-specific commentary.")
     if re.search(r"typical for the area|no adverse conditions were noted|see attached addendum", text, re.I):
-        return RuleResult(rule_id="ADD-1", rule_name="Commentary Standards", status=RuleStatus.WARNING, message="Potential canned/generic commentary detected. Verify addendum is specific to this report.")
+        return RuleResult(rule_id="ADD-1", rule_name="Commentary Standards", status=RuleStatus.VERIFY, message="Potential canned/generic commentary detected. Verify addendum is specific to this report.")
     return RuleResult(rule_id="ADD-1", rule_name="Commentary Standards", status=RuleStatus.PASS, message="Addendum/commentary evidence found.")
 
 
@@ -35,7 +35,7 @@ def validate_comp_selection_commentary(ctx: ValidationContext) -> RuleResult:
 def validate_dated_sales_commentary(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"dated sale|over\s+12\s+months|distant comparable|outside.*neighborhood", text, re.I):
-        return RuleResult(rule_id="ADD-3", rule_name="Dated Sales Commentary", status=RuleStatus.WARNING, message="Dated/distant comparable language found. Verify detailed explanation is adequate.")
+        return RuleResult(rule_id="ADD-3", rule_name="Dated Sales Commentary", status=RuleStatus.VERIFY, message="Dated/distant comparable language found. Verify detailed explanation is adequate.")
     return _verify("ADD-3", "Dated Sales Commentary", "Automated dated/distant sale detection is inconclusive. Verify if any comps need explanatory commentary.")
 
 
@@ -51,14 +51,14 @@ def validate_1004mc_req(ctx: ValidationContext) -> RuleResult:
 def validate_1004mc_inventory(ctx: ValidationContext) -> RuleResult:
     if not re.search(r"Inventory\s+Analysis|Absorption\s+Rate|Months\s+of\s+Housing\s+Supply|Total\s+#\s+of\s+Comparable", _text(ctx), re.I):
         return _verify("ADD-5", "1004MC Inventory Analysis", "1004MC inventory fields not extracted. Verify lightly shaded areas are completed or explained.")
-    return RuleResult(rule_id="ADD-5", rule_name="1004MC Inventory Analysis", status=RuleStatus.WARNING, message="1004MC inventory evidence found. Verify all required shaded areas are complete.")
+    return RuleResult(rule_id="ADD-5", rule_name="1004MC Inventory Analysis", status=RuleStatus.VERIFY, message="1004MC inventory evidence found. Verify all required shaded areas are complete.")
 
 
 @rule(id="ADD-6", name="1004MC Comparables Matching")
 def validate_1004mc_matching(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"Total\s+#\s+of\s+Comparable\s+Sales", text, re.I) and re.search(r"There\s+are\s+\d+\s+comparable", text, re.I):
-        return RuleResult(rule_id="ADD-6", rule_name="1004MC Comparables Matching", status=RuleStatus.WARNING, message="1004MC and sales-grid comparable counts were detected. Verify the counts match exactly.")
+        return RuleResult(rule_id="ADD-6", rule_name="1004MC Comparables Matching", status=RuleStatus.VERIFY, message="1004MC and sales-grid comparable counts were detected. Verify the counts match exactly.")
     return _verify("ADD-6", "1004MC Comparables Matching", "1004MC-to-sales-grid count matching requires extracted 1004MC counts. Verify active listing and sales totals match the grid.")
 
 
@@ -67,7 +67,7 @@ def validate_1004mc_trend(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"\bIncreasing\b.*\bStable\b.*\bDeclining\b", text, re.I | re.S):
         if re.search(r"\bStable\b", text, re.I):
-            return RuleResult(rule_id="ADD-7", rule_name="1004MC Overall Trend", status=RuleStatus.WARNING, message="1004MC trend grid detected. Verify selected trends are supported and time adjustments are applied/explained.")
+            return RuleResult(rule_id="ADD-7", rule_name="1004MC Overall Trend", status=RuleStatus.VERIFY, message="1004MC trend grid detected. Verify selected trends are supported and time adjustments are applied/explained.")
         return _verify("ADD-7", "1004MC Overall Trend", "1004MC trend grid detected but selected trend could not be determined.")
     return _verify("ADD-7", "1004MC Overall Trend", "1004MC trend fields not extracted. Verify trends with at least two data points.")
 
@@ -92,4 +92,4 @@ def validate_uspap_addendum(ctx: ValidationContext) -> RuleResult:
         missing.append("reasonable exposure time")
     if missing:
         return _verify("ADD-9", "USPAP 2014 Addendum", f"USPAP addendum found but missing/unclear: {', '.join(missing)}.")
-    return RuleResult(rule_id="ADD-9", rule_name="USPAP 2014 Addendum", status=RuleStatus.WARNING, message="USPAP addendum evidence found. Verify checked option and certifications are complete.")
+    return RuleResult(rule_id="ADD-9", rule_name="USPAP 2014 Addendum", status=RuleStatus.VERIFY, message="USPAP addendum evidence found. Verify checked option and certifications are complete.")

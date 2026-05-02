@@ -38,7 +38,7 @@ def validate_interior_photos(ctx: ValidationContext) -> RuleResult:
 @rule(id="PH-3", name="Additional Subject Photos")
 def validate_additional_photos(ctx: ValidationContext) -> RuleResult:
     if re.search(r"outbuilding|pool|deferred maintenance|special feature|obsolescence|subject side|crawl|attic", _text(ctx), re.I):
-        return RuleResult(rule_id="PH-3", rule_name="Additional Subject Photos", status=RuleStatus.WARNING, message="Additional-feature language detected. Verify required supporting photos are present.")
+        return RuleResult(rule_id="PH-3", rule_name="Additional Subject Photos", status=RuleStatus.VERIFY, message="Additional-feature language detected. Verify required supporting photos are present.")
     return _verify("PH-3", "Additional Subject Photos", "Additional subject photo requirement depends on property features. Verify outbuildings, pools, deferred maintenance, and obsolescence photos if applicable.")
 
 
@@ -54,11 +54,11 @@ def validate_fha_photos(ctx: ValidationContext) -> RuleResult:
 def validate_comparable_photos(ctx: ValidationContext) -> RuleResult:
     if not re.search(r"comparable photo|comp(?:arable)?\s+\d|MLS photo|drive-?by|Comparable\s+Sale\s+#", _text(ctx), re.I):
         return _verify("PH-5", "Comparable Photos", "Comparable photo evidence not detected. Verify MLS/drive-by requirements by loan type.")
-    return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.WARNING, message="Comparable photo evidence found. Verify source is acceptable for the loan type.")
+    return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.VERIFY, message="Comparable photo evidence found. Verify source is acceptable for the loan type.")
 
 
 @rule(id="PH-6", name="Obsolescence Photo Requirements")
 def validate_obsolescence_photos(ctx: ValidationContext) -> RuleResult:
     if re.search(r"obsolescence|external factor|deferred maintenance|damage", _text(ctx), re.I):
-        return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.WARNING, message="Obsolescence/condition issue language found. Verify sufficient photos and commentary.")
+        return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.VERIFY, message="Obsolescence/condition issue language found. Verify sufficient photos and commentary.")
     return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS, message="No obsolescence photo trigger language detected.")

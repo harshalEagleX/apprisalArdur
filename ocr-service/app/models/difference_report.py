@@ -205,7 +205,7 @@ class DifferenceReport(BaseModel):
     differences: List[FieldDifference] = Field(default_factory=list)
     
     # Processing issues (not decisions)
-    extraction_warnings: List[str] = Field(default_factory=list)
+    extraction_notices: List[str] = Field(default_factory=list)
     unreadable_sections: List[str] = Field(default_factory=list)
     
     # Field-level extraction confidence
@@ -230,6 +230,6 @@ class DifferenceReport(BaseModel):
             details=details
         ))
     
-    def add_warning(self, warning: str):
-        """Helper to add a processing warning."""
-        self.extraction_warnings.append(warning)
+    def add_notice(self, notice: str):
+        """Helper to add a processing notice."""
+        self.extraction_notices.append(notice)

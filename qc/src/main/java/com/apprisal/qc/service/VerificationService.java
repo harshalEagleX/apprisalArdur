@@ -3,32 +3,108 @@ package com.apprisal.qc.service;
 import com.apprisal.common.entity.*;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.repository.QCRuleResultRepository;
+import com.apprisal.common.service.AuditLogService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.lang.NonNull;
 
 /**
  * Service for handling reviewer verification of QC results.
- * Processes reviewer decisions on WARNING items and updates final decision.
+ * Processes reviewer PASS/FAIL decisions and updates final decision.
  */
 @Service
 public class VerificationService {
 
     private static final Logger log = LoggerFactory.getLogger(VerificationService.class);
+    private static final Duration REVIEW_LOCK_TTL = Duration.ofMinutes(30);
+    private static final long MIN_VERIFY_DECISION_MS = 8_000L;
+    private static final int MIN_FAIL_OVERRIDE_REASON_CHARS = 20;
 
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
+    private final AuditLogService auditLogService;
 
     public VerificationService(QCResultRepository qcResultRepository,
-            QCRuleResultRepository qcRuleResultRepository) {
+            QCRuleResultRepository qcRuleResultRepository,
+            AuditLogService auditLogService) {
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
+        this.auditLogService = auditLogService;
+    }
+
+    @Transactional
+    public QCResult beginReviewSession(@NonNull Long qcResultId, @NonNull User reviewer,
+            boolean acknowledgeExistingLock, String ipAddress, String userAgent) {
+        QCResult qcResult = getForVerification(qcResultId);
+        LocalDateTime now = LocalDateTime.now();
+        User lockedBy = qcResult.getReviewLockedBy();
+        boolean activeLock = lockedBy != null
+                && qcResult.getReviewLockExpiresAt() != null
+                && qcResult.getReviewLockExpiresAt().isAfter(now);
+
+        if (activeLock && !Objects.equals(lockedBy.getId(), reviewer.getId()) && !acknowledgeExistingLock) {
+            throw new IllegalStateException("This report is currently being reviewed by "
+                    + displayName(lockedBy) + ".");
+        }
+
+        if (!activeLock || !Objects.equals(lockedBy != null ? lockedBy.getId() : null, reviewer.getId())) {
+            qcResult.setReviewSessionToken(UUID.randomUUID().toString());
+            qcResult.setReviewStartedAt(now);
+            qcResult.setReviewLockAcknowledged(activeLock && acknowledgeExistingLock);
+        } else if (qcResult.getReviewSessionToken() == null || qcResult.getReviewSessionToken().isBlank()) {
+            qcResult.setReviewSessionToken(UUID.randomUUID().toString());
+        }
+
+        qcResult.setReviewLockedBy(reviewer);
+        qcResult.setReviewLastActiveAt(now);
+        qcResult.setReviewLockExpiresAt(now.plus(REVIEW_LOCK_TTL));
+        QCResult saved = qcResultRepository.save(qcResult);
+
+        markItemsPresented(qcResultId, saved.getReviewSessionToken());
+        auditLogService.log(reviewer, "REVIEW_SESSION_STARTED", "QCResult", qcResultId,
+                "sessionToken=" + saved.getReviewSessionToken(), ipAddress, userAgent);
+        return saved;
+    }
+
+    @Transactional
+    public QCResult heartbeatReviewSession(@NonNull Long qcResultId, @NonNull String sessionToken) {
+        QCResult qcResult = getForVerification(qcResultId);
+        assertSessionOwnsQcResult(qcResult, sessionToken);
+        LocalDateTime now = LocalDateTime.now();
+        qcResult.setReviewLastActiveAt(now);
+        qcResult.setReviewLockExpiresAt(now.plus(REVIEW_LOCK_TTL));
+        return qcResultRepository.save(qcResult);
+    }
+
+    @Transactional
+    public void releaseReviewSession(@NonNull Long qcResultId, @NonNull String sessionToken) {
+        QCResult qcResult = getForVerification(qcResultId);
+        if (sessionToken.equals(qcResult.getReviewSessionToken())) {
+            qcResult.setReviewLockExpiresAt(LocalDateTime.now());
+            qcResultRepository.save(qcResult);
+        }
+    }
+
+    @Transactional
+    public void markItemsPresented(@NonNull Long qcResultId, @NonNull String sessionToken) {
+        LocalDateTime now = LocalDateTime.now();
+        for (QCRuleResult item : qcRuleResultRepository.findPendingVerificationForQcResult(qcResultId)) {
+            if (item.getFirstPresentedAt() == null) {
+                item.setFirstPresentedAt(now);
+            }
+            if (item.getReviewSessionToken() == null || item.getReviewSessionToken().isBlank()) {
+                item.setReviewSessionToken(sessionToken);
+            }
+            qcRuleResultRepository.save(item);
+        }
     }
 
     /**
@@ -68,33 +144,54 @@ public class VerificationService {
      * Save a single decision (for auto-save AJAX calls).
      * 
      * @param ruleResultId The rule result to update
-     * @param decision     "ACCEPT" or "REJECT"
+     * @param decision     "PASS" or "FAIL"
      * @param comment      Optional reviewer comment
      * @return Updated rule result
      */
     @Transactional
-    public QCRuleResult saveDecision(@NonNull Long ruleResultId, @NonNull String decision, String comment) {
+    public QCRuleResult saveDecision(@NonNull Long ruleResultId, @NonNull String decision, String comment,
+            @NonNull String sessionToken, Long decisionLatencyMs, Boolean acknowledged, @NonNull User reviewer,
+            String ipAddress, String userAgent) {
         QCRuleResult ruleResult = qcRuleResultRepository.findById(ruleResultId)
                 .orElseThrow(() -> new RuntimeException("Rule result not found: " + ruleResultId));
+        QCResult qcResult = ruleResult.getQcResult();
+        assertSessionOwnsQcResult(qcResult, sessionToken);
+        validateFreshDecision(ruleResult, sessionToken);
+        validateEngagement(ruleResult, decisionLatencyMs, acknowledged);
 
-        boolean accepted = "ACCEPT".equalsIgnoreCase(decision);
+        boolean passed = isPassDecision(decision);
+        String originalStatus = normalizedStatus(ruleResult.getStatus());
 
-        // Set reviewer decision fields
-        ruleResult.setReviewerVerified(accepted);
-        ruleResult.setReviewerComment(comment);
-        ruleResult.setVerifiedAt(LocalDateTime.now());
-
-        // Update status based on decision
-        if (accepted) {
-            ruleResult.setStatus("MANUAL_PASS");
+        if (passed && "fail".equals(originalStatus)) {
+            handleFailOverride(ruleResult, comment, reviewer, sessionToken);
         } else {
-            ruleResult.setStatus("FAIL");
+            ruleResult.setReviewerVerified(passed);
+            ruleResult.setReviewerComment(comment);
+            ruleResult.setVerifiedAt(LocalDateTime.now());
+            ruleResult.setOverridePending(false);
+
+            if (passed) {
+                ruleResult.setStatus("MANUAL_PASS");
+            } else {
+                ruleResult.setStatus("FAIL");
+            }
         }
+
+        ruleResult.setReviewSessionToken(sessionToken);
+        ruleResult.setDecisionLatencyMs(decisionLatencyMs);
+        ruleResult.setAcknowledgedReferences(Boolean.TRUE.equals(acknowledged));
 
         qcRuleResultRepository.save(ruleResult);
 
         // Recalculate parent QCResult counters
         recalculateCounters(Objects.requireNonNull(ruleResult.getQcResult().getId()));
+        auditLogService.log(reviewer, "REVIEW_DECISION_SAVED", "QCRuleResult", ruleResultId,
+                "ruleId=" + ruleResult.getRuleId()
+                        + ", decision=" + decision
+                        + ", status=" + ruleResult.getStatus()
+                        + ", overridePending=" + Boolean.TRUE.equals(ruleResult.getOverridePending())
+                        + ", latencyMs=" + decisionLatencyMs,
+                ipAddress, userAgent);
 
         log.info("Decision saved: ruleResultId={}, decision={}, newStatus={}",
                 ruleResultId, decision, ruleResult.getStatus());
@@ -106,7 +203,7 @@ public class VerificationService {
      * Submit verification for a single rule result.
      *
      * @param ruleResultId The rule result to verify
-     * @param accepted     true = accept, false = reject
+     * @param accepted     true = pass, false = fail
      * @param comment      Reviewer comment
      * @param reviewer     The reviewer making the decision
      */
@@ -120,7 +217,7 @@ public class VerificationService {
         ruleResult.setVerifiedAt(LocalDateTime.now());
 
         qcRuleResultRepository.save(ruleResult);
-        log.info("Rule {} verified: accepted={}, comment={}", ruleResult.getRuleId(), accepted, comment);
+        log.info("Rule {} verified: passed={}, comment={}", ruleResult.getRuleId(), accepted, comment);
 
         return ruleResult;
     }
@@ -153,13 +250,13 @@ public class VerificationService {
         }
 
         // Compute final decision
-        // If any item is rejected, final decision is FAIL
-        // If all items are accepted, final decision is PASS
+        // If any item is failed, final decision is FAIL.
+        // If all items are passed, final decision is PASS.
         List<QCRuleResult> verifiedItems = qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId);
-        boolean anyRejected = verifiedItems.stream()
+        boolean anyFailed = verifiedItems.stream()
                 .anyMatch(item -> Boolean.FALSE.equals(item.getReviewerVerified()));
 
-        FinalDecision finalDecision = anyRejected ? FinalDecision.FAIL : FinalDecision.PASS;
+        FinalDecision finalDecision = anyFailed ? FinalDecision.FAIL : FinalDecision.PASS;
 
         qcResult.setFinalDecision(finalDecision);
         qcResult.setReviewedBy(reviewer);
@@ -175,7 +272,7 @@ public class VerificationService {
     }
 
     /**
-     * Quick accept all items (for obvious passes).
+     * Quick pass all items.
      */
     @Transactional
     public QCResult acceptAll(@NonNull Long qcResultId, @NonNull User reviewer, String notes) {
@@ -184,7 +281,7 @@ public class VerificationService {
 
         for (QCRuleResult item : items) {
             item.setReviewerVerified(true);
-            item.setReviewerComment("Bulk approved");
+            item.setReviewerComment("Bulk passed");
             item.setVerifiedAt(LocalDateTime.now());
             qcRuleResultRepository.save(item);
         }
@@ -198,7 +295,7 @@ public class VerificationService {
     }
 
     /**
-     * Reject entire QC result (quick reject).
+     * Fail entire QC result.
      */
     @Transactional
     public QCResult rejectAll(@NonNull Long qcResultId, @NonNull User reviewer, String reason) {
@@ -208,6 +305,31 @@ public class VerificationService {
         qcResult.setReviewedBy(reviewer);
         qcResult.setReviewedAt(LocalDateTime.now());
         qcResult.setReviewerNotes(reason);
+
+        return qcResultRepository.save(qcResult);
+    }
+
+    /**
+     * Complete a review from decisions that were already auto-saved.
+     */
+    @Transactional
+    public QCResult completeSavedVerification(@NonNull Long qcResultId, @NonNull User reviewer, String notes) {
+        QCResult qcResult = getForVerification(qcResultId);
+        List<QCRuleResult> verificationItems = qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId);
+
+        boolean hasPending = verificationItems.stream()
+                .anyMatch(item -> item.getReviewerVerified() == null || Boolean.TRUE.equals(item.getOverridePending()));
+        if (hasPending) {
+            throw new IllegalStateException("All review items must be marked Pass or Fail, and FAIL overrides must be second-approved, before submitting.");
+        }
+
+        boolean anyFailed = verificationItems.stream()
+                .anyMatch(item -> Boolean.FALSE.equals(item.getReviewerVerified()));
+
+        qcResult.setFinalDecision(anyFailed ? FinalDecision.FAIL : FinalDecision.PASS);
+        qcResult.setReviewedBy(reviewer);
+        qcResult.setReviewedAt(LocalDateTime.now());
+        qcResult.setReviewerNotes(notes);
 
         return qcResultRepository.save(qcResult);
     }
@@ -277,5 +399,98 @@ public class VerificationService {
 
         log.debug("Recalculated counters for QCResult {}: pass={}, fail={}, verify={}, manualPass={}",
                 qcResultId, passCount, failCount, verifyCount, manualPassCount);
+    }
+
+    private boolean isPassDecision(String decision) {
+        String normalized = decision == null ? "" : decision.trim().toUpperCase();
+        if ("PASS".equals(normalized)) {
+            return true;
+        }
+        if ("FAIL".equals(normalized)) {
+            return false;
+        }
+        throw new IllegalArgumentException("decision must be PASS or FAIL");
+    }
+
+    private void assertSessionOwnsQcResult(QCResult qcResult, String sessionToken) {
+        if (sessionToken == null || sessionToken.isBlank()) {
+            throw new IllegalStateException("Review session token is required.");
+        }
+        if (!sessionToken.equals(qcResult.getReviewSessionToken())) {
+            throw new IllegalStateException("This review session is stale. Reload the report before saving decisions.");
+        }
+        if (qcResult.getReviewLockExpiresAt() == null || qcResult.getReviewLockExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("This review session has timed out. Resume the report before saving decisions.");
+        }
+    }
+
+    private void validateFreshDecision(QCRuleResult ruleResult, String sessionToken) {
+        if (ruleResult.getReviewerVerified() != null
+                && ruleResult.getReviewSessionToken() != null
+                && !sessionToken.equals(ruleResult.getReviewSessionToken())
+                && !Boolean.TRUE.equals(ruleResult.getOverridePending())) {
+            throw new IllegalStateException("This item was already decided in another review session.");
+        }
+    }
+
+    private void validateEngagement(QCRuleResult ruleResult, Long decisionLatencyMs, Boolean acknowledged) {
+        String status = normalizedStatus(ruleResult.getStatus());
+        if ("verify".equals(status)) {
+            long latency = decisionLatencyMs == null ? 0L : decisionLatencyMs;
+            if (latency < MIN_VERIFY_DECISION_MS) {
+                throw new IllegalStateException("Please review the referenced sections before saving this decision.");
+            }
+            if (isHighSeverity(ruleResult) && !Boolean.TRUE.equals(acknowledged)) {
+                throw new IllegalStateException("High-severity VERIFY items require acknowledgement before decision.");
+            }
+        }
+    }
+
+    private void handleFailOverride(QCRuleResult ruleResult, String comment, User reviewer, String sessionToken) {
+        String reason = comment == null ? "" : comment.trim();
+        if (reason.length() < MIN_FAIL_OVERRIDE_REASON_CHARS) {
+            throw new IllegalStateException("FAIL override requires a specific reason of at least 20 characters.");
+        }
+
+        if (Boolean.TRUE.equals(ruleResult.getOverridePending())) {
+            User requestedBy = ruleResult.getOverrideRequestedBy();
+            if (requestedBy != null && Objects.equals(requestedBy.getId(), reviewer.getId())) {
+                throw new IllegalStateException("FAIL override requires approval from a second reviewer.");
+            }
+            ruleResult.setReviewerVerified(true);
+            ruleResult.setStatus("MANUAL_PASS");
+            ruleResult.setOverridePending(false);
+            ruleResult.setOverrideApprovedBy(reviewer);
+            ruleResult.setOverrideApprovedAt(LocalDateTime.now());
+            ruleResult.setVerifiedAt(LocalDateTime.now());
+            ruleResult.setReviewerComment(reason);
+            return;
+        }
+
+        ruleResult.setReviewerVerified(null);
+        ruleResult.setReviewerComment(reason);
+        ruleResult.setReviewSessionToken(sessionToken);
+        ruleResult.setOverridePending(true);
+        ruleResult.setOverrideRequestedBy(reviewer);
+        ruleResult.setOverrideRequestedAt(LocalDateTime.now());
+        ruleResult.setVerifiedAt(LocalDateTime.now());
+    }
+
+    private boolean isHighSeverity(QCRuleResult ruleResult) {
+        String severity = ruleResult.getSeverity() == null ? "" : ruleResult.getSeverity().trim().toUpperCase();
+        return "BLOCKING".equals(severity);
+    }
+
+    private String normalizedStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "verify";
+        }
+        return status.trim().toLowerCase();
+    }
+
+    private String displayName(User user) {
+        if (user == null) return "another reviewer";
+        if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
+        return user.getUsername();
     }
 }

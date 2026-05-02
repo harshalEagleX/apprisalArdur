@@ -24,7 +24,7 @@ def validate_sketch_location(ctx: ValidationContext) -> RuleResult:
 def validate_floor_coverage(ctx: ValidationContext) -> RuleResult:
     if not re.search(r"first floor|second floor|main level|basement|upper level|lower level|one[-\s]?story|#\s*of\s*Stories\s+1", _text(ctx), re.I):
         return _verify("SK-2", "Floor Coverage", "Floor labels not detected on sketch. Verify all floors are included.")
-    return RuleResult(rule_id="SK-2", rule_name="Floor Coverage", status=RuleStatus.WARNING, message="Floor-label evidence found. Verify all floors are represented.")
+    return RuleResult(rule_id="SK-2", rule_name="Floor Coverage", status=RuleStatus.VERIFY, message="Floor-label evidence found. Verify all floors are represented.")
 
 
 @rule(id="SK-3", name="Dimensions")
@@ -37,12 +37,12 @@ def validate_sketch_dimensions(ctx: ValidationContext) -> RuleResult:
 @rule(id="SK-4", name="Outbuildings and Structures")
 def validate_sketch_outbuildings(ctx: ValidationContext) -> RuleResult:
     if re.search(r"garage|outbuilding|porch|deck|patio|balcony|pool", _text(ctx), re.I):
-        return RuleResult(rule_id="SK-4", rule_name="Outbuildings and Structures", status=RuleStatus.WARNING, message="Structure/feature language found. Verify all contributing structures are shown on sketch with dimensions.")
+        return RuleResult(rule_id="SK-4", rule_name="Outbuildings and Structures", status=RuleStatus.VERIFY, message="Structure/feature language found. Verify all contributing structures are shown on sketch with dimensions.")
     return _verify("SK-4", "Outbuildings and Structures", "Automated structure detection is inconclusive. Verify garages, outbuildings, decks, porches, patios, and balconies.")
 
 
 @rule(id="SK-5", name="Area Calculations")
 def validate_area_calculations(ctx: ValidationContext) -> RuleResult:
     if re.search(r"gross living area|GLA|area calculation|total area", _text(ctx), re.I):
-        return RuleResult(rule_id="SK-5", rule_name="Area Calculations", status=RuleStatus.WARNING, message="Area-calculation evidence found. Verify it matches reported GLA.")
+        return RuleResult(rule_id="SK-5", rule_name="Area Calculations", status=RuleStatus.VERIFY, message="Area-calculation evidence found. Verify it matches reported GLA.")
     return _verify("SK-5", "Area Calculations", "Area calculations not detected. Verify sketch area totals match GLA.")

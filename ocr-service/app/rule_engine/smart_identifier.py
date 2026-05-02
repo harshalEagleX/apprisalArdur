@@ -2,7 +2,7 @@ import logging
 import traceback
 from enum import Enum
 from typing import Optional, Dict, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Configure logging - STREAM ONLY (Stateless / No PII on disk)
 # We do NOT write to a file to comply with data privacy requirements (No permanent storage).
@@ -16,7 +16,6 @@ class RuleStatus(str, Enum):
     PASS         = "pass"
     FAIL         = "fail"
     VERIFY       = "verify"        # field missing or too low confidence — human must check
-    WARNING      = "warning"       # soft issue, can be accepted
     SKIPPED      = "skipped"       # rule not applicable to this loan type
     SYSTEM_ERROR = "system_error"  # rule code crashed
 
@@ -24,7 +23,7 @@ class RuleStatus(str, Enum):
 class RuleSeverity(str, Enum):
     BLOCKING = "BLOCKING"   # FAIL = stop delivery, return to appraiser
     STANDARD = "STANDARD"   # FAIL = correction needed before delivery
-    ADVISORY = "ADVISORY"   # WARNING = flag only, not blocking
+    ADVISORY = "ADVISORY"   # non-blocking VERIFY-style finding
 
 
 class RuleResult(BaseModel):
@@ -37,6 +36,12 @@ class RuleResult(BaseModel):
     # Comparison fields for reviewer UI
     appraisal_value: Optional[str] = None
     engagement_value: Optional[str] = None
+    confidence: Optional[float] = None
+    extracted_value: Optional[Any] = None
+    expected_value: Optional[Any] = None
+    verify_question: Optional[str] = None
+    rejection_text: Optional[str] = None
+    evidence: List[str] = Field(default_factory=list)
     review_required: bool = False
     # Phase 3 additions
     severity: RuleSeverity = RuleSeverity.STANDARD
@@ -78,7 +83,7 @@ class SmartLogger:
             "total_rules": len(self.results),
             "passed": len([r for r in self.results if r.status == RuleStatus.PASS]),
             "failed": len([r for r in self.results if r.status == RuleStatus.FAIL]),
-            "verify": len([r for r in self.results if r.status in [RuleStatus.VERIFY, RuleStatus.WARNING]]),
+            "verify": len([r for r in self.results if r.status == RuleStatus.VERIFY]),
             "system_errors": len([r for r in self.results if r.status == RuleStatus.SYSTEM_ERROR]),
             "missing_data_hotspots": self.missing_data_log
         }

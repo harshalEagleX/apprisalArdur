@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Any, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydanticField
 
 from app.models.appraisal import (
     ValidationContext, AppraisalReport, SubjectSection,
@@ -54,6 +54,12 @@ class QCResultItem(BaseModel):
     details: Optional[Dict] = None
     appraisal_value: Optional[str] = None
     engagement_value: Optional[str] = None
+    confidence: Optional[float] = None
+    extracted_value: Optional[Any] = None
+    expected_value: Optional[Any] = None
+    verify_question: Optional[str] = None
+    rejection_text: Optional[str] = None
+    evidence: List[str] = PydanticField(default_factory=list)
     review_required: bool = False
     # Phase 3 additions
     severity: str = "STANDARD"
@@ -88,9 +94,6 @@ class QCResults(BaseModel):
     passed: int = 0
     failed: int = 0
     verify: int = 0         # VERIFY status — needs human review (uncertain extraction)
-    warnings: int = 0      # WARNING status — rule-level warnings (non-fatal issues)
-    skipped: int = 0
-    system_errors: int = 0  # Only actual engine crashes
     
     rule_results: List[QCResultItem] = []
     
@@ -100,8 +103,8 @@ class QCResults(BaseModel):
     # Suggestions for improvement
     suggestions: List[str] = []
     
-    # Warnings from processing
-    processing_warnings: List[str] = []
+    # Non-rule processing notices, such as OCR fallback messages.
+    processing_notices: List[str] = []
 
 
 class SmartQCProcessor:
@@ -112,11 +115,11 @@ class SmartQCProcessor:
     def __init__(self, use_tesseract: bool = True, use_nlp_embeddings: bool = False):
         # use_preprocessing=True enables the full 5-step image pipeline:
         # grayscale → denoise → Otsu threshold → table-line removal → deskew
-        # force_image_ocr=True is kept so every page is checked via Tesseract,
-        # but the pipeline now runs in parallel (4 workers) per Phase 1.
+        # Digital PDFs should keep their embedded text layer; scanned/low-text
+        # pages fall back to preprocessed Tesseract OCR.
         self.ocr_pipeline = OCRPipeline(
             use_tesseract=use_tesseract,
-            force_image_ocr=True,
+            force_image_ocr=False,
             use_preprocessing=True,
         )
         self.use_nlp_embeddings = use_nlp_embeddings
@@ -171,10 +174,11 @@ class SmartQCProcessor:
                 for pt in cached_pages:
                     extraction_result.page_index[pt.page_number] = pt.text
                     extraction_result.page_details.append(pt)
-                # Text cache is fast, but older cache rows do not include word
-                # geometry. Rebuild geometry from the PDF so rule findings can
-                # still produce true page-normalized bboxes on cache hits.
-                extraction_result.word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
+                    if getattr(pt, "words", None):
+                        extraction_result.word_index[pt.page_number] = pt.words
+                # Older cache rows may not include word geometry.
+                if not extraction_result.word_index:
+                    extraction_result.word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
 
         # ── Step 2: OCR Extraction (if not cached) ──────────────────────────
         if not cache_hit:
@@ -198,7 +202,7 @@ class SmartQCProcessor:
                 model_provider=model_provider,
                 model_name=model_name or "llama3:8b-instruct-q4_0",
                 vision_model=vision_model or "moondream2",
-                processing_warnings=["Failed to extract any text from PDF"]
+                processing_notices=["Failed to extract any text from PDF"]
             )
 
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
@@ -259,6 +263,14 @@ class SmartQCProcessor:
         elif report.contract.did_analyze_contract:
             logger.info("Appraisal indicates contract was analyzed but no contract PDF provided.")
 
+        vision_results = []
+        if (vision_model or "").lower().startswith("llava"):
+            try:
+                from app.services.vision_pipeline import analyze_pages_sync
+                vision_results = analyze_pages_sync(extraction_result.page_images)
+            except Exception as e:
+                logger.info("LLaVA vision pipeline skipped: %s", e)
+
         # Step 6: Create ValidationContext (pass field_meta for source_page + confidence)
         ctx = ValidationContext(
             report=report,
@@ -267,11 +279,14 @@ class SmartQCProcessor:
             field_meta=field_meta,
             raw_text=full_text,
             page_index=extraction_result.page_index,
+            vision_results=vision_results,
         )
         
         # Step 7: Execute rule engine
         logger.info("Executing rule engine")
         rule_results = engine.execute(ctx)
+        from app.rule_engine.cross_field_validator import CrossFieldValidator
+        rule_results.extend(CrossFieldValidator().validate(ctx))
 
         # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
         if document_id:
@@ -444,32 +459,33 @@ class SmartQCProcessor:
     ) -> QCResults:
         """Assemble final QC results."""
         
-        # Count results by status
-        status_counts = {
-            RuleStatus.PASS: 0,
-            RuleStatus.FAIL: 0,
-            RuleStatus.VERIFY: 0,
-            RuleStatus.WARNING: 0,
-            RuleStatus.SKIPPED: 0,
-            RuleStatus.SYSTEM_ERROR: 0,
-        }
+        # Count strict output statuses.
+        status_counts = {"pass": 0, "fail": 0, "verify": 0}
         
         qc_items = []
         action_items = []
         
         for result in rule_results:
-            status_counts[result.status] = status_counts.get(result.status, 0) + 1
+            external_status = self._public_status(result.status)
+            status_counts[external_status] = status_counts.get(external_status, 0) + 1
+            review_required = result.review_required or external_status in ["verify", "fail"]
             
             qc_items.append(QCResultItem(
                 rule_id=result.rule_id,
                 rule_name=result.rule_name,
-                status=result.status.value,
+                status=external_status,
                 message=result.message,
                 action_item=result.action_item,
                 details=result.details,
                 appraisal_value=result.appraisal_value,
                 engagement_value=result.engagement_value,
-                review_required=result.review_required,
+                confidence=getattr(result, "confidence", None),
+                extracted_value=getattr(result, "extracted_value", None),
+                expected_value=getattr(result, "expected_value", None),
+                verify_question=getattr(result, "verify_question", None),
+                rejection_text=getattr(result, "rejection_text", None),
+                evidence=getattr(result, "evidence", []),
+                review_required=review_required,
                 severity=result.severity.value if hasattr(result.severity, "value") else str(result.severity),
                 source_page=result.source_page,
                 bbox_x=getattr(result, "bbox_x", None),
@@ -482,7 +498,7 @@ class SmartQCProcessor:
             ))
             
             # Collect action items from failed/skipped rules
-            if result.action_item and result.status in [RuleStatus.FAIL, RuleStatus.SKIPPED, RuleStatus.WARNING]:
+            if result.action_item and external_status in ["fail", "verify"]:
                 action_items.append(f"[{result.rule_id}] {result.action_item}")
         
         # Get improvement suggestions
@@ -516,17 +532,21 @@ class SmartQCProcessor:
             extracted_fields=s_extract.model_dump(),
             field_confidence=field_confidence,
             total_rules=len(rule_results),
-            passed=status_counts[RuleStatus.PASS],
-            failed=status_counts[RuleStatus.FAIL],
-            verify=status_counts[RuleStatus.VERIFY],
-            warnings=status_counts[RuleStatus.WARNING],
-            skipped=status_counts[RuleStatus.SKIPPED],
-            system_errors=status_counts[RuleStatus.SYSTEM_ERROR],
+            passed=status_counts["pass"],
+            failed=status_counts["fail"],
+            verify=status_counts["verify"],
             rule_results=qc_items,
             action_items=action_items,
             suggestions=suggestions,
-            processing_warnings=extraction_result.warnings,
+            processing_notices=extraction_result.notices,
         )
+
+    def _public_status(self, status: RuleStatus) -> str:
+        if status == RuleStatus.FAIL:
+            return "fail"
+        if status in (RuleStatus.VERIFY, RuleStatus.SYSTEM_ERROR):
+            return "verify"
+        return "pass"
 
 
 # Create global processor instance

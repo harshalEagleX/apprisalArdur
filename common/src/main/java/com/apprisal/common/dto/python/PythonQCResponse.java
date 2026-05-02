@@ -22,7 +22,6 @@ public record PythonQCResponse(
         Integer passed,
         Integer failed,
         Integer verify,
-        Integer warnings,
         Integer skipped,
         @JsonProperty("system_errors")       Integer systemErrors,
         @JsonProperty("document_id")         String documentId,
@@ -34,5 +33,5 @@ public record PythonQCResponse(
         @JsonProperty("rule_results")        List<PythonRuleResult> ruleResults,
         @JsonProperty("action_items")        List<String> actionItems,
         List<String> suggestions,
-        @JsonProperty("processing_warnings") List<String> processingWarnings
+        @JsonProperty("processing_notices") List<String> processingNotices
 ) {}

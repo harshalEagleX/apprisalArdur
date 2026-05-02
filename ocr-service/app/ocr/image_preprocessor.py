@@ -133,7 +133,7 @@ class ImagePreprocessor:
         # Step 2: Denoising
         denoised = self.denoise_image(gray)
         
-        # Step 3: Binary thresholding
+        # Step 3: Adaptive binary thresholding
         thresholded = self.apply_threshold(denoised)
         
         # Step 4: Table line removal (if enabled)
@@ -199,9 +199,11 @@ class ImagePreprocessor:
     
     def apply_threshold(self, image: np.ndarray) -> np.ndarray:
         """
-        Apply binary thresholding using Otsu's method.
-        
+        Apply adaptive binary thresholding.
+
         Converts image to pure black text on white background.
+        Adaptive thresholding handles mixed lighting and scanned pages better
+        than a single global Otsu cutoff.
         
         Args:
             image: Grayscale input image
@@ -212,14 +214,15 @@ class ImagePreprocessor:
         if not CV2_AVAILABLE:
             return image
         
-        # Apply Otsu's thresholding
-        _, thresh = cv2.threshold(
-            image, 
-            0, 
-            255, 
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        thresh = cv2.adaptiveThreshold(
+            image,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            35,
+            11,
         )
-        logger.debug("Applied binary thresholding")
+        logger.debug("Applied adaptive binary thresholding")
         return thresh
     
     def remove_table_lines(self, image: np.ndarray) -> np.ndarray:

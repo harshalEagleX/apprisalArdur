@@ -190,13 +190,32 @@ export const getQCProgress = (qcResultId: number) =>
     `/api/reviewer/qc/${qcResultId}/progress`
   );
 
+export const startReviewSession = (qcResultId: number, acknowledgeExistingLock = false) =>
+  apiFetch<ReviewSession>(`/api/reviewer/qc/${qcResultId}/session/start`, {
+    method: "POST",
+    body: JSON.stringify({ acknowledgeExistingLock }),
+  });
+
+export const heartbeatReviewSession = (qcResultId: number, sessionToken: string) =>
+  apiFetch<{ success: boolean; expiresAt?: string }>(`/api/reviewer/qc/${qcResultId}/session/heartbeat`, {
+    method: "POST",
+    body: JSON.stringify({ sessionToken }),
+  });
+
 export const getQCFileInfo = (qcResultId: number) =>
   apiFetch<QCFileInfo>(`/api/qc/file/${qcResultId}`);
 
-export const saveDecision = (ruleResultId: number, decision: "ACCEPT" | "REJECT", comment?: string) =>
+export const saveDecision = (
+  ruleResultId: number,
+  decision: "PASS" | "FAIL",
+  comment: string | undefined,
+  sessionToken: string,
+  decisionLatencyMs: number,
+  acknowledged: boolean,
+) =>
   apiFetch("/api/reviewer/decision/save", {
     method: "POST",
-    body: JSON.stringify({ ruleResultId, decision, comment }),
+    body: JSON.stringify({ ruleResultId, decision, comment, sessionToken, decisionLatencyMs, acknowledged }),
   });
 
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
@@ -276,15 +295,36 @@ export interface QCRuleResult {
   actionItem?: string;
   appraisalValue?: string;
   engagementValue?: string;
+  confidence?: number | null;
+  extractedValue?: string | null;
+  expectedValue?: string | null;
+  verifyQuestion?: string | null;
+  rejectionText?: string | null;
+  evidence?: string | null;
   reviewRequired: boolean;
   reviewerVerified?: boolean;
   reviewerComment?: string;
+  firstPresentedAt?: string | null;
+  decisionLatencyMs?: number | null;
+  acknowledgedReferences?: boolean;
+  overridePending?: boolean;
+  overrideRequestedBy?: string | null;
+  overrideRequestedAt?: string | null;
   severity?: string;
   pdfPage?: number | null;
   bboxX?: number | null;
   bboxY?: number | null;
   bboxW?: number | null;
   bboxH?: number | null;
+}
+
+export interface ReviewSession {
+  success: boolean;
+  sessionToken: string;
+  lockedBy?: string;
+  startedAt?: string;
+  expiresAt?: string;
+  lockAcknowledged?: boolean;
 }
 
 export interface QCFileInfo {

@@ -108,6 +108,7 @@ class RuleEngine:
                         result.source_page = inferred_page
                 if result.field_confidence is None and field_conf is not None:
                     result.field_confidence = field_conf
+                self._complete_rule_outcome(result)
 
                 results.append(result)
                 self.logger.log_result(result)
@@ -123,6 +124,7 @@ class RuleEngine:
                     review_required=True,
                     severity=RuleSeverity(cfg.severity) if cfg else RuleSeverity.STANDARD,
                 )
+                self._complete_rule_outcome(res)
                 results.append(res)
                 self.logger.log_result(res)
 
@@ -136,10 +138,51 @@ class RuleEngine:
                     action_item="Report this to the development team.",
                     review_required=True,
                 )
+                self._complete_rule_outcome(res)
                 results.append(res)
                 self.logger.log_result(res)
 
         return results
+
+    def _complete_rule_outcome(self, result: RuleResult):
+        """Populate strict RuleOutcome fields for legacy rules."""
+        if result.confidence is None and result.field_confidence is not None:
+            result.confidence = result.field_confidence
+        if result.extracted_value is None and result.appraisal_value is not None:
+            result.extracted_value = result.appraisal_value
+        if result.expected_value is None and result.engagement_value is not None:
+            result.expected_value = result.engagement_value
+
+        evidence = result.evidence or []
+        if result.source_page and not evidence:
+            evidence = [f"Appraisal page {result.source_page}"]
+        result.evidence = evidence
+
+        if result.status == RuleStatus.VERIFY and not result.verify_question:
+            result.verify_question = self._generate_verify_question(result)
+            result.action_item = result.verify_question or result.action_item
+            result.review_required = True
+        if result.status == RuleStatus.FAIL and not result.rejection_text:
+            result.rejection_text = result.message
+            result.review_required = True
+
+    def _generate_verify_question(self, result: RuleResult) -> str:
+        fallback = result.action_item or result.message
+        if result.extracted_value is None and result.expected_value is None:
+            return fallback
+        try:
+            from app.services.ollama_service import generate_verify_question
+            question = generate_verify_question(
+                rule_description=f"{result.rule_id} {result.rule_name}",
+                field_name=result.rule_name,
+                extracted_value=result.extracted_value,
+                expected_value=result.expected_value,
+                confidence=result.confidence or 0.0,
+                evidence=", ".join(result.evidence or []),
+            )
+            return question or fallback
+        except Exception:
+            return fallback
 
     def _extract_meta(
         self, context: ValidationContext, rule_id: str

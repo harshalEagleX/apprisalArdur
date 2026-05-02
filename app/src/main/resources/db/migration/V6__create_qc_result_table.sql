@@ -15,7 +15,6 @@ CREATE TABLE qc_result (
     total_rules INT DEFAULT 0,
     passed_count INT DEFAULT 0,
     failed_count INT DEFAULT 0,
-    warning_count INT DEFAULT 0,
     error_count INT DEFAULT 0,
     skipped_count INT DEFAULT 0,
     

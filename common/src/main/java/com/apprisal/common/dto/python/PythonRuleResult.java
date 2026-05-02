@@ -20,6 +20,12 @@ public record PythonRuleResult(
         Map<String, Object> details,
         @JsonProperty("appraisal_value")  String appraisalValue,
         @JsonProperty("engagement_value") String engagementValue,
+        Double confidence,
+        @JsonProperty("extracted_value")  Object extractedValue,
+        @JsonProperty("expected_value")   Object expectedValue,
+        @JsonProperty("verify_question")  String verifyQuestion,
+        @JsonProperty("rejection_text")   String rejectionText,
+        @JsonProperty("evidence")         java.util.List<String> evidence,
         @JsonProperty("review_required")  boolean reviewRequired,
         @JsonProperty("source_page")      Integer sourcePage,
         @JsonProperty("bbox_x")           Float bboxX,
@@ -33,7 +39,6 @@ public record PythonRuleResult(
         return reviewRequired
                 || "fail".equals(normalizedStatus)
                 || "verify".equals(normalizedStatus)
-                || "warning".equals(normalizedStatus)
                 || "system_error".equals(normalizedStatus);
     }
 }

@@ -89,7 +89,7 @@ def validate_addresses(ctx: ValidationContext) -> RuleResult:
     missing = [str(i) for i, c in enumerate(comps, 1) if not c.address]
     if not comps or missing:
         if re.search(r"COMPARABLE\s+SALE\s+#\s*1.*Address", text, re.I | re.S) or len(re.findall(r"\b\d{2,5}\s+[A-Z][A-Za-z]+\s+", text)) >= 3:
-            return RuleResult(rule_id="SCA-3", rule_name="Address (Subject and Comparables)", status=RuleStatus.WARNING, message="Comparable address evidence found in OCR text. Verify exact UAD/USPS formatting.")
+            return RuleResult(rule_id="SCA-3", rule_name="Address (Subject and Comparables)", status=RuleStatus.VERIFY, message="Comparable address evidence found in OCR text. Verify exact UAD/USPS formatting.")
         return _verify("SCA-3", "Address (Subject and Comparables)", f"Comparable addresses missing/not extracted: {', '.join(missing) if missing else 'all'}")
     return RuleResult(rule_id="SCA-3", rule_name="Address (Subject and Comparables)", status=RuleStatus.PASS, message="Subject and comparable addresses are present.")
 
@@ -116,7 +116,7 @@ def validate_data_sources(ctx: ValidationContext) -> RuleResult:
         return res
     missing_dom = [str(i) for i, c in enumerate(_comps(ctx), 1) if "DOM" not in (c.data_source or "").upper()]
     if missing_dom:
-        return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.WARNING, message=f"DOM not found in data source for comp(s): {', '.join(missing_dom)}.")
+        return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.VERIFY, message=f"DOM not found in data source for comp(s): {', '.join(missing_dom)}.")
     return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.PASS, message="Comparable data sources include DOM evidence.")
 
 
@@ -133,7 +133,7 @@ def validate_verification_sources(ctx: ValidationContext) -> RuleResult:
 @rule(id="SCA-7", name="Sale or Financing Concessions")
 def validate_concessions(ctx: ValidationContext) -> RuleResult:
     if re.search(r"ArmLth|Conv;?\s*\d+|Cash;?\s*0|RH;?\s*\d+|Concessions", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-7", rule_name="Sale or Financing Concessions", status=RuleStatus.WARNING, message="Sale/financing/concession evidence found. Verify UAD format and adjustment direction.")
+        return RuleResult(rule_id="SCA-7", rule_name="Sale or Financing Concessions", status=RuleStatus.VERIFY, message="Sale/financing/concession evidence found. Verify UAD format and adjustment direction.")
     return _verify("SCA-7", "Sale or Financing Concessions", "Sale/financing/concession grid fields are not extracted. Verify UAD sale type, financing type, concessions, and adjustment direction.")
 
 
@@ -142,7 +142,7 @@ def validate_sale_date(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "sale_date", ("SCA-8", "Date of Sale/Time Adjustment"))
     if res:
         if re.search(r"\b(?:s|c)\d{2}/\d{2};c\d{2}/\d{2}|Date\s+of\s+Sale/Time", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-8", rule_name="Date of Sale/Time Adjustment", status=RuleStatus.WARNING, message="Sale/time evidence found. Verify sale date, contract date, and market-condition adjustments.")
+            return RuleResult(rule_id="SCA-8", rule_name="Date of Sale/Time Adjustment", status=RuleStatus.VERIFY, message="Sale/time evidence found. Verify sale date, contract date, and market-condition adjustments.")
         return res
     return RuleResult(rule_id="SCA-8", rule_name="Date of Sale/Time Adjustment", status=RuleStatus.PASS, message="Comparable sale dates are present.")
 
@@ -180,7 +180,7 @@ def validate_site_size(ctx: ValidationContext) -> RuleResult:
 @rule(id="SCA-12", name="View")
 def validate_sca_view(ctx: ValidationContext) -> RuleResult:
     if re.search(r"\bN;Res;|View", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-12", rule_name="View", status=RuleStatus.WARNING, message="View evidence found. Verify UAD format and consistency with Site section.")
+        return RuleResult(rule_id="SCA-12", rule_name="View", status=RuleStatus.VERIFY, message="View evidence found. Verify UAD format and consistency with Site section.")
     return _verify("SCA-12", "View", "Comparable view grid fields are not extracted. Verify UAD view format and consistency with Site section.")
 
 
@@ -235,7 +235,7 @@ def validate_sca_room_count(ctx: ValidationContext) -> RuleResult:
             missing.append(str(i))
     if missing:
         if re.search(r"Room\s+Count|Gross\s+Living\s+Area|GLA|\b\d+\s+\d+\s+2\.0\b", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-17", rule_name="Above Grade Room Count and GLA", status=RuleStatus.WARNING, message="Room-count/GLA evidence found. Verify values match sketch and Page 1.")
+            return RuleResult(rule_id="SCA-17", rule_name="Above Grade Room Count and GLA", status=RuleStatus.VERIFY, message="Room-count/GLA evidence found. Verify values match sketch and Page 1.")
         return _verify("SCA-17", "Above Grade Room Count and GLA", f"Room count/GLA missing for comp(s): {', '.join(missing)}.")
     return RuleResult(rule_id="SCA-17", rule_name="Above Grade Room Count and GLA", status=RuleStatus.PASS, message="Room count and GLA are present for comparables.")
 
@@ -243,7 +243,7 @@ def validate_sca_room_count(ctx: ValidationContext) -> RuleResult:
 @rule(id="SCA-18", name="Basement & Finished Rooms Below Grade")
 def validate_basement(ctx: ValidationContext) -> RuleResult:
     if re.search(r"Basement|Rooms\s+Below\s+Grade|0sf", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-18", rule_name="Basement & Finished Rooms Below Grade", status=RuleStatus.WARNING, message="Basement/below-grade evidence found. Verify UAD format and Page 1 consistency.")
+        return RuleResult(rule_id="SCA-18", rule_name="Basement & Finished Rooms Below Grade", status=RuleStatus.VERIFY, message="Basement/below-grade evidence found. Verify UAD format and Page 1 consistency.")
     return _verify("SCA-18", "Basement & Finished Rooms Below Grade", "Basement/below-grade grid fields are not extracted. Verify UAD format and consistency with Page 1.")
 
 
@@ -283,9 +283,9 @@ def validate_listing_comparables(ctx: ValidationContext) -> RuleResult:
     listings = [c for c in _comps(ctx) if c.is_listing]
     if not listings and _sca(ctx).comparables_count_listings in (None, 0):
         if re.search(r"Listing|Comparable\s+Sale\s+#\s*4|Active", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-23", rule_name="Listing Comparables", status=RuleStatus.WARNING, message="Listing comparable evidence found. Verify list-to-sale adjustment or explanation.")
+            return RuleResult(rule_id="SCA-23", rule_name="Listing Comparables", status=RuleStatus.VERIFY, message="Listing comparable evidence found. Verify list-to-sale adjustment or explanation.")
         return _verify("SCA-23", "Listing Comparables", "Listing comparable details not extracted. Verify list-to-sale adjustment or explanation.")
-    return RuleResult(rule_id="SCA-23", rule_name="Listing Comparables", status=RuleStatus.WARNING, message="Listing comparables require reviewer confirmation of list-to-sale adjustment support.")
+    return RuleResult(rule_id="SCA-23", rule_name="Listing Comparables", status=RuleStatus.VERIFY, message="Listing comparables require reviewer confirmation of list-to-sale adjustment support.")
 
 
 @rule(id="SCA-24", name="Unique Design Properties")
@@ -297,7 +297,7 @@ def validate_unique_design(ctx: ValidationContext) -> RuleResult:
 def validate_new_construction(ctx: ValidationContext) -> RuleResult:
     text = ctx.raw_text or ""
     if re.search(r"new construction|proposed construction|under construction", text, re.I):
-        return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.WARNING, message="New construction language found. Verify at least one comparable from competing development or explanation.")
+        return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.VERIFY, message="New construction language found. Verify at least one comparable from competing development or explanation.")
     return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.PASS, message="No new-construction trigger language detected.")
 
 
@@ -309,5 +309,5 @@ def validate_square_footage(ctx: ValidationContext) -> RuleResult:
 @rule(id="SCA-27", name="Comparable Photos")
 def validate_comparable_photos(ctx: ValidationContext) -> RuleResult:
     if re.search(r"comp(?:arable)?\s+photo|MLS\s+photo|drive-?by|Comparable\s+Sale\s+#", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.WARNING, message="Comparable photo/grid evidence found. Verify photo source meets loan-type requirement.")
+        return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.VERIFY, message="Comparable photo/grid evidence found. Verify photo source meets loan-type requirement.")
     return _verify("SCA-27", "Comparable Photos", "Comparable photo source/type not extracted. Verify MLS photos are acceptable for conventional and drive-by photos for FHA.")

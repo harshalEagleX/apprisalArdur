@@ -115,7 +115,7 @@ function initExistingDecisions() {
 /**
  * Select a decision for a verification item (with auto-save)
  * @param {number} ruleResultId - The rule result ID
- * @param {string} decision - 'ACCEPT' or 'REJECT'
+ * @param {string} decision - 'PASS' or 'FAIL'
  * @param {HTMLElement} btn - The clicked button
  */
 async function selectDecision(ruleResultId, decision, btn) {
@@ -136,10 +136,10 @@ async function selectDecision(ruleResultId, decision, btn) {
     const rejectBtn = document.getElementById('reject_' + ruleResultId);
 
     if (acceptBtn) {
-        acceptBtn.classList.toggle('active', decision === 'ACCEPT');
+        acceptBtn.classList.toggle('active', decision === 'PASS');
     }
     if (rejectBtn) {
-        rejectBtn.classList.toggle('active', decision === 'REJECT');
+        rejectBtn.classList.toggle('active', decision === 'FAIL');
     }
 
     // Auto-save to backend
@@ -172,7 +172,7 @@ function updateCardStatus(ruleResultId, decision) {
     if (!card) return;
 
     // Determine new status
-    const newStatus = decision === 'ACCEPT' ? 'MANUAL_PASS' : 'FAIL';
+    const newStatus = decision === 'PASS' ? 'MANUAL_PASS' : 'FAIL';
 
     // Update dataset
     card.dataset.status = newStatus;
@@ -237,17 +237,17 @@ function showAutoSaveIndicator(success) {
 }
 
 /**
- * Accept all verification items
+ * Pass all verification items
  */
-function acceptAllItems() {
+function passAllItems() {
     document.querySelectorAll('.verify-item[data-review-required="true"]').forEach(item => {
         const ruleId = item.dataset.ruleId;
         if (ruleId) {
-            selectDecision(ruleId, 'ACCEPT', null);
+            selectDecision(ruleId, 'PASS', null);
         }
     });
 
-    Toast.success('All items marked as accepted');
+    Toast.success('All items marked as passed');
 }
 
 /**
@@ -298,7 +298,7 @@ function showSubmitSummary() {
         const comment = state.decisions[ruleId]?.comment || '';
 
         // Determine if this is an override
-        const isOverride = (systemStatus === 'FAIL' || systemStatus === 'ERROR') && decision === 'ACCEPT';
+        const isOverride = (systemStatus === 'FAIL' || systemStatus === 'ERROR') && decision === 'PASS';
 
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -398,10 +398,10 @@ document.addEventListener('keydown', (e) => {
         }
     }
 
-    // Ctrl+Shift+A to accept all
+    // Ctrl+Shift+A to pass all
     if (e.ctrlKey && e.shiftKey && e.key === 'A') {
         e.preventDefault();
-        acceptAllItems();
+        passAllItems();
     }
 });
 
@@ -413,6 +413,6 @@ window.addEventListener('beforeunload', () => {
 
 // Export for global access
 window.selectDecision = selectDecision;
-window.acceptAllItems = acceptAllItems;
+window.passAllItems = passAllItems;
 window.showSubmitSummary = showSubmitSummary;
 window.confirmSubmit = confirmSubmit;

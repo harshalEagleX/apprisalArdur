@@ -12,14 +12,14 @@ def _verify(rule_id, name, message): return RuleResult(rule_id=rule_id, rule_nam
 @rule(id="DOC-1", name="Appraiser License")
 def validate_appraiser_license(ctx: ValidationContext) -> RuleResult:
     if re.search(r"license|certification|certified residential|state certified", _text(ctx), re.I):
-        return RuleResult(rule_id="DOC-1", rule_name="Appraiser License", status=RuleStatus.WARNING, message="License/certification evidence found. Verify license is current and valid.")
+        return RuleResult(rule_id="DOC-1", rule_name="Appraiser License", status=RuleStatus.VERIFY, message="License/certification evidence found. Verify license is current and valid.")
     return _verify("DOC-1", "Appraiser License", "Appraiser license/certification evidence not detected.")
 
 
 @rule(id="DOC-2", name="E&O Insurance")
 def validate_eo_insurance(ctx: ValidationContext) -> RuleResult:
     if re.search(r"errors?\s*&\s*omissions|E&O|insurance", _text(ctx), re.I):
-        return RuleResult(rule_id="DOC-2", rule_name="E&O Insurance", status=RuleStatus.WARNING, message="Insurance evidence found. Verify client requirement if applicable.")
+        return RuleResult(rule_id="DOC-2", rule_name="E&O Insurance", status=RuleStatus.VERIFY, message="Insurance evidence found. Verify client requirement if applicable.")
     return _verify("DOC-2", "E&O Insurance", "E&O insurance evidence not detected. Verify if client requires it.")
 
 
@@ -33,5 +33,5 @@ def validate_uad_data_set(ctx: ValidationContext) -> RuleResult:
 @rule(id="DOC-4", name="Trainee Signatures")
 def validate_trainee_signatures(ctx: ValidationContext) -> RuleResult:
     if re.search(r"trainee|supervisory appraiser", _text(ctx), re.I):
-        return RuleResult(rule_id="DOC-4", rule_name="Trainee Signatures", status=RuleStatus.WARNING, message="Trainee/supervisory appraiser evidence found. Verify required signatures and roles.")
+        return RuleResult(rule_id="DOC-4", rule_name="Trainee Signatures", status=RuleStatus.VERIFY, message="Trainee/supervisory appraiser evidence found. Verify required signatures and roles.")
     return RuleResult(rule_id="DOC-4", rule_name="Trainee Signatures", status=RuleStatus.PASS, message="No trainee/supervisory signature trigger language detected.")

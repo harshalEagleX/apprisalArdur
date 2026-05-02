@@ -13,6 +13,9 @@ Temperature is fixed at 0 for deterministic QC decisions.
 import json
 import logging
 import re
+import asyncio
+import base64
+import io
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Optional
@@ -221,6 +224,71 @@ def is_moondream_available() -> bool:
         return False
 
 
+def is_llava_available() -> bool:
+    try:
+        r = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+        models = [m.get("name", "") for m in r.json().get("models", [])]
+        model = get_active_vision_model()
+        return "llava" in model.lower() and any(model in m for m in models)
+    except Exception:
+        return False
+
+
+async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[str]:
+    payload = {
+        "model": get_active_text_model(),
+        "prompt": prompt,
+        "system": system,
+        "stream": False,
+        "keep_alive": OLLAMA_TEXT_KEEP_ALIVE,
+        "options": {
+            "temperature": 0.0,
+            "num_ctx": OLLAMA_TEXT_NUM_CTX,
+            "num_predict": max_tokens,
+            "top_k": 1,
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+            response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+            response.raise_for_status()
+            return response.json().get("response", "").strip()
+    except Exception as exc:
+        logger.warning("Async Ollama call failed: %s", exc)
+        return None
+
+
+async def gather_text_prompts(prompts: list[tuple[str, str, int]]) -> list[Optional[str]]:
+    return await asyncio.gather(
+        *(generate_async(prompt, system=system, max_tokens=max_tokens) for prompt, system, max_tokens in prompts)
+    )
+
+
+async def analyze_photo_llava(page_image, prompt: str) -> Optional[str]:
+    try:
+        from PIL import Image as PILImage
+        if not isinstance(page_image, PILImage.Image):
+            page_image = PILImage.fromarray(page_image)
+        buf = io.BytesIO()
+        page_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        payload = {
+            "model": get_active_vision_model(),
+            "prompt": prompt,
+            "images": [b64],
+            "stream": False,
+            "keep_alive": OLLAMA_VISION_KEEP_ALIVE,
+            "options": {"temperature": 0.0, "num_ctx": OLLAMA_VISION_NUM_CTX, "num_predict": 120},
+        }
+        async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+            response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+            response.raise_for_status()
+            return response.json().get("response", "").strip()
+    except Exception as exc:
+        logger.debug("LLaVA photo analysis failed: %s", exc)
+        return None
+
+
 CANNED_SYSTEM = (
     "You are an appraisal quality control expert. "
     "Your only job: decide if the commentary below is CANNED (generic boilerplate, "
@@ -243,6 +311,16 @@ def classify_commentary(text: str) -> Optional[bool]:
     if not text or len(text.strip()) < 20:
         return None
 
+    try:
+        from app.services.model_inference import classify_commentary_fast
+        fast = classify_commentary_fast(text)
+        if fast is not None:
+            is_canned, confidence = fast
+            if confidence >= 0.90:
+                return is_canned
+    except Exception:
+        pass
+
     prompt = f'Commentary to classify:\n"""\n{text[:800]}\n"""'
     response = _generate(prompt, system=CANNED_SYSTEM, max_tokens=10)
     if not response:
@@ -254,6 +332,39 @@ def classify_commentary(text: str) -> Optional[bool]:
     if "SPECIFIC" in upper:
         return False
     return None
+
+
+VERIFY_QUESTION_SYSTEM = (
+    "You are a mortgage appraisal QC assistant. Generate one specific human-review "
+    "question. Use the actual values and document reference. Output only the question."
+)
+
+
+def generate_verify_question(
+    *,
+    rule_description: str,
+    field_name: str,
+    extracted_value: object = None,
+    expected_value: object = None,
+    confidence: float = 0.0,
+    evidence: str = "",
+) -> Optional[str]:
+    prompt = f"""
+Rule being checked: {rule_description}
+Field: {field_name}
+Value extracted from appraisal: {extracted_value}
+Expected/reference value: {expected_value}
+Confidence: {confidence:.2f}
+Evidence/document location: {evidence or "not specified"}
+
+Generate a single, specific question for the human reviewer.
+The question must reference the actual values and the document location when available.
+Do not add explanations, bullets, or meta-commentary.
+""".strip()
+    response = _generate(prompt, system=VERIFY_QUESTION_SYSTEM, max_tokens=120)
+    if not response:
+        return None
+    return response.strip().splitlines()[0].strip().strip('"')
 
 
 # ---------------------------------------------------------------------------

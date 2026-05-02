@@ -276,7 +276,7 @@ def validate_borrower_name(ctx: ValidationContext) -> RuleResult:
                 return RuleResult(
                     rule_id="S-2",
                     rule_name="Borrower Name Validation",
-                    status=RuleStatus.WARNING,
+                    status=RuleStatus.VERIFY,
                     message="Assignment type is 'Refinance'; however, owner name and borrower name are different, please revise or comment.",
                     appraisal_value=f"Owner: {owner}, Borrower: {rpt_borrower}",
                     engagement_value="Refinance - Borrower should match Owner",
@@ -318,7 +318,7 @@ def validate_owner_record(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="S-3",
                 rule_name="Owner of Public Record",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Refinance transaction: Owner of Public Record differs from Borrower. Verify comment is provided explaining the discrepancy.",
                 details={"owner": owner, "borrower": borrower}
             )
@@ -502,7 +502,7 @@ def validate_occupant(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="S-7",
                 rule_name="Occupant Status",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Property is tenant-occupied. Please provide lease dates.",
                 appraisal_value="Tenant Occupied",
                 engagement_value="Lease dates required",
@@ -512,7 +512,7 @@ def validate_occupant(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="S-7",
                 rule_name="Occupant Status",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Property is tenant-occupied. Please provide rental amount."
             )
     
@@ -522,7 +522,7 @@ def validate_occupant(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="S-7",
                 rule_name="Occupant Status",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Property is vacant. Please state if utilities are ON or OFF."
             )
     
@@ -591,7 +591,7 @@ def validate_pud_hoa(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="S-9",
             rule_name="PUD and HOA",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message=f"HOA dues (${hoa_dues:.2f}) are specified but period (Per Year/Per Month) is not indicated."
         )
     
@@ -726,7 +726,7 @@ def validate_prior_history(ctx: ValidationContext) -> RuleResult:
             return RuleResult(
                 rule_id="S-12",
                 rule_name="Prior Listing/Sale History",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message=f"Property was offered for sale in past 12 months. Missing: {', '.join(missing_details)}."
             )
     

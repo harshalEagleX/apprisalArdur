@@ -54,7 +54,7 @@
                             <strong th:text="${qcResult.passedCount}">0</strong>
                             <span>Auto Pass</span>
                         </span>
-                        <span class="summary-item manual-pass-count" title="Rules manually accepted by reviewer">
+                        <span class="summary-item manual-pass-count" title="Rules manually passed by reviewer">
                             <i class="bi bi-check-circle"></i>
                             <strong th:text="${qcResult.manualPassCount}">0</strong>
                             <span>Manual Pass</span>
@@ -97,11 +97,11 @@
 
                         <!-- Quick Actions -->
                         <div class="quick-actions">
-                            <button type="button" class="btn btn-sm btn-secondary" onclick="acceptAllItems()">
-                                <i class="bi bi-check-all"></i> Accept All
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="passAllItems()">
+                                <i class="bi bi-check-all"></i> Pass All
                             </button>
-                            <button type="button" class="btn btn-sm btn-danger" data-modal-open="rejectModal">
-                                <i class="bi bi-x-lg"></i> Reject File
+                            <button type="button" class="btn btn-sm btn-danger" data-modal-open="failModal">
+                                <i class="bi bi-x-lg"></i> Fail File
                             </button>
                         </div>
 
@@ -154,22 +154,22 @@
                                 <div th:if="${rule.reviewRequired}" class="decision-section">
                                     <div class="decision-btns">
                                         <button type="button" class="btn btn-accept"
-                                            th:onclick="'selectDecision(' + ${rule.id} + ', \'ACCEPT\', this)'"
+                                            th:onclick="'selectDecision(' + ${rule.id} + ', \'PASS\', this)'"
                                             th:id="'accept_' + ${rule.id}"
                                             th:classappend="${rule.reviewerVerified != null and rule.reviewerVerified} ? 'active' : ''">
-                                            <i class="bi bi-check-lg"></i> Accept
+                                            <i class="bi bi-check-lg"></i> Pass
                                         </button>
-                                        <button type="button" class="btn btn-reject"
-                                            th:onclick="'selectDecision(' + ${rule.id} + ', \'REJECT\', this)'"
+                                        <button type="button" class="btn btn-reject" th:if="${#strings.toLowerCase(rule.status) == 'verify'}"
+                                            th:onclick="'selectDecision(' + ${rule.id} + ', \'FAIL\', this)'"
                                             th:id="'reject_' + ${rule.id}"
                                             th:classappend="${rule.reviewerVerified != null and !rule.reviewerVerified} ? 'active' : ''">
-                                            <i class="bi bi-x-lg"></i> Reject
+                                            <i class="bi bi-x-lg"></i> Fail
                                         </button>
                                     </div>
 
                                     <input type="hidden" th:name="'decision_' + ${rule.id}"
                                         th:id="'decision_' + ${rule.id}"
-                                        th:value="${rule.reviewerVerified != null ? (rule.reviewerVerified ? 'accept' : 'reject') : ''}">
+                                        th:value="${rule.reviewerVerified != null ? (rule.reviewerVerified ? 'pass' : 'fail') : ''}">
                                     <textarea class="form-input comment-input" th:name="'comment_' + ${rule.id}"
                                         th:id="'comment_' + ${rule.id}" placeholder="Optional comment..."
                                         th:text="${rule.reviewerComment}"></textarea>
@@ -199,23 +199,23 @@
         </div>
     </div>
 
-    <!-- Reject Modal -->
-    <div class="modal-overlay" id="rejectModal" onclick="Modal.closeOnOverlay(event, 'rejectModal')">
+    <!-- Fail Modal -->
+    <div class="modal-overlay" id="failModal" onclick="Modal.closeOnOverlay(event, 'failModal')">
         <div class="modal">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-x-circle" style="color: var(--color-error);"></i> Reject File
+                <h5 class="modal-title"><i class="bi bi-x-circle" style="color: var(--color-error);"></i> Fail File
                 </h5>
-                <button class="modal-close" data-modal-close="rejectModal">&times;</button>
+                <button class="modal-close" data-modal-close="failModal">&times;</button>
             </div>
             <form th:action="@{/reviewer/verify/{id}/reject(id=${qcResult.id})}" method="post">
                 <div class="modal-body">
-                    <label class="form-label">Reason for rejection</label>
+                    <label class="form-label">Reason for failure</label>
                     <textarea name="reason" class="form-input" rows="3" required
-                        placeholder="Explain why this file is being rejected..."></textarea>
+                        placeholder="Explain why this file is failing..."></textarea>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-modal-close="rejectModal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Reject File</button>
+                    <button type="button" class="btn btn-secondary" data-modal-close="failModal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Fail File</button>
                 </div>
             </form>
         </div>

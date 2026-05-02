@@ -53,9 +53,6 @@ public class QCResult {
     @Column(name = "manual_pass_count")
     private Integer manualPassCount = 0; // Items manually accepted by reviewer
 
-    @Column(name = "warning_count")
-    private Integer warningCount = 0;
-
     @Column(name = "error_count")
     private Integer errorCount = 0;
 
@@ -80,6 +77,25 @@ public class QCResult {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by")
     private User reviewedBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "review_locked_by")
+    private User reviewLockedBy;
+
+    @Column(name = "review_session_token", length = 128)
+    private String reviewSessionToken;
+
+    @Column(name = "review_started_at")
+    private LocalDateTime reviewStartedAt;
+
+    @Column(name = "review_last_active_at")
+    private LocalDateTime reviewLastActiveAt;
+
+    @Column(name = "review_lock_expires_at")
+    private LocalDateTime reviewLockExpiresAt;
+
+    @Column(name = "review_lock_acknowledged")
+    private Boolean reviewLockAcknowledged = false;
 
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
@@ -200,14 +216,6 @@ public class QCResult {
         this.manualPassCount = manualPassCount;
     }
 
-    public Integer getWarningCount() {
-        return warningCount;
-    }
-
-    public void setWarningCount(Integer warningCount) {
-        this.warningCount = warningCount;
-    }
-
     public Integer getErrorCount() {
         return errorCount;
     }
@@ -257,6 +265,54 @@ public class QCResult {
         this.reviewedBy = reviewedBy;
     }
 
+    public User getReviewLockedBy() {
+        return reviewLockedBy;
+    }
+
+    public void setReviewLockedBy(User reviewLockedBy) {
+        this.reviewLockedBy = reviewLockedBy;
+    }
+
+    public String getReviewSessionToken() {
+        return reviewSessionToken;
+    }
+
+    public void setReviewSessionToken(String reviewSessionToken) {
+        this.reviewSessionToken = reviewSessionToken;
+    }
+
+    public LocalDateTime getReviewStartedAt() {
+        return reviewStartedAt;
+    }
+
+    public void setReviewStartedAt(LocalDateTime reviewStartedAt) {
+        this.reviewStartedAt = reviewStartedAt;
+    }
+
+    public LocalDateTime getReviewLastActiveAt() {
+        return reviewLastActiveAt;
+    }
+
+    public void setReviewLastActiveAt(LocalDateTime reviewLastActiveAt) {
+        this.reviewLastActiveAt = reviewLastActiveAt;
+    }
+
+    public LocalDateTime getReviewLockExpiresAt() {
+        return reviewLockExpiresAt;
+    }
+
+    public void setReviewLockExpiresAt(LocalDateTime reviewLockExpiresAt) {
+        this.reviewLockExpiresAt = reviewLockExpiresAt;
+    }
+
+    public Boolean getReviewLockAcknowledged() {
+        return reviewLockAcknowledged;
+    }
+
+    public void setReviewLockAcknowledged(Boolean reviewLockAcknowledged) {
+        this.reviewLockAcknowledged = reviewLockAcknowledged;
+    }
+
     public LocalDateTime getReviewedAt() {
         return reviewedAt;
     }
@@ -303,7 +359,6 @@ public class QCResult {
         private Integer failedCount = 0;
         private Integer verifyCount = 0;
         private Integer manualPassCount = 0;
-        private Integer warningCount = 0;
         private Integer errorCount = 0;
         private Integer skippedCount = 0;
         private Integer processingTimeMs;
@@ -351,11 +406,6 @@ public class QCResult {
             return this;
         }
 
-        public QCResultBuilder warningCount(Integer warningCount) {
-            this.warningCount = warningCount;
-            return this;
-        }
-
         public QCResultBuilder errorCount(Integer errorCount) {
             this.errorCount = errorCount;
             return this;
@@ -385,7 +435,6 @@ public class QCResult {
             result.failedCount     = this.failedCount;
             result.verifyCount     = this.verifyCount;
             result.manualPassCount = this.manualPassCount;
-            result.warningCount    = this.warningCount;
             result.errorCount      = this.errorCount;
             result.skippedCount    = this.skippedCount;
             result.processingTimeMs = this.processingTimeMs;

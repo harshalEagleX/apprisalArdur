@@ -162,6 +162,15 @@ def apply_ocr_correction(text: str) -> Tuple[str, bool]:
         corrected = fixed
         changed = True
 
+    try:
+        from app.services.model_inference import correct_ocr_value
+        model_value, model_changed = correct_ocr_value(corrected)
+        if model_changed and model_value and 0.5 <= len(model_value) / max(len(corrected), 1) <= 1.8:
+            corrected = model_value
+            changed = True
+    except Exception:
+        pass
+
     return corrected, changed
 
 

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2, SkipForward, Crosshair, ZoomIn, ZoomOut } from "lucide-react";
-import { getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, getRealtimeUrl, type BatchFile, type QCRuleResult } from "@/lib/api";
+import { getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, getRealtimeUrl, startReviewSession, heartbeatReviewSession, type BatchFile, type QCRuleResult } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
@@ -12,7 +12,7 @@ const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
   loading: () => <PageSpinner label="Loading document viewer..." />,
 });
 
-type Decision = "ACCEPT" | "REJECT";
+type Decision = "PASS" | "FAIL";
 type Filter = "all" | "fail" | "verify" | "pass";
 type RuleFocus = {
   ruleId: string;
@@ -28,7 +28,6 @@ const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }>
   pass:         { border: "border-green-800/40",  bg: "bg-green-950/20",  text: "text-green-300" },
   fail:         { border: "border-red-800/40",    bg: "bg-red-950/20",    text: "text-red-300" },
   verify:       { border: "border-amber-800/40",  bg: "bg-amber-950/20",  text: "text-amber-300" },
-  warning:      { border: "border-orange-800/40", bg: "bg-orange-950/20", text: "text-orange-300" },
   MANUAL_PASS:  { border: "border-teal-800/40",   bg: "bg-teal-950/20",   text: "text-teal-300" },
   system_error: { border: "border-purple-800/40", bg: "bg-purple-950/20", text: "text-purple-300" },
   skipped:      { border: "border-slate-700/30",  bg: "bg-slate-800/20",  text: "text-slate-500" },
@@ -94,6 +93,10 @@ export default function VerifyFilePage() {
   const [zoom, setZoom] = useState(1);
   const [highlighting, setHighlighting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<Record<number, boolean>>({});
   const viewerRef = useRef<HTMLDivElement | null>(null);
 
   const loadRules = useCallback(async () => {
@@ -103,13 +106,50 @@ export default function VerifyFilePage() {
       setRules(rulesData.map(r => ({ ...r, status: ruleStatus(r.status) }))); setProgress(prog);
       const dec: Record<number, Decision> = {}; const com: Record<number, string> = {};
       for (const r of rulesData) {
-        if (r.reviewerVerified === true)  dec[r.id] = "ACCEPT";
-        if (r.reviewerVerified === false) dec[r.id] = "REJECT";
+        if (r.reviewerVerified === true)  dec[r.id] = "PASS";
+        if (r.reviewerVerified === false) dec[r.id] = "FAIL";
         if (r.reviewerComment) com[r.id] = r.reviewerComment;
       }
       setDecisions(dec); setComments(com);
     } finally { setLoading(false); }
   }, [qcResultId]);
+
+  useEffect(() => {
+    const markOnline = () => setOffline(false);
+    const markOffline = () => setOffline(true);
+    setOffline(typeof navigator !== "undefined" ? !navigator.onLine : false);
+    window.addEventListener("online", markOnline);
+    window.addEventListener("offline", markOffline);
+    return () => {
+      window.removeEventListener("online", markOnline);
+      window.removeEventListener("offline", markOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    startReviewSession(qcResultId)
+      .then(session => {
+        if (cancelled) return;
+        setSessionToken(session.sessionToken);
+        setSessionError(session.lockAcknowledged ? "Continuing a report that had prior review activity. Review existing decisions before sign-off." : null);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setSessionError(error instanceof Error ? error.message : "Unable to start review session.");
+      });
+    return () => { cancelled = true; };
+  }, [qcResultId]);
+
+  useEffect(() => {
+    if (!sessionToken) return;
+    const timer = window.setInterval(() => {
+      heartbeatReviewSession(qcResultId, sessionToken).catch(error => {
+        setSessionError(error instanceof Error ? error.message : "Review session timed out. Reload to resume.");
+      });
+    }, 120_000);
+    return () => window.clearInterval(timer);
+  }, [qcResultId, sessionToken]);
 
   useEffect(() => {
     getQCFileInfo(qcResultId)
@@ -210,25 +250,56 @@ export default function VerifyFilePage() {
     };
   }, [loadRules, qcResultId]);
 
-  async function handleDecision(ruleId: number, decision: Decision) {
-    setDecisions(prev => ({ ...prev, [ruleId]: decision })); setSaving(ruleId);
+  async function handleDecision(rule: QCRuleResult, decision: Decision) {
+    if (!sessionToken) {
+      setSessionError("Review session is not ready yet.");
+      return;
+    }
+    if (offline) {
+      setSessionError("You're offline. Decisions cannot be saved until your connection is restored.");
+      return;
+    }
+    const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : Date.now();
+    const latencyMs = Math.max(0, Date.now() - presentedAt);
+    setSaving(rule.id);
     try {
-      await saveDecision(ruleId, decision, comments[ruleId]);
-      setSaved(prev => new Set(prev).add(ruleId));
+      await saveDecision(rule.id, decision, comments[rule.id], sessionToken, latencyMs, Boolean(acknowledged[rule.id]));
+      setDecisions(prev => ({ ...prev, [rule.id]: decision }));
+      setSaved(prev => new Set(prev).add(rule.id));
       const prog = await getQCProgress(qcResultId); setProgress(prog);
-    } catch { setDecisions(prev => { const n = { ...prev }; delete n[ruleId]; return n; }); }
+      void loadRules();
+    } catch (error) {
+      setSessionError(error instanceof Error ? error.message : "Decision was not saved. Try again.");
+    }
     finally { setSaving(null); }
   }
 
   async function handleSubmit() {
+    if (!sessionToken) {
+      setSessionError("Review session is not ready yet.");
+      return;
+    }
+    const freshProgress = await getQCProgress(qcResultId);
+    setProgress(freshProgress);
+    if (!freshProgress.canSubmit) {
+      setSessionError(`There are still ${freshProgress.pending} item(s) waiting for server-confirmed decisions.`);
+      return;
+    }
+    const expected = String(qcResultId).slice(-4);
+    const typed = window.prompt(`You are about to sign off on this report. Type the last 4 digits of QC Result #${qcResultId} to confirm.`);
+    if (typed !== expected) {
+      setSessionError("Sign-off cancelled. The confirmation digits did not match.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const form = new FormData();
-      for (const [ruleId, dec] of Object.entries(decisions)) {
-        form.append(`decision_${ruleId}`, dec.toLowerCase());
-        if (comments[Number(ruleId)]) form.append(`comment_${ruleId}`, comments[Number(ruleId)]);
-      }
-      await fetch(`${JAVA}/reviewer/verify/${qcResultId}`, { method: "POST", credentials: "include", body: form });
+      const response = await fetch(`${JAVA}/api/reviewer/qc/${qcResultId}/submit`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "", sessionToken }),
+      });
+      if (!response.ok) throw new Error("Review submit failed");
       window.location.href = "/reviewer/queue";
     } finally { setSubmitting(false); }
   }
@@ -237,11 +308,11 @@ export default function VerifyFilePage() {
     total:  rules.length,
     pass:   rules.filter(r => r.status === "pass" || r.status === "MANUAL_PASS").length,
     fail:   rules.filter(r => r.status === "fail").length,
-    review: rules.filter(r => r.status === "verify" || r.status === "warning").length,
+    review: rules.filter(r => r.status === "verify").length,
   };
   const filtered = rules.filter(r => {
     if (filter === "fail")   return r.status === "fail";
-    if (filter === "verify") return r.status === "verify" || r.status === "warning";
+    if (filter === "verify") return r.status === "verify";
     if (filter === "pass")   return r.status === "pass" || r.status === "MANUAL_PASS";
     return true;
   });
@@ -250,6 +321,11 @@ export default function VerifyFilePage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
+      {(offline || sessionError) && (
+        <div className={`px-4 py-2 text-xs border-b ${offline ? "bg-red-950/60 border-red-800/50 text-red-200" : "bg-amber-950/60 border-amber-800/50 text-amber-100"}`}>
+          {offline ? "You're offline. Decisions are frozen until the connection is restored." : sessionError}
+        </div>
+      )}
       {/* Top bar */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 h-12 bg-slate-900 border-b border-slate-800">
         <a href="/reviewer/queue" className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors flex-shrink-0">
@@ -260,7 +336,7 @@ export default function VerifyFilePage() {
         <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
           <CountBadge label="Pass"   count={counts.pass}   style="text-green-400 bg-green-950/50 border-green-800/50" />
           <CountBadge label="Fail"   count={counts.fail}   style="text-red-400   bg-red-950/50   border-red-800/50" />
-          <CountBadge label="Review" count={counts.review} style="text-amber-400 bg-amber-950/50 border-amber-800/50" />
+          <CountBadge label="Needs Review" count={counts.review} style="text-amber-400 bg-amber-950/50 border-amber-800/50" />
         </div>
         {progress && progress.totalToVerify > 0 && (
           <div className="hidden md:flex items-center gap-2 flex-shrink-0">
@@ -379,7 +455,7 @@ export default function VerifyFilePage() {
                 className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
                   filter === f ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
                 }`}>
-                {f === "all" ? `All (${counts.total})` : f === "fail" ? `Fail (${counts.fail})` : f === "verify" ? `Review (${counts.review})` : `Pass (${counts.pass})`}
+                {f === "all" ? `All (${counts.total})` : f === "fail" ? `Fail (${counts.fail})` : f === "verify" ? `Needs Review (${counts.review})` : `Pass (${counts.pass})`}
               </button>
             ))}
           </div>
@@ -389,9 +465,13 @@ export default function VerifyFilePage() {
             ) : filtered.map(rule => (
               <RuleCard key={rule.id} rule={rule} decision={decisions[rule.id]} comment={comments[rule.id] ?? ""}
                 saving={saving === rule.id} savedNow={saved.has(rule.id)}
+                offline={offline} sessionReady={Boolean(sessionToken)}
+                acknowledged={Boolean(acknowledged[rule.id])}
                 active={activeFocus?.ruleId === rule.ruleId}
                 onSelect={() => focusRule(rule)}
-                onDecision={d => handleDecision(rule.id, d)} onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))} />
+                onDecision={d => handleDecision(rule, d)}
+                onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
+                onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))} />
             ))}
           </div>
         </div>
@@ -404,14 +484,34 @@ function CountBadge({ label, count, style }: { label: string; count: number; sty
   return <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${style}`}>{count} {label}</span>;
 }
 
-function RuleCard({ rule, decision, comment, saving, savedNow, active, onSelect, onDecision, onComment }: {
+function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionReady, acknowledged, active, onSelect, onDecision, onAcknowledge, onComment }: {
   rule: QCRuleResult; decision?: Decision; comment: string; saving: boolean; savedNow: boolean;
-  active?: boolean; onSelect: () => void; onDecision: (d: Decision) => void; onComment: (c: string) => void;
+  offline: boolean; sessionReady: boolean; acknowledged: boolean;
+  active?: boolean; onSelect: () => void; onDecision: (d: Decision) => void; onAcknowledge: (checked: boolean) => void; onComment: (c: string) => void;
 }) {
   const normalizedStatus = ruleStatus(rule.status);
-  const [expanded, setExpanded] = useState(normalizedStatus === "fail" || normalizedStatus === "verify" || normalizedStatus === "warning");
+  const [expanded, setExpanded] = useState(normalizedStatus === "fail" || normalizedStatus === "verify");
+  const [now, setNow] = useState(Date.now());
+  const mountedAt = useRef(Date.now());
   const s = STATUS_STYLE[normalizedStatus] ?? STATUS_STYLE["skipped"];
   const sev = rule.severity ?? "STANDARD";
+  const isVerify = normalizedStatus === "verify";
+  const isFail = normalizedStatus === "fail";
+  const isBlockingVerify = isVerify && sev === "BLOCKING";
+  const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : mountedAt.current;
+  const elapsedMs = Math.max(0, now - presentedAt);
+  const waitMs = isVerify ? Math.max(0, 8000 - elapsedMs) : 0;
+  const waitSeconds = Math.ceil(waitMs / 1000);
+  const overrideReasonOk = !isFail || comment.trim().length >= 20;
+  const canAct = sessionReady && !offline && !saving && waitMs === 0 && (!isBlockingVerify || acknowledged);
+  const canPass = canAct && overrideReasonOk;
+  const canFail = canAct && isVerify;
+
+  useEffect(() => {
+    if (!isVerify || waitMs === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [isVerify, waitMs]);
 
   return (
     <div className={`rounded-xl border p-3 ${s.border} ${s.bg} ${active ? "ring-1 ring-amber-400/70" : ""}`}>
@@ -423,8 +523,11 @@ function RuleCard({ rule, decision, comment, saving, savedNow, active, onSelect,
               <span className="text-xs font-medium text-slate-200">{rule.ruleName}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${SEV_STYLE[sev] ?? SEV_STYLE.STANDARD}`}>{sev}</span>
               {savedNow && <span className="text-[10px] text-teal-400 flex items-center gap-0.5"><CheckCircle2 size={9} />saved</span>}
+              {rule.overridePending && <span className="text-[10px] text-blue-300 border border-blue-800/50 bg-blue-950/40 rounded px-1.5 py-0.5">second approval pending</span>}
             </div>
-            <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>{rule.message}</p>
+            <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>
+              {normalizedStatus === "verify" && rule.verifyQuestion ? rule.verifyQuestion : normalizedStatus === "fail" && rule.rejectionText ? rule.rejectionText : rule.message}
+            </p>
           </div>
           <div className="flex-shrink-0 text-slate-600">{expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}</div>
         </div>
@@ -454,21 +557,57 @@ function RuleCard({ rule, decision, comment, saving, savedNow, active, onSelect,
               <span className="leading-relaxed">{rule.actionItem}</span>
             </div>
           )}
+          {rule.confidence != null && (
+            <div className="text-[11px] text-slate-500 font-mono">
+              Confidence {Math.round(Number(rule.confidence) * 100)}%
+            </div>
+          )}
+          {isVerify && (
+            <details className="rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-2 text-xs text-slate-400">
+              <summary className="cursor-pointer text-slate-300 font-medium">Rule help</summary>
+              <div className="mt-2 leading-relaxed">
+                Review the referenced page and values before choosing Pass or Fail. Pass means the item is acceptable after human review. Fail means the appraisal still needs correction or support.
+              </div>
+            </details>
+          )}
           {rule.reviewRequired ? (
             <div className="space-y-2">
+              {isVerify && waitMs > 0 && (
+                <div className="text-[11px] text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-lg px-2.5 py-2">
+                  Read the question and document reference. Actions unlock in {waitSeconds}s.
+                </div>
+              )}
+              {isBlockingVerify && (
+                <label className="flex items-start gap-2 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 rounded-lg px-2.5 py-2">
+                  <input type="checkbox" checked={acknowledged} onChange={e => onAcknowledge(e.target.checked)} className="mt-0.5" />
+                  <span>I have reviewed the referenced document sections.</span>
+                </label>
+              )}
+              {isFail && (
+                <div className="text-[11px] text-red-200 bg-red-950/20 border border-red-800/30 rounded-lg px-2.5 py-2">
+                  PASS here is an override. Enter a specific reason of at least 20 characters; a second reviewer must approve it before sign-off.
+                </div>
+              )}
+              {rule.overridePending && (
+                <div className="text-[11px] text-blue-200 bg-blue-950/20 border border-blue-800/30 rounded-lg px-2.5 py-2">
+                  Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A different reviewer must press Pass to approve it.
+                </div>
+              )}
               <div className="flex gap-2">
-                <button onClick={() => onDecision("ACCEPT")} disabled={saving}
-                  className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${decision === "ACCEPT" ? "bg-green-600 text-white" : "bg-slate-800 hover:bg-green-900/40 hover:text-green-300 text-slate-400 border border-slate-700"}`}>
-                  {saving ? <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : <Check size={12} />} Accept
+                <button onClick={() => onDecision("PASS")} disabled={!canPass}
+                  className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${decision === "PASS" ? "bg-green-600 text-white" : "bg-slate-800 hover:bg-green-900/40 hover:text-green-300 text-slate-400 border border-slate-700"}`}>
+                  {saving ? <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : <Check size={12} />} Pass
                 </button>
-                <button onClick={() => onDecision("REJECT")} disabled={saving}
-                  className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${decision === "REJECT" ? "bg-red-600 text-white" : "bg-slate-800 hover:bg-red-900/40 hover:text-red-300 text-slate-400 border border-slate-700"}`}>
-                  {saving ? <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : <X size={12} />} Reject
-                </button>
+                {normalizedStatus === "verify" && (
+                  <button onClick={() => onDecision("FAIL")} disabled={!canFail}
+                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${decision === "FAIL" ? "bg-red-600 text-white" : "bg-slate-800 hover:bg-red-900/40 hover:text-red-300 text-slate-400 border border-slate-700"}`}>
+                    {saving ? <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : <X size={12} />} Fail
+                  </button>
+                )}
               </div>
               <textarea value={comment} onChange={e => onComment(e.target.value)}
                 onBlur={() => decision && onDecision(decision)}
-                placeholder="Add a comment (optional)…" rows={2}
+                placeholder={isFail ? "Reason for override - be specific (minimum 20 characters)." : "Add a comment (optional)..."} rows={2}
                 className="w-full bg-slate-800/50 border border-slate-700/40 rounded-lg px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-600/50 transition-colors" />
             </div>
           ) : (

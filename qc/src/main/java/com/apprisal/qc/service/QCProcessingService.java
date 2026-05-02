@@ -416,7 +416,6 @@ public class QCProcessingService {
                 .passedCount(pythonResponse.passed())
                 .failedCount(pythonResponse.failed())
                 .verifyCount(pythonResponse.verify())
-                .warningCount(pythonResponse.warnings())
                 .errorCount(pythonResponse.systemErrors())
                 .skippedCount(pythonResponse.skipped())
                 .processingTimeMs(pythonResponse.processingTimeMs())
@@ -428,18 +427,26 @@ public class QCProcessingService {
         // Create rule results
         if (pythonResponse.ruleResults() != null) {
             for (PythonRuleResult pr : pythonResponse.ruleResults()) {
+                String normalizedStatus = normalizePythonStatus(pr.status());
+                boolean needsReview = pr.reviewRequired() || needsVerification(normalizedStatus);
                 QCRuleResult ruleResult = QCRuleResult.builder()
                         .ruleId(pr.ruleId())
                         .ruleName(pr.ruleName())
-                        .status(pr.status())
+                        .status(normalizedStatus)
                         .message(pr.message())
                         .severity(pr.severity() != null ? pr.severity() : "STANDARD")
                         .details(toJson(pr.details()))
                         .actionItem(pr.actionItem())
-                        .needsVerification(pr.needsVerification())
-                        .reviewRequired(pr.reviewRequired() || pr.needsVerification())
+                        .needsVerification(needsReview)
+                        .reviewRequired(needsReview)
                         .appraisalValue(pr.appraisalValue())
                         .engagementValue(pr.engagementValue())
+                        .confidenceScore(pr.confidence())
+                        .extractedValue(pr.extractedValue() != null ? String.valueOf(pr.extractedValue()) : null)
+                        .expectedValue(pr.expectedValue() != null ? String.valueOf(pr.expectedValue()) : null)
+                        .verifyQuestion(pr.verifyQuestion())
+                        .rejectionText(pr.rejectionText())
+                        .evidence(pr.evidence() != null ? toJson(pr.evidence()) : null)
                         .pdfPage(pr.sourcePage())
                         .bboxX(pr.bboxX())
                         .bboxY(pr.bboxY())
@@ -473,10 +480,22 @@ public class QCProcessingService {
      */
     private QCDecision determineDecision(PythonQCResponse response) {
         if (response.verify()       != null && response.verify()       > 0) return QCDecision.TO_VERIFY;
-        if (response.failed()       != null && response.failed()       > 0) return QCDecision.TO_VERIFY;
-        if (response.warnings()     != null && response.warnings()     > 0) return QCDecision.TO_VERIFY;
+        if (response.failed()       != null && response.failed()       > 0) return QCDecision.AUTO_FAIL;
         if (response.systemErrors() != null && response.systemErrors() > 0) return QCDecision.TO_VERIFY;
         return QCDecision.AUTO_PASS;
+    }
+
+    private String normalizePythonStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "verify";
+        }
+        return status.trim().toLowerCase();
+    }
+
+    private boolean needsVerification(String normalizedStatus) {
+        return "fail".equals(normalizedStatus)
+                || "verify".equals(normalizedStatus)
+                || "system_error".equals(normalizedStatus);
     }
 
     /**

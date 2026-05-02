@@ -30,15 +30,21 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
     List<QCRuleResult> findByStatus(String status);
 
     /**
-     * Find all WARNING/ERROR results that need verification for a QC result.
+     * Find all VERIFY/FAIL/system-error results that need reviewer action for a QC result.
      */
-    @Query("SELECT rr FROM QCRuleResult rr WHERE rr.qcResult.id = :qcResultId AND rr.needsVerification = true")
+    @Query("SELECT rr FROM QCRuleResult rr WHERE rr.qcResult.id = :qcResultId AND rr.needsVerification = true ORDER BY rr.id ASC")
     List<QCRuleResult> findVerificationItemsForQcResult(@Param("qcResultId") Long qcResultId);
 
     /**
      * Find unverified rule results for a QC result.
      */
-    @Query("SELECT rr FROM QCRuleResult rr WHERE rr.qcResult.id = :qcResultId AND rr.needsVerification = true AND rr.reviewerVerified IS NULL")
+    @Query("""
+        SELECT rr FROM QCRuleResult rr
+        WHERE rr.qcResult.id = :qcResultId
+          AND rr.needsVerification = true
+          AND (rr.reviewerVerified IS NULL OR rr.overridePending = true)
+        ORDER BY rr.id ASC
+        """)
     List<QCRuleResult> findPendingVerificationForQcResult(@Param("qcResultId") Long qcResultId);
 
     /**

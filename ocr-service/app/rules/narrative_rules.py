@@ -189,7 +189,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
         else:
             return RuleResult(
                 rule_id="COM-1", rule_name="Neighborhood Description Specificity",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message="Neighborhood description appears generic/boilerplate. "
                         "It should reference specific local landmarks, employers, streets, or market data.",
                 action_item="Revise neighborhood description to include area-specific details.",
@@ -201,7 +201,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     if is_canned:
         return RuleResult(
             rule_id="COM-1", rule_name="Neighborhood Description Specificity",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Neighborhood description may be generic. Add specific local market details.",
             action_item="Revise to include area-specific data (distances, employers, schools, market stats).",
             field_confidence=conf,
@@ -272,7 +272,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
     has_analysis = _has_market_analysis_fallback(text)
     return RuleResult(
         rule_id="COM-2", rule_name="Market Conditions Quality",
-        status=RuleStatus.PASS if has_analysis else RuleStatus.WARNING,
+        status=RuleStatus.PASS if has_analysis else RuleStatus.VERIFY,
         message="Market conditions commentary found." if has_analysis
                 else "Market conditions commentary may lack specific market data.",
         severity=RuleSeverity.STANDARD,
@@ -325,7 +325,7 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
 
     return RuleResult(
         rule_id="COM-3", rule_name="Comparable Selection Rationale",
-        status=RuleStatus.WARNING,
+        status=RuleStatus.VERIFY,
         message="Comparable selection commentary does not clearly explain why these properties were selected.",
         action_item="Add rationale explaining why each comparable was selected (proximity, similarity, availability).",
         severity=RuleSeverity.ADVISORY,
@@ -360,7 +360,7 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
 
     return RuleResult(
         rule_id="COM-4", rule_name="Adjustments Explanation",
-        status=RuleStatus.PASS if has_explanation else RuleStatus.WARNING,
+        status=RuleStatus.PASS if has_explanation else RuleStatus.VERIFY,
         message="Adjustment explanation found in commentary." if has_explanation
                 else "Adjustments may not be adequately explained. "
                      "FNMA requires market support for significant adjustments.",
@@ -404,7 +404,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
     if llm_result is True:   # canned
         return RuleResult(
             rule_id="COM-5", rule_name="Reconciliation Sufficiency",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Reconciliation commentary appears generic. It should explain why the final "
                     "value was chosen, not just restate the comparable values.",
             action_item="Revise reconciliation to explain the basis for the final value opinion.",
@@ -421,7 +421,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
 
     return RuleResult(
         rule_id="COM-5", rule_name="Reconciliation Sufficiency",
-        status=RuleStatus.WARNING,
+        status=RuleStatus.VERIFY,
         message="Reconciliation section may not adequately explain why the final value was selected.",
         action_item="Add commentary explaining which comparable(s) are most reliable and why.",
         severity=RuleSeverity.STANDARD,
@@ -488,7 +488,7 @@ def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
     if issues:
         return RuleResult(
             rule_id="COM-6", rule_name="Addenda Consistency",
-            status=RuleStatus.WARNING,
+            status=RuleStatus.VERIFY,
             message="Addenda consistency issue found: " + " ".join(issues),
             action_item="Review addenda and correct any references that conflict with the main report.",
             review_required=True,
@@ -550,7 +550,7 @@ def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
         if missing:
             return RuleResult(
                 rule_id="COM-7", rule_name="Prior Sales Disclosure",
-                status=RuleStatus.WARNING,
+                status=RuleStatus.VERIFY,
                 message=f"Property was offered for sale but missing: {', '.join(missing)}.",
                 action_item=f"Add {', '.join(missing)} to the Subject section.",
                 severity=RuleSeverity.STANDARD,

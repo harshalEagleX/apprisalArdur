@@ -119,12 +119,12 @@ def validate_zoning_compliance(ctx: ValidationContext) -> RuleResult:
     comp_upper = comp.upper()
     if "NO ZONING" in comp_upper:
         return RuleResult(rule_id="ST-5", rule_name="Zoning Classification and Compliance",
-                          status=RuleStatus.WARNING, appraisal_value=comp,
+                          status=RuleStatus.VERIFY, appraisal_value=comp,
                           message="Zoning is 'No Zoning'. Comment required: can subject be rebuilt if destroyed?",
                           severity=RuleSeverity.STANDARD)
     if "NON-CONFORMING" in comp_upper or "NONCONFORMING" in comp_upper:
         return RuleResult(rule_id="ST-5", rule_name="Zoning Classification and Compliance",
-                          status=RuleStatus.WARNING, appraisal_value=comp,
+                          status=RuleStatus.VERIFY, appraisal_value=comp,
                           message="Zoning is 'Legal Non-Conforming'. Explain why and rebuild rights.",
                           severity=RuleSeverity.STANDARD)
     if "ILLEGAL" in comp_upper:
@@ -214,7 +214,7 @@ def validate_flood_hazard(ctx: ValidationContext) -> RuleResult:
 
     if in_flood:
         return RuleResult(rule_id="ST-8", rule_name="FEMA Flood Hazard Area",
-                          status=RuleStatus.WARNING,
+                          status=RuleStatus.VERIFY,
                           appraisal_value=flood_zone or "Yes",
                           message="Property is in a FEMA flood zone. Comment on marketability impact required.",
                           action_item="Add commentary on flood zone impact on marketability.",
@@ -243,7 +243,7 @@ def validate_utilities_typical(ctx: ValidationContext) -> RuleResult:
                           severity=RuleSeverity.STANDARD)
     if re.search(r"utilities.*typical.*\bNo\b", text, re.I | re.S):
         return RuleResult(rule_id="ST-9", rule_name="Utilities Typical for Market",
-                          status=RuleStatus.WARNING,
+                          status=RuleStatus.VERIFY,
                           message="Utilities are marked not typical. Verify required commentary.",
                           review_required=True, severity=RuleSeverity.STANDARD)
     return RuleResult(rule_id="ST-9", rule_name="Utilities Typical for Market",
@@ -264,7 +264,7 @@ def validate_adverse_site_conditions(ctx: ValidationContext) -> RuleResult:
 
     if adverse:
         return RuleResult(rule_id="ST-10", rule_name="Adverse Site Conditions",
-                          status=RuleStatus.WARNING,
+                          status=RuleStatus.VERIFY,
                           message="Adverse site conditions indicated. Commentary must support response and adjustments should be reflected in sales grid.",
                           action_item="Verify commentary addresses all adverse conditions and grid adjustments.",
                           severity=RuleSeverity.STANDARD)

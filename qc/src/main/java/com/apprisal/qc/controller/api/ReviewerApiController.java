@@ -8,6 +8,7 @@ import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.security.UserPrincipal;
 import com.apprisal.common.realtime.RealtimeEventPublisher;
 import com.apprisal.qc.service.VerificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -90,13 +91,78 @@ public class ReviewerApiController {
 
     // ── Decision save (IDOR-protected) ─────────────────────────────────────────
 
+    @PostMapping("/qc/{qcResultId}/session/start")
+    public ResponseEntity<Map<String, Object>> startReviewSession(
+            @PathVariable Long qcResultId,
+            @RequestBody(required = false) Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
+        try {
+            if (principal == null) {
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Authentication required"));
+            }
+            if (principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+
+            boolean acknowledge = request != null && Boolean.TRUE.equals(request.get("acknowledgeExistingLock"));
+            QCResult result = verificationService.beginReviewSession(
+                    qcResultId,
+                    principal.getUser(),
+                    acknowledge,
+                    clientIp(httpRequest),
+                    httpRequest.getHeader("User-Agent"));
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", true);
+            body.put("sessionToken", result.getReviewSessionToken());
+            body.put("lockedBy", displayName(result.getReviewLockedBy()));
+            body.put("startedAt", result.getReviewStartedAt() != null ? result.getReviewStartedAt().toString() : null);
+            body.put("expiresAt", result.getReviewLockExpiresAt() != null ? result.getReviewLockExpiresAt().toString() : null);
+            body.put("lockAcknowledged", Boolean.TRUE.equals(result.getReviewLockAcknowledged()));
+            realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/presence", body);
+            return ResponseEntity.ok(body);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("success", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(409).body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/qc/{qcResultId}/session/heartbeat")
+    public ResponseEntity<Map<String, Object>> heartbeatReviewSession(
+            @PathVariable Long qcResultId,
+            @RequestBody Map<String, String> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal == null) {
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Authentication required"));
+            }
+            if (principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+            String sessionToken = request != null ? request.get("sessionToken") : null;
+            QCResult result = verificationService.heartbeatReviewSession(qcResultId, Objects.requireNonNull(sessionToken));
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "expiresAt", result.getReviewLockExpiresAt() != null ? result.getReviewLockExpiresAt().toString() : ""));
+        } catch (Exception e) {
+            return ResponseEntity.status(409).body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/decision/save")
     public ResponseEntity<Map<String, Object>> saveDecision(
             @RequestBody DecisionSaveRequest request,
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
         try {
+            if (principal == null) {
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Authentication required"));
+            }
             if (request.ruleResultId() == null) throw new IllegalArgumentException("ruleResultId is required");
             if (request.decision() == null || request.decision().isEmpty()) throw new IllegalArgumentException("decision is required");
+            if (request.sessionToken() == null || request.sessionToken().isBlank()) throw new IllegalArgumentException("sessionToken is required");
 
             // IDOR check: REVIEWER can only save decisions for their assigned batches
             if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
@@ -108,7 +174,13 @@ public class ReviewerApiController {
             QCRuleResult result = verificationService.saveDecision(
                     Objects.requireNonNull(request.ruleResultId()),
                     Objects.requireNonNull(request.decision()),
-                    request.comment());
+                    request.comment(),
+                    Objects.requireNonNull(request.sessionToken()),
+                    request.decisionLatencyMs(),
+                    request.acknowledged(),
+                    principal.getUser(),
+                    clientIp(httpRequest),
+                    httpRequest.getHeader("User-Agent"));
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -116,6 +188,7 @@ public class ReviewerApiController {
             response.put("ruleId", result.getRuleId());
             response.put("decision", request.decision());
             response.put("savedAt", result.getVerifiedAt().toString());
+            response.put("overridePending", Boolean.TRUE.equals(result.getOverridePending()));
 
             Long qcResultId = result.getQcResult().getId();
             realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/decision", response);
@@ -127,6 +200,43 @@ public class ReviewerApiController {
             return ResponseEntity.status(403).body(Map.of("success", false, "error", e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to save decision: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/qc/{qcResultId}/submit")
+    public ResponseEntity<Map<String, Object>> submitSavedReview(
+            @PathVariable Long qcResultId,
+            @RequestBody(required = false) Map<String, String> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal == null) {
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Authentication required"));
+            }
+            if (principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+
+            String notes = request != null ? request.get("notes") : null;
+            String sessionToken = request != null ? request.get("sessionToken") : null;
+            if (sessionToken == null || sessionToken.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "sessionToken is required"));
+            }
+            verificationService.heartbeatReviewSession(qcResultId, sessionToken);
+            QCResult result = verificationService.completeSavedVerification(qcResultId, principal.getUser(), notes);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("qcResultId", result.getId());
+            response.put("finalDecision", result.getFinalDecision() != null ? result.getFinalDecision().name() : null);
+
+            realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/progress", progressPayload(qcResultId));
+            realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/decision", response);
+            return ResponseEntity.ok(response);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("success", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to submit review: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
         }
     }
@@ -149,15 +259,27 @@ public class ReviewerApiController {
                 ruleMap.put("id",              rule.getId());
                 ruleMap.put("ruleId",          rule.getRuleId());
                 ruleMap.put("ruleName",        rule.getRuleName());
-                ruleMap.put("status",          rule.getStatus());
+                ruleMap.put("status",          normalizeStatus(rule.getStatus()));
                 ruleMap.put("message",         rule.getMessage());
                 ruleMap.put("details",         rule.getDetails());
                 ruleMap.put("actionItem",      rule.getActionItem());
-                ruleMap.put("reviewRequired",  rule.getReviewRequired());
+                ruleMap.put("reviewRequired",  Boolean.TRUE.equals(rule.getReviewRequired()) || needsReviewerAction(rule.getStatus()));
                 ruleMap.put("appraisalValue",  rule.getAppraisalValue());
                 ruleMap.put("engagementValue", rule.getEngagementValue());
+                ruleMap.put("confidence",      rule.getConfidenceScore());
+                ruleMap.put("extractedValue",  rule.getExtractedValue());
+                ruleMap.put("expectedValue",   rule.getExpectedValue());
+                ruleMap.put("verifyQuestion",  rule.getVerifyQuestion());
+                ruleMap.put("rejectionText",   rule.getRejectionText());
+                ruleMap.put("evidence",        rule.getEvidence());
                 ruleMap.put("reviewerVerified",rule.getReviewerVerified());
                 ruleMap.put("reviewerComment", rule.getReviewerComment());
+                ruleMap.put("firstPresentedAt", rule.getFirstPresentedAt() != null ? rule.getFirstPresentedAt().toString() : null);
+                ruleMap.put("decisionLatencyMs", rule.getDecisionLatencyMs());
+                ruleMap.put("acknowledgedReferences", rule.getAcknowledgedReferences());
+                ruleMap.put("overridePending", Boolean.TRUE.equals(rule.getOverridePending()));
+                ruleMap.put("overrideRequestedBy", rule.getOverrideRequestedBy() != null ? displayName(rule.getOverrideRequestedBy()) : null);
+                ruleMap.put("overrideRequestedAt", rule.getOverrideRequestedAt() != null ? rule.getOverrideRequestedAt().toString() : null);
                 ruleMap.put("severity",        rule.getSeverity() != null ? rule.getSeverity() : "STANDARD");
                 ruleMap.put("pdfPage",         rule.getPdfPage());
                 ruleMap.put("bboxX",           rule.getBboxX());
@@ -209,5 +331,31 @@ public class ReviewerApiController {
         response.put("completed", verificationItems.size() - pendingItems.size());
         response.put("canSubmit", pendingItems.isEmpty() && !verificationItems.isEmpty());
         return response;
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "verify";
+        }
+        return status.trim().toLowerCase();
+    }
+
+    private boolean needsReviewerAction(String status) {
+        String normalized = normalizeStatus(status);
+        return "verify".equals(normalized) || "fail".equals(normalized) || "system_error".equals(normalized);
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    private String displayName(com.apprisal.common.entity.User user) {
+        if (user == null) return null;
+        if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
+        return user.getUsername();
     }
 }

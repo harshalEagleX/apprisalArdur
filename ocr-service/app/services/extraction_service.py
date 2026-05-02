@@ -72,9 +72,9 @@ class ExtractionService:
                 report.env_file_readable = True
                 report.extraction_method = "env"
             except Exception as e:
-                logger.warning(f"ENV parsing failed: {e}")
+                logger.notice(f"ENV parsing failed: {e}")
                 report.env_file_readable = False
-                report.add_warning(f"ENV file present but unreadable: {str(e)}")
+                report.add_notice(f"ENV file present but unreadable: {str(e)}")
                 extracted_text = self._extract_from_pdf(pdf_path)
                 report.extraction_method = "pymupdf"
         else:
@@ -84,7 +84,7 @@ class ExtractionService:
         
         if not extracted_text or len(extracted_text.strip()) < 100:
             report.success = False
-            report.add_warning("Insufficient text extracted from document")
+            report.add_notice("Insufficient text extracted from document")
             report.unreadable_sections.append("ENTIRE_DOCUMENT")
             report.processing_time_ms = int((time.time() - start_time) * 1000)
             return report

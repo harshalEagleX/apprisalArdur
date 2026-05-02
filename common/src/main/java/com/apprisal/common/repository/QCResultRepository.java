@@ -55,6 +55,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         LEFT JOIN FETCH b.assignedReviewer
         WHERE qr.qcDecision = 'TO_VERIFY'
           AND qr.finalDecision IS NULL
+        ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """)
     List<QCResult> findPendingVerification();
 
@@ -69,6 +70,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         WHERE qr.qcDecision = 'TO_VERIFY'
           AND qr.finalDecision IS NULL
           AND reviewer.id = :reviewerId
+        ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """)
     List<QCResult> findPendingVerificationForReviewer(@Param("reviewerId") Long reviewerId);
 
