@@ -158,7 +158,7 @@ class NLPChecker:
             )
             logger.info("Sentence transformer initialized successfully")
         except Exception as e:
-            logger.warning(f"Failed to initialize sentence transformer: {e}")
+            logger.info(f"Failed to initialize sentence transformer: {e}")
             self.use_embeddings = False
     
     def detect_canned_commentary(
@@ -198,7 +198,7 @@ class NLPChecker:
                         has_specific_details=has_specific_details,
                     )
             except Exception as e:
-                logger.warning("Ollama canned check failed, falling back: %s", e)
+                logger.info("Ollama canned check failed, falling back: %s", e)
 
         # --- Tier 2: sentence-transformers ---
         matched_templates = [t for t in CANNED_TEMPLATES if t in text_lower]
@@ -209,7 +209,7 @@ class NLPChecker:
                 similarities = util.cos_sim(text_embedding, self._template_embeddings)
                 embedding_score = float(similarities.max())
             except Exception as e:
-                logger.warning("Embedding comparison failed: %s", e)
+                logger.info("Embedding comparison failed: %s", e)
 
         # --- Tier 3: Rule-based ---
         template_score = min(1.0, len(matched_templates) * 0.3)

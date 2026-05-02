@@ -61,7 +61,7 @@ public class QCProcessingService {
      * Spring's AOP proxies cannot intercept THIS.method() calls (self-calls).
      * By injecting ourselves through the container, self.processFilePair(pair)
      * goes through the CGLIB proxy, so @Transactional(REQUIRES_NEW) IS applied.
-     * Without this, processFilePair's @Transactional is silently skipped —
+     * Without this, processFilePair's @Transactional is bypassed —
      * the BatchFile entity is detached in the EM session of qcResultRepository.save()
      * and Hibernate Envers throws when trying to audit a detached relationship.
      */
@@ -416,8 +416,7 @@ public class QCProcessingService {
                 .passedCount(pythonResponse.passed())
                 .failedCount(pythonResponse.failed())
                 .verifyCount(pythonResponse.verify())
-                .errorCount(pythonResponse.systemErrors())
-                .skippedCount(pythonResponse.skipped())
+                .errorCount(0)
                 .processingTimeMs(pythonResponse.processingTimeMs())
                 .extractionMethod(pythonResponse.extractionMethod())
                 .pythonDocumentId(pythonResponse.documentId())
@@ -483,7 +482,6 @@ public class QCProcessingService {
     private QCDecision determineDecision(PythonQCResponse response) {
         if (response.verify()       != null && response.verify()       > 0) return QCDecision.TO_VERIFY;
         if (response.failed()       != null && response.failed()       > 0) return QCDecision.AUTO_FAIL;
-        if (response.systemErrors() != null && response.systemErrors() > 0) return QCDecision.TO_VERIFY;
         return QCDecision.AUTO_PASS;
     }
 
@@ -496,8 +494,7 @@ public class QCProcessingService {
 
     private boolean needsVerification(String normalizedStatus) {
         return "fail".equals(normalizedStatus)
-                || "verify".equals(normalizedStatus)
-                || "system_error".equals(normalizedStatus);
+                || "verify".equals(normalizedStatus);
     }
 
     /**

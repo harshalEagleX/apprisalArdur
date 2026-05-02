@@ -40,7 +40,7 @@ def get_cached_llm(task: str, text: str) -> Optional[str]:
                 return row.response
         return None
     except Exception as e:
-        logger.warning("LLM cache get failed: %s", e)
+        logger.info("LLM cache get failed: %s", e)
         return None
 
 
@@ -60,4 +60,4 @@ def save_llm_response(task: str, text: str, response: str, model_name: str = "")
                     model_name=model_name,
                 ))
     except Exception as e:
-        logger.warning("LLM cache save failed: %s", e)
+        logger.info("LLM cache save failed: %s", e)

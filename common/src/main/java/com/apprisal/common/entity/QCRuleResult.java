@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * processing.
  * 
  * Each rule (S-1, S-2, C-1, etc.) produces one QCRuleResult with:
- * - status: PASS, FAIL, VERIFY, ERROR, SKIPPED
+ * - status: PASS, FAIL, VERIFY
  * - message: Detailed message from Python
  * - needsVerification: true for VERIFY/ERROR items
  * - reviewerVerified: null=pending, true=pass, false=fail

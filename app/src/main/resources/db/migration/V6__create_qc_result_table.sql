@@ -16,7 +16,6 @@ CREATE TABLE qc_result (
     passed_count INT DEFAULT 0,
     failed_count INT DEFAULT 0,
     error_count INT DEFAULT 0,
-    skipped_count INT DEFAULT 0,
     
     -- Processing metadata
     processing_time_ms INT,

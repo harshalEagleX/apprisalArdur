@@ -26,14 +26,14 @@ try:
     PDF2IMAGE_AVAILABLE = True
 except ImportError:
     PDF2IMAGE_AVAILABLE = False
-    logging.warning("pdf2image not available. Install with: pip install pdf2image")
+    logging.info("pdf2image not available. Install with: pip install pdf2image")
 
 try:
     import cv2
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False
-    logging.warning("OpenCV not available. Install with: pip install opencv-python")
+    logging.info("OpenCV not available. Install with: pip install opencv-python")
 
 from PIL import Image
 
@@ -122,7 +122,7 @@ class ImagePreprocessor:
             Preprocessed image ready for OCR
         """
         if not CV2_AVAILABLE:
-            logger.warning("OpenCV not available. Returning original image.")
+            logger.info("OpenCV not available. Returning original image.")
             return image
         
         logger.debug(f"Preprocessing image: shape={image.shape}")
@@ -309,7 +309,7 @@ class ImagePreprocessor:
             return angle
             
         except Exception as e:
-            logger.warning(f"Failed to detect skew: {e}")
+            logger.info(f"Failed to detect skew: {e}")
             return 0.0
     
     def deskew_image(self, image: np.ndarray, angle: float) -> np.ndarray:
@@ -354,7 +354,7 @@ class ImagePreprocessor:
             output_path: Output file path
         """
         if not CV2_AVAILABLE:
-            logger.warning("OpenCV not available. Cannot save image.")
+            logger.info("OpenCV not available. Cannot save image.")
             return
         
         cv2.imwrite(output_path, image)

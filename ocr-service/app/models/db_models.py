@@ -98,7 +98,7 @@ class RuleResultRecord(Base):
     document_id      = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
     rule_id          = Column(String(20), nullable=False)
     rule_name        = Column(String(200))
-    status           = Column(String(20))            # pass / fail / verify / skipped / system_error
+    status           = Column(String(20))            # pass / fail / verify
     message          = Column(Text)
     action_item      = Column(Text)
     appraisal_value  = Column(Text)

@@ -103,13 +103,13 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
         r.raise_for_status()
         return r.json().get("response", "").strip()
     except httpx.TimeoutException:
-        logger.warning("Ollama request timed out (model=%s)", get_active_text_model())
+        logger.info("Ollama request timed out (model=%s)", get_active_text_model())
         return None
     except httpx.HTTPStatusError as e:
-        logger.warning("Ollama HTTP error: %s", e)
+        logger.info("Ollama HTTP error: %s", e)
         return None
     except Exception as e:
-        logger.warning("Ollama call failed: %s", e)
+        logger.info("Ollama call failed: %s", e)
         return None
 
 
@@ -254,7 +254,7 @@ async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -
             response.raise_for_status()
             return response.json().get("response", "").strip()
     except Exception as exc:
-        logger.warning("Async Ollama call failed: %s", exc)
+        logger.info("Async Ollama call failed: %s", exc)
         return None
 
 

@@ -22,8 +22,6 @@ public record PythonQCResponse(
         Integer passed,
         Integer failed,
         Integer verify,
-        Integer skipped,
-        @JsonProperty("system_errors")       Integer systemErrors,
         @JsonProperty("document_id")         String documentId,
         @JsonProperty("cache_hit")           Boolean cacheHit,
         @JsonProperty("file_hash")           String fileHash,

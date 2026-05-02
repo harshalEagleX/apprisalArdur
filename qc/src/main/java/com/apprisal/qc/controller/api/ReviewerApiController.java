@@ -272,7 +272,7 @@ public class ReviewerApiController {
                 ruleMap.put("verifyQuestion",  rule.getVerifyQuestion());
                 ruleMap.put("rejectionText",   rule.getRejectionText());
                 ruleMap.put("evidence",        rule.getEvidence());
-                ruleMap.put("help",            ruleHelp(rule.getRuleId()));
+                ruleMap.put("help",            ruleHelp(rule.getRuleId(), rule.getRuleName()));
                 ruleMap.put("reviewerVerified",rule.getReviewerVerified());
                 ruleMap.put("reviewerComment", rule.getReviewerComment());
                 ruleMap.put("firstPresentedAt", rule.getFirstPresentedAt() != null ? rule.getFirstPresentedAt().toString() : null);
@@ -343,7 +343,7 @@ public class ReviewerApiController {
 
     private boolean needsReviewerAction(String status) {
         String normalized = normalizeStatus(status);
-        return "verify".equals(normalized) || "fail".equals(normalized) || "system_error".equals(normalized);
+        return "verify".equals(normalized) || "fail".equals(normalized);
     }
 
     private String clientIp(HttpServletRequest request) {
@@ -360,9 +360,14 @@ public class ReviewerApiController {
         return user.getUsername();
     }
 
-    private Map<String, Object> ruleHelp(String ruleId) {
+    private Map<String, Object> ruleHelp(String ruleId, String ruleName) {
+        Map<String, Object> exact = exactRuleHelp(ruleId);
+        if (exact != null) {
+            return exact;
+        }
+
         String prefix = ruleId == null ? "" : ruleId.split("-")[0];
-        return switch (prefix) {
+        Map<String, Object> sectionHelp = switch (prefix) {
             case "S" -> Map.of(
                     "summary", "Subject section checks compare the appraisal's subject property facts against the order and UAD requirements.",
                     "terms", Map.of("PUD", "Planned Unit Development", "HOA", "Homeowners association dues", "APN", "Assessor parcel number"),
@@ -387,6 +392,71 @@ public class ReviewerApiController {
                     "summary", "Review the referenced values and document location, then decide whether the item is acceptable or needs correction.",
                     "terms", Map.of(),
                     "example", "Use Pass only when the evidence supports the rule.");
+        };
+        return Map.of(
+                "summary", "Rule " + (ruleId != null ? ruleId : "") + " - " + (ruleName != null ? ruleName : "QC check") + ". " + sectionHelp.get("summary"),
+                "terms", sectionHelp.get("terms"),
+                "example", sectionHelp.get("example"),
+                "documentationRef", "QCChecklist.md#" + (ruleId != null ? ruleId.toLowerCase().replace("-", "-") : "rule")
+        );
+    }
+
+    private Map<String, Object> exactRuleHelp(String ruleId) {
+        if (ruleId == null) return null;
+        return switch (ruleId) {
+            case "S-1" -> Map.of(
+                    "summary", "Checks that the subject address in the appraisal matches the order/engagement letter and known address signals.",
+                    "terms", Map.of("USPS", "address standardization source", "subject", "property being appraised"),
+                    "example", "Pass only if street, city, state, ZIP, and county identify the same property.");
+            case "S-2" -> Map.of(
+                    "summary", "Checks that borrower and co-borrower names match the engagement letter without omitted parties.",
+                    "terms", Map.of("suffix", "name endings such as Jr, Sr, III"),
+                    "example", "Middle-name differences can be reviewed, but a missing borrower should fail.");
+            case "S-9" -> Map.of(
+                    "summary", "Checks PUD and HOA consistency between checkbox state and dues.",
+                    "terms", Map.of("PUD", "Planned Unit Development", "HOA", "Homeowners association dues"),
+                    "example", "HOA dues greater than zero normally require the PUD indicator to be marked when applicable.");
+            case "C-1" -> Map.of(
+                    "summary", "Checks whether contract fields are completed for purchases and blank/default for refinance assignments.",
+                    "terms", Map.of("refinance", "loan transaction without a current purchase contract"),
+                    "example", "A refinance with populated purchase-contract price/date fields should fail.");
+            case "C-2" -> Map.of(
+                    "summary", "Checks contract price and fully executed date against purchase agreement evidence.",
+                    "terms", Map.of("fully executed", "signed by all required parties", "contract date", "latest required signature date"),
+                    "example", "If buyer signed 03/15 and seller signed 04/02, the contract date should be 04/02.");
+            case "N-2" -> Map.of(
+                    "summary", "Checks market trend against time-adjustment behavior in the sales grid.",
+                    "terms", Map.of("time adjustment", "market-condition adjustment for sale date", "trend", "increasing, stable, or declining values"),
+                    "example", "Increasing or declining markets need supported time adjustments or explanation.");
+            case "N-5" -> Map.of(
+                    "summary", "Checks that neighborhood boundaries are specific and complete.",
+                    "terms", Map.of("boundary", "north, south, east, and west neighborhood limits"),
+                    "example", "Named streets, highways, rivers, or city limits are better than generic area descriptions.");
+            case "SCA-7" -> Map.of(
+                    "summary", "Checks concessions and financing details for comparable sales and whether adjustments make sense.",
+                    "terms", Map.of("concession", "seller or financing assistance", "comp", "comparable sale"),
+                    "example", "A comparable with seller-paid costs may need a concession adjustment if market behavior supports it.");
+            case "ADD-6" -> Map.of(
+                    "summary", "Checks whether 1004MC comparable-sale counts match the sales comparison grid.",
+                    "terms", Map.of("1004MC", "Market Conditions Addendum", "sales grid", "sales comparison section"),
+                    "example", "If 1004MC shows 6 comparable sales but the grid has 3, the mismatch needs correction or support.");
+            case "FHA-2" -> Map.of(
+                    "summary", "Checks FHA case-number presence and consistency across required page headers.",
+                    "terms", Map.of("case number", "FHA identifier expected on appraisal pages"),
+                    "example", "Missing FHA case number on any required page should fail.");
+            case "FHA-5" -> Map.of(
+                    "summary", "Checks whether primary FHA comparables are recent enough relative to the effective date.",
+                    "terms", Map.of("effective date", "appraisal valuation date", "primary comparables", "comparables 1, 2, and 3"),
+                    "example", "A primary comparable more than 12 months older than the effective date should fail unless FHA policy supports it.");
+            case "FHA-10" -> Map.of(
+                    "summary", "Checks remaining economic life and whether short life is explained.",
+                    "terms", Map.of("REL", "remaining economic life"),
+                    "example", "REL under 30 years needs clear explanation and support.");
+            case "COM-1", "COM-2", "COM-3", "COM-4", "COM-5", "COM-6", "COM-7" -> Map.of(
+                    "summary", "Checks whether narrative commentary is specific, analytical, and tied to the subject or market evidence.",
+                    "terms", Map.of("canned", "generic boilerplate that could apply to any report", "reconciliation", "final weighting and value reasoning"),
+                    "example", "A useful comment explains why the data supports the conclusion, not just that the appraiser reviewed it.");
+            default -> null;
         };
     }
 }

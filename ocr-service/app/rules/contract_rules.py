@@ -62,7 +62,7 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
         )
     
     # Did Analyze Contract = True - check for additional requirements
-    # Check for contract analysis commentary (optional warning, not failure)
+    # Unclear contract analysis goes to VERIFY.
     if not ctx.report.contract.contract_analysis_comment or len(ctx.report.contract.contract_analysis_comment.strip()) < 20:
         return RuleResult(
             rule_id="C-1",
@@ -71,7 +71,7 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
             message="Appraiser must provide detailed reasoning and analysis of the contract including sale type and results."
         )
     
-    # Check if sale type is identified (optional warning)
+    # Missing sale type goes to VERIFY.
     if not ctx.report.contract.sale_type:
         return RuleResult(
             rule_id="C-1",
@@ -107,7 +107,7 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
             rule_id="C-2",
             rule_name="Contract Price and Date",
             status=RuleStatus.PASS,
-            message="Refinance: Contract validation skipped."
+            message="Refinance: Contract validation not applicable."
         )
     
     rpt_contract = ctx.report.contract
@@ -189,7 +189,7 @@ def validate_owner_record_source(ctx: ValidationContext) -> RuleResult:
             rule_id="C-3",
             rule_name="Owner of Record Data Source",
             status=RuleStatus.PASS,
-            message="Refinance: Owner record validation skipped."
+            message="Refinance: Owner record validation not applicable."
         )
     
     c = ctx.report.contract
@@ -245,7 +245,7 @@ def validate_financial_assistance(ctx: ValidationContext) -> RuleResult:
             rule_id="C-4",
             rule_name="Financial Assistance",
             status=RuleStatus.PASS,
-            message="Refinance: Financial assistance validation skipped."
+            message="Refinance: Financial assistance validation not applicable."
         )
     
     c = ctx.report.contract
@@ -326,7 +326,7 @@ def validate_personal_property(ctx: ValidationContext) -> RuleResult:
             rule_id="C-5",
             rule_name="Personal Property Analysis",
             status=RuleStatus.PASS,
-            message="Refinance: Personal property validation skipped."
+            message="Refinance: Personal property validation not applicable."
         )
     
     # Check if Purchase Agreement indicates personal property

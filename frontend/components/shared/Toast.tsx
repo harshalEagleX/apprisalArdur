@@ -1,26 +1,26 @@
 "use client";
 import { useEffect, useState } from "react";
-import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react";
+import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { subscribe, dismiss, type ToastItem } from "@/lib/toast";
 
 const ICON = {
   success: CheckCircle2,
   error:   XCircle,
-  warning: AlertTriangle,
+  notice:  Info,
   info:    Info,
 };
 
 const COLORS = {
   success: "border-green-700  bg-green-950  text-green-300",
   error:   "border-red-700   bg-red-950    text-red-300",
-  warning: "border-amber-700 bg-amber-950  text-amber-300",
+  notice:  "border-amber-700 bg-amber-950  text-amber-300",
   info:    "border-slate-600 bg-slate-900  text-slate-200",
 };
 
 const ICON_COLORS = {
   success: "text-green-400",
   error:   "text-red-400",
-  warning: "text-amber-400",
+  notice:  "text-amber-400",
   info:    "text-blue-400",
 };
 

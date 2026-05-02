@@ -276,7 +276,7 @@ def seed_rules_config():
                 ))
         logger.info("Seeded rules_config table with %d rules", len(RULE_DEFAULTS))
     except Exception as e:
-        logger.warning("rules_config seed failed (DB may be unavailable): %s", e)
+        logger.info("rules_config seed failed (DB may be unavailable): %s", e)
 
 
 def load_rule_configs() -> Dict[str, RuleConfigEntry]:
@@ -320,5 +320,5 @@ def load_rule_configs() -> Dict[str, RuleConfigEntry]:
             return configs
 
     except Exception as e:
-        logger.warning("Failed to load rules from DB, using defaults: %s", e)
+        logger.info("Failed to load rules from DB, using defaults: %s", e)
         return defaults

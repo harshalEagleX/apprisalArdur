@@ -29,7 +29,7 @@ def _load_model(filename: str) -> Optional[dict]:
         logger.info("Loaded runtime model %s", filename)
         return model
     except Exception as exc:
-        logger.warning("Failed to load runtime model %s: %s", filename, exc)
+        logger.info("Failed to load runtime model %s: %s", filename, exc)
         return None
 
 

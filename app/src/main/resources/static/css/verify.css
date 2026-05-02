@@ -352,19 +352,9 @@
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(26, 26, 36, 0.9) 30%);
 }
 
-.verify-item.warning {
-    border-left-color: var(--color-warning);
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(26, 26, 36, 0.9) 30%);
-}
-
 .verify-item.error {
     border-left-color: var(--color-error);
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(26, 26, 36, 0.9) 30%);
-}
-
-.verify-item.skipped {
-    border-left-color: var(--color-text-tertiary);
-    opacity: 0.8;
 }
 
 .verify-item.manual_pass {
@@ -425,18 +415,6 @@
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0.15) 100%);
     color: #f87171;
     border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.status-badge.warning {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-.status-badge.skipped {
-    background: rgba(156, 163, 175, 0.15);
-    color: var(--color-text-tertiary);
-    border: 1px solid rgba(156, 163, 175, 0.2);
 }
 
 .status-badge.manual_pass {

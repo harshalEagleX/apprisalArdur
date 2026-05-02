@@ -37,7 +37,7 @@ def validate_supervisory_appraiser(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"SUPERVISORY APPRAISER.*(?:Name|Signature).{0,80}\S", text, re.I | re.S):
         return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.VERIFY, message="Supervisory appraiser evidence found. Verify signature/certification requirements.")
-    return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.SKIPPED, message="No supervisory appraiser evidence detected.")
+    return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.PASS, message="No supervisory appraiser evidence detected.")
 
 
 @rule(id="SIG-4", name="Email Address")

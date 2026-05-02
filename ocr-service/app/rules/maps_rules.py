@@ -30,7 +30,7 @@ def validate_aerial_map(ctx: ValidationContext) -> RuleResult:
 @rule(id="M-3", name="Plat Map")
 def validate_plat_map(ctx: ValidationContext) -> RuleResult:
     if ctx.report.site.dimensions and ctx.report.site.shape and "irregular" not in (ctx.report.site.shape or "").lower():
-        return RuleResult(rule_id="M-3", rule_name="Plat Map", status=RuleStatus.SKIPPED, message="Plat map not required based on extracted regular site dimensions/shape.")
+        return RuleResult(rule_id="M-3", rule_name="Plat Map", status=RuleStatus.PASS, message="Plat map not required based on extracted regular site dimensions/shape.")
     if not re.search(r"plat map|survey|site plan", _text(ctx), re.I):
         return _verify("M-3", "Plat Map", "Plat map evidence not detected. Verify if site is irregular or dimensions are incomplete.")
     return RuleResult(rule_id="M-3", rule_name="Plat Map", status=RuleStatus.PASS, message="Plat/survey evidence detected.")

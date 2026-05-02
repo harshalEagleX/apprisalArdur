@@ -28,10 +28,10 @@ try:
     if DB_AVAILABLE:
         logger.info("Database available — OCR caching enabled")
     else:
-        logger.warning("Database not available — caching disabled, results not persisted")
+        logger.info("Database not available — caching disabled, results not persisted")
 except Exception as e:
     DB_AVAILABLE = False
-    logger.warning("Cache service init failed (%s) — running without persistence", e)
+    logger.info("Cache service init failed (%s) — running without persistence", e)
 
 
 def _db_ok() -> bool:
@@ -57,7 +57,7 @@ def get_document_id(file_hash: str) -> Optional[str]:
             doc = db.query(Document).filter(Document.file_hash == file_hash).first()
             return str(doc.id) if doc else None
     except Exception as e:
-        logger.warning("get_document_id failed: %s", e)
+        logger.info("get_document_id failed: %s", e)
         return None
 
 
@@ -113,7 +113,7 @@ def get_cached_ocr(file_hash: str, expected_pages: int):
         return pages
 
     except Exception as e:
-        logger.warning("Cache lookup failed: %s", e)
+        logger.info("Cache lookup failed: %s", e)
         return None
 
 
@@ -188,7 +188,7 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
         return str(doc_id)
 
     except Exception as e:
-        logger.warning("Cache save failed: %s", e)
+        logger.info("Cache save failed: %s", e)
         return None
 
 
@@ -247,7 +247,7 @@ def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confide
                 db.add(record)
 
     except Exception as e:
-        logger.warning("Field save failed: %s", e)
+        logger.info("Field save failed: %s", e)
 
 
 # ── Rule results save ──────────────────────────────────────────────────────────

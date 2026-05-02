@@ -64,7 +64,7 @@ def is_db_available() -> bool:
             conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         return True
     except Exception as e:
-        logger.warning("Database not available: %s", e)
+        logger.info("Database not available: %s", e)
         return False
 
 

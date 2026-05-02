@@ -1,4 +1,4 @@
-type ToastType = "success" | "error" | "info" | "warning";
+type ToastType = "success" | "error" | "info" | "notice";
 
 export interface ToastItem {
   id: string;
@@ -42,5 +42,5 @@ export const toast = {
   success: (title: string, message?: string) => add("success", title, message),
   error:   (title: string, message?: string) => add("error",   title, message, 8000),
   info:    (title: string, message?: string) => add("info",    title, message),
-  warning: (title: string, message?: string) => add("warning", title, message, 6000),
+  notice:  (title: string, message?: string) => add("notice",  title, message, 6000),
 };

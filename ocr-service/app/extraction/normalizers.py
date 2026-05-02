@@ -177,7 +177,7 @@ def normalize_money(raw: str) -> MoneyValue:
         value = float(cleaned) * multiplier
         return MoneyValue(raw=raw, value=value, confidence=1.0)
     except ValueError:
-        logger.warning(f"Could not parse money value: {raw}")
+        logger.info(f"Could not parse money value: {raw}")
         return MoneyValue(raw=raw, value=0.0, confidence=0.0)
 
 
@@ -233,7 +233,7 @@ def normalize_date(raw: str) -> str:
         except ValueError:
             pass
     
-    logger.warning(f"Could not parse date: {raw}")
+    logger.info(f"Could not parse date: {raw}")
     return ""
 
 

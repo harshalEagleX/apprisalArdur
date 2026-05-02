@@ -16,8 +16,6 @@ class RuleStatus(str, Enum):
     PASS         = "pass"
     FAIL         = "fail"
     VERIFY       = "verify"        # field missing or too low confidence — human must check
-    SKIPPED      = "skipped"       # rule not applicable to this loan type
-    SYSTEM_ERROR = "system_error"  # rule code crashed
 
 
 class RuleSeverity(str, Enum):
@@ -67,10 +65,8 @@ class SmartLogger:
     def log_result(self, result: RuleResult):
         self.results.append(result)
         
-        if result.status == RuleStatus.SYSTEM_ERROR:
-            logger.error(f"Rule {result.rule_id} SYSTEM_ERROR: {result.message} | Action: {result.action_item}")
-        elif result.status == RuleStatus.VERIFY:
-            logger.warning(f"Rule {result.rule_id} VERIFY: {result.message}")
+        if result.status == RuleStatus.VERIFY:
+            logger.info(f"Rule {result.rule_id} VERIFY: {result.message}")
             # Track missing fields for improvement suggestions
             if result.details and "field" in result.details:
                 field = result.details["field"]
@@ -84,7 +80,6 @@ class SmartLogger:
             "passed": len([r for r in self.results if r.status == RuleStatus.PASS]),
             "failed": len([r for r in self.results if r.status == RuleStatus.FAIL]),
             "verify": len([r for r in self.results if r.status == RuleStatus.VERIFY]),
-            "system_errors": len([r for r in self.results if r.status == RuleStatus.SYSTEM_ERROR]),
             "missing_data_hotspots": self.missing_data_log
         }
         return params

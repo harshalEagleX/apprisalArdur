@@ -234,7 +234,7 @@ class SmartQCProcessor:
             engagement_letter = self._map_engagement_letter(eng_extract)
         else:
             # FALLBACK: Create proxy from Report data
-            logger.warning("No Engagement Letter found. Creating proxy from Report data for validation.")
+            logger.info("No Engagement Letter found. Creating proxy from Report data for validation.")
             engagement_letter = EngagementLetter(
                 borrower_name=report.subject.borrower,
                 property_address=report.subject.address,
@@ -269,7 +269,7 @@ class SmartQCProcessor:
                 from app.services.vision_pipeline import analyze_pages_sync
                 vision_results = analyze_pages_sync(extraction_result.page_images)
             except Exception as e:
-                logger.info("LLaVA vision pipeline skipped: %s", e)
+                logger.info("LLaVA vision pipeline not run: %s", e)
 
         # Step 6: Create ValidationContext (pass field_meta for source_page + confidence)
         ctx = ValidationContext(
@@ -286,7 +286,7 @@ class SmartQCProcessor:
             from app.services.llm_enrichment import enrich_context_sync
             enrich_context_sync(ctx)
         except Exception as e:
-            logger.info("LLM enrichment skipped before rules: %s", e)
+            logger.info("LLM enrichment not run before rules: %s", e)
         
         # Step 7: Execute rule engine
         logger.info("Executing rule engine")
@@ -503,7 +503,7 @@ class SmartQCProcessor:
                 rule_version=result.rule_version,
             ))
             
-            # Collect action items from failed/skipped rules
+            # Collect action items from rules that need reviewer action.
             if result.action_item and external_status in ["fail", "verify"]:
                 action_items.append(f"[{result.rule_id}] {result.action_item}")
         
@@ -550,7 +550,7 @@ class SmartQCProcessor:
     def _public_status(self, status: RuleStatus) -> str:
         if status == RuleStatus.FAIL:
             return "fail"
-        if status in (RuleStatus.VERIFY, RuleStatus.SYSTEM_ERROR):
+        if status == RuleStatus.VERIFY:
             return "verify"
         return "pass"
 

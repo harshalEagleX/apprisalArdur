@@ -3,7 +3,7 @@ Rule Engine — Phase 3 upgrade.
 
 Improvements over previous version:
   - Rules execute in DB-configured order (structural → logic → commentary)
-  - Inactive rules are skipped (toggle via DB, no code restart)
+  - Inactive/non-applicable rules are returned as PASS (toggle via DB, no code restart)
   - Severity (BLOCKING / STANDARD / ADVISORY) attached to every result
   - source_page and field_confidence passed from Phase 2 field_meta
   - Single rule crash never stops other rules
@@ -61,23 +61,23 @@ class RuleEngine:
             rule_func = self._rules[rule_id]
             cfg = configs.get(rule_id)
 
-            # Skip inactive rules
+            # Disabled rules are closed as PASS so public output remains PASS / VERIFY / FAIL only.
             if cfg and not cfg.is_active:
                 results.append(RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.SKIPPED,
+                    status=RuleStatus.PASS,
                     message="Rule disabled via configuration.",
                     severity=RuleSeverity(cfg.severity) if cfg else RuleSeverity.STANDARD,
                 ))
                 continue
 
-            # Skip rules that do not apply to this assignment or loan type.
+            # Non-applicable rules are closed as PASS so no fourth status leaks downstream.
             if cfg and not self._is_applicable(context, cfg.applicable_loan_types):
                 res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.SKIPPED,
+                    status=RuleStatus.PASS,
                     message=f"Rule not applicable for this assignment/loan type ({cfg.applicable_loan_types}).",
                     severity=RuleSeverity(cfg.severity),
                 )
@@ -133,7 +133,7 @@ class RuleEngine:
                 res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.SYSTEM_ERROR,
+                    status=RuleStatus.VERIFY,
                     message=f"Runtime error: {str(e)}",
                     action_item="Report this to the development team.",
                     review_required=True,

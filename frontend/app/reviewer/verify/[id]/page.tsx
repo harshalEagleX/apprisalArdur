@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2, SkipForward, Crosshair, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2, Crosshair, ZoomIn, ZoomOut } from "lucide-react";
 import { getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, getRealtimeUrl, startReviewSession, heartbeatReviewSession, type BatchFile, type QCRuleResult } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
 
@@ -29,8 +29,6 @@ const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }>
   fail:         { border: "border-red-800/40",    bg: "bg-red-950/20",    text: "text-red-300" },
   verify:       { border: "border-amber-800/40",  bg: "bg-amber-950/20",  text: "text-amber-300" },
   MANUAL_PASS:  { border: "border-teal-800/40",   bg: "bg-teal-950/20",   text: "text-teal-300" },
-  system_error: { border: "border-purple-800/40", bg: "bg-purple-950/20", text: "text-purple-300" },
-  skipped:      { border: "border-slate-700/30",  bg: "bg-slate-800/20",  text: "text-slate-500" },
 };
 const SEV_STYLE: Record<string, string> = {
   BLOCKING: "bg-red-950/60 border-red-800/50 text-red-400",
@@ -493,7 +491,7 @@ function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionR
   const [expanded, setExpanded] = useState(normalizedStatus === "fail" || normalizedStatus === "verify");
   const [now, setNow] = useState(Date.now());
   const mountedAt = useRef(Date.now());
-  const s = STATUS_STYLE[normalizedStatus] ?? STATUS_STYLE["skipped"];
+  const s = STATUS_STYLE[normalizedStatus] ?? STATUS_STYLE["verify"];
   const sev = rule.severity ?? "STANDARD";
   const isVerify = normalizedStatus === "verify";
   const isFail = normalizedStatus === "fail";
@@ -627,7 +625,6 @@ function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionR
             <div className={`flex items-center gap-1.5 text-xs ${s.text} opacity-60`}>
               {normalizedStatus === "pass" || normalizedStatus === "MANUAL_PASS"
                 ? <><CheckCircle2 size={11} /> No action required</>
-                : normalizedStatus === "skipped" ? <><SkipForward size={11} /> Not applicable</>
                 : null}
             </div>
           )}

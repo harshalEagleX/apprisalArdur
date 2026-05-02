@@ -165,7 +165,7 @@ def enrich_context_sync(ctx: ValidationContext) -> dict[str, Any]:
         finally:
             loop.close()
     except Exception as exc:
-        logger.info("LLM enrichment skipped: %s", exc)
+        logger.info("LLM enrichment not run: %s", exc)
         ctx.llm_enrichment = {"available": False, "reason": str(exc)}
         return ctx.llm_enrichment
 

@@ -38,7 +38,6 @@ public record PythonRuleResult(
         String normalizedStatus = status == null ? "" : status.trim().toLowerCase();
         return reviewRequired
                 || "fail".equals(normalizedStatus)
-                || "verify".equals(normalizedStatus)
-                || "system_error".equals(normalizedStatus);
+                || "verify".equals(normalizedStatus);
     }
 }

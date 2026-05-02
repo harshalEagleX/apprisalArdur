@@ -178,7 +178,7 @@ function updateCardStatus(ruleResultId, decision) {
     card.dataset.status = newStatus;
 
     // Update CSS classes for styling
-    card.classList.remove('pass', 'fail', 'warning', 'error', 'manual_pass');
+    card.classList.remove('pass', 'fail', 'verify', 'error', 'manual_pass');
     card.classList.add(newStatus.toLowerCase().replace('_', '_'));
 
     // Update status badge

@@ -56,9 +56,6 @@ public class QCResult {
     @Column(name = "error_count")
     private Integer errorCount = 0;
 
-    @Column(name = "skipped_count")
-    private Integer skippedCount = 0;
-
     @Column(name = "processing_time_ms")
     private Integer processingTimeMs;
 
@@ -230,14 +227,6 @@ public class QCResult {
         this.errorCount = errorCount;
     }
 
-    public Integer getSkippedCount() {
-        return skippedCount;
-    }
-
-    public void setSkippedCount(Integer skippedCount) {
-        this.skippedCount = skippedCount;
-    }
-
     public Integer getProcessingTimeMs() {
         return processingTimeMs;
     }
@@ -372,7 +361,6 @@ public class QCResult {
         private Integer verifyCount = 0;
         private Integer manualPassCount = 0;
         private Integer errorCount = 0;
-        private Integer skippedCount = 0;
         private Integer processingTimeMs;
         private String  extractionMethod;
         private String  pythonDocumentId;      // IMPL FIX: was missing from builder
@@ -425,11 +413,6 @@ public class QCResult {
             return this;
         }
 
-        public QCResultBuilder skippedCount(Integer skippedCount) {
-            this.skippedCount = skippedCount;
-            return this;
-        }
-
         public QCResultBuilder processingTimeMs(Integer processingTimeMs) {
             this.processingTimeMs = processingTimeMs;
             return this;
@@ -452,7 +435,6 @@ public class QCResult {
             result.verifyCount     = this.verifyCount;
             result.manualPassCount = this.manualPassCount;
             result.errorCount      = this.errorCount;
-            result.skippedCount    = this.skippedCount;
             result.processingTimeMs = this.processingTimeMs;
             result.extractionMethod = this.extractionMethod;
             result.pythonDocumentId = this.pythonDocumentId;

@@ -77,7 +77,7 @@ def validate_1004mc_condo(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if ctx.report.form_type == "1073" or re.search(r"condo|co-?op", text, re.I):
         return _verify("ADD-8", "1004MC Condo/Co-Op", "Condo/Co-op language detected. Verify all condo/co-op 1004MC shaded areas are completed.")
-    return RuleResult(rule_id="ADD-8", rule_name="1004MC Condo/Co-Op", status=RuleStatus.SKIPPED, message="Not a condo/co-op report based on extracted evidence.")
+    return RuleResult(rule_id="ADD-8", rule_name="1004MC Condo/Co-Op", status=RuleStatus.PASS, message="Not a condo/co-op report based on extracted evidence.")
 
 
 @rule(id="ADD-9", name="USPAP 2014 Addendum")

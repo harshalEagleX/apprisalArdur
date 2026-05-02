@@ -9,7 +9,7 @@ CREATE TABLE qc_rule_result (
     rule_name VARCHAR(100),                 -- "Property Address Validation"
     
     -- Rule outcome
-    status VARCHAR(20) NOT NULL,            -- PASS, FAIL, VERIFY, ERROR, SKIPPED
+    status VARCHAR(20) NOT NULL,            -- PASS, FAIL, VERIFY
     message TEXT,                           -- Detailed message from Python
     details TEXT,                           -- JSON with expected/actual values
     action_item TEXT,                       -- Suggested action

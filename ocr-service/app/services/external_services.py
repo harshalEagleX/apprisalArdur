@@ -26,7 +26,7 @@ try:
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
-    logger.warning("httpx not available. External service calls will be stubbed.")
+    logger.info("httpx not available. External service calls will be stubbed.")
 
 
 @dataclass

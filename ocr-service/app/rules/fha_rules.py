@@ -67,7 +67,7 @@ def validate_fha_attic_crawl(ctx):
 def validate_fha_well_septic(ctx):
     if re.search(r"well|septic", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.VERIFY, message="Well/septic language found. Verify FHA distance, hookup, and marketability requirements.")
-    return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.SKIPPED, message="No well/septic evidence detected.")
+    return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.PASS, message="No well/septic evidence detected.")
 
 @rule(id="FHA-13", name="FHA Appliances")
 def validate_fha_appliances(ctx): return _verify("FHA-13", "FHA Appliances", "Verify built-in appliances were operated and operational status is stated.")
