@@ -4,10 +4,65 @@ All validation rules for the Contract section of appraisal reports.
 NOTE: Contract Section rules apply ONLY to Purchase Transactions.
 For Refinance transactions, this entire section must be BLANK.
 """
+import re
 from typing import Optional
 from datetime import datetime
 from app.rule_engine.engine import rule, RuleStatus, RuleResult, DataMissingException
 from app.models.appraisal import ValidationContext
+
+
+_GAR_PERSONAL_PROPERTY_BOILERPLATE = (
+    "firewood shall not be considered debris",
+    "property to be delivered in clean condition",
+    "property being sold as-is",
+    "property is being sold as-is",
+    "of the otherwise identified in this agreement as remaining with the property",
+)
+
+
+def _normalize_date(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    value = value.strip()
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(value, fmt).strftime("%m/%d/%Y")
+        except ValueError:
+            pass
+    match = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b", value)
+    if not match:
+        return value
+    month, day, year = match.groups()
+    if len(year) == 2:
+        year = f"20{year}" if int(year) < 70 else f"19{year}"
+    try:
+        return datetime(int(year), int(month), int(day)).strftime("%m/%d/%Y")
+    except ValueError:
+        return value
+
+
+def _filter_personal_property_items(items: list[str]) -> list[str]:
+    filtered = []
+    for item in items or []:
+        cleaned = re.sub(r"\s+", " ", str(item)).strip(" .;:,")
+        lower = cleaned.lower()
+        if not cleaned:
+            continue
+        if any(phrase in lower for phrase in _GAR_PERSONAL_PROPERTY_BOILERPLATE):
+            continue
+        if re.search(r"\b(?:as-is|debris|clean condition|otherwise identified in this agreement)\b", lower):
+            continue
+        filtered.append(cleaned)
+    return filtered
+
+
+def _contract_dates_in_text(text: Optional[str]) -> list[str]:
+    dates = []
+    for match in re.finditer(r"\b(?:Date\s+of\s+Contract|Contract\s+Date)\b[^0-9]{0,40}(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})", text or "", re.I):
+        normalized = _normalize_date(match.group(1))
+        if normalized and normalized not in dates:
+            dates.append(normalized)
+    return dates
 
 
 @rule(id="C-1", name="Contract Analysis Requirement")
@@ -137,15 +192,28 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
         
         # Validate Contract Date if both available
         if rpt_contract.date_of_contract and ctx.purchase_agreement.contract_date:
-            if rpt_contract.date_of_contract != ctx.purchase_agreement.contract_date:
+            report_date = _normalize_date(rpt_contract.date_of_contract)
+            pa_date = _normalize_date(ctx.purchase_agreement.contract_date)
+            if report_date != pa_date:
+                internal_dates = [d for d in _contract_dates_in_text(ctx.raw_text) if d != report_date]
+                internal_note = ""
+                if internal_dates:
+                    internal_note = (
+                        f" The appraisal also references contract date(s) {', '.join(internal_dates)}, "
+                        "creating an internal inconsistency."
+                    )
                 return RuleResult(
                     rule_id="C-2",
                     rule_name="Contract Price and Date",
                     status=RuleStatus.FAIL,
-                    message=f"In contract section, Contract Date noted as {rpt_contract.date_of_contract}; however, purchase contract shows {ctx.purchase_agreement.contract_date}. Please verify.",
+                    message=(
+                        f"Contract section shows Date of Contract as {report_date}; however, the purchase "
+                        f"agreement shows the fully executed/binding agreement date as {pa_date}.{internal_note} "
+                        f"Please revise the contract date field to reflect {pa_date}."
+                    ),
                     details={
-                        "report_date": rpt_contract.date_of_contract,
-                        "pa_date": ctx.purchase_agreement.contract_date
+                        "report_date": report_date,
+                        "pa_date": pa_date
                     }
                 )
     
@@ -271,6 +339,29 @@ def validate_financial_assistance(ctx: ValidationContext) -> RuleResult:
     
     # If Yes, amount should be provided and > 0
     if c.financial_assistance is True:
+        if re.search(r"\$\s*0(?:\.00)?\s*;{1,2}\s*closing\s+costs|\bclosing\s+costs\b.{0,40}\$\s*0(?:\.00)?", ctx.raw_text or "", re.I):
+            return RuleResult(
+                rule_id="C-4",
+                rule_name="Financial Assistance",
+                status=RuleStatus.PASS,
+                message="Report text indicates $0 closing-cost concessions/financial assistance.",
+                details={"checkbox_extracted_as": "Yes", "amount_evidence": "$0 closing costs"}
+            )
+        if ctx.purchase_agreement and ctx.purchase_agreement.concessions_amount is not None:
+            pa_amount = ctx.purchase_agreement.concessions_amount
+            rpt_amount = c.financial_assistance_amount or 0
+            if abs(pa_amount) <= 0.01 and abs(rpt_amount) <= 0.01:
+                return RuleResult(
+                    rule_id="C-4",
+                    rule_name="Financial Assistance",
+                    status=RuleStatus.PASS,
+                    message="Purchase agreement and report amount both indicate $0 financial assistance/concessions.",
+                    details={
+                        "pa_amount": pa_amount,
+                        "report_amount": rpt_amount,
+                        "checkbox_extracted_as": "Yes"
+                    }
+                )
         if c.financial_assistance_amount is None or c.financial_assistance_amount <= 0:
             return RuleResult(
                 rule_id="C-4",
@@ -331,47 +422,49 @@ def validate_personal_property(ctx: ValidationContext) -> RuleResult:
     
     # Check if Purchase Agreement indicates personal property
     if ctx.purchase_agreement and ctx.purchase_agreement.personal_property_items:
-        pa_items = ctx.purchase_agreement.personal_property_items
-        comment = ctx.report.contract.sales_concessions_comment or ""
-        
-        # Check if commentary exists
-        if len(comment.strip()) < 10:
-            return RuleResult(
-                rule_id="C-5",
-                rule_name="Personal Property Analysis",
-                status=RuleStatus.FAIL,
-                message=f"Purchase Agreement indicates personal property items ({', '.join(pa_items)}), but report commentary is missing or incomplete."
-            )
-        
-        # Check if items are mentioned in commentary (basic check)
-        comment_upper = comment.upper()
-        missing_items = []
-        for item in pa_items:
-            if item.upper() not in comment_upper:
-                missing_items.append(item)
-        
-        if missing_items:
-            return RuleResult(
-                rule_id="C-5",
-                rule_name="Personal Property Analysis",
-                status=RuleStatus.VERIFY,
-                message=f"Personal property items from contract may not be fully addressed in commentary. Items: {', '.join(missing_items)}"
-            )
-        
-        # Check if "contribute" or "value" is mentioned
-        contributes_keywords = ["CONTRIBUTE", "VALUE", "NO VALUE", "CONTRIBUTORY"]
-        has_contribution_statement = any(keyword in comment_upper for keyword in contributes_keywords)
-        
-        if not has_contribution_statement:
-            return RuleResult(
-                rule_id="C-5",
-                rule_name="Personal Property Analysis",
-                status=RuleStatus.VERIFY,
-                message="Please state whether personal property items contribute to the appraised value."
-            )
+        pa_items = _filter_personal_property_items(ctx.purchase_agreement.personal_property_items)
+        if pa_items:
+            comment = ctx.report.contract.sales_concessions_comment or ""
+            
+            # Check if commentary exists
+            if len(comment.strip()) < 10:
+                return RuleResult(
+                    rule_id="C-5",
+                    rule_name="Personal Property Analysis",
+                    status=RuleStatus.FAIL,
+                    message=f"Purchase Agreement indicates personal property items ({', '.join(pa_items)}), but report commentary is missing or incomplete."
+                )
+            
+            # Check if items are mentioned in commentary (basic check)
+            comment_upper = comment.upper()
+            missing_items = []
+            for item in pa_items:
+                if item.upper() not in comment_upper:
+                    missing_items.append(item)
+            
+            if missing_items:
+                return RuleResult(
+                    rule_id="C-5",
+                    rule_name="Personal Property Analysis",
+                    status=RuleStatus.VERIFY,
+                    message=f"Personal property items from contract may not be fully addressed in commentary. Items: {', '.join(missing_items)}"
+                )
+            
+            # Check if "contribute" or "value" is mentioned
+            contributes_keywords = ["CONTRIBUTE", "VALUE", "NO VALUE", "CONTRIBUTORY"]
+            has_contribution_statement = any(keyword in comment_upper for keyword in contributes_keywords)
+            
+            if not has_contribution_statement:
+                return RuleResult(
+                    rule_id="C-5",
+                    rule_name="Personal Property Analysis",
+                    status=RuleStatus.VERIFY,
+                    message="Please state whether personal property items contribute to the appraised value."
+                )
     
     # Check if report has personal property items documented
-    if ctx.report.contract.personal_property_items:
+    report_items = _filter_personal_property_items(ctx.report.contract.personal_property_items)
+    if report_items:
         if ctx.report.contract.personal_property_contributes_to_value is None:
             return RuleResult(
                 rule_id="C-5",

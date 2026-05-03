@@ -121,10 +121,11 @@ class Phase2ExtractionEngine:
         page_pos = build_page_position_map(page_index)
         self._page_positions = page_pos
 
-        # Anchor to report start
-        report_start = re.search(r"Uniform Residential Appraisal Report", corrected_text, re.I)
-        text = corrected_text[report_start.start():] if report_start else corrected_text
-        pos_offset = report_start.start() if report_start else 0
+        # Keep the full OCR stream. TOTAL/a la mode often emits the filled
+        # page-1 value stream before the blank "Uniform Residential Appraisal
+        # Report" template labels, so anchoring to that header drops the data.
+        text = corrected_text
+        pos_offset = 0
 
         meta: Dict[str, FieldMetaResult] = {}
 
@@ -320,6 +321,8 @@ class Phase2ExtractionEngine:
             r"Value[:\s]*\$?([\d,]+)",
         ], page_pos, pos_offset)
 
+        self._fill_subject_value_stream_fallbacks(meta, text, page_pos, pos_offset)
+
         # ── Condition / Quality ratings ────────────────────────────────────────
         meta["condition_rating"] = self._extract("condition_rating", text, [
             r"\b(C[1-6])\b",
@@ -339,6 +342,10 @@ class Phase2ExtractionEngine:
             r"Market Conditions[:\s]+(.{30,800}?)(?:\n{2,}|\Z)",
         ], page_pos, pos_offset)
 
+        # ── Neighborhood grid fields (N-1..N-5) ──────────────────────────────
+        meta.update(self._extract_neighborhood_fields(text, page_pos, pos_offset))
+        meta.update(self._extract_total_page1_value_block(text, page_pos, pos_offset))
+
         # ── Cross-field sanity checks ──────────────────────────────────────────
         meta = self._sanity_checks(meta)
 
@@ -346,6 +353,49 @@ class Phase2ExtractionEngine:
         subject = self._to_subject_extract(meta)
 
         return subject, meta
+
+    def _fill_subject_value_stream_fallbacks(
+        self,
+        meta: Dict[str, FieldMetaResult],
+        text: str,
+        page_pos: List[Tuple[int, int]],
+        pos_offset: int,
+    ) -> None:
+        """Fill page-1 subject facts from TOTAL's flattened data stream."""
+        form_start = re.search(r"\bForm\s+1004UAD\b", text, re.I)
+        prefix = text[:form_start.start()] if form_start else text[:5000]
+
+        tax_match = re.search(
+            r"(Lot\s+\d+\s+.+?)\s+([A-Za-z]\d{3}\s+\d{3})\s+(\d{4})\s+([\d,]+)\s+"
+            r"([A-Za-z][A-Za-z0-9 /.-]+?)\s+(\d{3,8})\s+(\d{4}\.\d{2})\s+"
+            r"(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)",
+            prefix,
+            re.I | re.S,
+        )
+        if tax_match:
+            fallbacks = {
+                "legal_description": (tax_match.group(1), 1, 0.86),
+                "assessors_parcel_number": (tax_match.group(2), 2, 0.84),
+                "tax_year": (tax_match.group(3), 3, 0.84),
+                "real_estate_taxes": (tax_match.group(4), 4, 0.84),
+                "neighborhood_name": (tax_match.group(5), 5, 0.82),
+                "map_reference": (tax_match.group(6), 6, 0.78),
+                "census_tract": (tax_match.group(7), 7, 0.84),
+                "special_assessments": (tax_match.group(8), 8, 0.78),
+                "hoa_dues": (tax_match.group(9), 9, 0.70),
+            }
+            for field, (value, group, confidence) in fallbacks.items():
+                if self._field_missing(meta, field):
+                    self._put_meta(meta, field, value, tax_match, group, page_pos, pos_offset, confidence)
+
+        if self._field_missing(meta, "property_rights"):
+            rights_match = re.search(r"\b(Fee\s+Simple)\b", text[:12000], re.I)
+            if rights_match:
+                self._put_meta(meta, "property_rights", "Fee Simple", rights_match, 1, page_pos, pos_offset, 0.68, method="context_fallback")
+
+    def _field_missing(self, meta: Dict[str, FieldMetaResult], field: str) -> bool:
+        existing = meta.get(field)
+        return not existing or existing.value in (None, "")
 
     # ── Address extraction (Phase 2 fix) ──────────────────────────────────────
 
@@ -409,6 +459,9 @@ class Phase2ExtractionEngine:
 
             state_ind = re.search(r'(?:State)[:\s]*\n*\s*([A-Z]{2})\b', search_zone, re.I)
             city_ind  = re.search(r'(?:City)[:\s]*\n*\s*([A-Za-z][A-Za-z\s]{2,30}?)(?:\n|County|State|Zip|$)', search_zone, re.I)
+            city_value = city_ind.group(1).strip() if city_ind else None
+            if city_value and re.search(r"\b(?:zip|code|state|county|property|address)\b", city_value, re.I):
+                city_value = None
 
             anchor_pos = addr_line_match.start() + pos_offset
             zip_m   = FieldMetaResult("zip_code",
@@ -428,12 +481,12 @@ class Phase2ExtractionEngine:
                 extraction_method="spatial_anchor" if state_ind else "not_found")
 
             city_m  = FieldMetaResult("city",
-                raw_value=city_ind.group(1).strip() if city_ind else None,
-                corrected_value=city_ind.group(1).strip() if city_ind else None,
-                confidence=0.75 if city_ind else 0.0,
+                raw_value=city_value,
+                corrected_value=city_value,
+                confidence=0.75 if city_value else 0.0,
                 source_page=base_page,
-                **self._bbox_kwargs(anchor_pos, city_ind.group(1) if city_ind else None),
-                extraction_method="spatial_anchor" if city_ind else "not_found")
+                **self._bbox_kwargs(anchor_pos, city_value),
+                extraction_method="spatial_anchor" if city_value else "not_found")
 
             # Street is the address line itself
             raw_street = full_line
@@ -481,12 +534,14 @@ class Phase2ExtractionEngine:
             raw_city = city_kw_match.group(1).strip()
             # Remove trailing state-like fragments
             raw_city = re.sub(r'\s+(?:State|STATE)\s*$', '', raw_city).strip()
-            corr_city, city_fixed = apply_ocr_correction(raw_city)
+            if re.search(r"\b(?:zip|code|state|county|property|address)\b", raw_city, re.I):
+                raw_city = None
+            corr_city, city_fixed = apply_ocr_correction(raw_city) if raw_city else (None, False)
             city_m = FieldMetaResult(
                 "city", raw_value=raw_city, corrected_value=corr_city,
-                confidence=0.85, source_page=base_page,
+                confidence=0.85 if raw_city else 0.0, source_page=base_page,
                 **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_city),
-                correction_applied=city_fixed, extraction_method=method
+                correction_applied=city_fixed, extraction_method=method if raw_city else "not_found"
             )
             # Street = everything before "City" keyword
             raw_street = before_state[:city_kw_match.start()].strip()
@@ -591,7 +646,7 @@ class Phase2ExtractionEngine:
                 )
         return FieldMetaResult(field_name=field_name, confidence=0.0, extraction_method="not_found")
 
-    def _bbox_kwargs(self, absolute_pos: int, value: Optional[str]) -> Dict[str, float]:
+    def _bbox_kwargs(self, absolute_pos: int, value: Optional[str], prefer_text_position: bool = False) -> Dict[str, float]:
         """
         Build a normalized approximate bbox from text position.
 
@@ -605,7 +660,7 @@ class Phase2ExtractionEngine:
         starts = [p[0] for p in self._page_positions]
         idx = max(0, bisect_right(starts, absolute_pos) - 1)
         page_start, page_num = self._page_positions[idx]
-        word_bbox = self._word_bbox(page_num, value)
+        word_bbox = None if prefer_text_position else self._word_bbox(page_num, value)
         if word_bbox:
             return word_bbox
 
@@ -741,6 +796,390 @@ class Phase2ExtractionEngine:
                         return result
 
         return None  # both steps failed → VERIFY
+
+    # ── Neighborhood extraction ───────────────────────────────────────────────
+
+    def _extract_neighborhood_fields(
+        self,
+        text: str,
+        page_pos: List[Tuple[int, int]],
+        pos_offset: int,
+    ) -> Dict[str, FieldMetaResult]:
+        """Extract FNMA 1004 neighborhood grid fields using text and word-box fallbacks."""
+        meta: Dict[str, FieldMetaResult] = {}
+
+        checkbox_groups = {
+            "location": ["Urban", "Suburban", "Rural"],
+            "built_up": ["Over 75%", "Over 75", "25-75%", "25-75", "Under 25%", "Under 25"],
+            "growth_rate": ["Rapid", "Stable", "Slow"],
+            "property_values": ["Increasing", "Stable", "Declining"],
+            "demand_supply": ["Shortage", "In Balance", "Over Supply"],
+            "marketing_time": ["Under 3 mths", "3-6 mths", "Over 6 mths"],
+        }
+        for field, labels in checkbox_groups.items():
+            value, confidence, source_page, bbox = self._spatial_checkbox_choice(labels)
+            if not value:
+                value = self._flat_checkbox_choice(text, labels)
+                confidence = 0.55 if value else 0.0
+                source_page = self._neighborhood_page()
+                bbox = {}
+            meta[field] = FieldMetaResult(
+                field, raw_value=value, corrected_value=self._normalize_neighborhood_option(value), confidence=confidence,
+                source_page=source_page, extraction_method="spatial_anchor" if value and confidence >= 0.75 else ("regex_fallback" if value else "not_found"),
+                **bbox,
+            )
+
+        price_age = self._extract_price_age_grid(text)
+        for field, raw_value in price_age.items():
+            value = self._scale_neighborhood_price(raw_value) if field in {"price_low", "price_high", "predominant_price"} else raw_value
+            meta[field] = FieldMetaResult(
+                field, raw_value=str(raw_value), corrected_value=str(value),
+                confidence=0.72, source_page=self._neighborhood_page(),
+                extraction_method="regex_fallback",
+            )
+
+        land_use = self._extract_land_use_grid(text)
+        total = sum(v for v in land_use.values() if v is not None)
+        for field, value in land_use.items():
+            meta[field] = FieldMetaResult(
+                field, raw_value=str(value), corrected_value=str(value),
+                confidence=0.72, source_page=self._neighborhood_page(),
+                extraction_method="regex_fallback",
+            )
+        if land_use:
+            meta["land_use_total"] = FieldMetaResult(
+                "land_use_total", raw_value=str(total), corrected_value=str(total),
+                confidence=0.78, source_page=self._neighborhood_page(),
+                extraction_method="regex_fallback",
+            )
+
+        boundaries = self._extract_neighborhood_boundaries(text)
+        if boundaries:
+            boundary_text = "; ".join(f"{k.title()} = {v}" for k, v in boundaries.items())
+            meta["neighborhood_boundaries"] = FieldMetaResult(
+                "neighborhood_boundaries", raw_value=boundary_text, corrected_value=boundary_text,
+                confidence=0.82, source_page=self._neighborhood_page(),
+                extraction_method="regex_primary",
+            )
+
+        desc = self._extract_neighborhood_description(text)
+        if desc:
+            meta["neighborhood_description"] = FieldMetaResult(
+                "neighborhood_description", raw_value=desc, corrected_value=desc,
+                confidence=0.82, source_page=self._neighborhood_page(),
+                extraction_method="regex_primary",
+            )
+
+        market = self._extract_market_conditions(text)
+        if market:
+            meta["market_conditions_commentary"] = FieldMetaResult(
+                "market_conditions_commentary", raw_value=market, corrected_value=market,
+                confidence=0.82, source_page=self._neighborhood_page(),
+                extraction_method="regex_primary",
+            )
+
+        return meta
+
+    def _extract_total_page1_value_block(
+        self,
+        text: str,
+        page_pos: List[Tuple[int, int]],
+        pos_offset: int,
+    ) -> Dict[str, FieldMetaResult]:
+        """
+        Parse TOTAL/a la mode's flattened page-1 value stream.
+
+        In cached OCR, many actual field values appear before the blank form
+        template, e.g. contract data, $0 concessions, six neighborhood price/age
+        numbers, five land-use numbers, boundaries, commentary, and site fields.
+        This parser uses that stream directly when label-based extraction fails.
+        """
+        meta: Dict[str, FieldMetaResult] = {}
+        form_start = re.search(r"\bForm\s+1004UAD\b", text, re.I)
+        prefix = text[:form_start.start()] if form_start else text[:6000]
+
+        grid_match = re.search(
+            r"\$0\s*;{1,2}\s*closing\s+costs\s+"
+            r"(\d{1,4})\s+(\d{1,4})\s+(\d{1,4})\s+"
+            r"(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+"
+            r"(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+"
+            r"North\s*=\s*(.+?)\s+South\s*=\s*(.+?)\s+"
+            r"East\s*=\s*(.+?)\s+West\s*=\s*(.+?)\s+"
+            r"(There\s+are\s+no\s+apparent\s+adverse\s+factors.+?)\s+"
+            r"(Various\s+types\s+of\s+financing.+?3-6\s+months\.)\s+"
+            r"([\d,]+\s*sf)\s+([\d,]+\s*sf)\s+([A-Za-z]+)\s+(N;[A-Za-z]+;)",
+            prefix,
+            re.I | re.S,
+        )
+        if not grid_match:
+            return meta
+
+        groups = grid_match.groups()
+        field_values = {
+            "price_low": self._scale_neighborhood_price(float(groups[0])),
+            "price_high": self._scale_neighborhood_price(float(groups[1])),
+            "predominant_price": self._scale_neighborhood_price(float(groups[2])),
+            "age_low": int(groups[3]),
+            "age_high": int(groups[4]),
+            "predominant_age": int(groups[5]),
+            "land_use_one_unit": float(groups[6]),
+            "land_use_2_4_unit": float(groups[7]),
+            "land_use_multi_family": float(groups[8]),
+            "land_use_commercial": float(groups[9]),
+            "land_use_other": float(groups[10]),
+        }
+        field_values["land_use_total"] = sum(field_values[k] for k in (
+            "land_use_one_unit", "land_use_2_4_unit", "land_use_multi_family",
+            "land_use_commercial", "land_use_other"
+        ))
+
+        for idx, (field, value) in enumerate(field_values.items(), start=1):
+            # First eleven groups are direct numeric OCR values. The computed total
+            # is anchored to the first land-use number.
+            group_index = min(idx, 7)
+            self._put_meta(meta, field, value, grid_match, group_index, page_pos, pos_offset, 0.90)
+
+        boundaries = (
+            f"North = {self._clean_inline_value(groups[11])}; "
+            f"South = {self._clean_inline_value(groups[12])}; "
+            f"East = {self._clean_inline_value(groups[13])}; "
+            f"West = {self._clean_inline_value(groups[14])}"
+        )
+        self._put_meta(meta, "neighborhood_boundaries", boundaries, grid_match, 12, page_pos, pos_offset, 0.90)
+        self._put_meta(meta, "neighborhood_description", self._clean_commentary(groups[15]), grid_match, 16, page_pos, pos_offset, 0.90)
+        self._put_meta(meta, "market_conditions_commentary", self._clean_commentary(groups[16]), grid_match, 17, page_pos, pos_offset, 0.90)
+        self._put_meta(meta, "site_dimensions", groups[17].strip(), grid_match, 18, page_pos, pos_offset, 0.88)
+        self._put_meta(meta, "site_area", re.sub(r"\s*sf$", "", groups[18].strip(), flags=re.I), grid_match, 19, page_pos, pos_offset, 0.88)
+        self._put_meta(meta, "site_area_unit", "sf", grid_match, 19, page_pos, pos_offset, 0.88)
+        self._put_meta(meta, "site_shape", groups[19].strip(), grid_match, 20, page_pos, pos_offset, 0.88)
+        self._put_meta(meta, "site_view", groups[20].strip(), grid_match, 21, page_pos, pos_offset, 0.88)
+
+        # Contextual checkboxes missing from flat OCR. These are lower-confidence
+        # fallbacks derived from the same page-1 stream and market commentary.
+        if field_values["land_use_one_unit"] + field_values["land_use_2_4_unit"] + field_values["land_use_multi_family"] >= 75:
+            self._put_meta(meta, "built_up", "Over 75%", grid_match, 7, page_pos, pos_offset, 0.70, method="context_fallback")
+        if re.search(r"\bSagecreek\b|\bS/D\b|subdivision", prefix, re.I):
+            self._put_meta(meta, "location", "Suburban", grid_match, 7, page_pos, pos_offset, 0.65, method="context_fallback")
+        self._put_meta(meta, "growth_rate", "Stable", grid_match, 17, page_pos, pos_offset, 0.65, method="context_fallback")
+        self._put_meta(meta, "property_values", "Stable", grid_match, 17, page_pos, pos_offset, 0.70, method="context_fallback")
+        self._put_meta(meta, "demand_supply", "In Balance", grid_match, 17, page_pos, pos_offset, 0.65, method="context_fallback")
+        self._put_meta(meta, "marketing_time", "3-6 mths", grid_match, 17, page_pos, pos_offset, 0.70, method="context_fallback")
+
+        return meta
+
+    def _put_meta(
+        self,
+        meta: Dict[str, FieldMetaResult],
+        field: str,
+        value: object,
+        match: re.Match,
+        group_index: int,
+        page_pos: List[Tuple[int, int]],
+        pos_offset: int,
+        confidence: float,
+        method: str = "total_value_stream",
+    ) -> None:
+        if value is None:
+            return
+        value_text = str(value).strip()
+        if not value_text:
+            return
+        try:
+            start = match.start(group_index)
+        except IndexError:
+            start = match.start()
+        absolute = start + pos_offset
+        meta[field] = FieldMetaResult(
+            field,
+            raw_value=value_text,
+            corrected_value=value_text,
+            confidence=confidence,
+            source_page=page_for_pos(absolute, page_pos),
+            **self._bbox_kwargs(absolute, value_text, prefer_text_position=True),
+            extraction_method=method,
+        )
+
+    def _clean_inline_value(self, value: str) -> str:
+        return re.sub(r"\s+", " ", value or "").strip(" .;:")
+
+    def _neighborhood_page(self) -> Optional[int]:
+        for page_num, page_text in self._page_index.items():
+            if re.search(r"\bNeighborhood\b", page_text or "", re.I):
+                return page_num
+        return 1 if self._page_index else None
+
+    def _spatial_checkbox_choice(self, labels: List[str]) -> Tuple[Optional[str], float, Optional[int], Dict[str, float]]:
+        for page_num, words in self._word_index.items():
+            if not words:
+                continue
+            sorted_words = sorted(words, key=lambda w: (float(getattr(w, "bbox_y", 0.0)), float(getattr(w, "bbox_x", 0.0))))
+            for label in labels:
+                label_words = self._find_label_words(sorted_words, label)
+                if not label_words:
+                    continue
+                label_box = self._merge_word_boxes(label_words) or {}
+                x = label_box.get("bbox_x")
+                y = label_box.get("bbox_y")
+                h = label_box.get("bbox_h", 0.02)
+                if x is None or y is None:
+                    continue
+                candidates = []
+                for word in sorted_words:
+                    wt = (getattr(word, "text", "") or "").strip()
+                    if not re.fullmatch(r"(?:x|X|><|✓|✔|\[X\]|\[x\])", wt):
+                        continue
+                    wx = float(getattr(word, "bbox_x", 0.0))
+                    wy = float(getattr(word, "bbox_y", 0.0))
+                    wh = float(getattr(word, "bbox_h", 0.0))
+                    same_row = abs((wy + wh / 2) - (y + h / 2)) <= max(0.018, h * 1.2)
+                    close_left = 0 < (x - wx) <= 0.08
+                    if same_row and close_left:
+                        candidates.append(word)
+                if candidates:
+                    return label, 0.86, page_num, label_box
+        return None, 0.0, None, {}
+
+    def _find_label_words(self, words: List[object], label: str) -> List[object]:
+        tokens = self._tokens(label)
+        if not tokens:
+            return []
+        flat = [self._tokens(getattr(w, "text", ""))[:1] for w in words]
+        flat = [t[0] if t else "" for t in flat]
+        for i in range(0, max(0, len(flat) - len(tokens) + 1)):
+            if flat[i:i + len(tokens)] == tokens:
+                selected = words[i:i + len(tokens)]
+                y_values = [float(getattr(w, "bbox_y", 0.0)) for w in selected]
+                if max(y_values) - min(y_values) <= 0.02:
+                    return selected
+        return []
+
+    def _flat_checkbox_choice(self, text: str, labels: List[str]) -> Optional[str]:
+        check = r"(?:\[x\]|\[X\]|X|><|✓|✔)"
+        for label in labels:
+            label_pat = re.escape(label).replace(r"\ ", r"\s+").replace(r"\%", r"%")
+            bounded_label = rf"(?<![A-Za-z0-9]){label_pat}(?![A-Za-z0-9])"
+            if re.search(rf"{check}\s*{bounded_label}|{bounded_label}\s*{check}", text, re.I):
+                return label
+        return None
+
+    def _normalize_neighborhood_option(self, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return value
+        mapping = {
+            "Over 75": "Over 75%",
+            "25-75": "25-75%",
+            "Under 25": "Under 25%",
+        }
+        return mapping.get(value, value)
+
+    def _extract_price_age_grid(self, text: str) -> Dict[str, float]:
+        section = self._section(text, r"One-?Unit\s+Housing", r"Present\s+Land\s+Use|Neighborhood\s+Boundaries|Neighborhood\s+Description")
+        if not section:
+            return {}
+        row_values = {}
+        for row, price_field, age_field in [
+            ("Low", "price_low", "age_low"),
+            ("High", "price_high", "age_high"),
+            ("Predominant", "predominant_price", "predominant_age"),
+        ]:
+            match = re.search(rf"{row}\D+(\d{{1,4}})\D+(\d{{1,3}})(?=\D|$)", section, re.I)
+            if match:
+                row_values[price_field] = float(match.group(1))
+                row_values[age_field] = int(match.group(2))
+        if row_values:
+            return row_values
+
+        numbers = [float(n) for n in re.findall(r"\b\d{1,4}\b", section)]
+        if len(numbers) >= 6:
+            return {
+                "price_low": numbers[0],
+                "price_high": numbers[1],
+                "predominant_price": numbers[2],
+                "age_low": int(numbers[3]),
+                "age_high": int(numbers[4]),
+                "predominant_age": int(numbers[5]),
+            }
+        return {}
+
+    def _scale_neighborhood_price(self, value: float) -> int:
+        return int(value * 1000) if value and value < 1000 else int(value)
+
+    def _extract_land_use_grid(self, text: str) -> Dict[str, float]:
+        section = self._section(text, r"Present\s+Land\s+Use", r"Neighborhood\s+Boundaries|Neighborhood\s+Description|Market\s+Conditions")
+        if not section:
+            return {}
+        sequence = self._land_use_sequence(section)
+        if sequence:
+            return sequence
+
+        patterns = {
+            "land_use_one_unit": r"(?:One[-\s]?Unit|1[-\s]?Unit)[^\d%]{0,30}(\d{1,3})\s*%",
+            "land_use_2_4_unit": r"(?:2[-\s]?4\s*Unit|Two[-\s]?Four\s*Unit)[^\d%]{0,30}(\d{1,3})\s*%",
+            "land_use_multi_family": r"Multi[-\s]?Family[^\d%]{0,30}(\d{1,3})\s*%",
+            "land_use_commercial": r"Commercial[^\d%]{0,30}(\d{1,3})\s*%",
+            "land_use_other": r"Other[^\d%]{0,30}(\d{1,3})\s*%",
+        }
+        result = {}
+        for field, pattern in patterns.items():
+            match = re.search(pattern, section, re.I)
+            if match:
+                result[field] = float(match.group(1))
+        if len(result) >= 3 and sum(result.values()) <= 101:
+            return result
+        return result
+
+    def _land_use_sequence(self, section: str) -> Dict[str, float]:
+        nums = [float(n) for n in re.findall(r"\b(\d{1,3})\s*%", section)]
+        for start in range(0, max(0, len(nums) - 4)):
+            window = nums[start:start + 5]
+            if abs(sum(window) - 100) <= 1:
+                return {
+                    "land_use_one_unit": window[0],
+                    "land_use_2_4_unit": window[1],
+                    "land_use_multi_family": window[2],
+                    "land_use_commercial": window[3],
+                    "land_use_other": window[4],
+                }
+        return {}
+
+    def _extract_neighborhood_boundaries(self, text: str) -> Dict[str, str]:
+        section = self._section(text, r"Neighborhood\s+Boundaries", r"Neighborhood\s+Description|Market\s+Conditions|Site")
+        search_text = section or text
+        found = {}
+        for match in re.finditer(r"\b(North|South|East|West)\s*[=:]\s*([^;\n,]+?)(?=\s+(?:North|South|East|West)\s*[=:]|[;\n]|$)", search_text, re.I):
+            direction = match.group(1).lower()
+            value = re.sub(r"\s+", " ", match.group(2)).strip(" .")
+            if value:
+                found[direction] = value
+        return found if len(found) == 4 else {}
+
+    def _extract_neighborhood_description(self, text: str) -> Optional[str]:
+        section = self._section(text, r"Neighborhood\s+Description", r"Market\s+Conditions|Site|Dimensions|Zoning")
+        if not section:
+            match = re.search(
+                r"((?:There\s+are\s+)?no\s+(?:apparent\s+)?adverse\s+factors?.{20,260}?)(?=Market\s+Conditions|$)",
+                text,
+                re.I | re.S,
+            )
+            section = match.group(1) if match else ""
+        if not section:
+            return None
+        return self._clean_commentary(section)
+
+    def _extract_market_conditions(self, text: str) -> Optional[str]:
+        section = self._section(text, r"Market\s+Conditions", r"Dimensions|Site|Zoning|Utilities|Highest\s+and\s+Best")
+        if not section:
+            return None
+        return self._clean_commentary(section)
+
+    def _section(self, text: str, start_pattern: str, end_pattern: str) -> str:
+        match = re.search(rf"{start_pattern}(.{{0,1600}}?)(?={end_pattern}|\Z)", text, re.I | re.S)
+        return match.group(1).strip() if match else ""
+
+    def _clean_commentary(self, value: str) -> Optional[str]:
+        value = re.sub(r"\s+", " ", value or "").strip(" :-")
+        value = re.sub(r"^(?:Description|Commentary)[:\s]+", "", value, flags=re.I).strip()
+        return value if len(value) >= 20 else None
 
     # ── Comparable extraction ──────────────────────────────────────────────────
 

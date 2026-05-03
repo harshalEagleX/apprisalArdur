@@ -27,6 +27,7 @@ def validate_site_dimensions(ctx: ValidationContext) -> RuleResult:
     site = getattr(ctx.report, 'site', None)
     text = _text(ctx)
     dimensions = getattr(site, 'dimensions', None) if site else None
+    shape = (getattr(site, 'shape', None) if site else None) or ""
     if not dimensions:
         match = re.search(r"Dimensions?\s+(\d[\d,]*(?:\.\d+)?)\s*(?:sf|sq\.?\s*ft|ac|acres)?", text, re.I)
         dimensions = match.group(1) if match else None
@@ -35,6 +36,23 @@ def validate_site_dimensions(ctx: ValidationContext) -> RuleResult:
                           status=RuleStatus.VERIFY,
                           message="Site dimensions not extracted. Verify dimensions are provided (e.g., 50 X 100).",
                           review_required=True, severity=RuleSeverity.STANDARD)
+    if re.search(r"\birregular\b", shape, re.I) or re.search(r"\bShape\s+Irregular\b", text, re.I):
+        if not re.search(r"\b(?:plat|survey|site\s+sketch|tax\s+map)\b", text, re.I):
+            return RuleResult(rule_id="ST-1", rule_name="Site Dimensions",
+                              status=RuleStatus.VERIFY,
+                              message="Site shape is irregular. Verify a plat/survey/map is included and the subject is clearly marked.",
+                              review_required=True, severity=RuleSeverity.STANDARD)
+    if re.fullmatch(r"[\d,]+(?:\.\d+)?", str(dimensions).strip()):
+        area = getattr(site, 'area', None) if site else None
+        try:
+            same_as_area = area is not None and abs(float(str(dimensions).replace(",", "")) - float(area)) < 0.01
+        except (TypeError, ValueError):
+            same_as_area = False
+        if same_as_area:
+            return RuleResult(rule_id="ST-1", rule_name="Site Dimensions",
+                              status=RuleStatus.VERIFY,
+                              message="Dimensions appear to repeat the site area instead of linear dimensions. Verify dimensions or plat/survey support.",
+                              review_required=True, severity=RuleSeverity.STANDARD)
     return RuleResult(rule_id="ST-1", rule_name="Site Dimensions",
                       status=RuleStatus.PASS, message=f"Dimensions: {dimensions}",
                       severity=RuleSeverity.STANDARD)

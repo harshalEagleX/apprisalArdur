@@ -451,16 +451,23 @@ class ExtractionService:
         else:
             # Text-based fallback (when checkboxes not in standard format)
             tl = text.lower()
-            if "did not analyze" in tl:
-                contract.did_analyze_contract = False
-            elif "did analyze" in tl or "i did analyze" in tl:
+            if re.search(r"(?:\[x\]|\[X\]|X|><)\s*(?:i\s+)?did\s+analyze|(?:i\s+)?did\s+analyze\s*(?:\[x\]|\[X\]|X|><)", text, re.I):
                 contract.did_analyze_contract = True
+            elif re.search(r"(?:\[x\]|\[X\]|X|><)\s*(?:i\s+)?did\s+not\s+analyze|(?:i\s+)?did\s+not\s+analyze\s*(?:\[x\]|\[X\]|X|><)", text, re.I):
+                contract.did_analyze_contract = False
 
         # C-1: Sale type — [X] on the sale type label
         for sale_type in ["Arms-Length", "Non Arms-Length", "REO", "Short Sale", "Court Ordered"]:
             if chk(sale_type) is True:
                 contract.sale_type = sale_type
                 break
+        if not contract.sale_type and re.search(r"\bArms?\s*length\s+sale\b", text, re.I):
+            contract.sale_type = "Arms-Length"
+        if contract.did_analyze_contract is None and re.search(r"\bArms?\s*length\s+sale\s*;\s*Contract\s+Price\b", text, re.I):
+            contract.did_analyze_contract = True
+            contract.contract_analysis_comment = self._extract_field(text, [
+                r"(Arms?\s*length\s+sale\s*;\s*Contract\s+Price[:\s]*\$?[\d,]+,\s*Closing\s+Costs[:\s]*\$?[\d,]+,\s*Contract\s+Date[:\s]*\d{1,2}/\d{1,2}/\d{2,4})",
+            ])
         
         # C-2: Contract Price and Date
         price_str = self._extract_field(text, [
@@ -469,6 +476,14 @@ class ExtractionService:
         ])
         if price_str:
             contract.contract_price = self._parse_money(price_str)
+
+        date_str = self._extract_field(text, [
+            r"Date\s+of\s+Contract[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+            r"Contract\s+Date[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        ])
+        if date_str:
+            contract.contract_date = date_str
+
         # C-3: Is seller the owner of public record?
         # [X] Yes → True (seller IS owner), [X] No → False (seller is NOT owner)
         # [ ] on both or not found → None (VERIFY)
@@ -510,11 +525,14 @@ class ExtractionService:
         contract.owner_record_data_source = self._extract_field(text, [
             r"Data Source\(?s?\)?[:\s]+([^\n]+?)(?:\s*\||$|\n)",
             r"Data Source\(?s?\)?[:\s]+(.+?)(?:Is the|$)",
+            r"\d{1,3},?\d{3}\s+\d{1,2}/\d{1,2}/\d{2,4}\s+([A-Za-z ,/]+?records?,\s*contract)\b",
         ])
         # Clean up data source
         if contract.owner_record_data_source:
             # Remove trailing checkbox artifacts
             contract.owner_record_data_source = re.sub(r'\s*\[?\s*\|?\s*$', '', contract.owner_record_data_source).strip()
+        if contract.is_seller_owner_of_record is None and contract.owner_record_data_source and re.search(r"tax\s+records?.*contract", contract.owner_record_data_source, re.I):
+            contract.is_seller_owner_of_record = True
         
         # C-4: Financial Assistance — three-state:
         # [X] Yes → has assistance, [X] No → no assistance, [ ] both → VERIFY
@@ -531,12 +549,15 @@ class ExtractionService:
             contract.has_financial_assistance = None   # Both [ ] → VERIFY
         elif re.search(r"financial assistance.*\$\s*0|no financial assistance", text, re.I):
             contract.has_financial_assistance = False  # text-based fallback
+        elif re.search(r"\$\s*0(?:\.00)?\s*;{1,2}\s*closing\s+costs", text, re.I):
+            contract.has_financial_assistance = False
         
         # C-4: Financial Assistance Amount
         assist_str = self._extract_field(text, [
             r"items to be paid\.\s*\$?\s*([\d,]+)",
             r"(?:Financial Assistance|Concessions?)[:\s]*\$?\s*([\d,]+)",
             r"\$\s*([\d,]+)\s*;.*financial assistance",
+            r"\$\s*([\d,]+(?:\.\d{2})?)\s*;{1,2}\s*closing\s+costs",
         ])
         if assist_str:
             contract.financial_assistance_amount = self._parse_money(assist_str)
@@ -548,7 +569,9 @@ class ExtractionService:
             items_text = pp_match.group(1)
             # Split by common delimiters
             items = [i.strip() for i in re.split(r"[,;]", items_text) if i.strip()]
-            contract.personal_property_items = items
+            contract.personal_property_items = [
+                item for item in items if not self._is_personal_property_boilerplate(item)
+            ]
         
         return contract
     
@@ -916,7 +939,9 @@ class ExtractionService:
         # Contract date — prefer "fully executed" / "acceptance" date,
         # otherwise pick the latest date found in the document.
         date_str = self._extract_field(text, [
+            r"Binding\s+Agreement\s+Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
             r"(?:Fully\s+Executed|Final|Acceptance|Accepted|Effective)\s+Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
+            r"Date\s+of\s+Last\s+Signature[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
         ])
         if not date_str:
             all_dates = re.findall(r"\b(\d{1,2}/\d{1,2}/\d{4})\b", text)
@@ -940,6 +965,7 @@ class ExtractionService:
 
         # Seller concessions / closing cost contributions
         conc_str = self._extract_field(text, [
+            r"Seller'?s\s+Monetary\s+Contribution[^$]{0,80}\$\s*([\d,]+(?:\.\d{2})?)",
             r"(?:Seller\s+)?Concessions?[:\s]*\$?\s*([\d,]+)",
             r"Closing\s+Costs?\s+(?:Paid\s+by\s+Seller|Contribution)[:\s]*\$?\s*([\d,]+)",
             r"Seller\s+(?:to\s+Pay|Contribution|Credit)[:\s]*\$?\s*([\d,]+)",
@@ -954,10 +980,25 @@ class ExtractionService:
         )
         if pp_match:
             pa.personal_property_items = [
-                i.strip() for i in re.split(r"[,;]", pp_match.group(1)) if i.strip()
+                i.strip()
+                for i in re.split(r"[,;]", pp_match.group(1))
+                if i.strip() and not self._is_personal_property_boilerplate(i)
             ]
 
         return pa
+
+    def _is_personal_property_boilerplate(self, text: str) -> bool:
+        lower = re.sub(r"\s+", " ", text or "").lower()
+        boilerplate = (
+            "firewood shall not be considered debris",
+            "property to be delivered in clean condition",
+            "property being sold as-is",
+            "property is being sold as-is",
+            "otherwise identified in this agreement as remaining with the property",
+            "as-is",
+            "debris",
+        )
+        return any(phrase in lower for phrase in boilerplate)
 
 
 # Global instance

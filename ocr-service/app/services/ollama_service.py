@@ -1,10 +1,11 @@
 """
 Ollama Service — local LLM inference for appraisal QC commentary analysis.
 
-Model: llava:13b
+Models: llama3.1:8b for text, llava:7b for vision by default.
 
 Setup (one-time):
-    ollama pull llava:13b
+    ollama pull llama3.1:8b
+    ollama pull llava:7b
 
 All calls are synchronous (this service runs inside a threadpool in FastAPI).
 Temperature is fixed at 0 for deterministic QC decisions.
@@ -17,6 +18,7 @@ import re
 import asyncio
 import base64
 import io
+import weakref
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Optional
@@ -26,9 +28,9 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llava:13b"
-OLLAMA_VISION_MODEL = "llava:13b"
-OLLAMA_TIMEOUT = 60.0  # seconds
+OLLAMA_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.1:8b")
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "45.0"))  # seconds
 OLLAMA_TEXT_NUM_CTX = 2048
 OLLAMA_VISION_NUM_CTX = 2048
 OLLAMA_TEXT_KEEP_ALIVE = "0s"
@@ -36,7 +38,16 @@ OLLAMA_VISION_KEEP_ALIVE = "30s"
 OLLAMA_MAX_CONCURRENCY = int(os.getenv("OLLAMA_MAX_CONCURRENCY", "1"))
 _TEXT_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_text_model", default=None)
 _VISION_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_vision_model", default=None)
-_OLLAMA_SEMAPHORE = asyncio.Semaphore(OLLAMA_MAX_CONCURRENCY)
+_OLLAMA_SEMAPHORES: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = weakref.WeakKeyDictionary()
+
+
+def _ollama_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    semaphore = _OLLAMA_SEMAPHORES.get(loop)
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(OLLAMA_MAX_CONCURRENCY)
+        _OLLAMA_SEMAPHORES[loop] = semaphore
+    return semaphore
 
 
 def get_active_text_model() -> str:
@@ -252,7 +263,7 @@ async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -
         },
     }
     try:
-        async with _OLLAMA_SEMAPHORE:
+        async with _ollama_semaphore():
             async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
                 response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
                 response.raise_for_status()
@@ -287,7 +298,7 @@ async def analyze_photo_llava(page_image, prompt: str) -> Optional[str]:
             "keep_alive": OLLAMA_VISION_KEEP_ALIVE,
             "options": {"temperature": 0.0, "num_ctx": OLLAMA_VISION_NUM_CTX, "num_predict": 120},
         }
-        async with _OLLAMA_SEMAPHORE:
+        async with _ollama_semaphore():
             async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
                 response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
                 response.raise_for_status()

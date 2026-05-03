@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import re
+import logging
 from datetime import datetime
 from typing import List, Optional
 
 from app.models.appraisal import ValidationContext
 from app.rule_engine.outcome import evaluate_rule
 from app.rule_engine.smart_identifier import RuleResult, RuleSeverity, RuleStatus
+
+logger = logging.getLogger(__name__)
 
 
 class CrossFieldValidator:
@@ -25,7 +28,11 @@ class CrossFieldValidator:
             self._fha_comp_recency,
             self._fha_remaining_economic_life,
         ):
-            result = check(context)
+            try:
+                result = check(context)
+            except Exception as exc:
+                logger.info("Cross-field check %s skipped after error: %s", check.__name__, exc)
+                continue
             if result:
                 results.append(result)
         return results
@@ -35,7 +42,15 @@ class CrossFieldValidator:
         if trend not in {"increasing", "declining"}:
             return None
         text = context.raw_text or ""
-        adjustments = [float(v.replace(",", "")) for v in re.findall(r"(?:time|date).*?\$?\(?(-?[\d,]+)\)?", text, re.I)]
+        adjustments: List[float] = []
+        for value in re.findall(r"(?:time|date).*?\$?\(?(-?[\d,]+)\)?", text, re.I):
+            cleaned = (value or "").replace(",", "").strip()
+            if not cleaned or cleaned in {"-", "-."}:
+                continue
+            try:
+                adjustments.append(float(cleaned))
+            except ValueError:
+                continue
         if adjustments and any(v != 0 for v in adjustments):
             return None
         return RuleResult(

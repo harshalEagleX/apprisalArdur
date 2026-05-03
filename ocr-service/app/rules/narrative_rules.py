@@ -1,5 +1,5 @@
 """
-Narrative / Commentary Rules — N-1 through N-7 (Phase 4)
+Narrative / Commentary Rules — COM-1 through COM-7 (Phase 4)
 
 These rules evaluate the QUALITY of appraiser commentary using:
   Tier 1: LLM (ollama/llava:13b) — most accurate
@@ -101,6 +101,8 @@ _CANNED_PHRASES = [
     "the subject property is located in a", "the neighborhood is characterized by",
     "the subject is typical for the neighborhood", "see attached addendum",
     "no adverse conditions were noted", "the property appears to be in average condition",
+    "no apparent adverse factors", "there are no apparent adverse factors",
+    "there are no adverse factors",
     "the improvements are typical for the area", "the subject is compatible",
     "this is a stable neighborhood", "the market appears balanced",
     "see comparable sales grid", "adjustments reflect market reactions",
@@ -157,22 +159,48 @@ def _has_market_analysis_fallback(text: str) -> bool:
     return specific >= 2
 
 
-# ── N-1: Neighborhood Description Specificity ─────────────────────────────────
+def _is_financing_only_market_commentary(text: str) -> bool:
+    lower = text.lower()
+    financing_mentions = len(re.findall(r"\b(?:fha|va|conventional|financing|loan)\b", lower))
+    has_market_measure = any(re.search(p, text, re.I) for p in _SPECIFIC_INDICATORS)
+    has_absorption_or_inventory = re.search(
+        r"\b(?:absorption|inventory|active listings?|pending sales?|closed sales?|supply|demand|days on market|dom)\b",
+        lower,
+    )
+    return financing_mentions >= 2 and not has_market_measure and not has_absorption_or_inventory
+
+
+# ── COM-1: Neighborhood Description Specificity ───────────────────────────────
 
 @rule(id="COM-1", name="Neighborhood Description Specificity")
 def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     """
-    N-1: Is the neighborhood description specific to this area, or generic boilerplate?
+    COM-1: Is the neighborhood description specific to this area, or generic boilerplate?
     Fails if: commentary is canned/generic.
     Uses LLM (ollama) with keyword fallback.
     """
     text = ctx.report.neighborhood.description_commentary
-    if not text or len(text.strip()) < 20:
+    if not text or len(text.strip()) < 30:
         return RuleResult(
             rule_id="COM-1", rule_name="Neighborhood Description Specificity",
             status=RuleStatus.VERIFY,
             message="Neighborhood description not found or too short to evaluate.",
             review_required=True,
+            severity=RuleSeverity.ADVISORY,
+        )
+
+    is_canned, conf = _is_canned_fallback(text)
+    if is_canned and re.search(r"\bno\s+(?:apparent\s+)?adverse\s+factors?\b", text, re.I):
+        return RuleResult(
+            rule_id="COM-1", rule_name="Neighborhood Description Specificity",
+            status=RuleStatus.FAIL,
+            message=(
+                "Neighborhood description appears to use generic boilerplate about no apparent adverse "
+                "factors. Add neighborhood-specific details such as subdivision, location influences, "
+                "amenities, employers, schools, or local market characteristics."
+            ),
+            action_item="Revise neighborhood description to include area-specific details.",
+            field_confidence=conf,
             severity=RuleSeverity.ADVISORY,
         )
 
@@ -189,7 +217,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
         else:
             return RuleResult(
                 rule_id="COM-1", rule_name="Neighborhood Description Specificity",
-                status=RuleStatus.VERIFY,
+                status=RuleStatus.FAIL,
                 message="Neighborhood description appears generic/boilerplate. "
                         "It should reference specific local landmarks, employers, streets, or market data.",
                 action_item="Revise neighborhood description to include area-specific details.",
@@ -197,12 +225,11 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
             )
 
     # Tier 2: Keyword fallback
-    is_canned, conf = _is_canned_fallback(text)
     if is_canned:
         return RuleResult(
             rule_id="COM-1", rule_name="Neighborhood Description Specificity",
-            status=RuleStatus.VERIFY,
-            message="Neighborhood description may be generic. Add specific local market details.",
+            status=RuleStatus.FAIL,
+            message="Neighborhood description appears generic. Add specific local market details.",
             action_item="Revise to include area-specific data (distances, employers, schools, market stats).",
             field_confidence=conf,
             severity=RuleSeverity.ADVISORY,
@@ -216,12 +243,12 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
     )
 
 
-# ── N-2: Market Conditions Quality ────────────────────────────────────────────
+# ── COM-2: Market Conditions Quality ──────────────────────────────────────────
 
 @rule(id="COM-2", name="Market Conditions Quality")
 def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
     """
-    N-2: Does the market conditions commentary contain real analysis?
+    COM-2: Does the market conditions commentary contain real analysis?
     Fails if: commentary only says 'see 1004mc' without adding analysis.
     """
     text = ctx.report.neighborhood.market_conditions_comment
@@ -232,6 +259,20 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
             message="Market conditions commentary is blank or missing. "
                     "UAD requires a market analysis in this section; 'See 1004MC' alone is not acceptable.",
             action_item="Add market conditions commentary with specific market data.",
+            severity=RuleSeverity.STANDARD,
+        )
+
+    if _is_financing_only_market_commentary(text):
+        return RuleResult(
+            rule_id="COM-2", rule_name="Market Conditions Quality",
+            status=RuleStatus.FAIL,
+            message=(
+                "Market conditions commentary discusses financing availability but does not provide actual "
+                "market analysis. Add supporting data such as price trends, absorption, active listing counts, "
+                "days on market, or supply/demand indicators."
+            ),
+            action_item="Revise market conditions commentary with substantive market data.",
+            appraisal_value=text[:150],
             severity=RuleSeverity.STANDARD,
         )
 
@@ -272,19 +313,20 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
     has_analysis = _has_market_analysis_fallback(text)
     return RuleResult(
         rule_id="COM-2", rule_name="Market Conditions Quality",
-        status=RuleStatus.PASS if has_analysis else RuleStatus.VERIFY,
+        status=RuleStatus.PASS if has_analysis else RuleStatus.FAIL,
         message="Market conditions commentary found." if has_analysis
-                else "Market conditions commentary may lack specific market data.",
+                else "Market conditions commentary lacks specific market data.",
+        action_item=None if has_analysis else "Add market data such as price trends, absorption, inventory, DOM, or supply/demand support.",
         severity=RuleSeverity.STANDARD,
     )
 
 
-# ── N-3: Comparable Selection Rationale ───────────────────────────────────────
+# ── COM-3: Comparable Selection Rationale ─────────────────────────────────────
 
 @rule(id="COM-3", name="Comparable Selection Rationale")
 def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
     """
-    N-3: Does the appraiser explain why these comparables were selected?
+    COM-3: Does the appraiser explain why these comparables were selected?
     Rule-based — looks for selection rationale phrases.
     """
     sales = ctx.report.sales_comparison
@@ -332,12 +374,12 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
     )
 
 
-# ── N-4: Adjustments Explanation ──────────────────────────────────────────────
+# ── COM-4: Adjustments Explanation ────────────────────────────────────────────
 
 @rule(id="COM-4", name="Adjustments Explanation")
 def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
     """
-    N-4: Are the adjustments in the sales comparison grid explained?
+    COM-4: Are the adjustments in the sales comparison grid explained?
     FNMA requires that significant adjustments be supported by market data.
     """
     commentary = ctx.report.sales_comparison.summary_commentary or ""
@@ -370,12 +412,12 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
     )
 
 
-# ── N-5: Reconciliation Sufficiency ───────────────────────────────────────────
+# ── COM-5: Reconciliation Sufficiency ─────────────────────────────────────────
 
 @rule(id="COM-5", name="Reconciliation Sufficiency")
 def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
     """
-    N-5: Does the reconciliation section explain WHY the final value was chosen,
+    COM-5: Does the reconciliation section explain WHY the final value was chosen,
     or does it just restate the comparable values?
     Uses LLM when available.
     """
@@ -428,7 +470,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
     )
 
 
-# ── N-6: Addenda Consistency ──────────────────────────────────────────────────
+# ── COM-6: Addenda Consistency ────────────────────────────────────────────────
 
 @rule(id="COM-6", name="Addenda Consistency")
 def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
@@ -519,12 +561,12 @@ def _money_digits(value: str) -> str:
     return re.sub(r"\D", "", value or "").lstrip("0")
 
 
-# ── N-7: Prior Sales Disclosure ───────────────────────────────────────────────
+# ── COM-7: Prior Sales Disclosure ─────────────────────────────────────────────
 
 @rule(id="COM-7", name="Prior Sales Disclosure")
 def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
     """
-    N-7: Are prior sales of the subject property disclosed and analyzed?
+    COM-7: Are prior sales of the subject property disclosed and analyzed?
     FNMA requires disclosure of any transfers in the prior 3 years.
     """
     subject = ctx.report.subject

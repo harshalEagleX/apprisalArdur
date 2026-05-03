@@ -10,6 +10,7 @@ Orchestrates the full QC pipeline:
 """
 
 import logging
+import os
 import re
 import time
 from typing import Dict, List, Optional, Any, Tuple, Any
@@ -39,6 +40,9 @@ from app.services.cache_service import (
     save_extracted_fields, save_rule_results,
     DB_AVAILABLE,
 )
+
+DEFAULT_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.1:8b")
+DEFAULT_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
 from app.services.phase2_extraction import phase2_engine
 
 logger = logging.getLogger(__name__)
@@ -82,8 +86,8 @@ class QCResults(BaseModel):
     document_id: Optional[str] = None     # DB record ID — None if DB unavailable
     cache_hit: bool = False               # True if OCR was served from cache
     model_provider: str = "ollama"
-    model_name: str = "llava:13b"
-    vision_model: str = "llava:13b"
+    model_name: str = DEFAULT_TEXT_MODEL
+    vision_model: str = DEFAULT_VISION_MODEL
     
     # Extracted fields summary
     extracted_fields: Dict[str, Any] = {}
@@ -150,9 +154,9 @@ class SmartQCProcessor:
         """
         start_time = time.time()
         document_id: Optional[str] = None
-        model_provider = "ollama"
-        model_name = "llava:13b"
-        vision_model = "llava:13b"
+        model_provider = (model_provider or "ollama").strip().lower()
+        model_name = (model_name or DEFAULT_TEXT_MODEL).strip()
+        vision_model = (vision_model or DEFAULT_VISION_MODEL).strip()
 
         # ── Step 1: Check OCR Cache ─────────────────────────────────────────
         import fitz as _fitz
@@ -203,8 +207,8 @@ class SmartQCProcessor:
                 total_pages=0,
                 extraction_method="none",
                 model_provider=model_provider,
-                model_name="llava:13b",
-                vision_model="llava:13b",
+                model_name=model_name,
+                vision_model=vision_model,
                 processing_notices=["Failed to extract any text from PDF"]
             )
 
@@ -257,6 +261,8 @@ class SmartQCProcessor:
             report.neighborhood.description_commentary = nbr_desc.value
         if mkt_cmt and mkt_cmt.value:
             report.neighborhood.market_conditions_comment = mkt_cmt.value
+        self._apply_neighborhood_from_field_meta(report, field_meta)
+        self._apply_site_from_field_meta(report, field_meta)
 
         # Step 5: Parse contract PDF if provided OR if appraisal says it was analyzed
         purchase_agreement = None
@@ -321,8 +327,8 @@ class SmartQCProcessor:
         return results
     
     def _map_extraction_to_report(
-        self, 
-        s: SubjectSectionExtract, 
+        self,
+        s: SubjectSectionExtract,
         c: ContractSectionExtract,
         legacy: Dict[str, Any]
     ) -> AppraisalReport:
@@ -406,6 +412,84 @@ class SmartQCProcessor:
             sales_comparison=sales,
         )
 
+    def _apply_neighborhood_from_field_meta(self, report: AppraisalReport, field_meta: dict) -> None:
+        def value(key: str):
+            meta = field_meta.get(key)
+            return meta.value if meta and meta.value not in (None, "") else None
+
+        def float_value(key: str):
+            raw = value(key)
+            if raw is None:
+                return None
+            try:
+                return float(str(raw).replace(",", "").replace("$", ""))
+            except (TypeError, ValueError):
+                return None
+
+        def int_value(key: str):
+            raw = float_value(key)
+            return int(raw) if raw is not None else None
+
+        neighborhood = report.neighborhood
+        for key, attr in {
+            "location": "location",
+            "built_up": "built_up",
+            "growth_rate": "growth_rate",
+            "property_values": "property_values",
+            "demand_supply": "demand_supply",
+            "marketing_time": "marketing_time",
+            "neighborhood_boundaries": "boundaries_description",
+        }.items():
+            extracted = value(key)
+            if extracted:
+                setattr(neighborhood, attr, extracted)
+
+        for key, attr in {
+            "price_low": "price_low",
+            "price_high": "price_high",
+            "predominant_price": "predominant_price",
+            "land_use_one_unit": "land_use_one_unit",
+            "land_use_total": "land_use_total",
+        }.items():
+            extracted = float_value(key)
+            if extracted is not None:
+                setattr(neighborhood, attr, extracted)
+
+        for key, attr in {
+            "age_low": "age_low",
+            "age_high": "age_high",
+            "predominant_age": "predominant_age",
+        }.items():
+            extracted = int_value(key)
+            if extracted is not None:
+                setattr(neighborhood, attr, extracted)
+
+    def _apply_site_from_field_meta(self, report: AppraisalReport, field_meta: dict) -> None:
+        def value(key: str):
+            meta = field_meta.get(key)
+            return meta.value if meta and meta.value not in (None, "") else None
+
+        def float_value(key: str):
+            raw = value(key)
+            if raw is None:
+                return None
+            try:
+                return float(str(raw).replace(",", "").replace("$", ""))
+            except (TypeError, ValueError):
+                return None
+
+        site = report.site
+        if value("site_dimensions"):
+            site.dimensions = value("site_dimensions")
+        if float_value("site_area") is not None:
+            site.area = float_value("site_area")
+        if value("site_area_unit"):
+            site.area_unit = value("site_area_unit")
+        if value("site_shape"):
+            site.shape = value("site_shape")
+        if value("site_view"):
+            site.view = value("site_view")
+
     def _apply_comparables_from_field_meta(
         self,
         report: AppraisalReport,
@@ -467,9 +551,9 @@ class SmartQCProcessor:
         vision_model: Optional[str] = None,
     ) -> QCResults:
         """Assemble final QC results."""
-        model_provider = "ollama"
-        model_name = "llava:13b"
-        vision_model = "llava:13b"
+        model_provider = (model_provider or "ollama").strip().lower()
+        model_name = (model_name or DEFAULT_TEXT_MODEL).strip()
+        vision_model = (vision_model or DEFAULT_VISION_MODEL).strip()
         
         # Count strict output statuses.
         status_counts = {"pass": 0, "fail": 0, "verify": 0}
@@ -539,8 +623,8 @@ class SmartQCProcessor:
             document_id=document_id,
             cache_hit=cache_hit,
             model_provider=model_provider,
-            model_name="llava:13b",
-            vision_model="llava:13b",
+            model_name=model_name,
+            vision_model=vision_model,
             extracted_fields=s_extract.model_dump(),
             field_confidence=field_confidence,
             total_rules=len(rule_results),

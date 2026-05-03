@@ -16,6 +16,8 @@ since neighborhood section extraction is populated by qc_processor from Phase 2.
 Commentary QUALITY checks are in narrative_rules.py (COM-1..COM-7).
 """
 
+import re
+
 from app.rule_engine.engine import rule, RuleStatus, RuleResult, RuleSeverity, DataMissingException
 from app.models.appraisal import ValidationContext
 
@@ -98,6 +100,18 @@ def validate_housing_price_range(ctx: ValidationContext) -> RuleResult:
             appraisal_value=f"Low=${nbr.price_low:,.0f}, High=${nbr.price_high:,.0f}",
             severity=RuleSeverity.STANDARD,
         )
+    comps = getattr(getattr(ctx.report, "sales_comparison", None), "comparables", None) or []
+    if not any(getattr(comp, "sale_price", None) for comp in comps):
+        return RuleResult(
+            rule_id="N-3", rule_name="One-Unit Housing Price Range",
+            status=RuleStatus.VERIFY,
+            message=(
+                f"Price range ${nbr.price_low:,.0f}-${nbr.price_high:,.0f} is extracted and internally valid. "
+                "Verify comparable sale prices fall within this neighborhood range."
+            ),
+            appraisal_value=f"Low=${nbr.price_low:,.0f}, High=${nbr.price_high:,.0f}",
+            review_required=True, severity=RuleSeverity.ADVISORY,
+        )
     return RuleResult(
         rule_id="N-3", rule_name="One-Unit Housing Price Range",
         status=RuleStatus.PASS,
@@ -127,6 +141,17 @@ def validate_present_land_use(ctx: ValidationContext) -> RuleResult:
             appraisal_value=f"{nbr.land_use_total:.0f}%",
             severity=RuleSeverity.STANDARD,
         )
+    raw = ctx.raw_text or ""
+    other_match = re.search(r"\bOther\b\s*[:=]?\s*(\d{1,3})\s*%", raw, re.I)
+    if other_match and float(other_match.group(1)) > 0:
+        description = nbr.description_commentary or ""
+        if not re.search(r"\bOther\b.*\b(?:land use|vacant|residential|commercial|industrial|agricultural|mixed)\b", description, re.I):
+            return RuleResult(
+                rule_id="N-4", rule_name="Present Land Use Total",
+                status=RuleStatus.VERIFY,
+                message="Present land use totals 100%, but the 'Other' land use category has a value and its description was not verified.",
+                review_required=True, severity=RuleSeverity.ADVISORY,
+            )
     return RuleResult(
         rule_id="N-4", rule_name="Present Land Use Total",
         status=RuleStatus.PASS,
