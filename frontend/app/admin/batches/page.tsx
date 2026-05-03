@@ -35,8 +35,8 @@ interface BatchProgress {
 const MODEL_OPTIONS: Record<QCModelSelection["provider"], { label: string; text: string[]; vision: string[] }> = {
   ollama: {
     label: "Ollama",
-    text: ["llava:13b"],
-    vision: ["llava:13b"],
+    text: ["llama3.1:8b"],
+    vision: ["llava:7b"],
   },
 };
 

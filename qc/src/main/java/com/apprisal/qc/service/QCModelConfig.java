@@ -3,8 +3,8 @@ package com.apprisal.qc.service;
 /**
  * Model selection carried from the admin UI into the Python QC service.
  *
- * QC is intentionally pinned to one local Ollama model so text and vision
- * decisions cannot drift between model families.
+ * Default local models are sized for an 8GB Apple Silicon dev machine.
+ * Text commentary uses a text LLM; vision fallbacks use a smaller LLaVA model.
  */
 public record QCModelConfig(
         String provider,
@@ -12,13 +12,13 @@ public record QCModelConfig(
         String visionModel) {
 
     public static QCModelConfig defaults() {
-        return new QCModelConfig("ollama", "llava:13b", "llava:13b");
+        return new QCModelConfig("ollama", "llama3.1:8b", "llava:7b");
     }
 
     public QCModelConfig {
         provider = "ollama";
-        textModel = "llava:13b";
-        visionModel = "llava:13b";
+        textModel = clean(textModel, "llama3.1:8b");
+        visionModel = clean(visionModel, "llava:7b");
     }
 
     public String label() {
