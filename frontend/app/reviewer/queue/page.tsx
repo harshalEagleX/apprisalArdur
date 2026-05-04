@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock, AlertCircle, CheckCircle2, ChevronRight, RefreshCw,
   Search, XCircle, ListFilter, FileText, ShieldAlert, PlayCircle, CalendarDays,
@@ -11,14 +11,25 @@ import EmptyState from "@/components/shared/EmptyState";
 import { PageSpinner } from "@/components/shared/Spinner";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+type QueueView = "all" | "failures" | "review";
+const QUEUE_VIEWS: QueueView[] = ["all", "failures", "review"];
 
 export default function ReviewerQueuePage() {
   const [items, setItems]     = useState<QCResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [query, setQuery] = useState("");
-  const [view, setView] = useState<"all" | "failures" | "review">("all");
+  const [query, setQuery] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("q") ?? "";
+  });
+  const [view, setView] = useState<QueueView>(() => {
+    if (typeof window === "undefined") return "all";
+    const next = new URLSearchParams(window.location.search).get("view");
+    return QUEUE_VIEWS.includes(next as QueueView) ? next as QueueView : "all";
+  });
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   async function loadQueue(showRefreshSpinner = false) {
     if (showRefreshSpinner) setRefreshing(true);
@@ -42,20 +53,29 @@ export default function ReviewerQueuePage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const searched = items.filter(item => {
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (view !== "all") params.set("view", view);
+    const nextUrl = params.toString() ? `/reviewer/queue?${params}` : "/reviewer/queue";
+    window.history.replaceState(null, "", nextUrl);
+  }, [query, view]);
+
+  const searched = useMemo(() => items.filter(item => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return item.batchFile.filename.toLowerCase().includes(q)
       || String(item.id).includes(q)
       || item.qcDecision.toLowerCase().includes(q);
-  });
-  const scoped = searched.filter(item => {
+  }), [items, query]);
+  const scoped = useMemo(() => searched.filter(item => {
     if (view === "failures") return item.failedCount > 0;
     if (view === "review") return item.failedCount === 0;
     return true;
-  });
-  const urgent = scoped.filter(i => i.failedCount > 0);
-  const normal = scoped.filter(i => i.failedCount === 0);
+  }), [searched, view]);
+  const urgent = useMemo(() => scoped.filter(i => i.failedCount > 0), [scoped]);
+  const normal = useMemo(() => scoped.filter(i => i.failedCount === 0), [scoped]);
+  const orderedScoped = useMemo(() => [...urgent, ...normal], [urgent, normal]);
   const stats = {
     total: items.length,
     failures: items.filter(i => i.failedCount > 0).length,
@@ -70,9 +90,124 @@ export default function ReviewerQueuePage() {
   const nextItem = prioritized[0];
   const todayKey = new Date().toDateString();
   const processedToday = items.filter(item => new Date(item.processedAt).toDateString() === todayKey).length;
-  const oldestPending = prioritized.length > 0
-    ? new Date(prioritized[prioritized.length - 1].processedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+  const oldestItem = items.reduce<QCResult | undefined>((oldest, item) => {
+    if (!oldest) return item;
+    return new Date(item.processedAt).getTime() < new Date(oldest.processedAt).getTime() ? item : oldest;
+  }, undefined);
+  const oldestPending = oldestItem
+    ? new Date(oldestItem.processedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : "None";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (orderedScoped.length === 0) {
+      const timer = window.setTimeout(() => {
+        if (!cancelled) setSelectedId(null);
+      }, 0);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
+    }
+    if (!selectedId || !orderedScoped.some(item => item.id === selectedId)) {
+      const timer = window.setTimeout(() => {
+        if (!cancelled) setSelectedId(orderedScoped[0].id);
+      }, 0);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
+    }
+  }, [orderedScoped, selectedId]);
+
+  function openQueueItem(item?: QCResult) {
+    if (!item) return;
+    window.location.href = `/reviewer/verify/${item.id}`;
+  }
+
+  function moveSelection(delta: number) {
+    if (orderedScoped.length === 0) return;
+    const currentIndex = Math.max(0, orderedScoped.findIndex(item => item.id === selectedId));
+    const nextIndex = Math.min(Math.max(currentIndex + delta, 0), orderedScoped.length - 1);
+    const next = orderedScoped[nextIndex];
+    setSelectedId(next.id);
+    window.setTimeout(() => {
+      document.getElementById(`queue-item-${next.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
+  }
+
+  function setViewShortcut(next: QueueView) {
+    setView(next);
+    setSelectedId(null);
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const inTextField = tagName === "input" || tagName === "textarea" || tagName === "select" || target?.isContentEditable;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === "Escape") {
+        if (query) {
+          event.preventDefault();
+          setQuery("");
+          searchRef.current?.blur();
+        }
+        return;
+      }
+      if (inTextField) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "/") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if (key === "r") {
+        event.preventDefault();
+        void loadQueue(true);
+        return;
+      }
+      if (key === "n") {
+        event.preventDefault();
+        openQueueItem(nextItem);
+        return;
+      }
+      if (key === "j" || event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSelection(1);
+        return;
+      }
+      if (key === "k" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveSelection(-1);
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        if (orderedScoped[0]) setSelectedId(orderedScoped[0].id);
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        const last = orderedScoped[orderedScoped.length - 1];
+        if (last) setSelectedId(last.id);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        openQueueItem(orderedScoped.find(item => item.id === selectedId) ?? nextItem);
+        return;
+      }
+      if (event.key === "1") setViewShortcut("all");
+      if (event.key === "2") setViewShortcut("failures");
+      if (event.key === "3") setViewShortcut("review");
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextItem, orderedScoped, query, selectedId]);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-7">
@@ -121,6 +256,7 @@ export default function ReviewerQueuePage() {
           <div className="relative flex-1 md:max-w-md">
             <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
+              ref={searchRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search file name, QC result, or decision..."
@@ -138,10 +274,12 @@ export default function ReviewerQueuePage() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-1">
-            {(["all", "failures", "review"] as const).map(next => (
+            {QUEUE_VIEWS.map(next => (
               <button
                 key={next}
                 onClick={() => setView(next)}
+                aria-pressed={view === next}
+                aria-keyshortcuts={next === "all" ? "1" : next === "failures" ? "2" : "3"}
                 className={`h-9 rounded-md px-3 text-xs font-medium transition-colors ${
                   view === next
                     ? "bg-blue-600 text-white"
@@ -198,7 +336,7 @@ export default function ReviewerQueuePage() {
                 <AlertCircle size={12} className="text-red-400" />
                 <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Requires attention — has failures</span>
               </div>
-              <QueueList items={urgent} />
+              <QueueList items={urgent} selectedId={selectedId} onSelect={setSelectedId} />
             </section>
           )}
 
@@ -211,7 +349,7 @@ export default function ReviewerQueuePage() {
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pending review</span>
                 </div>
               )}
-              <QueueList items={normal} />
+              <QueueList items={normal} selectedId={selectedId} onSelect={setSelectedId} />
             </section>
           )}
         </div>
@@ -236,6 +374,7 @@ function ReviewerNextAction({ item }: { item?: QCResult }) {
   return (
     <a
       href={`/reviewer/verify/${item.id}`}
+      aria-keyshortcuts="N"
       className={`group flex min-h-24 items-center gap-4 rounded-lg border p-4 transition-colors ${
         hasFailure
           ? "border-red-900/50 bg-red-950/25 text-red-100 hover:border-red-700"
@@ -275,7 +414,7 @@ function QueueSignal({ icon: Icon, label, value }: {
   );
 }
 
-function QueueList({ items }: { items: QCResult[] }) {
+function QueueList({ items, selectedId, onSelect }: { items: QCResult[]; selectedId: number | null; onSelect: (id: number) => void }) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900 divide-y divide-slate-800">
       {items.map(item => {
@@ -285,7 +424,12 @@ function QueueList({ items }: { items: QCResult[] }) {
         const actionLabel = hasFailure ? "Review failures" : "Review";
 
         return (
-          <div key={item.id} className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-slate-800/30 md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""}`}>
+          <div
+            id={`queue-item-${item.id}`}
+            key={item.id}
+            onMouseEnter={() => onSelect(item.id)}
+            className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-slate-800/30 md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""} ${selectedId === item.id ? "ring-1 ring-blue-500/70 ring-inset" : ""}`}
+          >
             {/* File icon */}
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${hasFailure ? "bg-red-950/60 border border-red-800/40" : "bg-slate-800 border border-slate-700"}`}>
               <svg className={`w-4 h-4 ${hasFailure ? "text-red-400" : "text-slate-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -332,6 +476,8 @@ function QueueList({ items }: { items: QCResult[] }) {
             {/* Action */}
             <a
               href={`/reviewer/verify/${item.id}`}
+              onFocus={() => onSelect(item.id)}
+              aria-keyshortcuts="Enter"
               className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700 md:min-w-[126px]"
             >
               {actionLabel} <ChevronRight size={13} />

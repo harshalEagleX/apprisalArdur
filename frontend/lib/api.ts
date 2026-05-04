@@ -90,6 +90,16 @@ export const getReviewerDashboard = () => apiFetch<Record<string, unknown>>("/ap
 export const getUsers = (page = 0, size = 20) =>
   apiFetch<{ content: User[]; totalPages: number; number: number; totalElements?: number }>(`/api/admin/users?page=${page}&size=${size}`);
 
+export async function getAllUsers(size = 100): Promise<User[]> {
+  const first = await getUsers(0, size);
+  const users = [...first.content];
+  for (let page = 1; page < first.totalPages; page += 1) {
+    const next = await getUsers(page, size);
+    users.push(...next.content);
+  }
+  return users;
+}
+
 export const createUser = (data: Omit<User, "id" | "createdAt"> & { password: string; clientId?: number }) =>
   apiFetch<User>("/api/admin/users", { method: "POST", body: JSON.stringify(data) });
 

@@ -19,6 +19,7 @@ const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
 
 type Decision = "PASS" | "FAIL";
 type Filter = "all" | "fail" | "verify" | "pass";
+const FILTERS: Filter[] = ["all", "fail", "verify", "pass"];
 type RuleFocus = {
   ruleId: string;
   page: number;
@@ -91,6 +92,7 @@ export default function VerifyFilePage() {
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState<Filter>("all");
   const [ruleQuery, setRuleQuery] = useState("");
+  const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [comments, setComments]   = useState<Record<number, string>>({});
   const [saving, setSaving]       = useState<number | null>(null);
@@ -117,6 +119,7 @@ export default function VerifyFilePage() {
   const [submitNotes, setSubmitNotes] = useState("");
   const [saveNotice, setSaveNotice] = useState<{ text: string; tone: "success" | "error" | "info" } | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
+  const ruleSearchRef = useRef<HTMLInputElement | null>(null);
   const inFlightDecisionIds = useRef<Set<number>>(new Set());
   const commentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
@@ -242,6 +245,7 @@ export default function VerifyFilePage() {
   }, []);
 
   function focusRule(rule: QCRuleResult) {
+    setSelectedRuleId(rule.id);
     const nextFocus = focusForRule(rule);
     if (!nextFocus.located) {
       setActiveFocus(nextFocus);
@@ -427,7 +431,10 @@ export default function VerifyFilePage() {
   const passedDecisions = Object.values(decisions).filter(value => value === "PASS").length;
   const failedDecisions = Object.values(decisions).filter(value => value === "FAIL").length;
   const nextPendingRule = rules.find(rule => rule.reviewRequired && !decisions[rule.id]);
-  const activeRule = rules.find(rule => rule.ruleId === activeFocus?.ruleId) ?? nextPendingRule;
+  const activeRule = rules.find(rule => rule.id === selectedRuleId)
+    ?? rules.find(rule => rule.ruleId === activeFocus?.ruleId)
+    ?? nextPendingRule
+    ?? filtered[0];
   const saveTone = saveNotice?.tone === "error"
     ? "border-red-800/50 bg-red-950/50 text-red-200"
     : saveNotice?.tone === "success"
@@ -447,6 +454,41 @@ export default function VerifyFilePage() {
     if (!rule) return;
     commentRefs.current[rule.id]?.focus();
   }
+
+  function moveActiveRule(delta: number) {
+    if (filtered.length === 0) return;
+    const currentIndex = Math.max(0, filtered.findIndex(rule => rule.id === activeRule?.id));
+    const nextIndex = Math.min(Math.max(currentIndex + delta, 0), filtered.length - 1);
+    const next = filtered[nextIndex];
+    setSelectedRuleId(next.id);
+    focusRule(next);
+    window.setTimeout(() => {
+      document.getElementById(`rule-${next.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
+  }
+
+  function cycleDocument(delta: number) {
+    if (documents.length <= 1) return;
+    const currentIndex = Math.max(0, documents.findIndex(doc => doc.id === activeDocument?.id));
+    const next = documents[(currentIndex + delta + documents.length) % documents.length];
+    setActiveDocumentId(next.id);
+    setPageCount(null);
+    setPdfError(false);
+    setActiveFocus(null);
+    setActivePage(1);
+  }
+
+  function setFilterShortcut(next: Filter) {
+    setFilter(next);
+    setSelectedRuleId(null);
+  }
+
+  useEffect(() => {
+    if (filtered.length === 0) return;
+    if (activeRule && filtered.some(rule => rule.id === activeRule.id)) return;
+    const timer = window.setTimeout(() => setSelectedRuleId(filtered[0].id), 0);
+    return () => window.clearTimeout(timer);
+  }, [activeRule, filtered]);
 
   function keyboardDecisionAllowed(rule: QCRuleResult, decision: Decision) {
     const normalizedStatus = ruleStatus(rule.status);
@@ -471,6 +513,64 @@ export default function VerifyFilePage() {
       const inTextField = tagName === "input" || tagName === "textarea" || tagName === "select" || target?.isContentEditable;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
+      if (event.key === "Escape") {
+        if (ruleQuery) {
+          event.preventDefault();
+          setRuleQuery("");
+          ruleSearchRef.current?.blur();
+        } else if (sessionError) {
+          event.preventDefault();
+          setSessionError(null);
+        }
+        return;
+      }
+      if (!inTextField && event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        void loadRules();
+        void getQCProgress(qcResultId).then(setProgress).catch(() => undefined);
+        return;
+      }
+      if (!inTextField && event.key === "/") {
+        event.preventDefault();
+        ruleSearchRef.current?.focus();
+        return;
+      }
+      if (!inTextField && event.key === "1") {
+        event.preventDefault();
+        setFilterShortcut("all");
+        return;
+      }
+      if (!inTextField && event.key === "2") {
+        event.preventDefault();
+        setFilterShortcut("fail");
+        return;
+      }
+      if (!inTextField && event.key === "3") {
+        event.preventDefault();
+        setFilterShortcut("verify");
+        return;
+      }
+      if (!inTextField && event.key === "4") {
+        event.preventDefault();
+        setFilterShortcut("pass");
+        return;
+      }
+      if (!inTextField && (event.key.toLowerCase() === "j" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        moveActiveRule(1);
+        return;
+      }
+      if (!inTextField && (event.key.toLowerCase() === "k" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        moveActiveRule(-1);
+        return;
+      }
+      if (!inTextField && event.key === "Enter" && activeRule) {
+        event.preventDefault();
+        focusRule(activeRule);
+        document.getElementById(`rule-${activeRule.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
       if (!inTextField && event.key.toLowerCase() === "n") {
         event.preventDefault();
         jumpToNextPending();
@@ -479,6 +579,26 @@ export default function VerifyFilePage() {
       if (!inTextField && event.key.toLowerCase() === "c") {
         event.preventDefault();
         focusComment(activeRule);
+        return;
+      }
+      if (!inTextField && event.key.toLowerCase() === "a" && activeRule) {
+        event.preventDefault();
+        setAcknowledged(prev => ({ ...prev, [activeRule.id]: !prev[activeRule.id] }));
+        return;
+      }
+      if (!inTextField && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void handleSubmit();
+        return;
+      }
+      if (!inTextField && event.key === "[") {
+        event.preventDefault();
+        cycleDocument(-1);
+        return;
+      }
+      if (!inTextField && event.key === "]") {
+        event.preventDefault();
+        cycleDocument(1);
         return;
       }
       if (!inTextField && (event.key === "+" || event.key === "=")) {
@@ -510,7 +630,7 @@ export default function VerifyFilePage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRule, acknowledged, comments, offline, saving, sessionToken]);
+  }, [activeRule, acknowledged, comments, documents, filter, filtered, offline, ruleQuery, saving, sessionError, sessionToken]);
 
   return (
     <DeviceGate
@@ -567,6 +687,7 @@ export default function VerifyFilePage() {
         {nextPendingRule && (
           <button
             onClick={jumpToNextPending}
+            aria-keyshortcuts="N"
             className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
           >
             <ArrowDownCircle size={13} />
@@ -610,6 +731,7 @@ export default function VerifyFilePage() {
                   disabled={zoom <= 0.6}
                   className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 disabled:opacity-30 hover:text-white"
                   title="Zoom out"
+                  aria-keyshortcuts="-"
                 >
                   <ZoomOut size={13} />
                 </button>
@@ -617,6 +739,7 @@ export default function VerifyFilePage() {
                   onClick={() => setZoom(1)}
                   className="h-7 min-w-12 rounded-md border border-slate-800 bg-slate-900 px-2 font-mono text-slate-400 hover:text-white"
                   title="Reset zoom"
+                  aria-keyshortcuts="0"
                 >
                   {Math.round(zoom * 100)}%
                 </button>
@@ -625,6 +748,7 @@ export default function VerifyFilePage() {
                   disabled={zoom >= 1.8}
                   className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 disabled:opacity-30 hover:text-white"
                   title="Zoom in"
+                  aria-keyshortcuts="+"
                 >
                   <ZoomIn size={13} />
                 </button>
@@ -688,14 +812,17 @@ export default function VerifyFilePage() {
               <div className="relative mr-1 min-w-44 flex-1">
                 <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
                 <input
+                  ref={ruleSearchRef}
                   value={ruleQuery}
                   onChange={e => setRuleQuery(e.target.value)}
                   placeholder="Search rules..."
                   className="h-7 w-full rounded-md border border-slate-800 bg-slate-900 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
-            {(["all","fail","verify","pass"] as Filter[]).map(f => (
+            {FILTERS.map(f => (
               <button key={f} onClick={() => setFilter(f)}
+                aria-pressed={filter === f}
+                aria-keyshortcuts={f === "all" ? "1" : f === "fail" ? "2" : f === "verify" ? "3" : "4"}
                 className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
                   filter === f ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
                 }`}>
@@ -712,7 +839,7 @@ export default function VerifyFilePage() {
                 saving={saving === rule.id} savedNow={saved.has(rule.id)}
                 offline={offline} sessionReady={Boolean(sessionToken)}
                 acknowledged={Boolean(acknowledged[rule.id])}
-                active={activeFocus?.ruleId === rule.ruleId}
+                active={activeRule?.id === rule.id}
                 onSelect={() => focusRule(rule)}
                 onDecision={d => handleDecision(rule, d)}
                 onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}

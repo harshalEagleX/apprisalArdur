@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import {
-  getAdminBatches, getUsers, processQC, assignReviewer, deleteBatch,
+  getAdminBatches, processQC, assignReviewer, deleteBatch,
   getBatchStatus, getBatchQCProgress, reconcileStuckBatches, cancelQC,
-  getAdminDashboard, type Batch, type User, type QCModelSelection,
+  getAdminDashboard, getAllUsers, type Batch, type User, type QCModelSelection,
 } from "@/lib/api";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
@@ -109,7 +109,7 @@ export default function BatchesPage() {
     try {
       const [bRes, uRes, dash] = await Promise.all([
         getAdminBatches(page, statusFilter || undefined, debouncedSearch || undefined),
-        getUsers(0, 200),
+        getAllUsers(),
         getAdminDashboard(),
       ]);
       batchLog("load:success", {
@@ -124,12 +124,12 @@ export default function BatchesPage() {
           fileCount: b.fileCount,
           updatedAt: b.updatedAt,
         })),
-        reviewers: uRes.content.filter(u => u.role === "REVIEWER").length,
+        reviewers: uRes.filter(u => u.role === "REVIEWER").length,
       });
       setBatches(bRes.content);
       setTotalPages(bRes.totalPages);
       setTotalElements(Number(bRes.totalElements ?? bRes.content.length));
-      setReviewers(uRes.content.filter(u => u.role === "REVIEWER"));
+      setReviewers(uRes.filter(u => u.role === "REVIEWER"));
       setReviewerWorkload((dash.reviewerWorkload as Record<string, number> | undefined) ?? {});
     } catch (e) {
       batchLog("load:error", e);
@@ -930,6 +930,13 @@ function BatchRecoveryDrawer({ batch, busy, onClose, onRetry, onDelete, onReuplo
         <div className="border-t border-slate-800 p-4">
           <div className="flex flex-wrap justify-end gap-2">
             <button
+              type="button"
+              onClick={() => copyBatchError(batch)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+            >
+              <FileStack size={14} /> Copy error
+            </button>
+            <button
               onClick={() => onRetry(batch)}
               disabled={busy || batch.status === "VALIDATION_FAILED"}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
@@ -983,6 +990,23 @@ function recoveryAdvice(batch: Batch) {
     fix: "Retry QC. If the same error returns, run Reconcile and preserve the full error text for support.",
     reupload: "Delete and re-upload only when the archive or PDFs are known to be wrong.",
   };
+}
+
+async function copyBatchError(batch: Batch) {
+  const text = [
+    `Batch: ${batch.parentBatchId}`,
+    `Status: ${batch.status}`,
+    `Client: ${batch.client?.name ?? "No client"}`,
+    `Files: ${batch.fileCount ?? batch.files?.length ?? 0}`,
+    "",
+    batch.errorMessage || "No error message provided.",
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Batch error copied");
+  } catch {
+    toast.error("Could not copy error");
+  }
 }
 
 function displayUser(user: User) {
