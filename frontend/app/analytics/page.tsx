@@ -14,15 +14,23 @@ async function api<T>(path: string): Promise<T> {
 type Days = 7 | 30 | 90;
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color = "text-blue-400" }: {
-  label: string; value: string | number | null; sub?: string; color?: string
+function StatCard({ label, value, sub, color = "text-blue-400", href }: {
+  label: string; value: string | number | null; sub?: string; color?: string; href?: string
 }) {
-  return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+  const content = (
+    <>
       <div className={`text-2xl font-bold ${color}`}>{value ?? "—"}</div>
       <div className="text-slate-300 text-sm font-medium mt-1">{label}</div>
       {sub && <div className="text-slate-500 text-xs mt-1">{sub}</div>}
-    </div>
+    </>
+  );
+  const className = "bg-slate-900 border border-slate-800 rounded-xl p-5 transition-colors";
+  return href ? (
+    <Link href={href} className={`${className} block hover:border-blue-800/70 hover:bg-slate-900/80`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
   );
 }
 
@@ -148,8 +156,8 @@ export default function AnalyticsPage() {
             <StatCard label="Rule Pass Rate"    value={overview.avgRulePassRate != null ? `${overview.avgRulePassRate}%` : "—"} color="text-cyan-400" />
             <StatCard label="Avg Processing"    value={overview.avgProcessingSeconds != null ? `${overview.avgProcessingSeconds}s` : "—"} color="text-amber-400" sub="per file" />
             <StatCard label="Cache Hit Rate"    value={overview.cacheHitRate != null ? `${overview.cacheHitRate}%` : "—"} color="text-purple-400" sub="repeat files" />
-            <StatCard label="Pending Review"    value={num("pendingReview")} color="text-rose-400" sub="need your attention" />
-            <StatCard label="VERIFY Over SLA"   value={Number(sla.over4Hours ?? 0)} color="text-orange-400" sub="4+ hours open" />
+            <StatCard label="Pending Review"    value={num("pendingReview")} color="text-rose-400" sub="open review queue" href="/admin/batches?status=REVIEW_PENDING" />
+            <StatCard label="VERIFY Over SLA"   value={Number(sla.over4Hours ?? 0)} color="text-orange-400" sub="open SLA queue" href="/analytics#review-sla" />
           </div>
 
           {/* ── Main grid ────────────────────────────────────────────────────── */}
@@ -283,6 +291,7 @@ export default function AnalyticsPage() {
             </Section>
 
             {/* Supervisor SLA */}
+            <div id="review-sla">
             <Section title="Review SLA Queue" Icon={Clock}>
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="rounded-xl border border-orange-900/40 bg-orange-950/20 p-3">
@@ -305,11 +314,20 @@ export default function AnalyticsPage() {
                         <span className="text-slate-500">QC {String(item.qcResultId)}</span>
                       </div>
                       <div className="text-slate-500 mt-1 truncate">{item.filename || "Unknown file"} · {item.firstPresentedAt || "not recorded"}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Link href="/admin/batches?status=IN_REVIEW" className="text-blue-400 hover:text-blue-300">
+                          Open in-review batches
+                        </Link>
+                        <Link href="/admin/batches?status=REVIEW_PENDING" className="text-slate-400 hover:text-slate-200">
+                          Open awaiting review
+                        </Link>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </Section>
+            </div>
 
             {/* Anomaly Report */}
             <Section title="Compliance Flags" Icon={ShieldAlert}>

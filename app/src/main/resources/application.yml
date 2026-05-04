@@ -20,7 +20,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create   # 🔥 IMPORTANT: Hibernate will manage schema
+      ddl-auto: update   # 🔥 IMPORTANT: Hibernate will manage schema
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect

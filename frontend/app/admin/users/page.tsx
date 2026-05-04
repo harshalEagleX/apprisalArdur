@@ -1,6 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Search, Plus, Users as UsersIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Search, Plus, Users as UsersIcon, ChevronLeft, ChevronRight,
+  ShieldCheck, ClipboardCheck, Pencil, Trash2, XCircle,
+} from "lucide-react";
+import type { ComponentType } from "react";
 import { getUsers, deleteUser, type User } from "@/lib/api";
 import UserModal from "@/components/admin/UserModal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
@@ -52,12 +56,16 @@ export default function UsersPage() {
         (u.email ?? "").toLowerCase().includes(search.toLowerCase())
       )
     : users;
+  const roleCounts = {
+    admins: users.filter(u => u.role === "ADMIN").length,
+    reviewers: users.filter(u => u.role === "REVIEWER").length,
+  };
 
   return (
-    <div className="p-6">
-      <div className="flex items-start justify-between mb-5">
+    <div className="p-6 max-w-[1200px]">
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-white">Users</h1>
+          <h1 className="text-xl font-semibold text-white">Users</h1>
           <p className="text-slate-500 text-sm mt-0.5">Admins and reviewers with access to this platform</p>
         </div>
         <button
@@ -68,23 +76,37 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4 max-w-xs">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-        <input
-          value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name or username…"
-          className="w-full h-9 bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-        />
+      <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+        <div className="relative max-w-sm">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, username, or email…"
+            className="w-full h-9 bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-9 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+              aria-label="Clear search"
+              title="Clear search"
+            >
+              <XCircle size={13} />
+            </button>
+          )}
+        </div>
+        <RoleSummary icon={ShieldCheck} label="Admins" value={roleCounts.admins} tone="purple" />
+        <RoleSummary icon={ClipboardCheck} label="Reviewers" value={roleCounts.reviewers} tone="blue" />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+        <div className="data-scroll">
+        <table className="w-full min-w-[820px] text-sm">
           <thead>
-            <tr className="border-b border-slate-800">
+            <tr className="border-b border-slate-800 bg-slate-950/40">
               {["User", "Role", "Client org", "Added", ""].map(h => (
-                <th key={h} className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${!h ? "w-24" : ""}`}>{h}</th>
+                <th key={h} className={`sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${!h ? "w-24 text-right" : ""}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -106,7 +128,7 @@ export default function UsersPage() {
                 </td>
               </tr>
             ) : filtered.map(u => (
-              <tr key={u.id} className="hover:bg-slate-800/30 transition-colors group">
+              <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-200 text-sm">{u.fullName ?? u.username}</div>
                   <div className="text-xs text-slate-500 mt-0.5">{u.username}{u.email ? ` · ${u.email}` : ""}</div>
@@ -123,16 +145,30 @@ export default function UsersPage() {
                   {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => setEditUser(u)} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Edit</button>
-                    <span className="text-slate-700">·</span>
-                    <button onClick={() => setDelete(u)} className="text-xs text-red-400 hover:text-red-300 transition-colors">Remove</button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => setEditUser(u)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-blue-300"
+                      aria-label={`Edit ${u.username}`}
+                      title="Edit user"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => setDelete(u)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-950/40 hover:text-red-300"
+                      aria-label={`Remove ${u.username}`}
+                      title="Remove user"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {total > 1 && (
@@ -157,6 +193,24 @@ export default function UsersPage() {
         confirmLabel="Remove" danger
         onConfirm={handleDelete} onCancel={() => setDelete(null)}
       />
+    </div>
+  );
+}
+
+function RoleSummary({ icon: Icon, label, value, tone }: {
+  icon: ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  value: number;
+  tone: "blue" | "purple";
+}) {
+  const styles = tone === "purple"
+    ? "border-purple-900/50 bg-purple-950/30 text-purple-200"
+    : "border-blue-900/50 bg-blue-950/30 text-blue-200";
+  return (
+    <div className={`flex h-9 items-center gap-2 rounded-lg border px-3 ${styles}`}>
+      <Icon size={14} className="opacity-80" />
+      <span className="text-sm font-semibold tabular-nums">{value}</span>
+      <span className="text-[11px] uppercase tracking-wide opacity-70">{label}</span>
     </div>
   );
 }

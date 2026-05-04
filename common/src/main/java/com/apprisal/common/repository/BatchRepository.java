@@ -33,6 +33,21 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @EntityGraph(attributePaths = {"client", "assignedReviewer"})
     Page<Batch> findAll(org.springframework.data.domain.Pageable pageable);
 
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
+    @Query("""
+        SELECT b FROM Batch b
+        WHERE (:status IS NULL OR b.status = :status)
+          AND (
+            :search IS NULL
+            OR LOWER(b.parentBatchId) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(b.client.name) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(b.client.code) LIKE LOWER(CONCAT('%', :search, '%'))
+          )
+        """)
+    Page<Batch> searchAdminBatches(@Param("status") BatchStatus status,
+                                   @Param("search") String search,
+                                   Pageable pageable);
+
     @EntityGraph(attributePaths = {"files"})
     Optional<Batch> findWithFilesById(Long id);
 

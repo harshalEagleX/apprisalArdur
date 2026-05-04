@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { X, Upload, FileArchive } from "lucide-react";
+import { AlertCircle, CheckCircle2, X, Upload } from "lucide-react";
 import { getClients, uploadBatch, type Client } from "@/lib/api";
 import Spinner from "@/components/shared/Spinner";
 
@@ -18,15 +18,23 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress]   = useState(0);
   const [error, setError]         = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ client?: string; file?: string }>({});
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const timer = window.setTimeout(() => {
-      setFile(null); setClientId(""); setError(""); setProgress(0);
+      setFile(null); setClientId(""); setError(""); setFieldErrors({}); setProgress(0);
       getClients().then(setClients).catch(() => null);
+      dialogRef.current?.focus();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      previousFocusRef.current?.focus();
+    };
   }, [open]);
 
   if (!open) return null;
@@ -34,20 +42,42 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault(); setDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f?.name.endsWith(".zip")) { setFile(f); setError(""); }
-    else setError("Only ZIP archives are accepted");
+    acceptFile(f);
+  }
+
+  function acceptFile(f?: File) {
+    if (!f) return;
+    const nextErrors: typeof fieldErrors = {};
+    if (!f.name.toLowerCase().endsWith(".zip")) {
+      nextErrors.file = "Only ZIP archives are accepted.";
+    } else if (f.size > 50 * 1024 * 1024) {
+      nextErrors.file = "ZIP file must be 50 MB or smaller.";
+    }
+    setFieldErrors(prev => ({ ...prev, file: nextErrors.file }));
+    if (!nextErrors.file) {
+      setFile(f);
+      setError("");
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) { setError("Select a ZIP file"); return; }
-    if (!clientId) { setError("Select a client organisation"); return; }
+    const nextErrors: typeof fieldErrors = {};
+    if (!clientId) nextErrors.client = "Select the client organisation for this batch.";
+    if (!file) nextErrors.file = "Select a ZIP archive before uploading.";
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setError("Fix the highlighted fields before uploading.");
+      return;
+    }
+    const selectedFile = file;
+    if (!selectedFile) return;
     setError(""); setUploading(true); setProgress(0);
 
     // Simulate upload progress while we wait for the server
     const interval = setInterval(() => setProgress(p => Math.min(p + 8, 85)), 300);
     try {
-      const result = await uploadBatch(file, clientId as number);
+      const result = await uploadBatch(selectedFile, clientId as number);
       clearInterval(interval); setProgress(100);
       await new Promise(r => setTimeout(r, 400));
       onUploaded(result.batchId, result.parentBatchId, result.fileCount);
@@ -60,18 +90,60 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
     }
   }
 
+  function handleDialogKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape" && !uploading) {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable || focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function openFilePicker() {
+    if (!uploading) inputRef.current?.click();
+  }
+
+  function handleDropzoneKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openFilePicker();
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={!uploading ? onClose : undefined} />
-      <div className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md mx-4 shadow-2xl">
+      <div
+        ref={dialogRef}
+        className="relative mx-4 w-full max-w-lg rounded-lg border border-slate-700 bg-slate-900 shadow-2xl focus:outline-none"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-dialog-title"
+        aria-describedby="upload-dialog-description"
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div>
-            <h2 className="text-sm font-semibold text-white">Upload batch</h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">ZIP must contain <code className="bg-slate-800 px-1 rounded">appraisal/</code> and <code className="bg-slate-800 px-1 rounded">engagement/</code> folders</p>
+            <h2 id="upload-dialog-title" className="text-sm font-semibold text-white">Upload batch</h2>
+            <p id="upload-dialog-description" className="text-[11px] text-slate-500 mt-0.5">ZIP must contain appraisal and engagement folders. Contracts are optional.</p>
           </div>
           {!uploading && (
-            <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300" aria-label="Close upload dialog">
               <X size={16} />
             </button>
           )}
@@ -79,39 +151,56 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="text-xs text-red-300 bg-red-950/60 border border-red-800 rounded-lg px-3 py-2.5">{error}</div>
+            <div className="flex items-start gap-2 rounded-lg border border-red-800 bg-red-950/60 px-3 py-2.5 text-xs text-red-300">
+              <AlertCircle size={13} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
           )}
 
           {/* Client selector */}
-          <div>
+          <section className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <div className="mb-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Batch owner</h3>
+              <p className="mt-0.5 text-[11px] text-slate-600">This controls storage paths and client-level reporting.</p>
+            </div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Client organisation <span className="text-red-400">*</span></label>
             <select value={clientId} onChange={e => setClientId(e.target.value ? Number(e.target.value) : "")}
-              disabled={uploading} className={INPUT}>
-              <option value="">Select client…</option>
+              disabled={uploading || clients.length === 0} className={`${INPUT} ${fieldErrors.client ? "border-red-700 focus:ring-red-500" : ""}`}>
+              <option value="">{clients.length === 0 ? "No clients available" : "Select client..."}</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
             </select>
-          </div>
+            {fieldErrors.client && <FieldError>{fieldErrors.client}</FieldError>}
+          </section>
 
           {/* Drop zone */}
-          <div>
+          <section className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <div className="mb-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Archive</h3>
+              <p className="mt-0.5 text-[11px] text-slate-600">Maximum 50 MB. The backend validates the folder structure after upload.</p>
+            </div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">ZIP archive <span className="text-red-400">*</span></label>
             <div
               onDragOver={e => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               onDrop={handleDrop}
-              onClick={() => !uploading && inputRef.current?.click()}
+              onClick={openFilePicker}
+              onKeyDown={handleDropzoneKeyDown}
+              role="button"
+              tabIndex={uploading ? -1 : 0}
+              aria-label={file ? `Selected ZIP archive ${file.name}. Press Enter to choose a different file.` : "Choose ZIP archive"}
               className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
                 uploading ? "cursor-not-allowed opacity-60 border-slate-700" :
                 dragging ? "border-blue-500 bg-blue-950/30 cursor-copy" :
                 file ? "border-green-700 bg-green-950/20 cursor-pointer" :
+                fieldErrors.file ? "border-red-700 bg-red-950/10 cursor-pointer" :
                 "border-slate-700 hover:border-slate-600 cursor-pointer"
               }`}
             >
               <input ref={inputRef} type="file" accept=".zip" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setError(""); }}} />
+                onChange={e => acceptFile(e.target.files?.[0])} />
               {file ? (
                 <div className="flex flex-col items-center gap-1.5">
-                  <FileArchive size={22} className="text-green-400" />
+                  <CheckCircle2 size={22} className="text-green-400" />
                   <span className="text-sm font-medium text-green-300">{file.name}</span>
                   <span className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
                 </div>
@@ -123,7 +212,8 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
                 </div>
               )}
             </div>
-          </div>
+            {fieldErrors.file && <FieldError>{fieldErrors.file}</FieldError>}
+          </section>
 
           {/* Upload progress bar */}
           {uploading && (
@@ -157,3 +247,12 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 }
 
 const INPUT = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:opacity-50";
+
+function FieldError({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-red-300">
+      <AlertCircle size={11} />
+      <span>{children}</span>
+    </div>
+  );
+}

@@ -22,7 +22,7 @@ export default function ActivityMonitor() {
   if (jobs.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 w-80 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+    <div className="fixed bottom-4 right-4 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800 bg-slate-900">
         <div className="flex items-center gap-2">

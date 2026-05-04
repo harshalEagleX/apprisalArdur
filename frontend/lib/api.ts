@@ -87,8 +87,8 @@ export const getAdminDashboard    = () => apiFetch<Record<string, unknown>>("/ap
 export const getReviewerDashboard = () => apiFetch<Record<string, unknown>>("/api/reviewer/dashboard");
 
 // ── Admin: Users ──────────────────────────────────────────────────────────────
-export const getUsers = (page = 0) =>
-  apiFetch<{ content: User[]; totalPages: number; number: number }>(`/api/admin/users?page=${page}&size=20`);
+export const getUsers = (page = 0, size = 20) =>
+  apiFetch<{ content: User[]; totalPages: number; number: number; totalElements?: number }>(`/api/admin/users?page=${page}&size=${size}`);
 
 export const createUser = (data: Omit<User, "id" | "createdAt"> & { password: string; clientId?: number }) =>
   apiFetch<User>("/api/admin/users", { method: "POST", body: JSON.stringify(data) });
@@ -106,10 +106,11 @@ export const createClient = (name: string, code: string) =>
   apiFetch<Client>("/api/admin/clients", { method: "POST", body: JSON.stringify({ name, code }) });
 
 // ── Admin: Batches ────────────────────────────────────────────────────────────
-export const getAdminBatches = (page = 0, status?: string) => {
+export const getAdminBatches = (page = 0, status?: string, search?: string) => {
   const params = new URLSearchParams({ page: String(page), size: "20" });
   if (status) params.set("status", status);
-  return apiFetch<{ content: Batch[]; totalPages: number; number: number }>(
+  if (search?.trim()) params.set("search", search.trim());
+  return apiFetch<{ content: Batch[]; totalPages: number; number: number; totalElements?: number }>(
     `/api/admin/batches?${params}`
   );
 };

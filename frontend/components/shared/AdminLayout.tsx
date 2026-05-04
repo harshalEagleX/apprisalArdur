@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -9,6 +9,7 @@ import {
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
 import ActivityMonitor from "./ActivityMonitor";
+import DeviceGate from "./DeviceGate";
 
 const NAV = [
   { href: "/admin",          label: "Overview",   Icon: LayoutDashboard },
@@ -23,6 +24,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [narrow, setNarrow]     = useState(false);
   const [signingOut, setSigning] = useState(false);
 
+  useEffect(() => {
+    const syncSidebar = () => {
+      if (window.innerWidth < 1024) setNarrow(true);
+    };
+    syncSidebar();
+    window.addEventListener("resize", syncSidebar);
+    return () => window.removeEventListener("resize", syncSidebar);
+  }, []);
+
   async function handleSignOut() {
     setSigning(true);
     await logout();
@@ -30,15 +40,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
+    <DeviceGate
+      minWidth={768}
+      title="Admin workspace is not available on phones"
+      message="Batch management, reviewer assignment, and QC tables need tablet or desktop space. Please use a tablet in landscape, laptop, or desktop."
+      allowTablet
+    >
     <div className="min-h-screen bg-slate-950 text-white flex">
       {/* Sidebar */}
-      <aside className={`flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-200 ${narrow ? "w-14" : "w-56"}`}>
+      <aside className={`sticky top-0 h-screen flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-200 ${narrow ? "w-14" : "w-56"}`}>
 
         {/* Logo + collapse toggle */}
         <div className="h-14 flex items-center justify-between px-3 border-b border-slate-800">
           {!narrow && (
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex-shrink-0 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-md bg-blue-600 flex-shrink-0 flex items-center justify-center">
                 <span className="text-xs font-bold text-white">A</span>
               </div>
               <div className="min-w-0">
@@ -48,14 +64,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           )}
           {narrow && (
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center mx-auto">
+            <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center mx-auto">
               <span className="text-xs font-bold text-white">A</span>
             </div>
           )}
           {!narrow && (
             <button
               onClick={() => setNarrow(true)}
-              className="text-slate-600 hover:text-slate-400 transition-colors p-0.5"
+              className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
               title="Collapse sidebar"
             >
               <ChevronLeft size={14} />
@@ -67,7 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {narrow && (
           <button
             onClick={() => setNarrow(false)}
-            className="mx-auto mt-2 text-slate-600 hover:text-slate-400 transition-colors"
+            className="mx-auto mt-2 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
             title="Expand sidebar"
           >
             <ChevronLeft size={14} className="rotate-180" />
@@ -83,7 +99,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 key={href}
                 href={href}
                 title={narrow ? label : undefined}
-                className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-colors ${
+                className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors ${
                   active
                     ? "bg-blue-600/20 text-blue-300 font-medium"
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
@@ -102,7 +118,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             onClick={handleSignOut}
             disabled={signingOut}
             title={narrow ? "Sign out" : undefined}
-            className="flex items-center gap-3 w-full px-2.5 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
+            className="flex items-center gap-3 w-full px-2.5 py-2 rounded-md text-sm text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-60"
           >
             <LogOut size={16} className="flex-shrink-0" />
             {!narrow && <span>{signingOut ? "Signing out…" : "Sign out"}</span>}
@@ -119,5 +135,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <ToastContainer />
       <ActivityMonitor />
     </div>
+    </DeviceGate>
   );
 }

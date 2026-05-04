@@ -62,25 +62,21 @@ public class BatchApiController {
     public ResponseEntity<?> getBatches(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
 
-        Page<Batch> batchPage;
+        BatchStatus batchStatus = null;
         if (status != null && !status.isBlank()) {
             try {
-                BatchStatus batchStatus = BatchStatus.valueOf(status.toUpperCase());
-                List<Batch> list = batchService.findByStatus(batchStatus);
-                return ResponseEntity.ok(Map.of(
-                    "content", list.stream().map(b -> toSummary(b, false)).toList(),
-                    "totalPages", 1,
-                    "number", 0,
-                    "totalElements", list.size()
-                ));
+                batchStatus = BatchStatus.valueOf(status.toUpperCase());
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Unknown status: " + status));
             }
         }
 
-        batchPage = batchService.findAll(PageRequest.of(page, size, Sort.by("createdAt").descending()));
+        Page<Batch> batchPage = (batchStatus != null || (search != null && !search.isBlank()))
+                ? batchService.searchAdminBatches(batchStatus, search, PageRequest.of(page, size, Sort.by("createdAt").descending()))
+                : batchService.findAll(PageRequest.of(page, size, Sort.by("createdAt").descending()));
 
         return ResponseEntity.ok(Map.of(
             "content",       batchPage.getContent().stream().map(b -> toSummary(b, false)).toList(),

@@ -139,6 +139,12 @@ public class BatchService {
         return batchRepository.findAll(pageable);
     }
 
+    @Transactional(readOnly = true)
+    public Page<Batch> searchAdminBatches(BatchStatus status, String search, @NonNull Pageable pageable) {
+        String trimmedSearch = search == null || search.isBlank() ? null : search.trim();
+        return batchRepository.searchAdminBatches(status, trimmedSearch, pageable);
+    }
+
     /**
      * Delete a batch and all its associated files.
      * 
