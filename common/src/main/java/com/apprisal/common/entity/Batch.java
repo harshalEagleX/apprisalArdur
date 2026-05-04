@@ -1,5 +1,6 @@
 package com.apprisal.common.entity;
 
+import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import jakarta.persistence.Version;
 import org.hibernate.annotations.Formula;
@@ -13,7 +14,11 @@ import java.util.List;
  */
 @Audited
 @Entity
-@Table(name = "batch")
+@Table(name = "batch",
+       indexes = {
+           @Index(name = "idx_batch_status_updated", columnList = "status, updated_at"),
+           @Index(name = "idx_batch_file_hash", columnList = "file_hash")
+       })
 public class Batch {
 
     @Id
@@ -75,13 +80,14 @@ public class Batch {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        LocalDateTime now = AppTime.now();
+        createdAt = now;
+        updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     // Getters and Setters

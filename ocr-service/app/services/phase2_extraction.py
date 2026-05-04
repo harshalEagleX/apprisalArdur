@@ -214,7 +214,7 @@ class Phase2ExtractionEngine:
 
         county_m = self._extract("county", text, [
             r"County[:\s]+([A-Za-z][A-Za-z\s]+?)(?:\s*\n|$)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["County"])
         meta["county"] = county_m
 
         # ── S-2: Borrower ─────────────────────────────────────────────────────
@@ -234,21 +234,21 @@ class Phase2ExtractionEngine:
         meta["owner_of_public_record"] = self._extract("owner_of_public_record", text, [
             r"Owner of Public Record[:\s]+([^\n]+)",
             r"Current Owner[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Owner of Public Record", "Owner of Record"])
 
         # ── S-4: Legal / APN / Taxes ──────────────────────────────────────────
         meta["legal_description"] = self._extract("legal_description", text, [
             r"Legal Description[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Legal Description"])
 
         meta["assessors_parcel_number"] = self._extract("assessors_parcel_number", text, [
             r"(?:Assessor'?s?\s*)?Parcel\s*(?:#|Number|No\.?)[:\s]+([^\n]+)",
             r"APN[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Assessor's Parcel #", "Assessor's Parcel Number", "APN"])
 
         meta["tax_year"] = self._extract("tax_year", text, [
             r"Tax Year[:\s]+(\d{4})",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Tax Year"])
 
         meta["real_estate_taxes"] = self._extract("real_estate_taxes", text, [
             r"R\.?E\.?\s*Taxes\s*\$?\s*([\d,]+)",
@@ -258,17 +258,17 @@ class Phase2ExtractionEngine:
         # ── S-5: Neighborhood Name ────────────────────────────────────────────
         meta["neighborhood_name"] = self._extract("neighborhood_name", text, [
             r"Neighborhood Name[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Neighborhood Name"])
 
         # ── S-6: Map Reference / Census Tract ─────────────────────────────────
         meta["map_reference"] = self._extract("map_reference", text, [
             r"Map Reference[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Map Reference"])
 
         meta["census_tract"] = self._extract("census_tract", text, [
             r"Census Tract[:\s]+(\d{4}\.\d{2})",
             r"Census Tract[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, pos_offset, spatial_labels=["Census Tract"])
 
         # ── S-7: Occupant ─────────────────────────────────────────────────────
         # Use three-state detection: True=[X], False=[ ], None=not found
@@ -328,18 +328,20 @@ class Phase2ExtractionEngine:
         )
 
         # ── S-10: Lender / Client ─────────────────────────────────────────────
-        meta["lender_name"] = self._extract("lender_name", text, [
+        lender_text, lender_pos_offset = self._text_window_for_pages(text, page_pos, 1, 2)
+        meta["lender_name"] = self._extract("lender_name", lender_text, [
             # Pattern 1: company name keyword (most specific)
             r"Lender/?Client[\s—:-]+([A-Za-z][A-Za-z0-9\s,\.&]+(?:Corporation|Corp|Inc|LLC|LLP|Company|Co\.?|Bank|Mortgage|Credit Union|Funding|Capital|Financial|Home Loans?|Lending|Services?))(?:\s+Address|\s*$|\n)",
             # Pattern 2: looks for line starting with a number-street (lender address often follows inline)
             r"Lender/?Client[\s—:-]+([A-Z][A-Za-z0-9\s,\.&]{4,60}?)(?=\s+\d{1,5}\s|\s+Address|\n|$)",
             # Pattern 3: anything that looks like a proper name (Title Case, reasonable length, no slash-junk)
             r"Lender/?Client[\s\-—:]+([A-Z][a-zA-Z0-9\s&,\.]{3,50}?)(?:\s+Address|\n)",
-        ], page_pos, pos_offset, post_clean=r'\s*(Address|Client Address).*$')
+        ], page_pos, lender_pos_offset, post_clean=r'\s*(Address|Client Address).*$', spatial_labels=["Lender/Client", "Lender"], spatial_page_range=(1, 2))
 
-        meta["lender_address"] = self._extract("lender_address", text, [
+        meta["lender_address"] = self._extract("lender_address", lender_text, [
+            r"Lender\s+Address[:\s]+(\d[^\n]+)",
             r"(?:Lender/?Client|Lender)\s+Address[:\s]+([^\n]+)",
-        ], page_pos, pos_offset)
+        ], page_pos, lender_pos_offset, spatial_labels=["Lender Address", "Client Address"], spatial_page_range=(1, 2))
 
         # ── S-11: Property Rights ─────────────────────────────────────────────
         # Three-state: [X] = this rights type applies, [ ] = explicit no, None = unknown
@@ -568,12 +570,18 @@ class Phase2ExtractionEngine:
 
             # Street is the address line itself
             raw_street = full_line
-            corr_street, sf = apply_ocr_correction(raw_street)
-            street_m = FieldMetaResult("property_address",
-                raw_value=raw_street, corrected_value=corr_street,
-                confidence=0.80, source_page=base_page,
-                **self._bbox_kwargs(line_abs_start, raw_street),
-                correction_applied=sf, extraction_method=method)
+            if _looks_like_form_label(raw_street):
+                street_m = FieldMetaResult(
+                    "property_address", confidence=0.0, source_page=base_page,
+                    extraction_method="not_found",
+                )
+            else:
+                corr_street, sf = apply_ocr_correction(raw_street)
+                street_m = FieldMetaResult("property_address",
+                    raw_value=raw_street, corrected_value=corr_street,
+                    confidence=0.80, source_page=base_page,
+                    **self._bbox_kwargs(line_abs_start, raw_street),
+                    correction_applied=sf, extraction_method=method)
             return street_m, city_m, state_m, zip_m
 
         raw_zip = zip_match.group(1)
@@ -643,13 +651,19 @@ class Phase2ExtractionEngine:
 
         # ── Step 4: street ────────────────────────────────────────────────────
         raw_street = re.sub(r'(?:City|CITY)[:\s].*$', '', raw_street if 'raw_street' in dir() else before_state, flags=re.I).strip()
-        corr_street, street_fixed = apply_ocr_correction(raw_street)
-        street_m = FieldMetaResult(
-            "property_address", raw_value=raw_street, corrected_value=corr_street,
-            confidence=0.85, source_page=base_page,
-            **self._bbox_kwargs(line_abs_start + max(0, full_line.find(raw_street)), raw_street),
-            correction_applied=street_fixed, extraction_method=method
-        )
+        if _looks_like_form_label(raw_street):
+            street_m = FieldMetaResult(
+                "property_address", confidence=0.0, source_page=base_page,
+                extraction_method="not_found",
+            )
+        else:
+            corr_street, street_fixed = apply_ocr_correction(raw_street)
+            street_m = FieldMetaResult(
+                "property_address", raw_value=raw_street, corrected_value=corr_street,
+                confidence=0.85, source_page=base_page,
+                **self._bbox_kwargs(line_abs_start + max(0, full_line.find(raw_street)), raw_street),
+                correction_applied=street_fixed, extraction_method=method
+            )
 
         return street_m, city_m, state_m, zip_m
 
@@ -663,6 +677,8 @@ class Phase2ExtractionEngine:
         page_pos: List[Tuple[int, int]],
         pos_offset: int,
         post_clean: Optional[str] = None,
+        spatial_labels: Optional[List[str]] = None,
+        spatial_page_range: Optional[Tuple[int, int]] = None,
     ) -> FieldMetaResult:
         """
         Try patterns in order. Return FieldMetaResult with page + confidence.
@@ -674,6 +690,12 @@ class Phase2ExtractionEngine:
                 raw_value = match.group(1).strip()
                 if post_clean:
                     raw_value = re.sub(post_clean, '', raw_value, flags=re.I).strip()
+                if not raw_value:
+                    logger.debug(
+                        "Phase2 _extract(%s): pattern %d produced an empty value; skipping.",
+                        field_name, i,
+                    )
+                    continue
 
                 # OCR row-flatten guard: when UAD form labels stack ahead of
                 # values, a greedy `[^\n]+` regex captures the next label.
@@ -710,6 +732,10 @@ class Phase2ExtractionEngine:
                     extraction_method=method,
                 )
 
+        spatial = self._extract_spatial_field(field_name, spatial_labels or [], spatial_page_range)
+        if spatial:
+            return spatial
+
         return FieldMetaResult(field_name=field_name, confidence=0.0, extraction_method="not_found")
 
     def _extract_text_block(
@@ -737,6 +763,38 @@ class Phase2ExtractionEngine:
                     extraction_method="regex_primary",
                 )
         return FieldMetaResult(field_name=field_name, confidence=0.0, extraction_method="not_found")
+
+    def _text_window_for_pages(
+        self,
+        text: str,
+        page_pos: List[Tuple[int, int]],
+        first_page: int,
+        last_page: int,
+    ) -> Tuple[str, int]:
+        """
+        Return the substring covering a page range plus its absolute offset.
+
+        Used for fields such as lender/client where later-page boilerplate uses
+        the same label words but is not a Subject-section value.
+        """
+        if not page_pos:
+            return text, 0
+
+        starts_by_page = {page_num: start for start, page_num in page_pos}
+        candidate_starts = [
+            start for page_num, start in starts_by_page.items()
+            if first_page <= page_num <= last_page
+        ]
+        if not candidate_starts:
+            return "", 0
+
+        start = min(candidate_starts)
+        following_starts = [
+            start_pos for start_pos, page_num in page_pos
+            if page_num > last_page
+        ]
+        end = min(following_starts) if following_starts else len(text)
+        return text[start:min(end, len(text))], start
 
     def _bbox_kwargs(self, absolute_pos: int, value: Optional[str], prefer_text_position: bool = False) -> Dict[str, float]:
         """
@@ -805,6 +863,216 @@ class Phase2ExtractionEngine:
             if token == target_tokens[0]:
                 return self._merge_word_boxes(words[i:i + 1])
         return None
+
+    def _extract_spatial_field(
+        self,
+        field_name: str,
+        labels: List[str],
+        page_range: Optional[Tuple[int, int]] = None,
+    ) -> Optional[FieldMetaResult]:
+        """Find the value cell near a label using OCR/native word boxes."""
+        if not labels or not self._word_index:
+            return None
+
+        for page_num in sorted(self._word_index.keys()):
+            if page_range and not (page_range[0] <= page_num <= page_range[1]):
+                continue
+            words = sorted(
+                self._word_index.get(page_num) or [],
+                key=lambda w: (
+                    float(getattr(w, "bbox_y", 0.0)),
+                    float(getattr(w, "bbox_x", 0.0)),
+                ),
+            )
+            if not words:
+                continue
+
+            for label in labels:
+                for label_words in self._find_label_word_sequences(words, label):
+                    value_words = self._value_words_near_label(words, label_words)
+                    value = self._words_value_text(value_words)
+                    if not self._valid_spatial_value(field_name, value):
+                        continue
+
+                    corr_value, was_corrected = apply_ocr_correction(value)
+                    bbox = self._merge_word_boxes(value_words) or {}
+                    return FieldMetaResult(
+                        field_name=field_name,
+                        raw_value=value,
+                        corrected_value=corr_value,
+                        confidence=0.82 if not was_corrected else 0.77,
+                        source_page=page_num,
+                        **bbox,
+                        correction_applied=was_corrected,
+                        extraction_method="word_box_anchor",
+                    )
+        return None
+
+    def _find_label_word_sequences(self, words: List[object], label: str) -> List[List[object]]:
+        tokens = self._tokens(label)
+        if not tokens:
+            return []
+
+        expanded = []
+        for word in words:
+            for token in self._tokens(getattr(word, "text", "")):
+                expanded.append((token, word))
+        flat = [token for token, _ in expanded]
+        matches: List[List[object]] = []
+        for i in range(0, max(0, len(flat) - len(tokens) + 1)):
+            if flat[i:i + len(tokens)] != tokens:
+                continue
+            selected = []
+            seen = set()
+            for _, word in expanded[i:i + len(tokens)]:
+                if id(word) not in seen:
+                    selected.append(word)
+                    seen.add(id(word))
+            y_values = [float(getattr(w, "bbox_y", 0.0)) for w in selected]
+            if max(y_values) - min(y_values) <= 0.02:
+                matches.append(selected)
+        return matches
+
+    def _value_words_near_label(
+        self,
+        words: List[object],
+        label_words: List[object],
+    ) -> List[object]:
+        label_box = self._merge_word_boxes(label_words)
+        if not label_box:
+            return []
+
+        lx = label_box["bbox_x"]
+        ly = label_box["bbox_y"]
+        lw = label_box["bbox_w"]
+        lh = label_box["bbox_h"]
+        label_right = lx + lw
+        label_mid_y = ly + lh / 2
+        label_bottom = ly + lh
+
+        # Prefer same-row values to the right when the form stores "Label: value".
+        same_row = [
+            word for word in words
+            if label_right + 0.005 <= float(getattr(word, "bbox_x", 0.0)) <= min(0.98, label_right + 0.42)
+            and abs((float(getattr(word, "bbox_y", 0.0)) + float(getattr(word, "bbox_h", 0.0)) / 2) - label_mid_y) <= max(0.014, lh * 0.75)
+        ]
+        same_row = self._trim_value_line(same_row)
+        if same_row and not _looks_like_form_label(self._words_value_text(same_row) or ""):
+            return same_row
+
+        # UAD grids often emit a label row followed by a value row. Use the next
+        # nearest row under the label and clip to this label's column.
+        next_label_x = self._next_label_x_on_row(words, label_words, label_mid_y)
+        right_bound = next_label_x - 0.006 if next_label_x else min(0.98, lx + max(lw + 0.04, 0.20))
+        left_bound = max(0.0, lx - 0.015)
+        below = [
+            word for word in words
+            if left_bound <= float(getattr(word, "bbox_x", 0.0)) <= right_bound
+            and label_bottom + 0.003 <= float(getattr(word, "bbox_y", 0.0)) <= min(0.98, label_bottom + 0.12)
+        ]
+        if not below:
+            return []
+
+        rows = self._group_words_by_row(below)
+        if not rows:
+            return []
+        return self._trim_value_line(rows[0])
+
+    def _next_label_x_on_row(
+        self,
+        words: List[object],
+        label_words: List[object],
+        label_mid_y: float,
+    ) -> Optional[float]:
+        label_ids = {id(word) for word in label_words}
+        label_right = max(
+            float(getattr(word, "bbox_x", 0.0)) + float(getattr(word, "bbox_w", 0.0))
+            for word in label_words
+        )
+        candidates = []
+        for word in words:
+            if id(word) in label_ids:
+                continue
+            x = float(getattr(word, "bbox_x", 0.0))
+            if x <= label_right:
+                continue
+            y_mid = float(getattr(word, "bbox_y", 0.0)) + float(getattr(word, "bbox_h", 0.0)) / 2
+            if abs(y_mid - label_mid_y) > 0.018:
+                continue
+            if _looks_like_form_label(str(getattr(word, "text", ""))):
+                candidates.append(x)
+        return min(candidates) if candidates else None
+
+    def _group_words_by_row(self, words: List[object]) -> List[List[object]]:
+        sorted_words = sorted(
+            words,
+            key=lambda w: (
+                float(getattr(w, "bbox_y", 0.0)) + float(getattr(w, "bbox_h", 0.0)) / 2,
+                float(getattr(w, "bbox_x", 0.0)),
+            ),
+        )
+        rows: List[List[object]] = []
+        row_mids: List[float] = []
+        for word in sorted_words:
+            mid = float(getattr(word, "bbox_y", 0.0)) + float(getattr(word, "bbox_h", 0.0)) / 2
+            placed = False
+            for idx, row_mid in enumerate(row_mids):
+                if abs(mid - row_mid) <= 0.014:
+                    rows[idx].append(word)
+                    row_mids[idx] = (row_mid + mid) / 2
+                    placed = True
+                    break
+            if not placed:
+                rows.append([word])
+                row_mids.append(mid)
+        return [sorted(row, key=lambda w: float(getattr(w, "bbox_x", 0.0))) for row in rows]
+
+    def _trim_value_line(self, words: List[object]) -> List[object]:
+        value_words = []
+        for word in sorted(words, key=lambda w: float(getattr(w, "bbox_x", 0.0))):
+            text = str(getattr(word, "text", "")).strip()
+            if not text:
+                continue
+            if not value_words and _looks_like_form_label(text):
+                continue
+            if value_words and _looks_like_form_label(text):
+                break
+            value_words.append(word)
+        return value_words
+
+    def _words_value_text(self, words: List[object]) -> Optional[str]:
+        if not words:
+            return None
+        value = " ".join(str(getattr(word, "text", "")).strip() for word in words)
+        value = re.sub(r"\s+", " ", value).strip(" :-|")
+        return value or None
+
+    def _valid_spatial_value(self, field_name: str, value: Optional[str]) -> bool:
+        if not value or _looks_like_form_label(value):
+            return False
+        if len(value) > 140:
+            return False
+
+        validators = {
+            "county": r"^[A-Za-z][A-Za-z .'-]{1,40}$",
+            "tax_year": r"^(?:19|20)\d{2}$",
+            "real_estate_taxes": r"^\$?[\d,]+(?:\.\d{2})?$",
+            "census_tract": r"^\d{1,6}(?:\.\d{1,4})?$",
+            "map_reference": r"^[A-Za-z0-9][A-Za-z0-9 .#/-]{0,40}$",
+            "assessors_parcel_number": r"^[A-Za-z0-9][A-Za-z0-9 .#/-]{1,60}$",
+            "lender_name": r"^[A-Za-z0-9][A-Za-z0-9 &,.'/-]{2,80}$",
+            "lender_address": r"^\d{1,6}\s+[A-Za-z0-9][A-Za-z0-9 #,.'/-]{6,120}$",
+        }
+        pattern = validators.get(field_name)
+        if pattern and not re.match(pattern, value, re.I):
+            return False
+        if field_name == "lender_address" and re.search(
+            r"\b(?:currently offered|prior to|effective date|subject property|appraisal\?)\b",
+            value,
+            re.I,
+        ):
+            return False
+        return True
 
     def _tokens(self, text: str) -> List[str]:
         return re.findall(r"[a-z0-9]+", (text or "").lower())
@@ -1132,18 +1400,8 @@ class Phase2ExtractionEngine:
         return None, 0.0, None, {}
 
     def _find_label_words(self, words: List[object], label: str) -> List[object]:
-        tokens = self._tokens(label)
-        if not tokens:
-            return []
-        flat = [self._tokens(getattr(w, "text", ""))[:1] for w in words]
-        flat = [t[0] if t else "" for t in flat]
-        for i in range(0, max(0, len(flat) - len(tokens) + 1)):
-            if flat[i:i + len(tokens)] == tokens:
-                selected = words[i:i + len(tokens)]
-                y_values = [float(getattr(w, "bbox_y", 0.0)) for w in selected]
-                if max(y_values) - min(y_values) <= 0.02:
-                    return selected
-        return []
+        sequences = self._find_label_word_sequences(words, label)
+        return sequences[0] if sequences else []
 
     def _flat_checkbox_choice(self, text: str, labels: List[str]) -> Optional[str]:
         check = r"(?:\[x\]|\[X\]|X|><|✓|✔)"
@@ -1294,20 +1552,48 @@ class Phase2ExtractionEngine:
         comps = []
 
         # ── Strategy 1: find explicit COMPARABLE headers ──────────────────────
-        for comp_num in range(1, 4):
-            next_num = comp_num + 1
-            section_match = re.search(
-                rf"COMPARABLE\s+(?:SALE\s+)?(?:NO\.?\s*|#\s*)?{comp_num}[^\d](.*?)"
-                rf"(?:COMPARABLE\s+(?:SALE\s+)?(?:NO\.?\s*|#\s*)?{next_num}[^\d]|$)",
-                text, re.I | re.DOTALL
-            )
+        header_pattern = re.compile(
+            r"COMPARABLE\s+(?:SALE\s+)?(?:NO\.?\s*|#\s*)?([1-4])\b",
+            re.I,
+        )
+        headers = [
+            (int(match.group(1)), match.start(), match.end())
+            for match in header_pattern.finditer(text)
+        ]
+        header_by_num = {}
+        for num, start, end in headers:
+            header_by_num.setdefault(num, (start, end))
 
-            if not section_match:
+        for comp_num in range(1, 4):
+            header = header_by_num.get(comp_num)
+            if not header:
                 comps.append({})
                 continue
 
-            comp_text = section_match.group(1)[:600]
-            base_page = page_for_pos(section_match.start() + pos_offset, page_pos)
+            section_start = header[0]
+            value_start = header[1]
+            next_header = header_by_num.get(comp_num + 1)
+            if next_header:
+                section_end = next_header[1]
+            else:
+                end_match = re.search(
+                    r"\b(?:RECONCILIATION|SALES\s+COMPARISON\s+APPROACH|"
+                    r"SUMMARY\s+OF\s+SALES\s+COMPARISON|COST\s+APPROACH)\b",
+                    text[value_start:value_start + 1600],
+                    re.I,
+                )
+                if comp_num < 3 or not end_match:
+                    logger.debug(
+                        "Phase2 comparables: missing boundary after comparable %d; "
+                        "marking section not_found.",
+                        comp_num,
+                    )
+                    comps.append({})
+                    continue
+                section_end = value_start + end_match.start()
+
+            comp_text = text[value_start:section_end][:600]
+            base_page = page_for_pos(section_start + pos_offset, page_pos)
 
             addr_match = re.search(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,]{5,60})', comp_text)
             price_match = re.search(r'\$\s*([\d,]{5,})', comp_text)
@@ -1335,10 +1621,19 @@ class Phase2ExtractionEngine:
 
         # ── Strategy 2: grid column scan (fallback if no headers found) ────────
         all_empty = all(not c.get("address") or c["address"].value is None for c in comps)
-        if all_empty:
+        if all_empty and not headers:
             # In the sales grid, comp addresses appear as 3 addresses after "Subject"
-            # Look for lines with street addresses in groups of 3-4
-            addr_lines = re.findall(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,]{5,50})', text)
+            # Look for lines with street addresses in groups of 3-4. Keep the
+            # scan inside the sales-comparison pages so signature/appraiser
+            # addresses later in the PDF cannot become comparable sales.
+            grid_text = self._section(
+                text,
+                r"Sales\s+Comparison\s+Approach",
+                r"Reconciliation|Cost\s+Approach|Income\s+Approach",
+            )
+            if not grid_text:
+                grid_text = text[:5000]
+            addr_lines = re.findall(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,]{5,50})', grid_text)
             # Filter to only look like street addresses (has directional/type suffix)
             street_lines = [
                 a for a in addr_lines

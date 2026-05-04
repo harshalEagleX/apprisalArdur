@@ -1,5 +1,6 @@
 package com.apprisal.common.entity;
 
+import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
@@ -16,7 +17,12 @@ import java.time.LocalDateTime;
  */
 @Audited
 @Entity
-@Table(name = "qc_rule_result")
+@Table(name = "qc_rule_result",
+       indexes = {
+           @Index(name = "idx_qc_rule_qcresult_id", columnList = "qc_result_id"),
+           @Index(name = "idx_qc_rule_needs_verif", columnList = "qc_result_id, needs_verification"),
+           @Index(name = "idx_qc_rule_status", columnList = "status")
+       })
 public class QCRuleResult {
 
     @Id
@@ -144,7 +150,7 @@ public class QCRuleResult {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = AppTime.now();
     }
 
     // Getters and Setters

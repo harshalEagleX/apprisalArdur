@@ -8,8 +8,10 @@ import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.ProcessingMetricsRepository;
 import com.apprisal.common.repository.QCResultRepository;
+import com.apprisal.common.repository.QCRuleResultRepository;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.service.FileMatchingService;
+import com.apprisal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,6 +51,7 @@ public class BatchService {
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
     private final QCResultRepository qcResultRepository;
+    private final QCRuleResultRepository qcRuleResultRepository;
     private final ProcessingMetricsRepository metricsRepository;
     private final AuditLogService auditLogService;
 
@@ -58,11 +61,13 @@ public class BatchService {
     public BatchService(BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             QCResultRepository qcResultRepository,
+            QCRuleResultRepository qcRuleResultRepository,
             ProcessingMetricsRepository metricsRepository,
             AuditLogService auditLogService) {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository = qcResultRepository;
+        this.qcRuleResultRepository = qcRuleResultRepository;
         this.metricsRepository = metricsRepository;
         this.auditLogService = auditLogService;
     }
@@ -145,16 +150,18 @@ public class BatchService {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
 
+        long started = System.nanoTime();
         log.info("Deleting batch {} with {} files", batch.getParentBatchId(), batch.getFiles().size());
 
-        List<QCResult> qcResults = qcResultRepository.findByBatchId(batchId);
-        for (QCResult qcResult : qcResults) {
-            metricsRepository.deleteByQcResultId(qcResult.getId());
-        }
-        qcResultRepository.deleteAll(qcResults);
-        qcResultRepository.flush();
+        long dbStarted = System.nanoTime();
+        int metricsDeleted = metricsRepository.deleteByBatchId(batchId);
+        int rulesDeleted = qcRuleResultRepository.deleteByBatchId(batchId);
+        int resultsDeleted = qcResultRepository.deleteByBatchId(batchId);
+        log.info("Deleted batch {} QC rows in {} ms: metrics={}, ruleResults={}, qcResults={}",
+                batch.getParentBatchId(), elapsedMs(dbStarted), metricsDeleted, rulesDeleted, resultsDeleted);
 
         // Delete storage files
+        long filesStarted = System.nanoTime();
         for (BatchFile file : batch.getFiles()) {
             if (file.getStoragePath() != null) {
                 try {
@@ -168,25 +175,29 @@ public class BatchService {
 
         // Delete batch storage directory
         try {
-            Path batchDir = Paths.get(storagePath, batch.getClient().getId().toString(), batch.getParentBatchId());
+            Path batchDir = Paths.get(storagePath, batch.getClient().getCode(), batch.getParentBatchId());
             if (Files.exists(batchDir)) {
-                Files.walk(batchDir)
-                        .sorted((a, b) -> b.compareTo(a)) // Delete files before directories
-                        .forEach(path -> {
-                            try {
-                                Files.deleteIfExists(path);
-                            } catch (IOException e) {
-                                log.warn("Failed to delete path {}: {}", path, e.getMessage());
-                            }
-                        });
+                try (var paths = Files.walk(batchDir)) {
+                    paths.sorted((a, b) -> b.compareTo(a)) // Delete files before directories
+                            .forEach(path -> {
+                                try {
+                                    Files.deleteIfExists(path);
+                                } catch (IOException e) {
+                                    log.warn("Failed to delete path {}: {}", path, e.getMessage());
+                                }
+                            });
+                }
             }
         } catch (IOException e) {
             log.warn("Failed to clean up batch directory: {}", e.getMessage());
         }
+        log.info("Deleted batch {} storage files in {} ms", batch.getParentBatchId(), elapsedMs(filesStarted));
 
         // Database will cascade delete files due to orphanRemoval.
+        long batchDeleteStarted = System.nanoTime();
         batchRepository.delete(batch);
-        log.info("Batch {} deleted successfully", batch.getParentBatchId());
+        log.info("Deleted batch {} row in {} ms", batch.getParentBatchId(), elapsedMs(batchDeleteStarted));
+        log.info("Batch {} deleted successfully in {} ms", batch.getParentBatchId(), elapsedMs(started));
     }
 
     /**
@@ -455,7 +466,7 @@ public class BatchService {
             throw new ResourceNotFoundException("Batch", "id", batchId);
         }
 
-        int updated = batchRepository.assignReviewerIfNotProcessing(batchId, reviewer);
+        int updated = batchRepository.assignReviewerIfNotProcessing(batchId, reviewer, AppTime.now());
         if (updated == 0) {
             throw new ValidationException("batch", "Reviewer can be assigned after QC processing completes");
         }
@@ -484,5 +495,9 @@ public class BatchService {
     @Transactional(readOnly = true)
     public long count() {
         return batchRepository.count();
+    }
+
+    private long elapsedMs(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000L;
     }
 }

@@ -2,6 +2,9 @@ spring:
   config:
     import: optional:file:.env[.properties]
 
+  jackson:
+    time-zone: Asia/Kolkata
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ardurApprisal}
     username: ${DB_USERNAME:harshalsmac}
@@ -13,13 +16,16 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      connection-init-sql: SET TIME ZONE 'Asia/Kolkata'
 
   jpa:
     hibernate:
-      ddl-auto: update   # 🔥 IMPORTANT: Hibernate will manage schema
+      ddl-auto: create   # 🔥 IMPORTANT: Hibernate will manage schema
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Kolkata
         format_sql: false
     show-sql: false
     open-in-view: false

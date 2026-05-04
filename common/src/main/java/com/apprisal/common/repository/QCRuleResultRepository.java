@@ -4,6 +4,7 @@ import com.apprisal.common.entity.QCRuleResult;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -30,6 +31,15 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
      * Find all rule results for a QC result.
      */
     List<QCRuleResult> findByQcResultId(Long qcResultId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        DELETE FROM QCRuleResult rr
+        WHERE rr.qcResult.id IN (
+            SELECT qr.id FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId
+        )
+        """)
+    int deleteByBatchId(@Param("batchId") Long batchId);
 
     /**
      * Find all rule results that need verification.

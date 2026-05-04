@@ -17,8 +17,13 @@ Usage:
 
 import logging
 import os
+import time
 
 from celery import Celery
+
+os.environ.setdefault("TZ", "Asia/Kolkata")
+if hasattr(time, "tzset"):
+    time.tzset()
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +39,8 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    timezone="UTC",
-    enable_utc=True,
+    timezone="Asia/Kolkata",
+    enable_utc=False,
     task_track_started=True,
     task_acks_late=True,              # re-queue if worker crashes mid-task
     worker_prefetch_multiplier=1,     # one task at a time per worker (OCR is heavy)

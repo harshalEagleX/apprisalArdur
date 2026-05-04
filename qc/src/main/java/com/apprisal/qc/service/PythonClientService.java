@@ -86,39 +86,67 @@ public class PythonClientService {
             throw new RuntimeException("Appraisal PDF not found on disk: " + appraisalPath);
         }
 
-        try {
-            ResponseEntity<PythonQCResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    requestEntity,
-                    PythonQCResponse.class);
+        int maxAttempts = Math.max(1, config.getRetryAttempts() + 1);
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                ResponseEntity<PythonQCResponse> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.POST,
+                        requestEntity,
+                        PythonQCResponse.class);
 
-            PythonQCResponse result = response.getBody();
-            if (result == null) {
-                throw new RuntimeException("Python QC service returned empty response body");
+                PythonQCResponse result = response.getBody();
+                if (result == null) {
+                    throw new RuntimeException("Python QC service returned empty response body");
+                }
+                log.info("Python QC completed: passed={}, failed={}, verify={}, total_rules={}",
+                        result.passed(), result.failed(), result.verify(), result.totalRules());
+                return result;
+
+            } catch (org.springframework.web.client.HttpClientErrorException e) {
+                // 4xx from Python — e.g. 422 invalid PDF, 400 bad request. Retrying will not fix bad input.
+                log.error("Python QC service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+                throw new RuntimeException("Python QC service rejected the request: " +
+                        e.getStatusCode() + " — " + e.getResponseBodyAsString(), e);
+            } catch (org.springframework.web.client.ResourceAccessException e) {
+                if (attempt >= maxAttempts) {
+                    log.error("Python QC service timeout or connection refused for model {} after {} attempt(s): {}",
+                            safeModelConfig.label(), attempt, e.getMessage());
+                    throw new RuntimeException("Python QC service timed out after " + config.getTimeoutSeconds() + "s " +
+                            "while processing model " + safeModelConfig.label() + ". " +
+                            "The ocr-service was reachable, but downstream OCR/LLM work may have stalled or timed out.", e);
+                }
+                log.warn("Python QC attempt {}/{} failed for model {}: {}. Retrying...",
+                        attempt, maxAttempts, safeModelConfig.label(), e.getMessage());
+                sleepBeforeRetry(attempt);
+            } catch (org.springframework.web.client.HttpServerErrorException e) {
+                if (attempt >= maxAttempts) {
+                    log.error("Python QC service internal error ({}) after {} attempt(s): {}",
+                            e.getStatusCode(), attempt, e.getResponseBodyAsString());
+                    throw new RuntimeException("Python QC service error: " + e.getStatusCode(), e);
+                }
+                log.warn("Python QC attempt {}/{} got {} from Python. Retrying...",
+                        attempt, maxAttempts, e.getStatusCode());
+                sleepBeforeRetry(attempt);
+            } catch (RestClientException e) {
+                if (attempt >= maxAttempts) {
+                    log.error("Failed to call Python QC service after {} attempt(s): {}", attempt, e.getMessage(), e);
+                    throw new RuntimeException("Python QC service call failed: " + e.getMessage(), e);
+                }
+                log.warn("Python QC attempt {}/{} failed: {}. Retrying...", attempt, maxAttempts, e.getMessage());
+                sleepBeforeRetry(attempt);
             }
-            log.info("Python QC completed: passed={}, failed={}, verify={}, total_rules={}",
-                    result.passed(), result.failed(), result.verify(), result.totalRules());
-            return result;
+        }
 
-        } catch (org.springframework.web.client.ResourceAccessException e) {
-            // Timeout or connection refused
-            log.error("Python QC service timeout or connection refused for model {}: {}", safeModelConfig.label(), e.getMessage());
-            throw new RuntimeException("Python QC service timed out after " + config.getTimeoutSeconds() + "s " +
-                    "while processing model " + safeModelConfig.label() + ". " +
-                    "The ocr-service was reachable, but downstream OCR/LLM work may have stalled or timed out.", e);
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
-            // 4xx from Python — e.g. 422 invalid PDF, 400 bad request
-            log.error("Python QC service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Python QC service rejected the request: " +
-                    e.getStatusCode() + " — " + e.getResponseBodyAsString(), e);
-        } catch (org.springframework.web.client.HttpServerErrorException e) {
-            // 5xx from Python
-            log.error("Python QC service internal error ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Python QC service error: " + e.getStatusCode(), e);
-        } catch (RestClientException e) {
-            log.error("Failed to call Python QC service: {}", e.getMessage(), e);
-            throw new RuntimeException("Python QC service call failed: " + e.getMessage(), e);
+        throw new IllegalStateException("Python QC retry loop exited without a result");
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(Math.min(5_000L, attempt * 1_000L));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting to retry Python QC request", e);
         }
     }
 

@@ -77,6 +77,10 @@ class ExtractedFieldRecord(Base):
     field_value       = Column(Text)
     confidence_score  = Column(Float, default=0.0)
     source_page       = Column(Integer)              # which page the value was found on
+    bbox_x            = Column(Float)
+    bbox_y            = Column(Float)
+    bbox_w            = Column(Float)
+    bbox_h            = Column(Float)
     extraction_method = Column(String(30))           # spatial_anchor / regex_primary / regex_fallback / not_found
     raw_ocr_text      = Column(Text)                 # value before OCR correction (training signal)
     correction_applied = Column(Boolean, default=False)  # True if ocr_correction.py changed the value

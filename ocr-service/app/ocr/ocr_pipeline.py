@@ -2,7 +2,9 @@
 Parallel OCR Pipeline for Appraisal Document Processing
 
 Strategy (Phase 1):
-  - Render all pages to PIL Images in main thread (fitz is NOT thread-safe)
+  - Prefer pdfplumber + Camelot for structured PDFs and UAD form grids.
+  - Render all pages to PIL Images in main thread only when OCR fallback is needed
+    (fitz is NOT thread-safe)
   - OCR pages in parallel via ThreadPoolExecutor(max_workers=4)
   - Smart threshold: ≥100 words embedded → skip Tesseract entirely
                      30–99 words → run both, pick best
@@ -46,10 +48,17 @@ try:
 except Exception:
     PDFPLUMBER_AVAILABLE = False
 
+try:
+    import camelot
+    CAMELOT_AVAILABLE = True
+except Exception:
+    CAMELOT_AVAILABLE = False
+
 
 class ExtractionMethod(str, Enum):
     """Method used to extract text from a page."""
-    EMBEDDED = "embedded"  # PyMuPDF embedded text
+    LAYOUT = "layout"  # pdfplumber/Camelot layout-aware extraction
+    EMBEDDED = "embedded"  # PyMuPDF embedded text fallback
     TESSERACT = "tesseract"  # Tesseract OCR
     CLOUD = "cloud"  # Cloud OCR (Google Vision, etc.)
 
@@ -152,6 +161,32 @@ class OCRPipeline:
 
     # Max parallel Tesseract workers
     MAX_WORKERS = 4
+
+    TABLE_FIELD_LABELS = (
+        "Owner of Public Record",
+        "Property Rights Appraised",
+        "Assessor's Parcel #",
+        "Legal Description",
+        "Neighborhood Name",
+        "Special Assessments",
+        "Map Reference",
+        "Census Tract",
+        "Property Address",
+        "Date of Contract",
+        "Lender/Client",
+        "R.E. Taxes $",
+        "Tax Year",
+        "Borrower",
+        "County",
+        "Address",
+        "City",
+        "State",
+        "Zip Code",
+        "Zip",
+        "Occupant",
+        "PUD",
+        "HOA $",
+    )
     
     def __init__(self, use_tesseract: bool = True, use_cloud: bool = False, force_image_ocr: bool = False, use_preprocessing: bool = False):
         self.use_tesseract = use_tesseract and TESSERACT_AVAILABLE
@@ -202,11 +237,12 @@ class OCRPipeline:
                 page = doc[i]
                 page_num = i + 1
 
-                plumber_text, plumber_words = self._pdfplumber_page(pdf_path, i)
-                embedded_text = plumber_text or page.get_text("text")
+                layout_text, layout_words, layout_has_tables = self._layout_page(pdf_path, i)
+                embedded_text = layout_text or page.get_text("text")
                 embedded_wc = len(embedded_text.split())
-                embedded_words = plumber_words or self._embedded_words(page, page_num)
-                has_tables = self._detect_tables(page)
+                embedded_words = layout_words or self._embedded_words(page, page_num)
+                has_tables = layout_has_tables or self._detect_tables(page)
+                embedded_method = ExtractionMethod.LAYOUT if layout_text else ExtractionMethod.EMBEDDED
 
                 # Decide whether OCR render is needed
                 needs_render = (
@@ -230,6 +266,7 @@ class OCRPipeline:
                     "embedded_text": embedded_text,
                     "embedded_wc":   embedded_wc,
                     "embedded_words": embedded_words,
+                    "embedded_method": embedded_method,
                     "has_tables":    has_tables,
                     "pil_img":       pil_img,
                     "force":         use_force,
@@ -248,6 +285,7 @@ class OCRPipeline:
                 emb_text = job["embedded_text"]
                 emb_wc   = job["embedded_wc"]
                 emb_words = job["embedded_words"]
+                emb_method = job["embedded_method"]
                 htables  = job["has_tables"]
                 img      = job["pil_img"]
                 force    = job["force"]
@@ -274,7 +312,7 @@ class OCRPipeline:
 
                 # Embedded text good enough
                 if emb_wc >= self.MIN_WORDS_THRESHOLD:
-                    return PageText(pn, emb_text, ExtractionMethod.EMBEDDED,
+                    return PageText(pn, emb_text, emb_method,
                                     self._estimate_confidence(emb_text), emb_wc, htables, emb_words)
 
                 # Hybrid zone or OCR-required zone
@@ -289,7 +327,7 @@ class OCRPipeline:
 
                 # Last resort: return whatever embedded gave us
                 conf = 0.5 if emb_wc < 10 else 0.7
-                return PageText(pn, emb_text, ExtractionMethod.EMBEDDED, conf, emb_wc, htables, emb_words)
+                return PageText(pn, emb_text, emb_method, conf, emb_wc, htables, emb_words)
 
             workers = min(self.MAX_WORKERS, len(page_jobs))
             with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -366,19 +404,46 @@ class OCRPipeline:
             logger.debug("Embedded word extraction failed page %d: %s", page_number, e)
         return words
 
-    def _pdfplumber_page(self, pdf_path: str, page_index: int) -> Tuple[str, List[OcrWord]]:
+    def _layout_page(self, pdf_path: str, page_index: int) -> Tuple[str, List[OcrWord], bool]:
+        """Extract a page through pdfplumber text/words plus Camelot/pdfplumber tables."""
+        plumber_text, words, plumber_tables = self._pdfplumber_page(pdf_path, page_index)
+        camelot_tables = self._camelot_page_tables(pdf_path, page_index + 1)
+
+        table_blocks = []
+        if camelot_tables:
+            table_blocks.append(camelot_tables)
+        if plumber_tables:
+            table_blocks.append(plumber_tables)
+
+        if not plumber_text and not table_blocks:
+            return "", [], False
+
+        parts = []
+        if table_blocks:
+            parts.append("LAYOUT_TABLE_VALUES")
+            parts.extend(table_blocks)
+            parts.append("END_LAYOUT_TABLE_VALUES")
+        if plumber_text:
+            parts.append(plumber_text)
+        return "\n".join(part for part in parts if part), words, bool(table_blocks)
+
+    def _pdfplumber_page(self, pdf_path: str, page_index: int) -> Tuple[str, List[OcrWord], str]:
         """Use pdfplumber when available for digital PDFs with live text + coordinates."""
         if not PDFPLUMBER_AVAILABLE:
-            return "", []
+            return "", [], ""
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 if page_index >= len(pdf.pages):
-                    return "", []
+                    return "", [], ""
                 page = pdf.pages[page_index]
                 chars = page.chars or []
                 if len(chars) < 20:
-                    return "", []
-                text = page.extract_text(x_tolerance=1, y_tolerance=3) or ""
+                    return "", [], ""
+                text = (
+                    page.extract_text(layout=True, x_tolerance=1, y_tolerance=3)
+                    or page.extract_text(x_tolerance=1, y_tolerance=3)
+                    or ""
+                )
                 words = []
                 page_w = max(float(page.width), 1.0)
                 page_h = max(float(page.height), 1.0)
@@ -399,10 +464,190 @@ class OCRPipeline:
                         bbox_h=max(0.001, min(1.0, (bottom - top) / page_h)),
                         confidence=1.0,
                     ))
-                return text, words
+                table_text = self._pdfplumber_table_text(page)
+                return text, words, table_text
         except Exception as e:
             logger.debug("pdfplumber extraction failed page %d: %s", page_index + 1, e)
-            return "", []
+            return "", [], ""
+
+    def _pdfplumber_table_text(self, page) -> str:
+        """Extract table rows from pdfplumber and synthesize label/value lines."""
+        table_settings = [
+            {"vertical_strategy": "lines", "horizontal_strategy": "lines"},
+            {"vertical_strategy": "text", "horizontal_strategy": "text"},
+        ]
+        blocks = []
+        for settings in table_settings:
+            try:
+                tables = page.extract_tables(table_settings=settings) or []
+            except Exception:
+                continue
+            for table in tables:
+                block = self._table_rows_to_text(table)
+                if block:
+                    blocks.append(block)
+            if blocks:
+                break
+        return "\n".join(blocks)
+
+    def _camelot_page_tables(self, pdf_path: str, page_number: int) -> str:
+        """Extract grid tables with Camelot, preferring lattice then stream."""
+        if not CAMELOT_AVAILABLE:
+            return ""
+
+        blocks = []
+        for flavor in ("lattice", "stream"):
+            try:
+                tables = camelot.read_pdf(
+                    pdf_path,
+                    pages=str(page_number),
+                    flavor=flavor,
+                    strip_text="\n",
+                )
+            except Exception as e:
+                logger.debug("Camelot %s failed page %d: %s", flavor, page_number, e)
+                continue
+            for table in tables:
+                try:
+                    rows = table.df.fillna("").astype(str).values.tolist()
+                except Exception:
+                    continue
+                block = self._table_rows_to_text(rows)
+                if block:
+                    blocks.append(block)
+            if blocks:
+                break
+        return "\n".join(blocks)
+
+    def _table_rows_to_text(self, rows: List[List[object]]) -> str:
+        """Convert extracted table cells into stable TSV plus label/value pairs."""
+        cleaned_rows = [
+            [self._clean_cell(cell) for cell in row]
+            for row in rows
+        ]
+        cleaned_rows = [row for row in cleaned_rows if any(row)]
+        if not cleaned_rows:
+            return ""
+
+        row_lines = []
+        pairs = []
+        for row in cleaned_rows:
+            row_lines.append("\t".join(row))
+            pairs.extend(self._same_row_label_values(row))
+
+        for current, nxt in zip(cleaned_rows, cleaned_rows[1:]):
+            pairs.extend(self._label_row_value_row_pairs(current, nxt))
+
+        lines = []
+        if pairs:
+            lines.append("LABEL_VALUE_PAIRS")
+            seen = set()
+            for label, value in pairs:
+                key = (label.lower(), value.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                lines.append(f"{label}: {value}")
+            lines.append("END_LABEL_VALUE_PAIRS")
+        lines.extend(row_lines)
+        return "\n".join(lines)
+
+    def _same_row_label_values(self, row: List[str]) -> List[Tuple[str, str]]:
+        pairs = []
+        for left, right in zip(row, row[1:]):
+            if self._looks_like_table_label(left) and self._looks_like_table_value(right):
+                pairs.append((left.rstrip(":"), right))
+        for cell in row:
+            pairs.extend(self._inline_label_values(cell))
+            parts = [part.strip() for part in re.split(r"\n+", cell) if part.strip()]
+            if len(parts) >= 2 and self._looks_like_table_label(parts[0]):
+                value = " ".join(parts[1:]).strip()
+                if self._looks_like_table_value(value):
+                    pairs.append((parts[0].rstrip(":"), value))
+        return pairs
+
+    def _inline_label_values(self, cell: str) -> List[Tuple[str, str]]:
+        value = self._clean_cell(cell)
+        if not value:
+            return []
+
+        matches = []
+        for label in self.TABLE_FIELD_LABELS:
+            pattern = re.escape(label).replace(r"\ ", r"\s+")
+            for match in re.finditer(rf"(?<![A-Za-z0-9]){pattern}(?![A-Za-z0-9])", value, re.I):
+                matches.append((match.start(), match.end(), label))
+        if len(matches) < 2:
+            return []
+
+        contained = set()
+        for idx, item in enumerate(matches):
+            start, end, _ = item
+            for other_idx, other in enumerate(matches):
+                if idx == other_idx:
+                    continue
+                other_start, other_end, _ = other
+                if other_start <= start and end <= other_end and (other_end - other_start) > (end - start):
+                    contained.add(idx)
+                    break
+
+        deduped = []
+        seen_starts = set()
+        for original_idx, item in sorted(enumerate(matches), key=lambda pair: (pair[1][0], -(pair[1][1] - pair[1][0]))):
+            if original_idx in contained:
+                continue
+            if item[0] in seen_starts:
+                continue
+            seen_starts.add(item[0])
+            deduped.append(item)
+
+        pairs = []
+        for idx, (start, end, label) in enumerate(deduped):
+            next_start = deduped[idx + 1][0] if idx + 1 < len(deduped) else len(value)
+            raw = value[end:next_start]
+            raw = re.sub(r"^[\s:.-]+", "", raw)
+            raw = re.sub(r"[\s|]+$", "", raw).strip()
+            if self._looks_like_table_value(raw):
+                if label == "Address" and idx > 0 and deduped[idx - 1][2] == "Lender/Client":
+                    label = "Lender Address"
+                pairs.append((label.rstrip(":"), raw))
+        return pairs
+
+    def _label_row_value_row_pairs(self, labels: List[str], values: List[str]) -> List[Tuple[str, str]]:
+        pairs = []
+        max_cols = min(len(labels), len(values))
+        label_count = sum(1 for cell in labels[:max_cols] if self._looks_like_table_label(cell))
+        value_count = sum(1 for cell in values[:max_cols] if self._looks_like_table_value(cell))
+        if label_count < 2 or value_count < 1:
+            return pairs
+        for label, value in zip(labels[:max_cols], values[:max_cols]):
+            if self._looks_like_table_label(label) and self._looks_like_table_value(value):
+                pairs.append((label.rstrip(":"), value))
+        return pairs
+
+    def _clean_cell(self, cell: object) -> str:
+        value = re.sub(r"\s+", " ", str(cell or "")).strip()
+        return value.strip(" |")
+
+    def _looks_like_table_label(self, value: str) -> bool:
+        value = self._clean_cell(value).rstrip(":")
+        if not value or len(value) > 80:
+            return False
+        lowered = value.lower()
+        known_fragments = tuple(label.lower() for label in self.TABLE_FIELD_LABELS) + (
+            "sale price", "proximity", "site", "view", "design", "quality",
+            "condition", "gross living area",
+        )
+        if any(fragment in lowered for fragment in known_fragments):
+            return True
+        return False
+
+    def _looks_like_table_value(self, value: str) -> bool:
+        value = self._clean_cell(value)
+        if not value or len(value) > 180:
+            return False
+        if self._looks_like_table_label(value):
+            return False
+        return bool(re.search(r"[A-Za-z0-9$]", value))
 
     def _tesseract_hocr_words(self, image, page_number: int, config: str = "--psm 6") -> Tuple[Optional[str], List[OcrWord]]:
         """Capture hOCR output and parse word boxes/confidence from it."""

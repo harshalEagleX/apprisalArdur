@@ -3,6 +3,7 @@ package com.apprisal.qc.service;
 import com.apprisal.common.entity.Batch;
 import com.apprisal.common.entity.BatchStatus;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -77,8 +78,9 @@ public class StuckBatchReconciler {
 
         try {
             // Find all batches stuck for longer than retryAfterMinutes
-            LocalDateTime retryCutoff  = LocalDateTime.now().minusMinutes(retryAfterMinutes);
-            LocalDateTime abandonCutoff = LocalDateTime.now().minusMinutes(abandonAfterMinutes);
+            LocalDateTime now = AppTime.now();
+            LocalDateTime retryCutoff  = now.minusMinutes(retryAfterMinutes);
+            LocalDateTime abandonCutoff = now.minusMinutes(abandonAfterMinutes);
 
             List<Batch> stuckBatches = batchRepository.findStuckInQcProcessing(retryCutoff);
 
@@ -103,6 +105,12 @@ public class StuckBatchReconciler {
         Long batchId = batch.getId();
         String batchRef = batch.getParentBatchId();
         LocalDateTime stuckSince = batch.getUpdatedAt();
+
+        if (qcProcessingService.isBatchActive(batchId)) {
+            log.info("Reconciler: batch {} ({}) is still active on this JVM; skipping stuck check. Last activity: {}",
+                    batchId, batchRef, stuckSince);
+            return;
+        }
 
         boolean shouldAbandon = stuckSince != null && stuckSince.isBefore(abandonCutoff);
 
@@ -140,14 +148,18 @@ public class StuckBatchReconciler {
      */
     @Transactional
     public ReconciliationReport runManually() {
-        LocalDateTime retryCutoff   = LocalDateTime.now().minusMinutes(retryAfterMinutes);
-        LocalDateTime abandonCutoff = LocalDateTime.now().minusMinutes(abandonAfterMinutes);
+        LocalDateTime now = AppTime.now();
+        LocalDateTime retryCutoff   = now.minusMinutes(retryAfterMinutes);
+        LocalDateTime abandonCutoff = now.minusMinutes(abandonAfterMinutes);
         List<Batch> stuck = batchRepository.findStuckInQcProcessing(retryCutoff);
 
         boolean pythonHealthy = pythonClientService.isHealthy();
         int retried = 0, abandoned = 0;
 
         for (Batch b : stuck) {
+            if (qcProcessingService.isBatchActive(b.getId())) {
+                continue;
+            }
             if (b.getUpdatedAt() != null && b.getUpdatedAt().isBefore(abandonCutoff)) {
                 b.setStatus(BatchStatus.ERROR);
                 b.setErrorMessage("Manually reconciled: exceeded " + abandonAfterMinutes + " minute limit.");

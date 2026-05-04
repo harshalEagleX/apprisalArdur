@@ -1,5 +1,6 @@
 package com.apprisal.common.entity;
 
+import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -94,7 +95,7 @@ public class ProcessingMetrics {
     private LocalDateTime createdAt;
 
     @PrePersist
-    protected void onCreate() { createdAt = LocalDateTime.now(); }
+    protected void onCreate() { createdAt = AppTime.now(); }
 
     // ── Builder ───────────────────────────────────────────────────────────────
     public static Builder builder() { return new Builder(); }

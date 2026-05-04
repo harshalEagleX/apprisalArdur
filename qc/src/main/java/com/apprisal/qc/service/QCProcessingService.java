@@ -10,6 +10,7 @@ import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.realtime.RealtimeEventPublisher;
 import com.apprisal.common.service.FileMatchingService;
 import com.apprisal.common.service.FileMatchingService.FilePair;
+import com.apprisal.common.util.AppTime;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -154,7 +155,7 @@ public class QCProcessingService {
             return false;
         }
         cancellationRequests.remove(batchId);
-        int updated = batchRepository.markQcProcessingIfTriggerable(batchId);
+        int updated = batchRepository.markQcProcessingIfTriggerable(batchId, AppTime.now());
         if (updated > 0) {
             updateProgress(batchId, "queued", "QC job queued with " + safeModelConfig.label(), 0, 1, true, safeModelConfig);
             log.info("Claimed batch {} for QC processing using {}", batchId, safeModelConfig.label());
@@ -162,6 +163,10 @@ public class QCProcessingService {
         }
         activeBatches.remove(batchId);
         return false;
+    }
+
+    public boolean isBatchActive(@NonNull Long batchId) {
+        return activeBatches.contains(batchId) || runningThreads.containsKey(batchId);
     }
 
     @Transactional
@@ -173,7 +178,7 @@ public class QCProcessingService {
         }
 
         String message = "QC stopped by admin. Click Run QC to start again.";
-        int updated = batchRepository.markUploadedIfQcProcessing(batchId, message);
+        int updated = batchRepository.markUploadedIfQcProcessing(batchId, message, AppTime.now());
         activeBatches.remove(batchId);
         updateProgress(batchId, "stopped", message, 0, 1, false, QCModelConfig.defaults());
         if (updated > 0) {
@@ -203,6 +208,11 @@ public class QCProcessingService {
                 .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
         batch.setStatus(status);
         batch.setErrorMessage(errorMessage);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void touchBatchActivity(@NonNull Long batchId) {
+        batchRepository.touchQcProcessing(batchId, AppTime.now());
     }
 
     /**
@@ -329,6 +339,13 @@ public class QCProcessingService {
                 existing != null ? existing.startedAt() : Instant.now().toString(),
                 Instant.now().toString()
         ));
+        if (running || "saving".equals(stage) || "complete".equals(stage) || "error".equals(stage)) {
+            try {
+                self.touchBatchActivity(batchId);
+            } catch (Exception e) {
+                log.debug("Could not update QC heartbeat for batch {}: {}", batchId, e.getMessage());
+            }
+        }
         realtimeEventPublisher.publish("/topic/qc/batch/" + batchId + "/progress", progressPayload(batchId, progress));
     }
 

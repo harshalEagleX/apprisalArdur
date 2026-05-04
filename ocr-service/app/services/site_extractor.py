@@ -31,8 +31,12 @@ def extract_advanced_fields(text: str) -> Dict[str, Any]:
     # Look for "Site Area" or "Area" followed by number
     area_match = re.search(r"(?:Site Area|Area)\s*[:\.]?\s*([\d,]+(?:\.\d+)?)\s*(sf|sq\.?\s*ft|ac|acres)", text, re.IGNORECASE)
     if area_match:
-        data["siteArea"] = float(area_match.group(1).replace(',', ''))
-        data["siteAreaUnit"] = area_match.group(2).lower()
+        area_raw = (area_match.group(1) or "").replace(',', '').strip()
+        try:
+            data["siteArea"] = float(area_raw)
+            data["siteAreaUnit"] = area_match.group(2).lower()
+        except ValueError:
+            pass
 
     # Zoning Compliance
     # The form usually has "Specific Zoning Classification ... Zoning Compliance [ ] Legal ..."

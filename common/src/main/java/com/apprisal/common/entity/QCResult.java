@@ -1,5 +1,6 @@
 package com.apprisal.common.entity;
 
+import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
@@ -16,7 +17,12 @@ import java.util.List;
  */
 @Audited
 @Entity
-@Table(name = "qc_result")
+@Table(name = "qc_result",
+       indexes = {
+           @Index(name = "idx_qc_result_batchfile", columnList = "batch_file_id"),
+           @Index(name = "idx_qc_result_decision", columnList = "qc_decision"),
+           @Index(name = "idx_qc_result_final", columnList = "final_decision")
+       })
 public class QCResult {
 
     @Id
@@ -120,16 +126,17 @@ public class QCResult {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        LocalDateTime now = AppTime.now();
+        createdAt = now;
+        updatedAt = now;
         if (processedAt == null) {
-            processedAt = LocalDateTime.now();
+            processedAt = now;
         }
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     // Helper method to add rule results

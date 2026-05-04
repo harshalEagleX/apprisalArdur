@@ -30,6 +30,16 @@ engine = create_engine(
     echo=False,  # set True to log all SQL
 )
 
+
+@event.listens_for(engine, "connect")
+def _set_session_timezone(dbapi_connection, connection_record):
+    try:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("SET TIME ZONE 'Asia/Kolkata'")
+        cursor.close()
+    except Exception as exc:
+        logger.debug("Could not set DB session timezone: %s", exc)
+
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
@@ -92,6 +102,12 @@ def ensure_schema_compatibility():
             statements.append("ALTER TABLE page_ocr_results ADD COLUMN hocr_text TEXT")
         if "word_json" not in columns:
             statements.append("ALTER TABLE page_ocr_results ADD COLUMN word_json TEXT")
+
+        if "extracted_fields" in table_names:
+            field_columns = {column["name"] for column in inspector.get_columns("extracted_fields")}
+            for column_name in ("bbox_x", "bbox_y", "bbox_w", "bbox_h"):
+                if column_name not in field_columns:
+                    statements.append(f"ALTER TABLE extracted_fields ADD COLUMN {column_name} DOUBLE PRECISION")
 
         if not statements:
             return

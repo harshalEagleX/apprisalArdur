@@ -3,6 +3,7 @@ package com.apprisal.common.repository;
 import com.apprisal.common.entity.QCDecision;
 import com.apprisal.common.entity.QCResult;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -38,6 +39,10 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
 
     @Query("SELECT COUNT(qr) FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId")
     long countByBatchId(@Param("batchId") Long batchId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId")
+    int deleteByBatchId(@Param("batchId") Long batchId);
 
     /**
      * Find all QC results with a specific decision type.

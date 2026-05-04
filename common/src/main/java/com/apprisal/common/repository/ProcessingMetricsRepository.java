@@ -2,6 +2,7 @@ package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.ProcessingMetrics;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -17,6 +18,15 @@ public interface ProcessingMetricsRepository extends JpaRepository<ProcessingMet
     Optional<ProcessingMetrics> findByQcResultId(Long qcResultId);
 
     void deleteByQcResultId(Long qcResultId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        DELETE FROM ProcessingMetrics m
+        WHERE m.qcResult.id IN (
+            SELECT qr.id FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId
+        )
+        """)
+    int deleteByBatchId(@Param("batchId") Long batchId);
 
     @Transactional(readOnly = true)
     @Query("SELECT AVG(m.ocrConfidenceAvg) FROM ProcessingMetrics m WHERE m.createdAt >= :from")

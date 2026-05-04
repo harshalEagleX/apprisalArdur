@@ -75,7 +75,7 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
         UPDATE Batch b
         SET b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING,
             b.errorMessage = null,
-            b.updatedAt = CURRENT_TIMESTAMP,
+            b.updatedAt = :now,
             b.version = b.version + 1
         WHERE b.id = :batchId
           AND b.status IN (
@@ -84,7 +84,7 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
             com.apprisal.common.entity.BatchStatus.ERROR
           )
         """)
-    int markQcProcessingIfTriggerable(@Param("batchId") Long batchId);
+    int markQcProcessingIfTriggerable(@Param("batchId") Long batchId, @Param("now") LocalDateTime now);
 
     /**
      * Return a running batch to UPLOADED after an admin stop request.
@@ -95,12 +95,29 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
         UPDATE Batch b
         SET b.status = com.apprisal.common.entity.BatchStatus.UPLOADED,
             b.errorMessage = :message,
-            b.updatedAt = CURRENT_TIMESTAMP,
+            b.updatedAt = :now,
             b.version = b.version + 1
         WHERE b.id = :batchId
           AND b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING
         """)
-    int markUploadedIfQcProcessing(@Param("batchId") Long batchId, @Param("message") String message);
+    int markUploadedIfQcProcessing(@Param("batchId") Long batchId,
+                                   @Param("message") String message,
+                                   @Param("now") LocalDateTime now);
+
+    /**
+     * Lightweight heartbeat for long-running QC work.  It keeps updatedAt as
+     * actual processing activity, so the stuck reconciler does not abandon a
+     * live batch just because Python/OCR takes a while.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.updatedAt = :now,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status = com.apprisal.common.entity.BatchStatus.QC_PROCESSING
+        """)
+    int touchQcProcessing(@Param("batchId") Long batchId, @Param("now") LocalDateTime now);
 
     /**
      * Assign a reviewer without loading and saving the full Batch row.
@@ -113,12 +130,14 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
         UPDATE Batch b
         SET b.assignedReviewer = :reviewer,
             b.status = com.apprisal.common.entity.BatchStatus.REVIEW_PENDING,
-            b.updatedAt = CURRENT_TIMESTAMP,
+            b.updatedAt = :now,
             b.version = b.version + 1
         WHERE b.id = :batchId
           AND b.status <> com.apprisal.common.entity.BatchStatus.QC_PROCESSING
         """)
-    int assignReviewerIfNotProcessing(@Param("batchId") Long batchId, @Param("reviewer") User reviewer);
+    int assignReviewerIfNotProcessing(@Param("batchId") Long batchId,
+                                      @Param("reviewer") User reviewer,
+                                      @Param("now") LocalDateTime now);
 
     /**
      * Find batches stuck in QC_PROCESSING whose updatedAt is older than the given cutoff.

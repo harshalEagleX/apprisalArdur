@@ -16,6 +16,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
+os.environ.setdefault("TZ", "Asia/Kolkata")
+if hasattr(time, "tzset"):
+    time.tzset()
+
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Request, WebSocket, WebSocketDisconnect, Security
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
