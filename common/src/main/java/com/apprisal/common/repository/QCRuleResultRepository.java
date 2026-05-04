@@ -1,7 +1,9 @@
 package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.QCRuleResult;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,6 +16,15 @@ import java.time.LocalDateTime;
  */
 @Repository
 public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT rr FROM QCRuleResult rr
+        JOIN FETCH rr.qcResult qr
+        LEFT JOIN FETCH qr.batchFile bf
+        WHERE rr.id = :id
+        """)
+    java.util.Optional<QCRuleResult> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Find all rule results for a QC result.
@@ -53,6 +64,21 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
      */
     @Query("SELECT rr.status, COUNT(rr) FROM QCRuleResult rr WHERE rr.qcResult.id = :qcResultId GROUP BY rr.status")
     List<Object[]> countByStatusForQcResult(@Param("qcResultId") Long qcResultId);
+
+    /**
+     * Count reviewer progress in one cheap aggregate query.
+     * Returns: totalRules, totalToVerify, pending.
+     */
+    @Query("""
+        SELECT COUNT(rr),
+               SUM(CASE WHEN rr.needsVerification = true THEN 1 ELSE 0 END),
+               SUM(CASE WHEN rr.needsVerification = true
+                         AND (rr.reviewerVerified IS NULL OR rr.overridePending = true)
+                        THEN 1 ELSE 0 END)
+        FROM QCRuleResult rr
+        WHERE rr.qcResult.id = :qcResultId
+        """)
+    List<Object[]> progressCountsForQcResult(@Param("qcResultId") Long qcResultId);
 
     @Query("""
         SELECT rr FROM QCRuleResult rr

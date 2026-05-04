@@ -969,16 +969,15 @@ export const config = {
 
 **Current (keep as-is):**
 - Ollama running locally on port 11434
-- Model: `llama3:8b-instruct-q4_0` for commentary analysis (COM-1..COM-7)
-- Model: `moondream` for checkbox detection (future)
+- Model: `llava:13b` for commentary analysis (COM-1..COM-7)
+- Model: `llava:13b` for checkbox detection (future)
 - Temperature: 0.0 (deterministic)
 - All calls cached in `llm_response_cache` table (SHA-256 of input)
 - Fallback: keyword-based when Ollama unavailable
 
-**No Claude API or OpenAI integration is needed** unless the commentary quality detection
-proves insufficient with llama3:8b. The current tiered approach (keyword → embeddings → LLM)
-is already well-designed. Add Claude/OpenAI only if Ollama quality is demonstrably below
-business requirements — which requires measurement first.
+**No remote LLM integration is needed.** The current tiered approach
+(keyword → embeddings → llava:13b) is already well-designed. Tune the local
+llava:13b prompts only if measured quality falls below business requirements.
 
 ---
 

@@ -5,6 +5,7 @@ import com.apprisal.common.entity.QCResult;
 import com.apprisal.common.entity.QCRuleResult;
 import com.apprisal.common.entity.Role;
 import com.apprisal.common.repository.QCResultRepository;
+import com.apprisal.common.repository.QCRuleResultRepository;
 import com.apprisal.common.security.UserPrincipal;
 import com.apprisal.common.realtime.RealtimeEventPublisher;
 import com.apprisal.qc.service.VerificationService;
@@ -12,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,13 +36,16 @@ public class ReviewerApiController {
 
     private final VerificationService verificationService;
     private final QCResultRepository qcResultRepository;
+    private final QCRuleResultRepository qcRuleResultRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
 
     public ReviewerApiController(VerificationService verificationService,
                                  QCResultRepository qcResultRepository,
+                                 QCRuleResultRepository qcRuleResultRepository,
                                  RealtimeEventPublisher realtimeEventPublisher) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
+        this.qcRuleResultRepository = qcRuleResultRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
@@ -159,7 +164,7 @@ public class ReviewerApiController {
             HttpServletRequest httpRequest) {
         try {
             if (principal == null) {
-                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Authentication required"));
+                return ResponseEntity.status(401).body(errorBody("AUTH_REQUIRED", "Authentication required"));
             }
             if (request.ruleResultId() == null) throw new IllegalArgumentException("ruleResultId is required");
             if (request.decision() == null || request.decision().isEmpty()) throw new IllegalArgumentException("decision is required");
@@ -192,18 +197,31 @@ public class ReviewerApiController {
             response.put("status", normalizeStatus(result.getStatus()));
             response.put("reviewerVerified", result.getReviewerVerified());
             response.put("overridePending", Boolean.TRUE.equals(result.getOverridePending()));
+            response.put("reviewerComment", result.getReviewerComment());
 
             Long qcResultId = result.getQcResult().getId();
             realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/decision", response);
-            realtimeEventPublisher.publish("/topic/reviewer/qc/" + qcResultId + "/progress", progressPayload(qcResultId));
 
             log.info("Decision saved: ruleResultId={}, decision={}", request.ruleResultId(), request.decision());
             return ResponseEntity.ok(response);
         } catch (SecurityException e) {
-            return ResponseEntity.status(403).body(Map.of("success", false, "error", e.getMessage()));
+            return ResponseEntity.status(403).body(errorBody("ACCESS_DENIED", e.getMessage()));
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Concurrent decision save detected for ruleResultId={}: {}", request.ruleResultId(), e.getMessage());
+            return ResponseEntity.status(409).body(errorBody(
+                    "DECISION_ALREADY_UPDATED",
+                    "This review item was updated a moment ago. The latest saved decision is already on the server. Refresh the rule list if the screen still looks outdated."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(errorBody("INVALID_REQUEST", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(errorBody("REVIEW_STATE_CONFLICT", e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to save decision: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+            return ResponseEntity.status(500).body(errorBody(
+                    "DECISION_SAVE_FAILED",
+                    "We couldn't save that review decision right now. Please try again. If it keeps happening, refresh the page to load the latest review state."
+            ));
         }
     }
 
@@ -324,18 +342,29 @@ public class ReviewerApiController {
     }
 
     private Map<String, Object> progressPayload(Long qcResultId) {
-        List<QCRuleResult> allRules = verificationService.getAllRuleResults(qcResultId);
-        List<QCRuleResult> pendingItems = verificationService.getPendingItems(qcResultId);
-        List<QCRuleResult> verificationItems = verificationService.getVerificationItems(qcResultId);
+        java.util.List<Object[]> rows = qcRuleResultRepository.progressCountsForQcResult(qcResultId);
+        Object[] row = rows != null && !rows.isEmpty() && rows.get(0) != null
+                ? rows.get(0)
+                : new Object[] {0L, 0L, 0L};
+        long totalRules = numberAt(row, 0);
+        long totalToVerify = numberAt(row, 1);
+        long pending = numberAt(row, 2);
 
         Map<String, Object> response = new HashMap<>();
         response.put("qcResultId", qcResultId);
-        response.put("totalRules", allRules.size());
-        response.put("totalToVerify", verificationItems.size());
-        response.put("pending", pendingItems.size());
-        response.put("completed", verificationItems.size() - pendingItems.size());
-        response.put("canSubmit", pendingItems.isEmpty() && !verificationItems.isEmpty());
+        response.put("totalRules", totalRules);
+        response.put("totalToVerify", totalToVerify);
+        response.put("pending", pending);
+        response.put("completed", totalToVerify - pending);
+        response.put("canSubmit", pending == 0 && totalToVerify > 0);
         return response;
+    }
+
+    private long numberAt(Object[] row, int index) {
+        if (row == null || row.length <= index || row[index] == null) {
+            return 0L;
+        }
+        return ((Number) row[index]).longValue();
     }
 
     private String normalizeStatus(String status) {
@@ -348,6 +377,14 @@ public class ReviewerApiController {
     private boolean needsReviewerAction(String status) {
         String normalized = normalizeStatus(status);
         return "verify".equals(normalized) || "fail".equals(normalized);
+    }
+
+    private Map<String, Object> errorBody(String code, String message) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("error", code);
+        response.put("message", message);
+        return response;
     }
 
     private String clientIp(HttpServletRequest request) {

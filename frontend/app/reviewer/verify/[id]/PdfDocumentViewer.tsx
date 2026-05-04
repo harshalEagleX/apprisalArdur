@@ -29,14 +29,16 @@ export function PdfDocumentViewer({
   const pdfOptions = useMemo(() => ({ withCredentials: true }), []);
   const [numPages, setNumPages] = useState(0);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const highlightRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const page = pageRefs.current[targetPage];
     if (!page) return;
     window.setTimeout(() => {
-      page.scrollIntoView({ behavior: "smooth", block: "start" });
+      const target = targetBox ? highlightRef.current : page;
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 80);
-  }, [fileUrl, targetPage, numPages]);
+  }, [fileUrl, targetPage, targetBox, highlighting, numPages]);
 
   return (
     <Document
@@ -61,6 +63,7 @@ export function PdfDocumentViewer({
             >
               {highlighting && targetPage === pageNumber && targetBox && (
                 <div
+                  ref={highlightRef}
                   className="pointer-events-none absolute z-20 rounded-[3px] border-2 border-amber-300 bg-amber-300/20 shadow-[0_0_32px_rgba(251,191,36,0.45)] transition-all"
                   style={{
                     left: `${targetBox.x * 100}%`,

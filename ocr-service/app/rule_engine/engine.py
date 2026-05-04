@@ -85,9 +85,6 @@ class RuleEngine:
                 self.logger.log_result(res)
                 continue
 
-            # Attach field metadata for source_page + bbox + confidence lookup
-            field_conf, src_page, field_meta = self._extract_meta(context, rule_id)
-
             try:
                 result = rule_func(context)
 
@@ -95,19 +92,7 @@ class RuleEngine:
                 if cfg:
                     if result.severity == RuleSeverity.STANDARD:
                         result.severity = RuleSeverity(cfg.severity)
-                if result.source_page is None and src_page:
-                    result.source_page = src_page
-                if field_meta and result.bbox_x is None:
-                    result.bbox_x = getattr(field_meta, "bbox_x", None)
-                    result.bbox_y = getattr(field_meta, "bbox_y", None)
-                    result.bbox_w = getattr(field_meta, "bbox_w", None)
-                    result.bbox_h = getattr(field_meta, "bbox_h", None)
-                if result.source_page is None:
-                    inferred_page = self._infer_source_page(context, rule_id, result)
-                    if inferred_page:
-                        result.source_page = inferred_page
-                if result.field_confidence is None and field_conf is not None:
-                    result.field_confidence = field_conf
+                self._attach_location_meta(context, rule_id, result)
                 self._complete_rule_outcome(result)
 
                 results.append(result)
@@ -124,6 +109,8 @@ class RuleEngine:
                     review_required=True,
                     severity=RuleSeverity(cfg.severity) if cfg else RuleSeverity.STANDARD,
                 )
+                res.target_field = self._normalize_field_name(e.field_name)
+                self._attach_location_meta(context, rule_id, res, field_hint=e.field_name)
                 self._complete_rule_outcome(res)
                 results.append(res)
                 self.logger.log_result(res)
@@ -138,6 +125,7 @@ class RuleEngine:
                     action_item="Report this to the development team.",
                     review_required=True,
                 )
+                self._attach_location_meta(context, rule_id, res)
                 self._complete_rule_outcome(res)
                 results.append(res)
                 self.logger.log_result(res)
@@ -184,8 +172,36 @@ class RuleEngine:
         except Exception:
             return fallback
 
+    def _attach_location_meta(
+        self,
+        context: ValidationContext,
+        rule_id: str,
+        result: RuleResult,
+        field_hint: Optional[str] = None,
+    ):
+        """Attach the most specific known field location to a rule result."""
+        field_conf, src_page, field_meta = self._extract_meta(context, rule_id, result, field_hint)
+
+        if result.source_page is None and src_page:
+            result.source_page = src_page
+        if field_meta and result.bbox_x is None:
+            result.bbox_x = getattr(field_meta, "bbox_x", None)
+            result.bbox_y = getattr(field_meta, "bbox_y", None)
+            result.bbox_w = getattr(field_meta, "bbox_w", None)
+            result.bbox_h = getattr(field_meta, "bbox_h", None)
+        if result.source_page is None:
+            inferred_page = self._infer_source_page(context, rule_id, result)
+            if inferred_page:
+                result.source_page = inferred_page
+        if result.field_confidence is None and field_conf is not None:
+            result.field_confidence = field_conf
+
     def _extract_meta(
-        self, context: ValidationContext, rule_id: str
+        self,
+        context: ValidationContext,
+        rule_id: str,
+        result: Optional[RuleResult] = None,
+        field_hint: Optional[str] = None,
     ):
         """
         Look up source_page and field_confidence from Phase 2 field_meta
@@ -221,14 +237,77 @@ class RuleEngine:
             "COM-7": "offered_for_sale_12mo",
         }
 
-        field_name = RULE_FIELD_MAP.get(rule_id)
-        if not field_name or not context.field_meta:
+        target_field = (
+            self._normalize_field_name(field_hint)
+            or self._normalize_field_name(getattr(result, "target_field", None))
+            or self._normalize_field_name((getattr(result, "details", None) or {}).get("target_field") if result else None)
+            or self._normalize_field_name((getattr(result, "details", None) or {}).get("failed_field") if result else None)
+            or self._normalize_field_name((getattr(result, "details", None) or {}).get("field") if result else None)
+        )
+
+        if not context.field_meta:
             return None, None, None
 
-        meta = context.field_meta.get(field_name)
-        if meta and hasattr(meta, "effective_confidence"):
-            return meta.effective_confidence, meta.source_page, meta
+        field_candidates = []
+        if target_field:
+            field_candidates.append(target_field)
+        default_field = RULE_FIELD_MAP.get(rule_id)
+        if default_field and default_field not in field_candidates:
+            field_candidates.append(default_field)
+
+        for field_name in field_candidates:
+            meta = context.field_meta.get(field_name)
+            if meta and hasattr(meta, "effective_confidence"):
+                return meta.effective_confidence, meta.source_page, meta
+
         return None, None, None
+
+    def _normalize_field_name(self, value: Optional[str]) -> Optional[str]:
+        """Translate rule-language field labels into Phase 2 field_meta keys."""
+        if not value:
+            return None
+        raw = str(value).strip()
+        if not raw:
+            return None
+
+        key = re.sub(r"\([^)]*\)", "", raw).strip().lower()
+        key = re.sub(r"[^a-z0-9]+", "_", key).strip("_")
+        aliases = {
+            "property_address": "property_address",
+            "property_address_report": "property_address",
+            "address": "property_address",
+            "street": "property_address",
+            "city": "city",
+            "state": "state",
+            "zip": "zip_code",
+            "zip_code": "zip_code",
+            "county": "county",
+            "client_engagement_letter": None,
+            "property_address_engagement_letter": None,
+            "borrower": "borrower_name",
+            "borrower_name": "borrower_name",
+            "borrower_name_report": "borrower_name",
+            "owner_of_public_record": "owner_of_public_record",
+            "legal_description": "legal_description",
+            "assessors_parcel_number": "assessors_parcel_number",
+            "apn": "assessors_parcel_number",
+            "tax_year": "tax_year",
+            "real_estate_taxes": "real_estate_taxes",
+            "special_assessments": "special_assessments",
+            "hoa_dues": "hoa_dues",
+            "pud": "is_pud_checked",
+            "pud_checkbox": "is_pud_checked",
+            "lender_name": "lender_name",
+            "lender_name_report": "lender_name",
+            "lender_address": "lender_address",
+            "property_rights": "property_rights",
+            "property_rights_appraised": "property_rights",
+            "prior_sale_offered_status": "offered_for_sale_12mo",
+            "prior_sale_offered_12mo": "offered_for_sale_12mo",
+            "data_sources": "data_source",
+            "data_source": "data_source",
+        }
+        return aliases.get(key, key)
 
     def _is_applicable(self, context: ValidationContext, applicable_loan_types: str) -> bool:
         tokens = {

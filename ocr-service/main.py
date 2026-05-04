@@ -398,7 +398,12 @@ async def process_qc(
                     shutil.copyfileobj(engagement_letter.file, buffer)
                 if engagement_letter.filename.lower().endswith(".pdf"):
                     if is_valid_pdf(eng_path):
-                        engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
+                        engagement_text = await run_in_threadpool(
+                            extract_text_from_supporting_pdf,
+                            eng_path,
+                            "Engagement letter OCR",
+                            engagement_letter.filename,
+                        )
                 else:
                     with open(eng_path, "rb") as f:
                         engagement_text = f.read().decode('utf-8', errors='ignore')
@@ -411,7 +416,12 @@ async def process_qc(
                     shutil.copyfileobj(contract_file.file, buffer)
                 if contract_file.filename.lower().endswith(".pdf"):
                     if is_valid_pdf(con_path):
-                        contract_text = await run_in_threadpool(extract_text_from_pdf, con_path)
+                        contract_text = await run_in_threadpool(
+                            extract_text_from_supporting_pdf,
+                            con_path,
+                            "Contract OCR",
+                            contract_file.filename,
+                        )
                 else:
                     with open(con_path, "rb") as f:
                         contract_text = f.read().decode('utf-8', errors='ignore')
@@ -419,7 +429,7 @@ async def process_qc(
             # Run QC processor in threadpool
             processor = get_qc_processor()
             def _run_processor():
-                from app.services.ollama_service import use_model_selection
+                from app.services.ollama_service import ollama_request_guard, use_model_selection
 
                 executable_text_model = text_model if model_provider.lower() == "ollama" else None
                 if model_provider.lower() != "ollama":
@@ -429,17 +439,18 @@ async def process_qc(
                         extra={"request_id": request_id}
                     )
 
-                with use_model_selection(text_model=executable_text_model, vision_model=vision_model):
-                    return processor.process_document(
-                        pdf_path=pdf_path,
-                        engagement_letter_text=engagement_text,
-                        contract_text=contract_text,
-                        file_hash=file_hash,
-                        original_filename=file.filename,
-                        model_provider=model_provider,
-                        model_name=text_model,
-                        vision_model=vision_model,
-                    )
+                with ollama_request_guard():
+                    with use_model_selection(text_model=executable_text_model, vision_model=vision_model):
+                        return processor.process_document(
+                            pdf_path=pdf_path,
+                            engagement_letter_text=engagement_text,
+                            contract_text=contract_text,
+                            file_hash=file_hash,
+                            original_filename=file.filename,
+                            model_provider=model_provider,
+                            model_name=text_model,
+                            vision_model=vision_model,
+                        )
 
             results = await run_in_threadpool(_run_processor)
 
@@ -662,6 +673,48 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         text = "\n\n".join([page.get_text() for page in doc])
         doc.close()
         return text
+
+
+def extract_text_from_supporting_pdf(pdf_path: str, document_label: str, filename: str) -> str:
+    """
+    Extract text for engagement/contract PDFs with explicit logging.
+
+    These files are used as comparison inputs, so we log whether OCR/native
+    extraction produced enough text to make downstream rule failures trustworthy.
+    """
+    pipeline = OCRPipeline(
+        use_tesseract=True,
+        force_image_ocr=False,
+        use_preprocessing=True,
+    )
+    try:
+        result = pipeline.extract_all_pages(pdf_path)
+        text = pipeline.get_full_text(result.page_index)
+        total_chars = len(text.strip())
+        logger.info(
+            "%s extraction completed",
+            document_label,
+            extra={
+                "supporting_filename": filename,
+                "supporting_pages": result.total_pages,
+                "supporting_characters": total_chars,
+                "supporting_methods": sorted({page.method.value for page in result.page_details}),
+            },
+        )
+        if total_chars < 50:
+            logger.warning(
+                "%s extraction produced very little text; downstream comparisons may be unreliable",
+                document_label,
+                extra={
+                    "supporting_filename": filename,
+                    "supporting_pages": result.total_pages,
+                    "supporting_characters": total_chars,
+                },
+            )
+        return text
+    except Exception as e:
+        logger.error("%s extraction failed: %s", document_label, e)
+        return extract_text_from_pdf(pdf_path)
 
 
 def extract_fields(text: str) -> Dict[str, Any]:

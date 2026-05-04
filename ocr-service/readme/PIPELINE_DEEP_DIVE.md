@@ -430,7 +430,7 @@ check_pattern = r"(?:\[x\]|\[X\]|X|><|\]X|X\[|x)"
 
 **Where is the LLM called in the pipeline?**
 
-The LLM (llama3:8b-instruct-q4_0 via Ollama) is called in the **NLP check layer** only.  
+The LLM (llava:13b via Ollama) is called in the **NLP check layer** only.  
 It is **NOT** called during field extraction, OCR, or rule evaluation.
 
 ```
@@ -458,8 +458,8 @@ Short text snippets — never the full document:
 
 Three-tier fallback (`nlp_checks.py`):
 ```
-Tier 1: Ollama/llama3  →  if server down or model not loaded...
-Tier 2: sentence-transformers (all-MiniLM-L6-v2)  →  if not installed...
+Tier 1: Ollama/llava:13b  →  if server down or model not loaded...
+Tier 2: rule-based checks  →  if local llava:13b is unavailable...
 Tier 3: Rule-based keyword matching  →  always available
 ```
 
@@ -758,7 +758,7 @@ It does not need document-level context for this task.
 - Ask the LLM to extract fields from raw OCR output
 - Chain LLM calls with document context
 
-The reason: a 27-page appraisal is ~15,000–25,000 tokens. Even llama3:8b handles that poorly and inconsistently. The regex/pattern approach is more reliable and auditable for structured field extraction.
+The reason: a 27-page appraisal is ~15,000–25,000 tokens. Even llava:13b handles that poorly and inconsistently. The regex/pattern approach is more reliable and auditable for structured field extraction.
 
 ---
 

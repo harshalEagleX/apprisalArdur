@@ -49,6 +49,6 @@ pandas>=2.0.0
 
 # LLM Backend (install separately — NOT via pip):
 # 1. Install ollama:  https://ollama.com/download  (macOS: brew install ollama)
-# 2. Pull model:      ollama pull llama3:8b-instruct-q4_0
+# 2. Pull model:      ollama pull llava:13b
 # 3. Start server:    ollama serve
 # The service auto-detects ollama at http://localhost:11434

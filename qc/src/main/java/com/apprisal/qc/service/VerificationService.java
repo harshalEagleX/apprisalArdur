@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Locale;
 import org.springframework.lang.NonNull;
 
 /**
@@ -167,11 +168,14 @@ public class VerificationService {
     public QCRuleResult saveDecision(@NonNull Long ruleResultId, @NonNull String decision, String comment,
             @NonNull String sessionToken, Long decisionLatencyMs, Boolean acknowledged, @NonNull User reviewer,
             String ipAddress, String userAgent) {
-        QCRuleResult ruleResult = qcRuleResultRepository.findById(ruleResultId)
+        QCRuleResult ruleResult = qcRuleResultRepository.findByIdForUpdate(ruleResultId)
                 .orElseThrow(() -> new RuntimeException("Rule result not found: " + ruleResultId));
         QCResult qcResult = ruleResult.getQcResult();
         assertDocumentCurrent(qcResult);
         assertSessionOwnsQcResult(qcResult, sessionToken);
+        if (isDuplicateSubmission(ruleResult, decision, comment, sessionToken)) {
+            return ruleResult;
+        }
         validateFreshDecision(ruleResult, sessionToken);
         validateEngagement(ruleResult, decisionLatencyMs, acknowledged);
 
@@ -197,10 +201,10 @@ public class VerificationService {
         ruleResult.setDecisionLatencyMs(decisionLatencyMs);
         ruleResult.setAcknowledgedReferences(Boolean.TRUE.equals(acknowledged));
 
-        qcRuleResultRepository.save(ruleResult);
+        qcRuleResultRepository.saveAndFlush(ruleResult);
 
         // Recalculate parent QCResult counters
-        recalculateCounters(Objects.requireNonNull(ruleResult.getQcResult().getId()));
+        recalculateCounters(Objects.requireNonNull(qcResult.getId()));
         auditLogService.log(reviewer, "REVIEW_DECISION_SAVED", "QCRuleResult", ruleResultId,
                 "ruleId=" + ruleResult.getRuleId()
                         + ", decision=" + decision
@@ -383,28 +387,25 @@ public class VerificationService {
         QCResult qcResult = qcResultRepository.findById(qcResultId)
                 .orElseThrow(() -> new RuntimeException("QC Result not found: " + qcResultId));
 
-        List<QCRuleResult> allRules = qcRuleResultRepository.findByQcResultId(qcResultId);
-
         int passCount = 0;
         int failCount = 0;
         int verifyCount = 0;
         int manualPassCount = 0;
 
-        for (QCRuleResult rule : allRules) {
-            String status = rule.getStatus() == null ? "" : rule.getStatus().trim().toLowerCase();
-
+        for (Object[] row : qcRuleResultRepository.countByStatusForQcResult(qcResultId)) {
+            String status = row[0] != null ? row[0].toString().trim().toLowerCase(Locale.ROOT) : "";
+            int count = row[1] instanceof Number ? ((Number) row[1]).intValue() : 0;
             if ("pass".equals(status)) {
-                passCount++;
+                passCount = count;
             } else if ("fail".equals(status)) {
-                failCount++;
+                failCount = count;
             } else if ("manual_pass".equals(status)) {
-                manualPassCount++;
+                manualPassCount = count;
             }
-
-            // Verify count: reviewRequired=true AND not yet decided
-            if (Boolean.TRUE.equals(rule.getReviewRequired()) && rule.getReviewerVerified() == null) {
-                verifyCount++;
-            }
+        }
+        Object[] progressCounts = firstProgressRow(qcResultId);
+        if (progressCounts != null && progressCounts.length >= 3 && progressCounts[2] instanceof Number pending) {
+            verifyCount = pending.intValue();
         }
 
         qcResult.setPassedCount(passCount);
@@ -461,7 +462,7 @@ public class VerificationService {
                 && ruleResult.getReviewSessionToken() != null
                 && !sessionToken.equals(ruleResult.getReviewSessionToken())
                 && !Boolean.TRUE.equals(ruleResult.getOverridePending())) {
-            throw new IllegalStateException("This item was already decided in another review session.");
+            throw new IllegalStateException("This review item was already decided in another session. Refresh the page to see the latest saved decision.");
         }
     }
 
@@ -515,6 +516,43 @@ public class VerificationService {
     private boolean isHighSeverity(QCRuleResult ruleResult) {
         String severity = ruleResult.getSeverity() == null ? "" : ruleResult.getSeverity().trim().toUpperCase();
         return "BLOCKING".equals(severity);
+    }
+
+    private Object[] firstProgressRow(Long qcResultId) {
+        List<Object[]> rows = qcRuleResultRepository.progressCountsForQcResult(qcResultId);
+        if (rows == null || rows.isEmpty() || rows.get(0) == null) {
+            return new Object[] {0L, 0L, 0L};
+        }
+        return rows.get(0);
+    }
+
+    private boolean isDuplicateSubmission(QCRuleResult ruleResult, String decision, String comment, String sessionToken) {
+        if (!Objects.equals(ruleResult.getReviewSessionToken(), sessionToken)) {
+            return false;
+        }
+
+        String normalizedDecision = decision == null ? "" : decision.trim().toUpperCase(Locale.ROOT);
+        String normalizedComment = comment == null ? "" : comment.trim();
+        String currentStatus = normalizedStatus(ruleResult.getStatus());
+        String currentComment = ruleResult.getReviewerComment() == null ? "" : ruleResult.getReviewerComment().trim();
+
+        if ("PASS".equals(normalizedDecision)
+                && Boolean.TRUE.equals(ruleResult.getOverridePending())
+                && normalizedComment.equals(currentComment)) {
+            return true;
+        }
+
+        if ("PASS".equals(normalizedDecision)
+                && Boolean.TRUE.equals(ruleResult.getReviewerVerified())
+                && "manual_pass".equals(currentStatus)
+                && normalizedComment.equals(currentComment)) {
+            return true;
+        }
+
+        return "FAIL".equals(normalizedDecision)
+                && Boolean.FALSE.equals(ruleResult.getReviewerVerified())
+                && "fail".equals(currentStatus)
+                && normalizedComment.equals(currentComment);
     }
 
     private String normalizedStatus(String status) {

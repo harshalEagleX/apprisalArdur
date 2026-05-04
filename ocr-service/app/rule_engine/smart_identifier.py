@@ -48,6 +48,7 @@ class RuleResult(BaseModel):
     bbox_y: Optional[float] = None
     bbox_w: Optional[float] = None
     bbox_h: Optional[float] = None
+    target_field: Optional[str] = None         # Extracted field whose location should be shown to the reviewer
     field_confidence: Optional[float] = None   # Confidence of extracted value(s) used
     auto_correctable: bool = False             # True if system can fix without human
     rule_version: str = "1.0"

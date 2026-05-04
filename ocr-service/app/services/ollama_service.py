@@ -1,10 +1,9 @@
 """
 Ollama Service — local LLM inference for appraisal QC commentary analysis.
 
-Models: llama3.1:8b for text, llava:7b for vision by default.
+Models: llava:7b for both text and vision by default.
 
 Setup (one-time):
-    ollama pull llama3.1:8b
     ollama pull llava:7b
 
 All calls are synchronous (this service runs inside a threadpool in FastAPI).
@@ -28,17 +27,25 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.1:8b")
+OLLAMA_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
 OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "45.0"))  # seconds
-OLLAMA_TEXT_NUM_CTX = 2048
-OLLAMA_VISION_NUM_CTX = 2048
-OLLAMA_TEXT_KEEP_ALIVE = "0s"
-OLLAMA_VISION_KEEP_ALIVE = "30s"
+OLLAMA_TEXT_NUM_CTX = int(os.getenv("OLLAMA_TEXT_NUM_CTX", "1024"))
+OLLAMA_VISION_NUM_CTX = int(os.getenv("OLLAMA_VISION_NUM_CTX", "1024"))
+OLLAMA_TEXT_KEEP_ALIVE = os.getenv("OLLAMA_TEXT_KEEP_ALIVE", "10m")
+OLLAMA_VISION_KEEP_ALIVE = os.getenv("OLLAMA_VISION_KEEP_ALIVE", "10m")
 OLLAMA_MAX_CONCURRENCY = int(os.getenv("OLLAMA_MAX_CONCURRENCY", "1"))
 _TEXT_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_text_model", default=None)
 _VISION_MODEL_OVERRIDE: ContextVar[Optional[str]] = ContextVar("ollama_vision_model", default=None)
+_REQUEST_OLLAMA_DISABLED: ContextVar[bool] = ContextVar("ollama_request_disabled", default=False)
 _OLLAMA_SEMAPHORES: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = weakref.WeakKeyDictionary()
+
+try:
+    import cv2
+    import numpy as np
+    OPENCV_AVAILABLE = True
+except Exception:
+    OPENCV_AVAILABLE = False
 
 
 def _ollama_semaphore() -> asyncio.Semaphore:
@@ -69,6 +76,35 @@ def use_model_selection(text_model: Optional[str] = None, vision_model: Optional
         _VISION_MODEL_OVERRIDE.reset(vision_token)
 
 
+@contextmanager
+def ollama_request_guard():
+    """
+    Bound the blast radius of slow/downstream Ollama failures to a single QC request.
+
+    Once a request experiences a hard Ollama timeout we short-circuit later LLM calls
+    in the same request and let deterministic fallbacks finish the pipeline quickly.
+    """
+    disable_token = _REQUEST_OLLAMA_DISABLED.set(False)
+    try:
+        yield
+    finally:
+        _REQUEST_OLLAMA_DISABLED.reset(disable_token)
+
+
+def _ollama_disabled_for_request() -> bool:
+    return _REQUEST_OLLAMA_DISABLED.get()
+
+
+def _disable_ollama_for_request(reason: str, *, model: str) -> None:
+    if not _REQUEST_OLLAMA_DISABLED.get():
+        logger.warning(
+            "Disabling further Ollama calls for this QC request after %s (model=%s); deterministic fallbacks will continue.",
+            reason,
+            model,
+        )
+    _REQUEST_OLLAMA_DISABLED.set(True)
+
+
 # ---------------------------------------------------------------------------
 # Availability check
 # ---------------------------------------------------------------------------
@@ -95,6 +131,8 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
     POST to /api/generate (non-streaming).
     Returns the model response string, or None on failure.
     """
+    if _ollama_disabled_for_request():
+        return None
     payload = {
         "model": get_active_text_model(),
         "prompt": prompt,
@@ -118,6 +156,7 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
         return r.json().get("response", "").strip()
     except httpx.TimeoutException:
         logger.info("Ollama request timed out (model=%s)", get_active_text_model())
+        _disable_ollama_for_request("text timeout", model=get_active_text_model())
         return None
     except httpx.HTTPStatusError as e:
         logger.info("Ollama HTTP error: %s", e)
@@ -127,31 +166,119 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
         return None
 
 
+def _detect_checkbox_state_opencv(crop_image) -> Optional[bool]:
+    """
+    Cheap local checkbox detector for small form crops.
+
+    Returns:
+        True when a checkbox appears confidently marked
+        False when a checkbox appears confidently empty
+        None when no confident checkbox box is found
+    """
+    if not OPENCV_AVAILABLE:
+        return None
+
+    try:
+        if hasattr(crop_image, "convert"):
+            gray = np.array(crop_image.convert("L"))
+        else:
+            gray = crop_image
+
+        if gray is None or gray.size == 0:
+            return None
+
+        # Focus on the left side where form checkboxes usually sit.
+        width = gray.shape[1]
+        roi = gray[:, :max(40, int(width * 0.45))]
+        if roi.size == 0:
+            return None
+
+        blurred = cv2.GaussianBlur(roi, (3, 3), 0)
+        thresh = cv2.adaptiveThreshold(
+            blurred,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV,
+            31,
+            7,
+        )
+
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        best_candidate: Optional[tuple[float, bool]] = None
+
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            area = w * h
+            if area < 36 or area > 2500:
+                continue
+            aspect = w / float(h or 1)
+            if not 0.65 <= aspect <= 1.35:
+                continue
+
+            contour_area = cv2.contourArea(contour)
+            if contour_area < area * 0.35:
+                continue
+
+            pad = 2
+            x1 = max(0, x + pad)
+            y1 = max(0, y + pad)
+            x2 = min(thresh.shape[1], x + w - pad)
+            y2 = min(thresh.shape[0], y + h - pad)
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            inner = thresh[y1:y2, x1:x2]
+            fill_ratio = float(np.count_nonzero(inner)) / float(inner.size or 1)
+
+            # Empty checkbox tends to keep only border pixels.
+            if fill_ratio <= 0.10:
+                score = contour_area
+                candidate = (score, False)
+            # Marked checkbox has noticeably denser interior strokes.
+            elif fill_ratio >= 0.22:
+                score = contour_area + fill_ratio
+                candidate = (score, True)
+            else:
+                continue
+
+            if best_candidate is None or candidate[0] > best_candidate[0]:
+                best_candidate = candidate
+
+        if best_candidate is None:
+            return None
+        return best_candidate[1]
+
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Task 1: Canned commentary detection (N-6, N-7 rules)
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Checkbox detection via LLaVA vision (STEP 2 fallback)
+# Checkbox detection via OpenCV first, then the configured vision model.
 # Only called when OCR text-pattern detection returned None (uncertain)
 # ---------------------------------------------------------------------------
 
 def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
     """
-    Use LLaVA to detect checkbox state on a page image.
+    Use OpenCV first, then the configured vision model, to detect checkbox state.
 
     Strategy:
       1. Use pytesseract.image_to_data to locate the label text on the page
       2. Crop a region around/left-of the label (where checkboxes appear in UAD forms)
-      3. Send the crop to LLaVA: "Is the checkbox checked? YES or NO only."
-      4. Cache by (page_hash + label) to avoid repeat calls
+      3. Run a fast OpenCV checkbox detector on the crop
+      4. If still uncertain, send the crop to Ollama vision: "Is the checkbox checked? YES or NO only."
 
     Returns:
-        True  = LLaVA says checkbox is checked
-        False = LLaVA says checkbox is NOT checked
-        None  = LLaVA unavailable or uncertain
+        True  = local detector/model says checkbox is checked
+        False = local detector/model says checkbox is NOT checked
+        None  = no confident checkbox state found
     """
     try:
+        if _ollama_disabled_for_request():
+            return None
         import base64
         import io
         import numpy as np
@@ -188,6 +315,10 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
             y2 = min(page_gray.height, label_y + pad * 2)
             strip = page_gray.crop((x1, y1, x2, y2))
 
+        opencv_result = _detect_checkbox_state_opencv(strip)
+        if opencv_result is not None:
+            return opencv_result
+
         # Encode as base64 PNG for Ollama vision API
         buf = io.BytesIO()
         strip.save(buf, format="PNG")
@@ -212,7 +343,7 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
             },
         }
 
-        r = httpx.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=15.0)
+        r = httpx.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=min(OLLAMA_TIMEOUT, 15.0))
         r.raise_for_status()
         response = r.json().get("response", "").strip().upper()
 
@@ -222,13 +353,17 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
             return False
         return None
 
+    except httpx.TimeoutException:
+        logger.info("Ollama checkbox vision request timed out (model=%s)", get_active_vision_model())
+        _disable_ollama_for_request("vision timeout", model=get_active_vision_model())
+        return None
     except Exception as e:
-        logger.debug("LLaVA checkbox detection failed for '%s': %s", label_text, e)
+        logger.debug("llava:13b checkbox detection failed for '%s': %s", label_text, e)
         return None
 
 
 def is_vision_model_available() -> bool:
-    """Check if the single configured LLaVA model is loaded in Ollama."""
+    """Check if the single configured llava:13b model is loaded in Ollama."""
     try:
         r = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
         models = [m.get("name", "") for m in r.json().get("models", [])]
@@ -249,6 +384,8 @@ def is_llava_available() -> bool:
 
 
 async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[str]:
+    if _ollama_disabled_for_request():
+        return None
     payload = {
         "model": get_active_text_model(),
         "prompt": prompt,
@@ -270,6 +407,7 @@ async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -
                 return response.json().get("response", "").strip()
     except httpx.TimeoutException:
         logger.info("Async Ollama request timed out (model=%s)", get_active_text_model())
+        _disable_ollama_for_request("async text timeout", model=get_active_text_model())
         return None
     except Exception as exc:
         logger.info("Async Ollama call failed: %s: %s", exc.__class__.__name__, exc)
@@ -283,6 +421,8 @@ async def gather_text_prompts(prompts: list[tuple[str, str, int]]) -> list[Optio
 
 
 async def analyze_photo_llava(page_image, prompt: str) -> Optional[str]:
+    if _ollama_disabled_for_request():
+        return None
     try:
         from PIL import Image as PILImage
         if not isinstance(page_image, PILImage.Image):
@@ -303,8 +443,12 @@ async def analyze_photo_llava(page_image, prompt: str) -> Optional[str]:
                 response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
                 response.raise_for_status()
                 return response.json().get("response", "").strip()
+    except httpx.TimeoutException:
+        logger.info("Ollama photo analysis timed out (model=%s)", get_active_vision_model())
+        _disable_ollama_for_request("photo vision timeout", model=get_active_vision_model())
+        return None
     except Exception as exc:
-        logger.debug("LLaVA photo analysis failed: %s", exc)
+        logger.debug("llava:13b photo analysis failed: %s", exc)
         return None
 
 
@@ -320,7 +464,7 @@ CANNED_SYSTEM = (
 
 def classify_commentary(text: str) -> Optional[bool]:
     """
-    Classify commentary as canned or specific using the configured LLaVA model.
+    Classify commentary as canned or specific using the configured llava:13b model.
 
     Returns:
         True  = canned (generic)

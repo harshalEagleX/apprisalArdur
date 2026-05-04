@@ -41,7 +41,7 @@ from app.services.cache_service import (
     DB_AVAILABLE,
 )
 
-DEFAULT_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.1:8b")
+DEFAULT_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
 DEFAULT_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
 from app.services.phase2_extraction import phase2_engine
 
@@ -72,6 +72,7 @@ class QCResultItem(BaseModel):
     bbox_y: Optional[float] = None
     bbox_w: Optional[float] = None
     bbox_h: Optional[float] = None
+    target_field: Optional[str] = None
     field_confidence: Optional[float] = None
     auto_correctable: bool = False
     rule_version: str = "1.0"
@@ -183,9 +184,28 @@ class SmartQCProcessor:
                     extraction_result.page_details.append(pt)
                     if getattr(pt, "words", None):
                         extraction_result.word_index[pt.page_number] = pt.words
-                # Older cache rows may not include word geometry.
-                if not extraction_result.word_index:
-                    extraction_result.word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
+                # Older or partially upgraded cache rows may not include word
+                # geometry for every page. Rebuild missing pages so reviewer
+                # highlights prefer real PDF/OCR coordinates over text-position
+                # approximation.
+                missing_word_pages = [
+                    page_num for page_num in range(1, total_pages + 1)
+                    if not extraction_result.word_index.get(page_num)
+                ]
+                if missing_word_pages:
+                    rebuilt_word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
+                    for page_num in missing_word_pages:
+                        words = rebuilt_word_index.get(page_num)
+                        if words:
+                            extraction_result.word_index[page_num] = words
+                    for pt in extraction_result.page_details:
+                        if not getattr(pt, "words", None):
+                            pt.words = extraction_result.word_index.get(pt.page_number, [])
+                    logger.info(
+                        "Rebuilt word geometry for %d cached page(s): %s",
+                        len(missing_word_pages),
+                        ",".join(str(p) for p in missing_word_pages[:20]),
+                    )
 
         # ── Step 2: OCR Extraction (if not cached) ──────────────────────────
         if not cache_hit:
@@ -212,10 +232,11 @@ class SmartQCProcessor:
                 processing_notices=["Failed to extract any text from PDF"]
             )
 
+        # Raw OCR/native extraction output remains the default source of truth.
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
 
         # Step 2: Phase 2 Multi-Layer Extraction
-        # Source A: Phase 2 engine — pass page_images for LLaVA checkbox fallback
+        # Source A: Phase 2 engine — pass page_images for llava:13b checkbox fallback
         s_extract, field_meta = phase2_engine.extract_subject(
             full_text,
             extraction_result.page_index,
@@ -278,7 +299,7 @@ class SmartQCProcessor:
                 from app.services.vision_pipeline import analyze_pages_sync
                 vision_results = analyze_pages_sync(extraction_result.page_images)
             except Exception as e:
-                logger.info("LLaVA vision pipeline not run: %s", e)
+                logger.info("llava:13b vision pipeline not run: %s", e)
 
         # Step 6: Create ValidationContext (pass field_meta for source_page + confidence)
         ctx = ValidationContext(
@@ -588,6 +609,7 @@ class SmartQCProcessor:
                 bbox_y=getattr(result, "bbox_y", None),
                 bbox_w=getattr(result, "bbox_w", None),
                 bbox_h=getattr(result, "bbox_h", None),
+                target_field=getattr(result, "target_field", None),
                 field_confidence=result.field_confidence,
                 auto_correctable=result.auto_correctable,
                 rule_version=result.rule_version,

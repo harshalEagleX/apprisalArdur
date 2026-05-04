@@ -1,8 +1,7 @@
-"""Optional LLaVA scene-understanding pipeline.
+"""Optional llava:13b scene-understanding pipeline.
 
-Moondream remains the checkbox fallback. This module is for condition,
-occupancy, obsolescence, and room-type evidence when a LLaVA model is selected
-through Ollama.
+Uses the configured Ollama llava:13b model for condition, occupancy, obsolescence,
+and room-type evidence.
 """
 
 from __future__ import annotations

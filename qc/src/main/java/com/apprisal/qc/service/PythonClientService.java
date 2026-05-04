@@ -103,9 +103,10 @@ public class PythonClientService {
 
         } catch (org.springframework.web.client.ResourceAccessException e) {
             // Timeout or connection refused
-            log.error("Python QC service timeout or connection refused: {}", e.getMessage());
-            throw new RuntimeException("Python QC service timeout (limit: " + config.getTimeoutSeconds() + "s). " +
-                    "Check that ocr-service is running and responsive.", e);
+            log.error("Python QC service timeout or connection refused for model {}: {}", safeModelConfig.label(), e.getMessage());
+            throw new RuntimeException("Python QC service timed out after " + config.getTimeoutSeconds() + "s " +
+                    "while processing model " + safeModelConfig.label() + ". " +
+                    "The ocr-service was reachable, but downstream OCR/LLM work may have stalled or timed out.", e);
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             // 4xx from Python — e.g. 422 invalid PDF, 400 bad request
             log.error("Python QC service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());

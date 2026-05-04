@@ -7,6 +7,7 @@ to existing deterministic logic.
 from __future__ import annotations
 
 import logging
+import os
 import pickle
 from functools import lru_cache
 from pathlib import Path
@@ -16,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = ROOT / "training" / "models"
+
+
+def _env_flag(name: str, default: str = "false") -> bool:
+    value = os.getenv(name, default)
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+OCR_MODEL_CORRECTION_ENABLED = _env_flag("OCR_MODEL_CORRECTION_ENABLED", "false")
 
 
 @lru_cache(maxsize=1)
@@ -34,6 +43,8 @@ def _load_model(filename: str) -> Optional[dict]:
 
 
 def correct_ocr_value(value: str) -> tuple[str, bool]:
+    if not OCR_MODEL_CORRECTION_ENABLED:
+        return value, False
     model = _load_model("ocr_correction_model.pkl")
     if not model or not value:
         return value, False

@@ -12,6 +12,7 @@ Later (Phase 6), operator feedback replaces/extends this dictionary automaticall
 """
 
 import re
+import os
 from typing import Tuple
 
 # ── Label corrections ─────────────────────────────────────────────────────────
@@ -123,6 +124,18 @@ _NUMERIC_O_PATTERN = re.compile(r'(?<=\d)O(?=\d)|(?<=\$)O(?=\d)')
 _NUMERIC_L_PATTERN = re.compile(r'(?<=\$)l(?=\d)|(?<=\d)l(?=\d)')
 
 
+def _env_flag(name: str, default: str = "false") -> bool:
+    value = os.getenv(name, default)
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Raw OCR must remain the default source of truth for matching, audit, and review.
+OCR_CORRECTION_ENABLED = _env_flag("OCR_CORRECTION_ENABLED", "false")
+OCR_RULE_CORRECTION_ENABLED = _env_flag("OCR_RULE_CORRECTION_ENABLED", "false")
+OCR_MODEL_CORRECTION_ENABLED = _env_flag("OCR_MODEL_CORRECTION_ENABLED", "false")
+OCR_LEARNED_CORRECTION_ENABLED = _env_flag("OCR_LEARNED_CORRECTION_ENABLED", "false")
+
+
 def apply_ocr_correction(text: str) -> Tuple[str, bool]:
     """
     Apply the correction dictionary and regex-based numeric fixes to `text`.
@@ -135,41 +148,45 @@ def apply_ocr_correction(text: str) -> Tuple[str, bool]:
     """
     if not text:
         return text, False
+    if not OCR_CORRECTION_ENABLED:
+        return text, False
 
     corrected = text
     changed = False
 
-    # Label corrections (case-sensitive, shortest-first to avoid partial matches)
-    for wrong, right in LABEL_CORRECTIONS.items():
-        if wrong in corrected:
-            corrected = corrected.replace(wrong, right)
+    if OCR_RULE_CORRECTION_ENABLED:
+        # Label corrections (case-sensitive, shortest-first to avoid partial matches)
+        for wrong, right in LABEL_CORRECTIONS.items():
+            if wrong in corrected:
+                corrected = corrected.replace(wrong, right)
+                changed = True
+
+        # State abbreviation fixes
+        for wrong, right in STATE_FIXES.items():
+            if wrong in corrected:
+                corrected = corrected.replace(wrong, right)
+                changed = True
+
+        # Numeric O/l fixes
+        fixed = _NUMERIC_O_PATTERN.sub("0", corrected)
+        if fixed != corrected:
+            corrected = fixed
             changed = True
 
-    # State abbreviation fixes
-    for wrong, right in STATE_FIXES.items():
-        if wrong in corrected:
-            corrected = corrected.replace(wrong, right)
+        fixed = _NUMERIC_L_PATTERN.sub("1", corrected)
+        if fixed != corrected:
+            corrected = fixed
             changed = True
 
-    # Numeric O/l fixes
-    fixed = _NUMERIC_O_PATTERN.sub("0", corrected)
-    if fixed != corrected:
-        corrected = fixed
-        changed = True
-
-    fixed = _NUMERIC_L_PATTERN.sub("1", corrected)
-    if fixed != corrected:
-        corrected = fixed
-        changed = True
-
-    try:
-        from app.services.model_inference import correct_ocr_value
-        model_value, model_changed = correct_ocr_value(corrected)
-        if model_changed and model_value and 0.5 <= len(model_value) / max(len(corrected), 1) <= 1.8:
-            corrected = model_value
-            changed = True
-    except Exception:
-        pass
+    if OCR_MODEL_CORRECTION_ENABLED:
+        try:
+            from app.services.model_inference import correct_ocr_value
+            model_value, model_changed = correct_ocr_value(corrected)
+            if model_changed and model_value and 0.5 <= len(model_value) / max(len(corrected), 1) <= 1.8:
+                corrected = model_value
+                changed = True
+        except Exception:
+            pass
 
     return corrected, changed
 
@@ -185,16 +202,22 @@ def apply_ocr_correction_to_full_text(text: str) -> Tuple[str, int]:
     Returns:
         (corrected_text, correction_count)
     """
+    if not OCR_CORRECTION_ENABLED:
+        return text, 0
+
     corrected, _ = apply_ocr_correction(text)
-    static_count = sum(1 for wrong in LABEL_CORRECTIONS if wrong in text)
+    static_count = 0
+    if OCR_RULE_CORRECTION_ENABLED:
+        static_count = sum(1 for wrong in LABEL_CORRECTIONS if wrong in text)
 
     # Layer 2: apply operator-learned corrections from DB (same-day, no retraining)
-    learned = _get_learned_corrections_cached()
     learned_count = 0
-    for wrong, right in learned.items():
-        if wrong in corrected:
-            corrected = corrected.replace(wrong, right)
-            learned_count += 1
+    if OCR_LEARNED_CORRECTION_ENABLED:
+        learned = _get_learned_corrections_cached()
+        for wrong, right in learned.items():
+            if wrong in corrected:
+                corrected = corrected.replace(wrong, right)
+                learned_count += 1
 
     return corrected, static_count + learned_count
 

@@ -1,6 +1,6 @@
 # CLAUDE.md — Appraisal QC Platform
 
-> This file is read by Claude Code on every session. It tells Claude exactly how this project works,
+> This file is read by AI coding assistant on every session. It tells AI assistant exactly how this project works,
 > what tools to use, what never to do, and how to think about every decision.
 > Keep this file updated as the project evolves.
 
@@ -41,7 +41,7 @@ appraisal-qc/
 │   │   │   ├── ocr/
 │   │   │   │   ├── ocr_pipeline.py       ← main OCR orchestrator
 │   │   │   │   ├── image_preprocessor.py ← OpenCV preprocessing (5-step pipeline)
-│   │   │   │   └── checkbox_detector.py  ← OpenCV + moondream2 checkbox logic
+│   │   │   │   └── checkbox_detector.py  ← OpenCV + llava:13b checkbox logic
 │   │   │   ├── extraction/
 │   │   │   │   ├── extraction_service.py ← field extraction coordinator
 │   │   │   │   ├── subject_extractor.py
@@ -154,15 +154,15 @@ python scripts/retrain.py
 # Check Ollama models available
 curl http://localhost:11434/api/tags
 
-# Pull moondream for checkbox detection (if not already pulled)
-ollama pull moondream
+# Pull llava:13b for checkbox detection (if not already pulled)
+ollama pull llava:13b
 ```
 
 ---
 
 ## Environment Variables
 
-All secrets live in `.env` (never committed to git). Claude Code must never hardcode any of these.
+All secrets live in `.env` (never committed to git). AI coding assistant must never hardcode any of these.
 
 ```bash
 # Database
@@ -173,8 +173,8 @@ REDIS_URL=redis://localhost:6379
 
 # Ollama (local — no API key needed)
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_LLM_MODEL=llama3:8b-instruct-q4_0
-OLLAMA_VISION_MODEL=moondream
+OLLAMA_LLM_MODEL=llava:13b
+OLLAMA_VISION_MODEL=llava:13b
 
 # Security
 API_KEY=<generated on deploy>
@@ -193,11 +193,11 @@ MIN_WORDS_THRESHOLD=100
 
 ---
 
-## The Most Critical Rules for Claude Code to Follow
+## The Most Critical Rules for AI coding assistant to Follow
 
 ### Rule 1 — Never Use LLM for Structured Field Extraction
 
-LLM (Ollama/llama3) must NEVER be used to extract structured fields from appraisal text.
+LLM (Ollama/llava:13b) must NEVER be used to extract structured fields from appraisal text.
 Fields like address, borrower name, contract price, dates — always use regex + spatial anchoring.
 
 LLM is ONLY allowed for:
@@ -205,16 +205,16 @@ LLM is ONLY allowed for:
 - Market conditions narrative quality
 - Reconciliation sufficiency evaluation
 
-If Claude Code suggests using LLM to extract a field, that is wrong. Correct it.
+If AI coding assistant suggests using LLM to extract a field, that is wrong. Correct it.
 
-### Rule 2 — Checkbox Detection Uses OpenCV First, moondream2 Second
+### Rule 2 — Checkbox Detection Uses OpenCV First, llava:13b Second
 
-Never call moondream2 for a checkbox unless OpenCV pixel analysis returned confidence < 75%.
-Do not call any external API (Claude API, GPT) for checkbox detection — moondream2 is local and free.
+Never call llava:13b for a checkbox unless OpenCV pixel analysis returned confidence < 75%.
+Do not call any external API (remote LLM APIs) for checkbox detection — llava:13b is local and free.
 
 The checkbox_detector.py must always follow this exact order:
 1. OpenCV pixel analysis (0ms, always runs first)
-2. moondream2 via Ollama only if step 1 is uncertain
+2. llava:13b via Ollama only if step 1 is uncertain
 3. Result cached by `document_id + page_number + checkbox_bbox`
 
 ### Rule 3 — Every Extracted Field Must Have These Four Properties Populated
@@ -409,12 +409,12 @@ For each checkbox on the form:
         else:
             # Ambiguous — go to step 2
 
-    Step 2: moondream2 via Ollama (only if step 1 uncertain)
+    Step 2: llava:13b via Ollama (only if step 1 uncertain)
         Check cache first: key = f"{doc_id}:{page}:{bbox}"
         If cache hit: return cached result
 
         response = ollama.generate(
-            model="moondream",
+            model="llava:13b",
             prompt="Is the checkbox in this image marked with a check or X? Answer YES or NO only.",
             images=[base64_encoded_crop]
         )
@@ -428,7 +428,7 @@ For each checkbox on the form:
         flag for human review in results
 ```
 
-**Never call any external API (Anthropic, OpenAI) for checkbox detection. moondream2 is local.**
+**Never call any external API (remote LLM APIs) for checkbox detection. llava:13b is local.**
 
 ---
 
@@ -445,7 +445,7 @@ LLM is allowed for:
 LLM is NOT allowed for:
     - Field extraction (use regex)
     - Field validation (use rules engine)
-    - Checkbox detection (use OpenCV + moondream)
+    - Checkbox detection (use OpenCV + llava:13b)
     - Document classification (use keyword matching)
     - Anything where a simpler tool works
 ```
@@ -454,8 +454,8 @@ LLM is NOT allowed for:
 
 | Purpose | Model | Max input |
 |---------|-------|-----------|
-| Commentary analysis | llama3:8b-instruct-q4_0 | 800 chars |
-| Checkbox detection | moondream | 100×100px crop |
+| Commentary analysis | llava:13b | 800 chars |
+| Checkbox detection | llava:13b | 100×100px crop |
 
 **LLM call settings — never change without documenting why:**
 - Temperature: 0.0 (deterministic — same input must give same output)
@@ -533,7 +533,7 @@ Every new rule or extractor must have tests against real documents before being 
 
 ## Common Mistakes to Avoid
 
-**Do not do these things. If Claude Code suggests them, refuse.**
+**Do not do these things. If AI coding assistant suggests them, refuse.**
 
 1. `force_image_ocr=True` on all pages — use hybrid mode with the decision tree above
 2. Processing pages in a sequential for loop — always use ThreadPoolExecutor
@@ -544,8 +544,8 @@ Every new rule or extractor must have tests against real documents before being 
 7. Hardcoding any secret, path, or URL — always use env vars via config.py
 8. Writing a rule that can raise an uncaught exception — always wrap in try/except
 9. Searching for "Zip Code" literally — search for 5-digit pattern instead
-10. Calling moondream for a checkbox without checking OpenCV result first
-11. Calling any external API for checkbox detection (Anthropic, OpenAI)
+10. Calling llava:13b for a checkbox without checking OpenCV result first
+11. Calling any external API for checkbox detection (remote LLM APIs)
 12. Running OCR on a page with 100+ embedded words — use PyMuPDF directly
 
 ---
@@ -564,9 +564,9 @@ Every new rule or extractor must have tests against real documents before being 
 - If value is NULL: fix the extractor for that field first, then retest the rule
 - Check source_page — is the extractor looking at the right page?
 
-**moondream2 gives wrong checkbox answers:**
-- Run `ollama pull moondream` to ensure you have the latest version
-- Check that the crop sent to moondream is at least 50×50 pixels
+**llava:13b gives wrong checkbox answers:**
+- Run `ollama pull llava:13b` to ensure you have the latest version
+- Check that the crop sent to llava:13b is at least 50×50 pixels
 - Check that full preprocessing was applied to the page image before cropping
 - If consistently wrong on one document: that document has unusual checkbox style — add to test fixtures
 
@@ -631,7 +631,7 @@ Achievement gates are defined in `docs/build_plan.md`.
 | 🟡 MED | Pages processed sequentially not in parallel | ocr_pipeline.py — wire in ThreadPoolExecutor |
 | 🟡 MED | No OCR caching by file hash | ocr_pipeline.py — add hash check before OCR |
 | 🟡 MED | Full preprocessing not used by /qc/process | ocr_pipeline.py — unify both paths |
-| 🟡 MED | Checkbox detection reads text only, misses visual marks | checkbox_detector.py — OpenCV + moondream |
+| 🟡 MED | Checkbox detection reads text only, misses visual marks | checkbox_detector.py — OpenCV + llava:13b |
 | 🟢 LOW | CORS allow_origins is wildcard | main.py — restrict to env var |
 | 🟢 LOW | No API key auth on endpoints | security.py — add X-API-Key middleware |
 
@@ -641,7 +641,7 @@ Achievement gates are defined in `docs/build_plan.md`.
 *System: FastAPI port 5001 | Next.js port 3000 | PostgreSQL | Redis | Ollama (local)*
 *Reference document: 96 Baell Trace Ct SE.pdf — 27 pages — UAD 1004 — Colquitt County GA*# CLAUDE.md — Appraisal QC Platform
 
-> This file is read by Claude Code on every session. It tells Claude exactly how this project works,
+> This file is read by AI coding assistant on every session. It tells AI assistant exactly how this project works,
 > what tools to use, what never to do, and how to think about every decision.
 > Keep this file updated as the project evolves.
 
@@ -742,7 +742,7 @@ cd frontend
 npm run dev   # → http://localhost:3000
 
 # Pull vision model for checkbox detection
-ollama pull moondream
+ollama pull llava:13b
 
 # Apply DB migrations
 alembic upgrade head
@@ -761,8 +761,8 @@ All secrets live in env vars. Never hardcode any of these.
 DATABASE_URL=postgresql://qc_user:qc_password@localhost:5432/appraisal_qc
 REDIS_URL=redis://localhost:6379/0
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_LLM_MODEL=llama3:8b-instruct-q4_0
-OLLAMA_VISION_MODEL=moondream
+OLLAMA_LLM_MODEL=llava:13b
+OLLAMA_VISION_MODEL=llava:13b
 MAX_FILE_SIZE_BYTES=52428800   # 50 MB
 MAX_PAGE_COUNT=100
 TESSERACT_CMD=/opt/homebrew/bin/tesseract
@@ -772,11 +772,11 @@ MIN_WORDS_THRESHOLD=100
 
 ---
 
-## The Most Critical Rules for Claude Code to Follow
+## The Most Critical Rules for AI coding assistant to Follow
 
 ### Rule 1 — Never Use LLM for Structured Field Extraction
 
-LLM (Ollama/llama3) must NEVER be used to extract structured fields from appraisal text.
+LLM (Ollama/llava:13b) must NEVER be used to extract structured fields from appraisal text.
 Fields like address, borrower name, contract price, dates — always use regex + spatial anchoring
 in `app/services/phase2_extraction.py`.
 
@@ -887,14 +887,14 @@ For each checkbox field:
         UNCHECKED → conf=0.30, extraction_method="regex_fallback"
         UNKNOWN  → conf=0.00, extraction_method="not_found" → VERIFY
 
-    Future (Phase 6 / when moondream downloaded):
+    Future (Phase 6 / when llava:13b downloaded):
         Step 2: OpenCV pixel analysis on page image region
             dark_pixel_ratio > 0.40 → CHECKED, conf=0.90
             dark_pixel_ratio < 0.15 → UNCHECKED, conf=0.90
             0.15-0.40 → ambiguous → Step 3
 
-        Step 3: moondream2 via Ollama (only if Steps 1+2 both uncertain)
-            ollama.generate(model="moondream", prompt="Is checkbox checked? YES or NO", images=[crop])
+        Step 3: llava:13b via Ollama (only if Steps 1+2 both uncertain)
+            ollama.generate(model="llava:13b", prompt="Is checkbox checked? YES or NO", images=[crop])
             Cache result: key = f"{doc_id}:{page}:{label}"
 ```
 
@@ -936,8 +936,8 @@ For each PDF page:
 
 | Purpose | Model | Max input | Rule |
 |---------|-------|-----------|------|
-| Commentary analysis | llama3:8b-instruct-q4_0 | 800 chars | COM-1,COM-2,COM-5 |
-| Checkbox detection (future) | moondream | 100×100px crop | S-7,S-9,S-11,C-1,C-3,C-4 |
+| Commentary analysis | llava:13b | 800 chars | COM-1,COM-2,COM-5 |
+| Checkbox detection (future) | llava:13b | 100×100px crop | S-7,S-9,S-11,C-1,C-3,C-4 |
 
 **Settings — never change without documenting why:**
 - Temperature: 0.0 (deterministic)

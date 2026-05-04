@@ -23,6 +23,15 @@ type RuleFocus = {
   located: boolean;
 };
 type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: number };
+type DecisionEvent = {
+  ruleResultId: number;
+  decision: Decision;
+  savedAt: string;
+  status: string;
+  reviewerVerified?: boolean | null;
+  overridePending?: boolean;
+  reviewerComment?: string;
+};
 
 const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
   pass:         { border: "border-green-800/40",  bg: "bg-green-950/20",  text: "text-green-300" },
@@ -98,6 +107,20 @@ export default function VerifyFilePage() {
   const [offline, setOffline] = useState(false);
   const [acknowledged, setAcknowledged] = useState<Record<number, boolean>>({});
   const viewerRef = useRef<HTMLDivElement | null>(null);
+  const inFlightDecisionIds = useRef<Set<number>>(new Set());
+
+  const applySavedDecision = useCallback((ruleId: number, savedDecision: DecisionEvent, fallbackComment?: string) => {
+    setDecisions(prev => ({ ...prev, [ruleId]: savedDecision.decision }));
+    setSaved(prev => new Set(prev).add(ruleId));
+    setRules(prev => prev.map(item => item.id === ruleId ? {
+      ...item,
+      status: ruleStatus(savedDecision.status),
+      reviewerVerified: savedDecision.reviewerVerified ?? undefined,
+      reviewerComment: savedDecision.reviewerComment ?? fallbackComment ?? item.reviewerComment,
+      overridePending: Boolean(savedDecision.overridePending),
+      verifiedAt: savedDecision.savedAt,
+    } : item));
+  }, []);
 
   const loadRules = useCallback(async () => {
     setLoading(true);
@@ -209,7 +232,7 @@ export default function VerifyFilePage() {
     setActiveFocus(nextFocus);
     setActivePage(nextFocus.page);
     setHighlighting(true);
-    window.setTimeout(() => setHighlighting(false), 2600);
+    window.setTimeout(() => setHighlighting(false), 5000);
   }
 
   useEffect(() => {
@@ -251,8 +274,13 @@ export default function VerifyFilePage() {
               totalToVerify: Number(next.totalToVerify ?? 0),
             });
           }
-          if (message.topic === decisionTopic) {
-            void getQCProgress(qcResultId).then(setProgress).catch(() => undefined);
+          if (message.topic === decisionTopic && message.payload && typeof message.payload === "object") {
+            const next = message.payload as DecisionEvent;
+            if (typeof next.ruleResultId === "number") {
+              applySavedDecision(next.ruleResultId, next);
+              inFlightDecisionIds.current.delete(next.ruleResultId);
+              setSaving(current => current === next.ruleResultId ? null : current);
+            }
           }
         } catch {
           // Ignore malformed realtime messages; REST polling remains the fallback.
@@ -267,9 +295,12 @@ export default function VerifyFilePage() {
       if (reconnectTimer != null) window.clearTimeout(reconnectTimer);
       ws?.close();
     };
-  }, [loadRules, qcResultId]);
+  }, [applySavedDecision, loadRules, qcResultId]);
 
   async function handleDecision(rule: QCRuleResult, decision: Decision) {
+    if (inFlightDecisionIds.current.has(rule.id)) {
+      return;
+    }
     if (!sessionToken) {
       setSessionError("Review session is not ready yet.");
       return;
@@ -280,24 +311,25 @@ export default function VerifyFilePage() {
     }
     const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : Date.now();
     const latencyMs = Math.max(0, Date.now() - presentedAt);
+    inFlightDecisionIds.current.add(rule.id);
     setSaving(rule.id);
     try {
       const savedDecision = await saveDecision(rule.id, decision, comments[rule.id], sessionToken, latencyMs, Boolean(acknowledged[rule.id]));
-      setDecisions(prev => ({ ...prev, [rule.id]: decision }));
-      setSaved(prev => new Set(prev).add(rule.id));
-      setRules(prev => prev.map(item => item.id === rule.id ? {
-        ...item,
-        status: ruleStatus(savedDecision.status),
-        reviewerVerified: savedDecision.reviewerVerified ?? undefined,
-        reviewerComment: comments[rule.id],
-        overridePending: Boolean(savedDecision.overridePending),
-        verifiedAt: savedDecision.savedAt,
-      } : item));
-      const prog = await getQCProgress(qcResultId); setProgress(prog);
+      applySavedDecision(rule.id, savedDecision, comments[rule.id]);
+      setProgress(prev => {
+        if (!prev || decisions[rule.id]) return prev;
+        const pending = Math.max(0, prev.pending - 1);
+        return { ...prev, pending, canSubmit: pending === 0 && prev.totalToVerify > 0 };
+      });
+      void getQCProgress(qcResultId).then(setProgress).catch(() => undefined);
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : "Decision was not saved. Try again.");
+      void Promise.all([loadRules(), getQCProgress(qcResultId).then(setProgress)]).catch(() => undefined);
     }
-    finally { setSaving(null); }
+    finally {
+      inFlightDecisionIds.current.delete(rule.id);
+      setSaving(null);
+    }
   }
 
   async function handleSubmit() {
@@ -353,6 +385,7 @@ export default function VerifyFilePage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
+      {activeFocus && <RuleFocusOverlay focus={activeFocus} highlighting={highlighting} />}
       {(offline || sessionError) && (
         <div className={`flex items-center gap-3 px-4 py-2 text-xs border-b ${offline ? "bg-red-950/60 border-red-800/50 text-red-200" : "bg-amber-950/60 border-amber-800/50 text-amber-100"}`}>
           <span className="flex-1">{offline ? "You're offline. Decisions are frozen until the connection is restored." : sessionError}</span>
@@ -447,20 +480,6 @@ export default function VerifyFilePage() {
           </div>
           {activeDocument ? (
             <div ref={viewerRef} className={`relative flex-1 overflow-auto bg-slate-950 ${highlighting ? "ring-2 ring-amber-400 ring-inset" : ""}`}>
-              {activeFocus && (
-                <div className={`absolute left-4 top-4 z-10 max-w-sm rounded-lg border px-3 py-2 shadow-xl transition-opacity ${
-                  highlighting ? "opacity-100 bg-amber-400/95 border-amber-200 text-slate-950" : "opacity-80 bg-slate-900/95 border-slate-700 text-slate-200"
-                }`}>
-                  <div className="flex items-center gap-2 text-xs font-semibold">
-                    <Crosshair size={13} />
-                    {activeFocus.ruleId}
-                  </div>
-                  <div className="mt-0.5 text-[11px] opacity-80">{activeFocus.note}</div>
-                  {!activeFocus.located && (
-                    <div className="mt-1 text-[11px] text-amber-300">Re-run QC after location extraction is available.</div>
-                  )}
-                </div>
-              )}
               <div className="min-h-full flex justify-center px-4 py-12">
                 <div className="relative">
                   <PdfDocumentViewer
@@ -521,6 +540,27 @@ export default function VerifyFilePage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RuleFocusOverlay({ focus, highlighting }: { focus: RuleFocus; highlighting: boolean }) {
+  return (
+    <div
+      className={`pointer-events-none fixed left-3 top-3 z-50 max-w-[180px] rounded-md border px-2 py-1 text-[10px] shadow-lg transition-colors ${
+        highlighting
+          ? "bg-amber-300/95 border-amber-100 text-slate-950"
+          : "bg-slate-900/95 border-slate-700 text-slate-200 opacity-90"
+      }`}
+    >
+      <div className="flex items-center gap-1 font-semibold leading-tight">
+        <Crosshair size={10} />
+        <span className="truncate">{focus.ruleId}</span>
+      </div>
+      <div className="mt-0.5 leading-snug opacity-70">{focus.note}</div>
+      {!focus.located && (
+        <div className="mt-0.5 leading-snug text-amber-300">Re-run QC after location extraction is available.</div>
+      )}
     </div>
   );
 }
@@ -683,7 +723,6 @@ function RuleCard({ rule, decision, comment, saving, savedNow, offline, sessionR
                 )}
               </div>
               <textarea value={comment} onChange={e => onComment(e.target.value)}
-                onBlur={() => decision && onDecision(decision)}
                 placeholder={isFail ? "Reason for override - be specific (minimum 20 characters)." : "Add a comment (optional)..."} rows={2}
                 className="w-full bg-slate-800/50 border border-slate-700/40 rounded-lg px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-600/50 transition-colors" />
             </div>

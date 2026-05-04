@@ -112,6 +112,7 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
 
     # --- 2. Compare Components ---
     mismatches = []
+    mismatch_fields = []
     
     # Street: Fuzzy Match
     norm_eng_street = normalize_address(eng_street)
@@ -129,32 +130,39 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
             and not street_tokens_match(norm_rpt_street, norm_eng_street)
         ):
             mismatches.append(f"Street mismatch: '{subj.address}' vs '{eng_street}' (Match: {similarity:.1%})")
+            mismatch_fields.append("property_address")
 
     # City: Exact Match (Normalized)
     rpt_city = normalize_string(subj.city)
     eng_city_norm = normalize_string(eng_city)
     if not rpt_city: 
         mismatches.append("City missing in Report")
+        mismatch_fields.append("city")
     elif rpt_city != eng_city_norm:
         # Allow containment for City too? "San Francisco" vs "San Francisco" is exact. 
         # Sometimes "Mt View" vs "Mountain View". For now, strict normalized.
         mismatches.append(f"City mismatch: '{subj.city}' vs '{eng_city}'")
+        mismatch_fields.append("city")
 
     # State: Exact Match
     rpt_state = (subj.state or "").strip().upper()
     eng_state_clean = (eng_state or "").strip().upper()
     if not rpt_state:
         mismatches.append("State missing in Report")
+        mismatch_fields.append("state")
     elif rpt_state != eng_state_clean:
-         mismatches.append(f"State mismatch: '{rpt_state}' vs '{eng_state_clean}'")
+        mismatches.append(f"State mismatch: '{rpt_state}' vs '{eng_state_clean}'")
+        mismatch_fields.append("state")
 
     # Zip: Exact Match (5 digit)
     rpt_zip = (subj.zip_code or "")[:5]
     eng_zip_clean = (eng_zip or "")[:5]
     if not rpt_zip:
         mismatches.append("Zip code missing in Report")
+        mismatch_fields.append("zip_code")
     elif rpt_zip != eng_zip_clean:
         mismatches.append(f"Zip mismatch: '{rpt_zip}' vs '{eng_zip_clean}'")
+        mismatch_fields.append("zip_code")
 
     # County: Exact Match (normalized)
     rpt_county = normalize_string(subj.county)
@@ -162,8 +170,10 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
     if eng_county:
         if not rpt_county:
             mismatches.append("County missing in Report")
+            mismatch_fields.append("county")
         elif rpt_county != eng_county:
             mismatches.append(f"County mismatch: '{subj.county}' vs '{eng.county}'")
+            mismatch_fields.append("county")
 
     usps_result = None
     try:
@@ -178,8 +188,10 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
         )
         if not usps_result.is_valid:
             mismatches.append(f"USPS validation failed: {usps_result.error_message or 'invalid address'}")
+            mismatch_fields.append("property_address")
         elif usps_result.zip_code and rpt_zip and usps_result.zip_code[:5] != rpt_zip:
             mismatches.append(f"USPS ZIP mismatch: '{rpt_zip}' vs '{usps_result.zip_code[:5]}'")
+            mismatch_fields.append("zip_code")
     except Exception as exc:
         usps_result = None
 
@@ -193,6 +205,7 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
         )
 
     llm_address = ((ctx.llm_enrichment or {}).get("items") or {}).get("address_normalization") or {}
+    target_field = mismatch_fields[0] if mismatch_fields else "property_address"
     if llm_address.get("same_location") is True and llm_address.get("llm_confidence_score", 0.0) >= 0.75:
         return RuleResult(
             rule_id="S-1",
@@ -202,9 +215,11 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
             appraisal_value=f"{subj.address}, {subj.city}, {subj.state} {subj.zip_code}",
             engagement_value=f"{eng_street}, {eng_city}, {eng_state} {eng_zip}",
             review_required=True,
+            target_field=target_field,
             action_item="Confirm whether the appraisal and engagement-letter addresses are the same property.",
             details={
                 "mismatches": mismatches,
+                "target_field": target_field,
                 "llm_address_normalization": llm_address,
             },
         )
@@ -217,7 +232,9 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
         appraisal_value=f"{subj.address}, {subj.city}, {subj.state} {subj.zip_code}",
         engagement_value=f"{eng_street}, {eng_city}, {eng_state} {eng_zip}",
         review_required=True,
+        target_field=target_field,
         details={
+            "target_field": target_field,
             "report_components": {
                 "street": subj.address, 
                 "city": subj.city, 
@@ -571,7 +588,8 @@ def validate_special_assessments(ctx: ValidationContext) -> RuleResult:
                 rule_id="S-8",
                 rule_name="Special Assessments",
                 status=RuleStatus.FAIL,
-                message=f"In the subject section, please specify what the special assessment of ${subj.special_assessments:.2f} is for."
+                message=f"In the subject section, please specify what the special assessment of ${subj.special_assessments:.2f} is for.",
+                target_field="special_assessments",
             )
     
     return RuleResult(
@@ -600,7 +618,8 @@ def validate_pud_hoa(ctx: ValidationContext) -> RuleResult:
             rule_id="S-9",
             rule_name="PUD and HOA",
             status=RuleStatus.FAIL,
-            message=f"HOA dues are noted as \"${hoa_dues:.2f}\" per {period} in subject section; however, PUD box is not marked. Please revise."
+            message=f"HOA dues are noted as \"${hoa_dues:.2f}\" per {period} in subject section; however, PUD box is not marked. Please revise.",
+            target_field="is_pud_checked",
         )
     
     # Check if period is specified when HOA dues exist
@@ -609,7 +628,8 @@ def validate_pud_hoa(ctx: ValidationContext) -> RuleResult:
             rule_id="S-9",
             rule_name="PUD and HOA",
             status=RuleStatus.VERIFY,
-            message=f"HOA dues (${hoa_dues:.2f}) are specified but period (Per Year/Per Month) is not indicated."
+            message=f"HOA dues (${hoa_dues:.2f}) are specified but period (Per Year/Per Month) is not indicated.",
+            target_field="hoa_dues",
         )
     
     return RuleResult(
@@ -643,6 +663,7 @@ def validate_lender_client(ctx: ValidationContext) -> RuleResult:
                 rule_name="Lender/Client Information",
                 status=RuleStatus.FAIL,
                 message=f"Please correct the lender's name so it reflects as: {eng_lender}",
+                target_field="lender_name",
                 details={"report": rpt_lender, "engagement": eng_lender}
             )
     elif eng_lender and not rpt_lender:
@@ -656,6 +677,7 @@ def validate_lender_client(ctx: ValidationContext) -> RuleResult:
                 rule_name="Lender/Client Information",
                 status=RuleStatus.FAIL,
                 message=f"Please correct the lender's address so it reflects as: {eng_address}",
+                target_field="lender_address",
                 details={"report": rpt_address, "engagement": eng_address}
             )
     
@@ -688,7 +710,8 @@ def validate_property_rights(ctx: ValidationContext) -> RuleResult:
             rule_id="S-11",
             rule_name="Property Rights Appraised",
             status=RuleStatus.FAIL,
-            message=f"Invalid Property Rights value: '{subj.property_rights}'. Must be one of: Fee Simple, Leasehold, De Minimis PUD."
+            message=f"Invalid Property Rights value: '{subj.property_rights}'. Must be one of: Fee Simple, Leasehold, De Minimis PUD.",
+            target_field="property_rights",
         )
     
     return RuleResult(

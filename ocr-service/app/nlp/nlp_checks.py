@@ -6,7 +6,7 @@ Provides:
 - Reasoning presence validation
 - Market trend keyword extraction
 
-Uses rule-based approaches and lightweight models suitable for CPU inference.
+Uses llava:13b when available and rule-based fallbacks otherwise.
 """
 
 import re
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Tier 1: Ollama / LLaVA (best quality, requires local ollama server)
+# Tier 1: Ollama / llava:13b (best quality, requires local ollama server)
 try:
     from app.services.ollama_service import (
         classify_commentary,
@@ -28,19 +28,10 @@ try:
     if OLLAMA_AVAILABLE:
         logger.info("Ollama available — using llava:13b for commentary analysis")
     else:
-        logger.info("Ollama not running — falling back to embedding/rule-based checks")
+        logger.info("Ollama not running — falling back to rule-based checks")
 except ImportError:
     OLLAMA_AVAILABLE = False
     logger.info("ollama_service not importable — using fallback")
-
-# Tier 2: sentence-transformers (good, no server required)
-try:
-    from sentence_transformers import SentenceTransformer, util
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
-    logger.info("sentence-transformers not available. Using rule-based fallback.")
-
 
 @dataclass
 class CommentaryAnalysis:
@@ -127,39 +118,19 @@ SPECIFICITY_PATTERNS = [
 class NLPChecker:
     """
     CPU-friendly NLP checker for appraisal commentary analysis.
-    
-    Uses rule-based approaches with optional sentence-transformers for
-    better canned commentary detection.
+
+    Uses llava:13b first, then rule-based checks when local Ollama is unavailable
+    or inconclusive.
     """
     
     def __init__(self, use_embeddings: bool = False):
         """
         Initialize NLP checker.
-        
+
         Args:
-            use_embeddings: Whether to use sentence-transformers (slower but more accurate)
+            use_embeddings: Ignored. Kept for backward-compatible callers.
         """
-        self.use_embeddings = use_embeddings and SENTENCE_TRANSFORMERS_AVAILABLE
-        self._model = None
-        self._template_embeddings = None
-        
-        if self.use_embeddings:
-            self._init_embeddings()
-    
-    def _init_embeddings(self):
-        """Initialize sentence transformer model."""
-        try:
-            # Use a small, CPU-friendly model
-            self._model = SentenceTransformer('all-MiniLM-L6-v2')
-            # Pre-compute template embeddings
-            self._template_embeddings = self._model.encode(
-                CANNED_TEMPLATES, 
-                convert_to_tensor=True
-            )
-            logger.info("Sentence transformer initialized successfully")
-        except Exception as e:
-            logger.info(f"Failed to initialize sentence transformer: {e}")
-            self.use_embeddings = False
+        self.use_embeddings = False
     
     def detect_canned_commentary(
         self,
@@ -170,8 +141,7 @@ class NLPChecker:
         Detect if commentary appears to be generic/canned.
 
         Tier 1: ollama/llava:13b (most accurate)
-        Tier 2: sentence-transformers similarity
-        Tier 3: rule-based template matching (always available)
+        Tier 2: rule-based template matching (always available)
         """
         if not text or len(text.strip()) < 20:
             return CommentaryAnalysis(
@@ -200,23 +170,9 @@ class NLPChecker:
             except Exception as e:
                 logger.info("Ollama canned check failed, falling back: %s", e)
 
-        # --- Tier 2: sentence-transformers ---
         matched_templates = [t for t in CANNED_TEMPLATES if t in text_lower]
-        embedding_score = 0.0
-        if self.use_embeddings and self._model:
-            try:
-                text_embedding = self._model.encode(text, convert_to_tensor=True)
-                similarities = util.cos_sim(text_embedding, self._template_embeddings)
-                embedding_score = float(similarities.max())
-            except Exception as e:
-                logger.info("Embedding comparison failed: %s", e)
-
-        # --- Tier 3: Rule-based ---
         template_score = min(1.0, len(matched_templates) * 0.3)
-        if self.use_embeddings:
-            combined_score = template_score * 0.3 + embedding_score * 0.7
-        else:
-            combined_score = template_score
+        combined_score = template_score
 
         if has_specific_details:
             combined_score *= 0.5

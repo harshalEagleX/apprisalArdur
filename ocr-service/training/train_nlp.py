@@ -2,18 +2,13 @@
 NLP Model Training for Appraisal Commentary Analysis
 
 Two modes:
-  1. ollama-label  — use llama3:8b-instruct-q4_0 to auto-label a CSV of commentary
-                     snippets, then train a fast sklearn pipeline on those labels.
-                     Run once to generate labels; the sklearn model is used for
-                     offline/batch scoring without hitting ollama each time.
+  1. ollama-label  — use llava:13b to auto-label a CSV of commentary snippets.
 
   2. canned        — train (or retrain) the sklearn pipeline on an already-labelled CSV.
 
-  3. transformer   — placeholder for fine-tuning DistilBERT on GPU.
-
 Usage:
     # Step 1: pull the model (one-time)
-    ollama pull llama3:8b-instruct-q4_0
+    ollama pull llava:13b
 
     # Step 2: auto-label your raw commentary CSV
     python train_nlp.py --task ollama-label --data raw_commentary.csv
@@ -40,7 +35,7 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 def auto_label_with_ollama(input_csv: str, output_csv: str = "labelled_commentary.csv"):
     """
-    Use llama3:8b-instruct-q4_0 to label raw commentary snippets as CANNED/SPECIFIC.
+    Use llava:13b to label raw commentary snippets as CANNED/SPECIFIC.
     Saves a new CSV with an 'is_canned' column (1=canned, 0=specific).
 
     Input CSV must have a 'text' column.
@@ -61,8 +56,8 @@ def auto_label_with_ollama(input_csv: str, output_csv: str = "labelled_commentar
 
     if not is_ollama_available():
         logger.error(
-            "Ollama is not running or llama3:8b-instruct-q4_0 is not loaded.\n"
-            "Run:  ollama pull llama3:8b-instruct-q4_0\n"
+            "Ollama is not running or llava:13b is not loaded.\n"
+            "Run:  ollama pull llava:13b\n"
             "Then: ollama serve"
         )
         return
@@ -72,7 +67,7 @@ def auto_label_with_ollama(input_csv: str, output_csv: str = "labelled_commentar
         logger.error("Input CSV must have a 'text' column")
         return
 
-    logger.info("Auto-labelling %d rows using llama3:8b-instruct-q4_0 ...", len(df))
+    logger.info("Auto-labelling %d rows using llava:13b ...", len(df))
     labels = []
     for i, row in df.iterrows():
         text = str(row["text"])
@@ -162,10 +157,6 @@ class NLPModelTrainer:
             "when ollama is unavailable."
         )
 
-    def train_transformer_model(self):
-        logger.info("Transformer fine-tuning not yet implemented (requires GPU).")
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -182,11 +173,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--task", type=str, default="canned",
-        choices=["canned", "ollama-label", "transformer"],
+        choices=["canned", "ollama-label"],
         help=(
             "canned       — train sklearn model on labelled CSV\n"
-            "ollama-label — use llama3 to auto-label raw CSV, then save for training\n"
-            "transformer  — placeholder (GPU required)"
+            "ollama-label — use llava:13b to auto-label raw CSV, then save for training"
         ),
     )
     args = parser.parse_args()
@@ -196,5 +186,3 @@ if __name__ == "__main__":
         auto_label_with_ollama(args.data, args.output)
     elif args.task == "canned":
         trainer.train_canned_detector(args.data)
-    elif args.task == "transformer":
-        trainer.train_transformer_model()

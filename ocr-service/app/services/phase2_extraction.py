@@ -28,12 +28,12 @@ from app.services.ocr_correction import apply_ocr_correction
 
 logger = logging.getLogger(__name__)
 
-# LLaVA vision fallback for uncertain checkboxes
+# llava:13b vision fallback for uncertain checkboxes
 try:
     from app.services.ollama_service import detect_checkbox_vision, is_vision_model_available
     _VISION_OK = is_vision_model_available()
     if _VISION_OK:
-        logger.info("LLaVA available — checkbox vision fallback enabled")
+        logger.info("llava:13b available — checkbox vision fallback enabled")
 except Exception:
     _VISION_OK = False
     detect_checkbox_vision = None
@@ -87,7 +87,7 @@ class Phase2ExtractionEngine:
     Phase 2 field extraction with metadata (source page, confidence, correction).
     """
     def __init__(self):
-        # Page images for LLaVA checkbox fallback — set per extract_subject() call
+        # Page images for llava:13b checkbox fallback — set per extract_subject() call
         self._page_images: Dict[int, object] = {}
         self._page_index: Dict[int, str] = {}
         self._page_positions: List[Tuple[int, int]] = []
@@ -106,7 +106,7 @@ class Phase2ExtractionEngine:
         Returns:
             (SubjectSectionExtract, dict of field_name → FieldMetaResult)
         """
-        # Store page images for LLaVA checkbox fallback (Step 2)
+        # Store page images for llava:13b checkbox fallback (Step 2)
         # Page 1 is the main form page — checkboxes are almost always on pages 1-3
         self._page_images = page_images or {}
         self._page_index = page_index
@@ -445,6 +445,7 @@ class Phase2ExtractionEngine:
 
         full_line = addr_line_match.group(1).strip()
         base_page = page_for_pos(addr_line_match.start() + pos_offset, page_pos)
+        line_abs_start = addr_line_match.start(1) + pos_offset
         method = "spatial_anchor"
 
         # ── Step 1: zip code — anchor on 5-digit pattern ──────────────────────
@@ -464,12 +465,13 @@ class Phase2ExtractionEngine:
                 city_value = None
 
             anchor_pos = addr_line_match.start() + pos_offset
+            search_abs_start = addr_line_match.start() + pos_offset
             zip_m   = FieldMetaResult("zip_code",
                 raw_value=zip_ind.group(1) if zip_ind else None,
                 corrected_value=zip_ind.group(1) if zip_ind else None,
                 confidence=0.80 if zip_ind else 0.0,
                 source_page=base_page,
-                **self._bbox_kwargs(anchor_pos, zip_ind.group(1) if zip_ind else None),
+                **self._bbox_kwargs(search_abs_start + zip_ind.start(1) if zip_ind else anchor_pos, zip_ind.group(1) if zip_ind else None),
                 extraction_method="spatial_anchor" if zip_ind else "not_found")
 
             state_m = FieldMetaResult("state",
@@ -477,7 +479,7 @@ class Phase2ExtractionEngine:
                 corrected_value=state_ind.group(1).upper() if state_ind else None,
                 confidence=0.80 if state_ind else 0.0,
                 source_page=base_page,
-                **self._bbox_kwargs(anchor_pos, state_ind.group(1) if state_ind else None),
+                **self._bbox_kwargs(search_abs_start + state_ind.start(1) if state_ind else anchor_pos, state_ind.group(1) if state_ind else None),
                 extraction_method="spatial_anchor" if state_ind else "not_found")
 
             city_m  = FieldMetaResult("city",
@@ -485,7 +487,7 @@ class Phase2ExtractionEngine:
                 corrected_value=city_value,
                 confidence=0.75 if city_value else 0.0,
                 source_page=base_page,
-                **self._bbox_kwargs(anchor_pos, city_value),
+                **self._bbox_kwargs(search_abs_start + city_ind.start(1) if city_ind else anchor_pos, city_value),
                 extraction_method="spatial_anchor" if city_value else "not_found")
 
             # Street is the address line itself
@@ -494,7 +496,7 @@ class Phase2ExtractionEngine:
             street_m = FieldMetaResult("property_address",
                 raw_value=raw_street, corrected_value=corr_street,
                 confidence=0.80, source_page=base_page,
-                **self._bbox_kwargs(anchor_pos, raw_street),
+                **self._bbox_kwargs(line_abs_start, raw_street),
                 correction_applied=sf, extraction_method=method)
             return street_m, city_m, state_m, zip_m
 
@@ -505,7 +507,7 @@ class Phase2ExtractionEngine:
         zip_m = FieldMetaResult(
             "zip_code", raw_value=raw_zip, corrected_value=corr_zip,
             confidence=0.92, source_page=base_page,
-            **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_zip),
+            **self._bbox_kwargs(line_abs_start + zip_match.start(1), raw_zip),
             correction_applied=zip_fixed, extraction_method=method
         )
 
@@ -519,7 +521,7 @@ class Phase2ExtractionEngine:
             state_m = FieldMetaResult(
                 "state", raw_value=raw_state, corrected_value=raw_state,
                 confidence=0.90, source_page=base_page,
-                **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_state),
+                **self._bbox_kwargs(line_abs_start + state_match.start(1), raw_state),
                 extraction_method=method
             )
             before_state = before_zip[:state_match.start()].strip()
@@ -540,7 +542,7 @@ class Phase2ExtractionEngine:
             city_m = FieldMetaResult(
                 "city", raw_value=raw_city, corrected_value=corr_city,
                 confidence=0.85 if raw_city else 0.0, source_page=base_page,
-                **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_city),
+                **self._bbox_kwargs(line_abs_start + city_kw_match.start(1), raw_city),
                 correction_applied=city_fixed, extraction_method=method if raw_city else "not_found"
             )
             # Street = everything before "City" keyword
@@ -559,7 +561,7 @@ class Phase2ExtractionEngine:
                 "city", raw_value=raw_city, corrected_value=raw_city,
                 confidence=0.55 if raw_city else 0.0,
                 source_page=base_page,
-                **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_city),
+                **self._bbox_kwargs(line_abs_start + max(0, before_state.rfind(raw_city)) if raw_city else line_abs_start, raw_city),
                 extraction_method="regex_fallback" if raw_city else "not_found"
             )
 
@@ -569,7 +571,7 @@ class Phase2ExtractionEngine:
         street_m = FieldMetaResult(
             "property_address", raw_value=raw_street, corrected_value=corr_street,
             confidence=0.85, source_page=base_page,
-            **self._bbox_kwargs(addr_line_match.start() + pos_offset, raw_street),
+            **self._bbox_kwargs(line_abs_start + max(0, full_line.find(raw_street)), raw_street),
             correction_applied=street_fixed, extraction_method=method
         )
 
@@ -598,7 +600,8 @@ class Phase2ExtractionEngine:
                     raw_value = re.sub(post_clean, '', raw_value, flags=re.I).strip()
 
                 corr_value, was_corrected = apply_ocr_correction(raw_value)
-                source_page = page_for_pos(match.start() + pos_offset, page_pos)
+                value_pos = match.start(1) + pos_offset
+                source_page = page_for_pos(value_pos, page_pos)
 
                 # Confidence decreases for fallback patterns
                 confidence = 0.88 - (i * 0.10)
@@ -614,7 +617,7 @@ class Phase2ExtractionEngine:
                     corrected_value=corr_value,
                     confidence=confidence,
                     source_page=source_page,
-                    **self._bbox_kwargs(match.start() + pos_offset, raw_value),
+                    **self._bbox_kwargs(value_pos, raw_value),
                     correction_applied=was_corrected,
                     extraction_method=method,
                 )
@@ -634,14 +637,15 @@ class Phase2ExtractionEngine:
             match = re.search(pattern, text, re.I | re.DOTALL)
             if match:
                 raw_value = match.group(1).strip()
-                source_page = page_for_pos(match.start() + pos_offset, page_pos)
+                value_pos = match.start(1) + pos_offset
+                source_page = page_for_pos(value_pos, page_pos)
                 return FieldMetaResult(
                     field_name=field_name,
                     raw_value=raw_value,
                     corrected_value=raw_value,
                     confidence=0.75,
                     source_page=source_page,
-                    **self._bbox_kwargs(match.start() + pos_offset, raw_value),
+                    **self._bbox_kwargs(value_pos, raw_value),
                     extraction_method="regex_primary",
                 )
         return FieldMetaResult(field_name=field_name, confidence=0.0, extraction_method="not_found")
@@ -758,14 +762,14 @@ class Phase2ExtractionEngine:
 
     def _checkbox_state(self, text: str, label: str) -> Optional[bool]:
         """
-        Three-state checkbox detection with LLaVA vision fallback.
+        Three-state checkbox detection with llava:13b vision fallback.
 
         Step 1: OCR text patterns (instant, always runs first)
           [X] or [x] near label → True  (YES, checked)
           [ ] near label        → False (NO, explicitly unchecked)
 
-        Step 2: LLaVA vision (only when Step 1 returns None)
-          Sends the page image crop to local LLaVA model
+        Step 2: llava:13b vision (only when Step 1 returns None)
+          Sends the page image crop to local llava:13b model
           Asks: "Is the checkbox next to '{label}' checked? YES or NO only."
 
         Returns None only when both steps fail → VERIFY in rules.
@@ -781,7 +785,7 @@ class Phase2ExtractionEngine:
         if re.search(unchecked, text, re.I):
             return False
 
-        # Step 2: LLaVA vision (page_image stored in self._page_images by extract_subject)
+        # Step 2: llava:13b vision (page_image stored in self._page_images by extract_subject)
         if _VISION_OK and detect_checkbox_vision and self._page_images:
             # Try page 1 first (main form), then pages 2 and 3
             for pg_num in [1, 2, 3]:
@@ -790,7 +794,7 @@ class Phase2ExtractionEngine:
                     result = detect_checkbox_vision(page_img, label)
                     if result is not None:
                         logger.debug(
-                            "LLaVA checkbox '%s' page %d -> %s",
+                            "llava:13b checkbox '%s' page %d -> %s",
                             label, pg_num, result
                         )
                         return result

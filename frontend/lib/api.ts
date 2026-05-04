@@ -11,11 +11,26 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
 
   try {
     const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
-    const message = typeof parsed.error === "string" ? parsed.error : parsed.message;
-    return typeof message === "string" && message.trim() ? message : fallback;
+    const message = typeof parsed.message === "string" ? parsed.message : parsed.error;
+    if (typeof message === "string" && message.trim()) {
+      return sanitizeErrorMessage(message);
+    }
+    return fallback;
   } catch {
-    return text;
+    return sanitizeErrorMessage(text);
   }
+}
+
+function sanitizeErrorMessage(message: string): string {
+  const clean = message.trim();
+  if (!clean) return "Something went wrong. Please try again.";
+  if (clean.includes("Unexpected row count") || clean.includes("OptimisticLocking") || clean.includes("StaleObjectState")) {
+    return "This item was updated a moment ago. Refresh the page to see the latest saved decision before trying again.";
+  }
+  if (clean.includes("Read timed out")) {
+    return "The request took too long to finish. Please try again in a moment.";
+  }
+  return clean;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -338,6 +353,7 @@ export interface DecisionSaveResponse {
   status: string;
   reviewerVerified?: boolean | null;
   overridePending?: boolean;
+  reviewerComment?: string;
 }
 
 export interface ReviewSession {

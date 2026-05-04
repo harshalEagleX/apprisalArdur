@@ -130,7 +130,7 @@ class CrossFieldValidator:
                 status=RuleStatus.VERIFY,
                 message="Vision model condition evidence differs from reported condition.",
                 verify_question=(
-                    f"The report states condition {reported}, but LLaVA analysis on page {first.page} returned: "
+                    f"The report states condition {reported}, but llava:13b analysis on page {first.page} returned: "
                     f"{first.response}. Please confirm the reported condition rating."
                 ),
                 review_required=True,

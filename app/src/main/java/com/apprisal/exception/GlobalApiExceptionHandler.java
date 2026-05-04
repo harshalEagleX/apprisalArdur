@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -21,7 +22,7 @@ import com.apprisal.common.exception.ValidationException;
  * Global exception handler for REST API controllers.
  * Provides consistent error responses and logging for all API endpoints.
  */
-@RestControllerAdvice(basePackages = "com.apprisal.controller.api")
+@RestControllerAdvice(basePackages = "com.apprisal")
 public class GlobalApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalApiExceptionHandler.class);
@@ -74,6 +75,15 @@ public class GlobalApiExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
         log.warn("Invalid state: {}", ex.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, Object>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        log.warn("Concurrent update conflict: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                "This item was updated by another action a moment ago. Refresh the page to see the latest saved data before trying again."
+        );
     }
 
     @ExceptionHandler(Exception.class)

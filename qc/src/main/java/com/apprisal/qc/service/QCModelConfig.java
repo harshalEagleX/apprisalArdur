@@ -3,8 +3,7 @@ package com.apprisal.qc.service;
 /**
  * Model selection carried from the admin UI into the Python QC service.
  *
- * Default local models are sized for an 8GB Apple Silicon dev machine.
- * Text commentary uses a text LLM; vision fallbacks use a smaller LLaVA model.
+ * Default local model uses llava:7b for both OCR-text reading and vision fallbacks.
  */
 public record QCModelConfig(
         String provider,
@@ -12,12 +11,12 @@ public record QCModelConfig(
         String visionModel) {
 
     public static QCModelConfig defaults() {
-        return new QCModelConfig("ollama", "llama3.1:8b", "llava:7b");
+        return new QCModelConfig("ollama", "llava:7b", "llava:7b");
     }
 
     public QCModelConfig {
         provider = "ollama";
-        textModel = clean(textModel, "llama3.1:8b");
+        textModel = clean(textModel, "llava:7b");
         visionModel = clean(visionModel, "llava:7b");
     }
 

@@ -88,13 +88,13 @@ Think of it like a team of three specialists:
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  TOOL 2: LLM (Claude / GPT / Local Llama)                   │
+│  TOOL 2: LLM (local Ollama llava:13b)                       │
 │  Job: English professor. Reads text and judges quality.     │
 │  Good at: "Is this commentary generic or specific?"         │
 │           "Does this description make real-world sense?"    │
 │  Bad at: Structured field extraction (inconsistent)         │
 │  Speed: Medium (1–5 seconds per call)                       │
-│  Cost: API cost or local GPU                                │
+│  Cost: Local compute                                        │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -184,7 +184,7 @@ This keeps the system fast, cheap, and explainable.
 | Database | PostgreSQL | Reliable, good for training data |
 | OCR | Tesseract (local) + Hybrid mode | Free, good enough, add cloud later |
 | PDF reading | PyMuPDF | Best embedded text extraction |
-| LLM | Claude API (or local Ollama) | Best quality, good API |
+| LLM | local Ollama with llava:13b | Best quality, good API |
 | ML training | scikit-learn → then PyTorch | Start simple, grow complex |
 | Deployment | Docker + single VPS | Simple, cheap |
 | Background jobs | Celery + Redis | For async OCR processing |
@@ -720,11 +720,11 @@ Build a list of 50 common canned phrases. If the commentary contains more than 2
 
 ### LLM Cost Control
 
-If you use Claude API:
+If you use local llava:13b:
 - Average LLM call: ~500 input tokens + ~20 output tokens = ~520 tokens
 - At 3 calls per document: ~1,560 tokens per document
 - At 1,000 documents per month: 1.56 million tokens
-- Cost: roughly $2–5 per month at current rates
+- Cost: local compute only
 
 This is very cheap. Don't run LLM calls on preprocessing or field extraction — only on commentary evaluation where it actually adds value.
 
@@ -1149,7 +1149,7 @@ You have AI tools to accelerate development. Here is a realistic plan:
 
 30 days × 4–6 hours = 120–180 hours total investment.
 
-With AI pair programming (Claude, Cursor, etc.) you can move 2–3× faster on boilerplate and standard patterns. The hard parts where you will spend time regardless:
+With AI pair programming tools you can move 2–3× faster on boilerplate and standard patterns. The hard parts where you will spend time regardless:
 - Getting OCR quality right for your specific form type
 - Debugging regex patterns on real documents
 - UI/UX for operator workflow
@@ -1247,7 +1247,7 @@ The gates are not bureaucracy. They are the fastest path to a working system.
 | PDF text extraction | PyMuPDF | Best embedded text quality |
 | OCR engine | Tesseract | Free, local, good quality |
 | Image preprocessing | OpenCV | Industry standard, fast |
-| LLM | Claude API (with local Llama fallback) | Best quality + local backup |
+| LLM | local Ollama llava:13b | Single approved local model |
 | ML framework | scikit-learn → PyTorch | Simple start, grow as needed |
 | Database | PostgreSQL | Reliable, good JSON support |
 | Job queue | Celery + Redis | Proven, handles async OCR |
