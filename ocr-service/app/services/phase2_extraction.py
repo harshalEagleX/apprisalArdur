@@ -56,6 +56,82 @@ _STATE_ZIP_PREFIXES: Dict[str, Tuple[str, ...]] = {
 }
 
 
+# UAD 1004 form labels. When OCR flattens a tabular row, the regex anchored on
+# label A often captures label B (the next column header) as if it were the
+# value. We use this set to detect "value == next label" and reject the match
+# rather than emitting garbage.
+#
+# Keep entries lowercase, trimmed, no trailing colon. New labels can be added
+# safely; over-inclusion is fine — it just turns wrong-extractions into
+# `not_found`, which surfaces as VERIFY in the rules engine (the correct
+# behavior when the extractor genuinely failed).
+_UAD_FORM_LABEL_STOP_SET: frozenset = frozenset({
+    # Subject section
+    "subject property address", "property address", "address",
+    "city", "state", "zip code", "zip", "county",
+    "borrower", "co-borrower", "owner of public record", "owner of record",
+    "legal description", "assessor's parcel #", "assessor's parcel number",
+    "assessor's parcel", "parcel #", "parcel number", "apn",
+    "tax year", "r.e. taxes", "real estate taxes", "taxes",
+    "neighborhood name", "map reference", "census tract",
+    "occupant", "owner", "tenant", "vacant",
+    "special assessments", "pud", "hoa dues", "hoa", "per year", "per month",
+    "lender", "lender/client", "lender / client", "client",
+    "property rights appraised", "property rights",
+    "fee simple", "leasehold", "de minimis pud",
+    # Neighborhood section
+    "location", "built-up", "growth", "property values", "demand/supply",
+    "marketing time", "neighborhood boundaries", "present land use %",
+    "one-unit housing", "price", "age", "low", "high", "pred",
+    "neighborhood description", "market conditions",
+    # Site section
+    "dimensions", "area", "shape", "view", "specific zoning classification",
+    "zoning compliance", "highest & best use",
+    "utilities", "off-site improvements", "fema special flood hazard area",
+    "fema flood zone", "fema map #", "fema map date",
+    # Improvements
+    "general description", "foundation", "exterior description",
+    "interior", "heating", "cooling", "amenities", "car storage",
+    "appliances", "finished area above grade contains",
+    # Sales comparison grid headers
+    "subject", "comparable sale # 1", "comparable sale # 2", "comparable sale # 3",
+    "proximity to subject", "sale price", "sale price/gross liv. area",
+    "data source(s)", "verification source(s)",
+    "sale or financing concessions", "date of sale/time", "site",
+    "design (style)", "quality of construction", "actual age", "condition",
+    "above grade", "room count", "gross living area",
+    "basement & finished rooms below grade", "functional utility",
+    "garage/carport", "porch/patio/deck",
+    # Misc
+    "total bedrooms", "baths", "yes", "no",
+    # Long boilerplate strings used elsewhere on the form (we anchor on full-line
+    # match, so these are page-6 INTENDED USE / CERTIFICATION sentences that
+    # were leaking into lender_address etc.)
+    "is the subject property currently offered for sale or has it been offered for sale in the twelve months prior to the effective date of this appraisal?",
+    "are the units, common elements, and recreation facilities complete?",
+})
+
+
+def _looks_like_form_label(value: str) -> bool:
+    """
+    True if `value` is itself a UAD form label rather than a real field value.
+
+    Used by the generic extractor to detect the off-by-one OCR-flatten bug
+    where a label-anchored regex captures the *next* label as the value.
+    """
+    if not value:
+        return False
+    raw = value.strip().lower().rstrip(":").rstrip(".")
+    if raw in _UAD_FORM_LABEL_STOP_SET:
+        return True
+    # Also try with trailing punctuation stripped (handles "Parcel #" → "parcel"
+    # when the corresponding "parcel" form is registered in the set).
+    stripped = raw.rstrip("#").strip()
+    if stripped and stripped in _UAD_FORM_LABEL_STOP_SET:
+        return True
+    return False
+
+
 # ── Page position map ──────────────────────────────────────────────────────────
 
 def build_page_position_map(page_index: Dict[int, str]) -> List[Tuple[int, int]]:
@@ -598,6 +674,18 @@ class Phase2ExtractionEngine:
                 raw_value = match.group(1).strip()
                 if post_clean:
                     raw_value = re.sub(post_clean, '', raw_value, flags=re.I).strip()
+
+                # OCR row-flatten guard: when UAD form labels stack ahead of
+                # values, a greedy `[^\n]+` regex captures the next label.
+                # Reject those matches and try the next pattern (or fall
+                # through to not_found, which surfaces as VERIFY).
+                if _looks_like_form_label(raw_value):
+                    logger.debug(
+                        "Phase2 _extract(%s): pattern %d captured a form label "
+                        "(%r); skipping to next pattern.",
+                        field_name, i, raw_value,
+                    )
+                    continue
 
                 corr_value, was_corrected = apply_ocr_correction(raw_value)
                 value_pos = match.start(1) + pos_offset
