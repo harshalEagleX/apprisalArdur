@@ -62,8 +62,8 @@ function ConfirmDialogContent({
         aria-labelledby="confirm-dialog-title"
       >
         <div className="flex gap-3 mb-4">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${danger ? "bg-red-950/60 border border-red-500/30" : "bg-blue-950/50 border border-blue-500/30"}`}>
-            {danger ? <AlertTriangle size={16} className="text-red-400" /> : <Info size={16} className="text-blue-400" />}
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${danger ? "bg-red-950/60 border border-red-500/30" : "bg-slate-950/50 border border-slate-500/30"}`}>
+            {danger ? <AlertTriangle size={16} className="text-red-400" /> : <Info size={16} className="text-slate-400" />}
           </div>
           <div>
             <h3 id="confirm-dialog-title" className="text-sm font-semibold text-white">{title}</h3>
@@ -91,7 +91,7 @@ function ConfirmDialogContent({
           <button
             onClick={onConfirm}
             disabled={!canConfirm}
-            className={`px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-40 ${danger ? "bg-red-600 hover:bg-red-500" : "bg-blue-600 hover:bg-blue-500"}`}
+            className={`px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-40 ${danger ? "bg-red-600 hover:bg-red-500" : "bg-slate-600 hover:bg-slate-500"}`}
           >
             {confirmLabel}
           </button>

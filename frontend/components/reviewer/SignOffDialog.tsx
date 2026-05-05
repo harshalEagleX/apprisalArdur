@@ -143,7 +143,7 @@ export function SignOffDialog({
           autoFocus
           inputMode="numeric"
           maxLength={4}
-          className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 font-mono text-sm tracking-[0.25em] text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 font-mono text-sm tracking-[0.25em] text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
           placeholder="0000"
         />
 
@@ -152,7 +152,7 @@ export function SignOffDialog({
           value={notes}
           onChange={e => onNotesChange(e.target.value)}
           rows={3}
-          className="mt-1.5 w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          className="mt-1.5 w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
           placeholder="Optional summary for the completed review..."
         />
 
@@ -167,7 +167,7 @@ export function SignOffDialog({
           <button
             onClick={onConfirm}
             disabled={!canConfirm}
-            className="h-9 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+            className="h-9 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40"
           >
             {submitting ? "Submitting..." : "Submit review"}
           </button>

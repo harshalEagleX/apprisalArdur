@@ -53,7 +53,7 @@ export const BatchRow = memo(function BatchRow({
 
   return (
     <tr
-      className={`transition-colors ${b.status === "QC_PROCESSING" ? "bg-blue-950/10" : "hover:bg-white/[0.03]"}`}
+      className={`transition-colors ${b.status === "QC_PROCESSING" ? "bg-slate-950/10" : "hover:bg-white/[0.03]"}`}
     >
       {/* Batch ID */}
       <td className="px-4 py-3">
@@ -88,7 +88,7 @@ export const BatchRow = memo(function BatchRow({
             </div>
             <div className="w-32 h-1 bg-[#0B0F14] rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                className="h-full bg-slate-500 rounded-full transition-all duration-500"
                 style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
               />
             </div>
@@ -98,7 +98,7 @@ export const BatchRow = memo(function BatchRow({
             </div>
             {subLabel && (
               <div
-                className="mt-0.5 text-[10px] text-blue-300 max-w-[170px] truncate"
+                className="mt-0.5 text-[10px] text-slate-300 max-w-[170px] truncate"
                 title={progress.subMessage ?? subLabel}
               >
                 {subLabel}
@@ -106,7 +106,7 @@ export const BatchRow = memo(function BatchRow({
               </div>
             )}
             {progress.modelName && (
-              <div className="mt-0.5 text-[10px] text-blue-400 max-w-[150px] truncate">
+              <div className="mt-0.5 text-[10px] text-slate-400 max-w-[150px] truncate">
                 {progress.modelProvider ?? "model"} · {progress.modelName}
               </div>
             )}
@@ -163,7 +163,7 @@ export const BatchRow = memo(function BatchRow({
             <button
               onClick={() => onProcessQC(b)}
               disabled={isLoading}
-              className="inline-flex h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-950/45 px-2.5 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-900/50 disabled:opacity-40"
+              className="inline-flex h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-md border border-slate-500/25 bg-slate-950/45 px-2.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-900/50 disabled:opacity-40"
             >
               {isLoading ? spinnerSvg : <Play size={12} />}
               {b.status === "ERROR" ? "Retry" : "Run QC"}
@@ -172,7 +172,7 @@ export const BatchRow = memo(function BatchRow({
 
           {/* Processing spinner (no progress yet) */}
           {b.status === "QC_PROCESSING" && !progress && (
-            <span className="text-[11px] text-indigo-400 flex items-center gap-1">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1">
               {spinnerSvg}
               Processing
             </span>

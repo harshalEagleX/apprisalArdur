@@ -16,7 +16,7 @@ function RecoveryMetric({
   const tones = {
     slate: "border-white/10 bg-[#0B0F14]/70 text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
-    blue: "border-blue-900/50 bg-blue-950/30 text-blue-200",
+    blue: "border-slate-900/50 bg-slate-950/30 text-slate-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
     red: "border-red-900/50 bg-red-950/30 text-red-200",
   };
@@ -226,7 +226,7 @@ export function BatchRecoveryDrawer({
             <button
               onClick={() => onRetry(batch)}
               disabled={busy || batch.status === "VALIDATION_FAILED"}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40"
             >
               <Play size={14} /> Retry QC
             </button>

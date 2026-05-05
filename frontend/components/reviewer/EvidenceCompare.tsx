@@ -22,11 +22,11 @@ function EvidenceValue({
   tone: "found" | "expected";
 }) {
   const compareTokens = new Set(tokenize(compareTo).map(normalizeToken).filter(Boolean));
-  const titleColor = tone === "found" ? "text-slate-500" : "text-blue-400";
-  const valueColor = tone === "found" ? "text-slate-300" : "text-blue-200";
+  const titleColor = tone === "found" ? "text-slate-500" : "text-slate-400";
+  const valueColor = tone === "found" ? "text-slate-300" : "text-slate-200";
   return (
     <div
-      className={`rounded-lg p-2.5 ${tone === "found" ? "border border-white/10 bg-[#11161C]/80" : "border border-blue-500/25 bg-blue-950/25"}`}
+      className={`rounded-lg p-2.5 ${tone === "found" ? "border border-white/10 bg-[#11161C]/80" : "border border-slate-500/25 bg-slate-950/25"}`}
     >
       <div className={`mb-1 text-[10px] font-semibold uppercase tracking-wide ${titleColor}`}>
         {title}
@@ -80,7 +80,7 @@ export function EvidenceCompare({ rule, status }: EvidenceCompareProps) {
         <span className="rounded border border-white/10 bg-[#11161C] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
           Evidence
         </span>
-        <span className="rounded border border-blue-500/25 bg-blue-950/30 px-1.5 py-0.5 text-[10px] text-blue-200">
+        <span className="rounded border border-slate-500/25 bg-slate-950/30 px-1.5 py-0.5 text-[10px] text-slate-200">
           {pageLabel}
         </span>
         {rule.confidence != null && (

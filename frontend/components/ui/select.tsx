@@ -117,7 +117,7 @@ export function Select({
           setOpen(next => !next)
         }}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-md border bg-[#11161C] px-3 text-left text-sm text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-10 w-full items-center justify-between gap-2 rounded-md border bg-[#11161C] px-3 text-left text-sm text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/45 disabled:cursor-not-allowed disabled:opacity-50",
           invalid
             ? "border-red-500/70 focus-visible:ring-red-500/35"
             : "border-white/10 hover:border-white/16"
@@ -164,10 +164,10 @@ export function Select({
                 className={cn(
                   "flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                   index === activeIndex ? "bg-white/[0.05] text-white" : "text-slate-300",
-                  option.value === value && "text-blue-200"
+                  option.value === value && "text-slate-200"
                 )}
               >
-                <Check size={14} className={cn("mt-0.5 shrink-0 text-blue-400", option.value === value ? "opacity-100" : "opacity-0")} />
+                <Check size={14} className={cn("mt-0.5 shrink-0 text-slate-400", option.value === value ? "opacity-100" : "opacity-0")} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{option.label}</span>
                   {option.description && <span className="mt-0.5 block truncate text-xs text-slate-500">{option.description}</span>}

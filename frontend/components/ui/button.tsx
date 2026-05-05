@@ -10,13 +10,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "border border-blue-400/30 bg-blue-600 text-white shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_0_22px_rgba(59,130,246,0.2)] hover:bg-blue-500 hover:shadow-[0_0_0_1px_rgba(59,130,246,0.36),0_0_30px_rgba(59,130,246,0.28)]",
+          "border border-slate-400/30 bg-slate-600 text-white shadow-[0_0_0_1px_rgba(226,232,240,0.22),0_0_22px_rgba(226,232,240,0.2)] hover:bg-slate-500 hover:shadow-[0_0_0_1px_rgba(226,232,240,0.36),0_0_30px_rgba(226,232,240,0.28)]",
         primary:
-          "border border-blue-400/30 bg-blue-600 text-white shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_0_22px_rgba(59,130,246,0.2)] hover:bg-blue-500 hover:shadow-[0_0_0_1px_rgba(59,130,246,0.36),0_0_30px_rgba(59,130,246,0.28)]",
+          "border border-slate-400/30 bg-slate-600 text-white shadow-[0_0_0_1px_rgba(226,232,240,0.22),0_0_22px_rgba(226,232,240,0.2)] hover:bg-slate-500 hover:shadow-[0_0_0_1px_rgba(226,232,240,0.36),0_0_30px_rgba(226,232,240,0.28)]",
         destructive:
           "border border-red-400/30 bg-red-600 text-white shadow-[0_0_0_1px_rgba(239,68,68,0.16),0_0_20px_rgba(239,68,68,0.16)] hover:bg-red-500",
         outline:
-          "border border-white/10 bg-[#11161C] text-slate-300 hover:border-blue-500/40 hover:bg-[#161B22] hover:text-white",
+          "border border-white/10 bg-[#11161C] text-slate-300 hover:border-slate-500/40 hover:bg-[#161B22] hover:text-white",
         secondary:
           "border border-white/10 bg-transparent text-slate-300 hover:border-white/16 hover:bg-white/[0.04] hover:text-white",
         ghost: "text-slate-400 hover:bg-white/[0.04] hover:text-white",

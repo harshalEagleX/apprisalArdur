@@ -190,10 +190,10 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
               aria-label={file ? `Selected ZIP archive ${file.name}. Press Enter to choose a different file.` : "Choose ZIP archive"}
               className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
                 uploading ? "cursor-not-allowed border-white/10 opacity-60" :
-                dragging ? "cursor-copy border-blue-500 bg-blue-950/30" :
+                dragging ? "cursor-copy border-slate-500 bg-slate-950/30" :
                 file ? "cursor-pointer border-green-500/50 bg-green-950/20" :
                 fieldErrors.file ? "cursor-pointer border-red-500/50 bg-red-950/10" :
-                "cursor-pointer border-white/15 hover:border-blue-500/35"
+                "cursor-pointer border-white/15 hover:border-slate-500/35"
               }`}
             >
               <input ref={inputRef} type="file" accept=".zip" className="hidden"
@@ -223,7 +223,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
                 <span className="font-mono">{progress}%</span>
               </div>
               <div className="h-1.5 bg-[#0B0F14] rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-slate-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
               </div>
             </div>
           )}
@@ -235,7 +235,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
               </button>
             )}
             <button type="submit" disabled={uploading || !file || !clientId}
-              className="flex items-center gap-2 rounded-md border border-blue-400/30 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50">
+              className="flex items-center gap-2 rounded-md border border-slate-400/30 bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-50">
               {uploading && <Spinner size={13} />}
               {uploading ? "Uploading…" : "Upload batch"}
             </button>
@@ -246,7 +246,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50";
+const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 disabled:opacity-50";
 
 function FieldError({ children }: { children: React.ReactNode }) {
   return (

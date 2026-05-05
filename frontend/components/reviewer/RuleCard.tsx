@@ -130,7 +130,7 @@ export const RuleCard = memo(function RuleCard({
   return (
     <div
       id={`rule-${rule.id}`}
-      className={`rounded-lg border p-3 shadow-[0_10px_24px_rgba(0,0,0,0.12)] ${s.border} ${s.bg} ${active ? "ring-1 ring-blue-500/60" : ""}`}
+      className={`rounded-lg border p-3 shadow-[0_10px_24px_rgba(0,0,0,0.12)] ${s.border} ${s.bg} ${active ? "ring-1 ring-slate-500/60" : ""}`}
     >
       <button
         onClick={() => {
@@ -152,7 +152,7 @@ export const RuleCard = memo(function RuleCard({
                 {sev}
               </span>
               {saving && (
-                <span className="text-[10px] text-blue-300 flex items-center gap-0.5">
+                <span className="text-[10px] text-slate-300 flex items-center gap-0.5">
                   <Save size={9} />
                   saving
                 </span>
@@ -170,7 +170,7 @@ export const RuleCard = memo(function RuleCard({
                 </span>
               )}
               {rule.overridePending && (
-                <span className="text-[10px] text-blue-200 border border-blue-500/25 bg-blue-950/35 rounded px-1.5 py-0.5">
+                <span className="text-[10px] text-slate-200 border border-slate-500/25 bg-slate-950/35 rounded px-1.5 py-0.5">
                   second approval pending
                 </span>
               )}
@@ -270,7 +270,7 @@ export const RuleCard = memo(function RuleCard({
                 </div>
               )}
               {rule.overridePending && (
-                <div className="text-[11px] text-blue-200 bg-blue-950/18 border border-blue-500/25 rounded-lg px-2.5 py-2">
+                <div className="text-[11px] text-slate-200 bg-slate-950/18 border border-slate-500/25 rounded-lg px-2.5 py-2">
                   Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
                   different reviewer must press Pass to approve it.
                 </div>
@@ -311,7 +311,7 @@ export const RuleCard = memo(function RuleCard({
                     : "Add a comment (optional)..."
                 }
                 rows={2}
-                className="w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/55 px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/55 px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
               />
               {decision && (
                 <div className="text-[10px] text-slate-600">

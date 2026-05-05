@@ -12,20 +12,45 @@ import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideToolti
 const REVIEWER_QUEUE_GUIDE_STEPS: TooltipStep[] = [
   {
     target: '[data-guide="reviewer-nav"]',
-    title: "Reviewer navigation",
-    body: "Queue shows assigned work. Help stays available for operator guidance and status explanations.",
+    eyebrow: "Reviewer desk",
+    title: "Stay inside the assigned workflow",
+    body: "Queue is the reviewer home. Help stays available for status explanations while active reviews keep a clear badge in the top bar.",
     position: "bottom",
+    flow: ["Queue", "Verify", "Sign off", "Return"],
   },
   {
-    target: '[data-guide="reviewer-workspace"]',
-    title: "Reviewer workspace",
-    body: "This area contains your queue or active review screen. Start from the highest-priority assigned file.",
+    target: '[data-guide="reviewer-queue-next"]',
+    fallbackTarget: '[data-guide="reviewer-workspace"]',
+    eyebrow: "Prioritization",
+    title: "Start with the highest-risk file",
+    body: "The queue sorts failures first, then files with more VERIFY items, then older work. The next action card opens the highest priority result.",
     position: "top",
+    flow: ["Failures", "More VERIFY", "Oldest first"],
+    shortcut: "Press N to open the next prioritized item.",
+  },
+  {
+    target: '[data-guide="reviewer-queue-filters"]',
+    fallbackTarget: '[data-guide="reviewer-workspace"]',
+    eyebrow: "Queue control",
+    title: "Filter without losing your place",
+    body: "Search by filename, QC id, or decision. Use All, Failures, and Review-only views to narrow assigned work.",
+    position: "bottom",
+    shortcut: "/ focuses search, 1 shows all, 2 shows failures, 3 shows review-only, R refreshes.",
+  },
+  {
+    target: '[data-guide="reviewer-queue-list"]',
+    fallbackTarget: '[data-guide="reviewer-workspace"]',
+    eyebrow: "Open review",
+    title: "Choose a file and enter verification",
+    body: "Opening a queue item navigates to the verification workspace with a return path back to your filtered queue.",
+    position: "top",
+    flow: ["Select row", "Review", "Session starts"],
   },
   {
     target: '[data-guide="guide-launcher"]',
+    eyebrow: "Help system",
     title: "Open this guide anytime",
-    body: "Use this guide button whenever you want the walkthrough again.",
+    body: "The reviewer guide changes between queue and active verification so it always explains the page you are using.",
     position: "left",
   },
 ];
@@ -33,27 +58,38 @@ const REVIEWER_QUEUE_GUIDE_STEPS: TooltipStep[] = [
 const REVIEWER_VERIFY_GUIDE_STEPS: TooltipStep[] = [
   {
     target: '[data-guide="review-topbar"]',
-    title: "Review command bar",
-    body: "This bar shows review progress, save state, focus mode, and final submit controls.",
+    eyebrow: "Review session",
+    title: "Confirm the session and progress",
+    body: "The verify page starts a backend review lock. The command bar shows progress, save state, live connection, focus mode, and final submit controls.",
     position: "bottom",
+    flow: ["Start lock", "Load progress", "Save decisions", "Submit"],
   },
   {
     target: '[data-guide="review-document"]',
-    title: "Document evidence",
+    eyebrow: "Evidence pane",
+    title: "Inspect source documents before deciding",
     body: "Use the PDF side to inspect the appraisal, order, and contract. Rule focus can jump to the extracted page and highlight area.",
     position: "right",
+    flow: ["Report", "Order", "Contract", "Highlighted evidence"],
+    shortcut: "[ and ] switch documents, + and - zoom, 0 resets zoom.",
   },
   {
     target: '[data-guide="review-rules"]',
-    title: "Decision checklist",
-    body: "Rules needing review are saved here. Use comments for overrides and submit only after required decisions are complete.",
+    eyebrow: "Decision checklist",
+    title: "Save auditable PASS/FAIL decisions",
+    body: "Rules needing review are saved here. VERIFY can pass or fail. Failed rules can be overridden with PASS only with a strong comment, and blocking VERIFY items require acknowledgement.",
     position: "left",
+    flow: ["Focus rule", "Compare evidence", "Comment", "Save decision"],
+    shortcut: "N jumps to next pending rule, C focuses comment, A toggles acknowledgement, P saves pass, F saves fail.",
+    note: "Submit stays locked until all required decisions are saved and the backend says canSubmit is true.",
   },
   {
     target: '[data-guide="review-focus"]',
-    title: "Focus mode",
-    body: "Focus mode hides outer navigation and can enter browser fullscreen for uninterrupted review work.",
+    eyebrow: "Focus mode",
+    title: "Use full-screen review when needed",
+    body: "Focus mode hides outer navigation and can enter browser fullscreen for uninterrupted review work. It is optional; the reviewer can stay in the normal shell if they prefer.",
     position: "bottom",
+    shortcut: "Use the Focus button to enter or exit. Escape exits browser fullscreen.",
   },
 ];
 
@@ -83,7 +119,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
         className="sticky top-0 z-30 h-16 flex-shrink-0 border-b border-white/10 bg-[#11161C]/95 backdrop-blur flex items-center px-5 gap-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg border border-blue-500/25 bg-blue-600 flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.2)]">
+          <div className="w-8 h-8 rounded-lg border border-slate-500/25 bg-slate-600 flex items-center justify-center shadow-[0_0_22px_rgba(226,232,240,0.2)]">
             <span className="text-[11px] font-bold">A</span>
           </div>
           <div className="hidden sm:block">
@@ -97,7 +133,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
         <nav data-guide="reviewer-nav" className="flex items-center gap-1">
           <ReviewerNavLink href="/reviewer/queue" active={pathname.startsWith("/reviewer/queue")} icon={Inbox} label="Queue" />
           {pathname.startsWith("/reviewer/verify") && (
-            <span className="hidden sm:inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-950/30 px-2.5 text-sm font-medium text-blue-200">
+            <span className="hidden sm:inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-500/25 bg-slate-950/30 px-2.5 text-sm font-medium text-slate-200">
               <FileCheck2 size={14} />
               Active review
             </span>
@@ -106,7 +142,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
         </nav>
 
         <div className="hidden min-w-0 items-center gap-2 rounded-md border border-white/10 bg-[#161B22]/70 px-2.5 py-1.5 text-[11px] text-slate-500 lg:flex">
-          <BrainCircuit size={13} className="shrink-0 text-blue-300" />
+          <BrainCircuit size={13} className="shrink-0 text-slate-300" />
           <span className="truncate">Verify evidence. Save decisions. Sign off with traceability.</span>
         </div>
 
@@ -130,7 +166,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
       <div
         data-reviewer-shell-content="true"
         data-guide="reviewer-workspace"
-        className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.05),transparent_28%)]"
+        className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(226,232,240,0.032),transparent_28%)]"
       >
         {children}
       </div>
@@ -151,7 +187,7 @@ function ReviewerNavLink({ href, active, icon: Icon, label }: {
     <Link
       href={href}
       className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors ${
-        active ? "border border-blue-500/20 bg-blue-600/15 text-blue-200 font-medium" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
+        active ? "border border-slate-500/20 bg-slate-600/15 text-slate-200 font-medium" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
       }`}
     >
       <Icon size={14} />

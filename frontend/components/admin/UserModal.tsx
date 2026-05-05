@@ -154,7 +154,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="flex items-center gap-2 rounded-md border border-blue-400/30 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50">
+              className="flex items-center gap-2 rounded-md border border-slate-400/30 bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-50">
               {saving && <Spinner size={13} />}
               {saving ? "Saving…" : isEdit ? "Save changes" : "Create user"}
             </button>
@@ -165,7 +165,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30";
 
 function inputClass(error?: string) {
   return `${INPUT} ${error ? "border-red-700 focus:ring-red-500 focus:border-red-600" : ""}`;

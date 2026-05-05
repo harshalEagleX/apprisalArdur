@@ -14,7 +14,7 @@ async function api<T>(path: string): Promise<T> {
 type Days = 7 | 30 | 90;
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color = "text-blue-400", href }: {
+function StatCard({ label, value, sub, color = "text-slate-400", href }: {
   label: string; value: string | number | null; sub?: string; color?: string; href?: string
 }) {
   const content = (
@@ -26,7 +26,7 @@ function StatCard({ label, value, sub, color = "text-blue-400", href }: {
   );
   const className = "foundation-fade-in rounded-lg border border-white/10 bg-[#11161C]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.24)] transition-colors";
   return href ? (
-    <Link href={href} className={`${className} block hover:border-blue-500/35 hover:bg-[#161B22]`}>
+    <Link href={href} className={`${className} block hover:border-slate-500/35 hover:bg-[#161B22]`}>
       {content}
     </Link>
   ) : (
@@ -47,7 +47,7 @@ function Section({
   return (
     <div className="foundation-fade-in rounded-lg border border-white/10 bg-[#11161C]/85 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-slate-200">
-        <Icon size={16} className="text-blue-400" />{title}
+        <Icon size={16} className="text-slate-400" />{title}
       </h2>
       {children}
     </div>
@@ -55,7 +55,7 @@ function Section({
 }
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
-function ProgressBar({ pct, color = "bg-blue-500" }: { pct: number; color?: string }) {
+function ProgressBar({ pct, color = "bg-slate-500" }: { pct: number; color?: string }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#0B0F14]">
       <div className={`${color} h-1.5 rounded-full transition-all duration-700`}
@@ -115,9 +115,9 @@ export default function AnalyticsPage() {
   return (
     <div className="foundation-grid min-h-screen bg-slate-950 text-white">
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <header className="border-b border-white/10 bg-[#11161C]/80 px-6 py-4 backdrop-blur">
+      <header data-guide="analytics-header" className="border-b border-white/10 bg-[#11161C]/80 px-6 py-4 backdrop-blur">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-300">Supervisor intelligence</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">Supervisor intelligence</div>
           <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <h1 className="text-2xl font-semibold tracking-normal">Analytics Dashboard</h1>
@@ -127,7 +127,7 @@ export default function AnalyticsPage() {
               {([7,30,90] as Days[]).map(d => (
                 <button key={d} onClick={() => setDays(d)}
                   className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    days === d ? "border-blue-500 bg-blue-600 text-white shadow-[0_0_24px_rgba(59,130,246,0.22)]" : "border-white/10 bg-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                    days === d ? "border-slate-500 bg-slate-600 text-white shadow-[0_0_24px_rgba(226,232,240,0.22)]" : "border-white/10 bg-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200"
                   }`}>
                   {d}d
                 </button>
@@ -148,17 +148,17 @@ export default function AnalyticsPage() {
 
       {loading ? (
         <div className="flex h-64 items-center justify-center text-slate-500">
-          <span className="mr-3 h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+          <span className="mr-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
           Loading analytics…
         </div>
       ) : (
         <div className="mx-auto max-w-7xl space-y-6 p-6">
 
           {/* ── Overview cards ──────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            <StatCard label="Files Checked"     value={num("totalFilesProcessed")} color="text-blue-400" />
+          <div data-guide="analytics-overview" className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+            <StatCard label="Files Checked"     value={num("totalFilesProcessed")} color="text-slate-400" />
             <StatCard label="OCR Accuracy"      value={overview.avgOcrAccuracy != null ? `${overview.avgOcrAccuracy}%` : "—"} color="text-emerald-400" sub="average confidence" />
-            <StatCard label="Rule Pass Rate"    value={overview.avgRulePassRate != null ? `${overview.avgRulePassRate}%` : "—"} color="text-blue-300" />
+            <StatCard label="Rule Pass Rate"    value={overview.avgRulePassRate != null ? `${overview.avgRulePassRate}%` : "—"} color="text-slate-300" />
             <StatCard label="Avg Processing"    value={overview.avgProcessingSeconds != null ? `${overview.avgProcessingSeconds}s` : "—"} color="text-amber-400" sub="per file" />
             <StatCard label="Cache Hit Rate"    value={overview.cacheHitRate != null ? `${overview.cacheHitRate}%` : "—"} color="text-slate-200" sub="repeat files" />
             <StatCard label="Pending Review"    value={num("pendingReview")} color="text-rose-400" sub="open review queue" href="/admin/batches?status=REVIEW_PENDING" />
@@ -166,7 +166,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* ── Main grid ────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div data-guide="analytics-sections" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
             {/* OCR Insights */}
             <Section title="Document Reading Quality" Icon={FileText}>
@@ -287,7 +287,7 @@ export default function AnalyticsPage() {
                         <span className="text-slate-400">{String(r.date)}</span>
                         <span className="text-right text-slate-300">{String(r.fileCount)}</span>
                         <span className={`text-right font-medium ${Number(r.ocrAccuracy ?? 0) >= 85 ? "text-emerald-400" : "text-amber-400"}`}>{r.ocrAccuracy as number}%</span>
-                        <span className="text-right text-blue-300">{r.passRate as number}%</span>
+                        <span className="text-right text-slate-300">{r.passRate as number}%</span>
                       </div>
                     ))}
                   </div>
@@ -320,7 +320,7 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="text-slate-500 mt-1 truncate">{item.filename || "Unknown file"} · {item.firstPresentedAt || "not recorded"}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Link href="/admin/batches?status=IN_REVIEW" className="text-blue-400 hover:text-blue-300">
+                        <Link href="/admin/batches?status=IN_REVIEW" className="text-slate-400 hover:text-slate-300">
                           Open in-review batches
                         </Link>
                         <Link href="/admin/batches?status=REVIEW_PENDING" className="text-slate-400 hover:text-slate-200">
@@ -359,7 +359,7 @@ export default function AnalyticsPage() {
 
           {/* ── Guidance banner ──────────────────────────────────────────────── */}
           <div className="foundation-fade-in flex items-start gap-3 rounded-lg border border-white/10 bg-[#11161C]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-            <Lightbulb size={22} className="mt-0.5 text-blue-400 flex-shrink-0" />
+            <Lightbulb size={22} className="mt-0.5 text-slate-400 flex-shrink-0" />
             <div>
               <div className="text-sm font-medium text-slate-200 mb-1">How to read this dashboard</div>
               <div className="text-xs text-slate-400 space-y-1">

@@ -26,11 +26,11 @@ export default function ActivityMonitor() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 bg-[#11161C] px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <Activity size={13} className="text-blue-300" />
+          <Activity size={13} className="text-slate-300" />
           <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-300">
             Background activity
           </span>
-          <span className="rounded-full border border-blue-500/25 bg-blue-950/35 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-blue-100">
+          <span className="rounded-full border border-slate-500/25 bg-slate-950/35 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-100">
             {jobs.length}
           </span>
         </div>
@@ -72,12 +72,12 @@ export default function ActivityMonitor() {
                       </div>
                     )}
                     {job.modelLabel && (
-                      <div className="mt-0.5 truncate text-[10px] text-blue-300">
+                      <div className="mt-0.5 truncate text-[10px] text-slate-300">
                         {job.modelLabel}
                       </div>
                     )}
                     {subLabel && (
-                      <div className="mt-0.5 truncate text-[10px] text-blue-200" title={job.subMessage ?? subLabel}>
+                      <div className="mt-0.5 truncate text-[10px] text-slate-200" title={job.subMessage ?? subLabel}>
                         {subLabel}{job.subMessage ? ` — ${job.subMessage}` : ""}
                       </div>
                     )}
@@ -93,7 +93,7 @@ export default function ActivityMonitor() {
                 {/* Progress bar */}
                 <div className="h-1.5 overflow-hidden rounded-full bg-[#0B0F14]">
                   <div
-                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                    className="h-full rounded-full bg-slate-500 transition-all duration-500"
                     style={{ width: `${pct}%` }}
                   />
                 </div>

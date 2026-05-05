@@ -26,10 +26,10 @@ export default function LoginPage() {
 
   return (
     <main className="foundation-grid relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(59,130,246,0.12),transparent_34%),linear-gradient(to_bottom,rgba(11,15,20,0.2),#0B0F14_78%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(226,232,240,0.045),transparent_34%),linear-gradient(to_bottom,rgba(5,7,10,0.62),rgba(5,7,10,0.86)_78%)]" />
       <div className="relative mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-6 py-10 lg:grid-cols-[1fr_25rem]">
         <section className="hidden max-w-2xl lg:block">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-950/20 px-3 py-1.5 text-xs font-medium text-blue-200">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-md border border-slate-500/20 bg-slate-950/20 px-3 py-1.5 text-xs font-medium text-slate-200">
             <BrainCircuit size={14} />
             AI Document Intelligence Platform
           </div>
@@ -48,7 +48,7 @@ export default function LoginPage() {
 
         <section className="mx-auto w-full max-w-sm lg:mx-0">
           <div className="mb-7">
-            <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-blue-500/25 bg-blue-950/35 shadow-[0_0_28px_rgba(59,130,246,0.18)]">
+            <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-500/25 bg-slate-950/35 shadow-[0_0_28px_rgba(226,232,240,0.18)]">
               <span className="text-base font-semibold text-white">A</span>
             </div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">Secure workspace</div>
@@ -73,7 +73,7 @@ export default function LoginPage() {
                 placeholder="Enter username"
                 required
                 autoFocus
-                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
               />
             </div>
             <div className="mt-3">
@@ -84,13 +84,13 @@ export default function LoginPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Enter password"
                 required
-                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-blue-400/30 bg-blue-600 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.18)] transition-all hover:bg-blue-500 disabled:opacity-50"
+              className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-400/30 bg-slate-600 text-sm font-semibold text-white shadow-[0_0_24px_rgba(226,232,240,0.18)] transition-all hover:bg-slate-500 disabled:opacity-50"
             >
               {loading ? <Spinner size={14} /> : <ArrowRight size={14} />}
               {loading ? "Signing in..." : "Sign in"}
@@ -112,7 +112,7 @@ function Signal({ icon: Icon, label, value }: {
 }) {
   return (
     <div className="rounded-lg border border-white/10 bg-[#11161C]/80 p-3">
-      <Icon size={15} className="mb-2 text-blue-300" />
+      <Icon size={15} className="mb-2 text-slate-300" />
       <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">{label}</div>
       <div className="mt-1 text-xs text-slate-300">{value}</div>
     </div>

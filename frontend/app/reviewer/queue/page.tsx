@@ -247,7 +247,7 @@ export default function ReviewerQueuePage() {
       </div>
 
       {!loading && !error && (
-        <div className="mb-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
+        <div data-guide="reviewer-queue-next" className="mb-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
           <ReviewerNextAction item={nextItem} returnTo={queueReturnPath} />
           <div className="grid grid-cols-2 gap-2">
             <QueueSignal icon={CalendarDays} label="Processed today" value={processedToday} />
@@ -263,7 +263,7 @@ export default function ReviewerQueuePage() {
         <QueueStat icon={ListFilter} label="Verify rules" value={stats.verifyRules} tone="blue" />
       </div>
 
-      <div className="mb-5 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+      <div data-guide="reviewer-queue-filters" className="mb-5 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="relative flex-1 md:max-w-md">
             <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -272,7 +272,7 @@ export default function ReviewerQueuePage() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search file name, QC result, or decision..."
-              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
             />
             {query && (
               <button
@@ -294,7 +294,7 @@ export default function ReviewerQueuePage() {
                 aria-keyshortcuts={next === "all" ? "1" : next === "failures" ? "2" : "3"}
                 className={`h-9 rounded-md px-3 text-xs font-medium transition-colors ${
                   view === next
-                    ? "bg-blue-600 text-white shadow-[0_0_18px_rgba(59,130,246,0.16)]"
+                    ? "bg-slate-600 text-white shadow-[0_0_18px_rgba(226,232,240,0.16)]"
                     : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
                 }`}
               >
@@ -333,14 +333,14 @@ export default function ReviewerQueuePage() {
             title="No queue items match"
             description="Clear the search or change the queue filter."
             action={
-              <button onClick={() => { setQuery(""); setView("all"); }} className="text-sm text-blue-400 hover:text-blue-300">
+              <button onClick={() => { setQuery(""); setView("all"); }} className="text-sm text-slate-400 hover:text-slate-300">
                 Reset queue filters
               </button>
             }
           />
         </div>
       ) : (
-        <div className="space-y-6">
+        <div data-guide="reviewer-queue-list" className="space-y-6">
           {/* Urgent — files with failures */}
           {urgent.length > 0 && (
             <section>
@@ -440,7 +440,7 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
             id={`queue-item-${item.id}`}
             key={item.id}
             onMouseEnter={() => onSelect(item.id)}
-            className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-white/[0.03] md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""} ${selectedId === item.id ? "ring-1 ring-blue-500/60 ring-inset" : ""}`}
+            className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-white/[0.03] md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""} ${selectedId === item.id ? "ring-1 ring-slate-500/60 ring-inset" : ""}`}
           >
             {/* File icon */}
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${hasFailure ? "bg-red-950/50 border border-red-500/25" : "bg-[#161B22] border border-white/10"}`}>
@@ -490,7 +490,7 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
               href={reviewHref(item.id, returnTo)}
               onFocus={() => onSelect(item.id)}
               aria-keyshortcuts="Enter"
-              className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-500 md:min-w-[126px]"
+              className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-slate-500 md:min-w-[126px]"
             >
               {actionLabel} <ChevronRight size={13} />
             </a>
@@ -515,7 +515,7 @@ function QueueStat({ icon: Icon, label, value, tone }: {
     slate: "border-white/10 bg-[#11161C] text-slate-300",
     red: "border-red-500/25 bg-red-950/25 text-red-200",
     amber: "border-amber-500/25 bg-amber-950/25 text-amber-200",
-    blue: "border-blue-500/25 bg-blue-950/25 text-blue-200",
+    blue: "border-slate-500/25 bg-slate-950/25 text-slate-200",
   };
   return (
     <div className={`flex h-14 items-center gap-3 rounded-lg border px-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)] ${styles[tone]}`}>

@@ -1,8 +1,8 @@
 const CONFIG: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
   UPLOADED:          { label: "Uploaded",         dot: "bg-slate-400",  text: "text-slate-300",  bg: "bg-[#161B22]", border: "border-white/10" },
-  VALIDATING:        { label: "Validating",       dot: "bg-blue-400 animate-pulse", text: "text-blue-200", bg: "bg-blue-950/40", border: "border-blue-500/25" },
+  VALIDATING:        { label: "Validating",       dot: "bg-slate-400 animate-pulse", text: "text-slate-200", bg: "bg-slate-950/40", border: "border-slate-500/25" },
   VALIDATION_FAILED: { label: "Invalid",          dot: "bg-red-400",    text: "text-red-200",    bg: "bg-red-950/40", border: "border-red-500/25" },
-  QC_PROCESSING:     { label: "QC Running",       dot: "bg-blue-400 animate-pulse", text: "text-blue-200", bg: "bg-blue-950/40", border: "border-blue-500/25" },
+  QC_PROCESSING:     { label: "QC Running",       dot: "bg-slate-400 animate-pulse", text: "text-slate-200", bg: "bg-slate-950/40", border: "border-slate-500/25" },
   REVIEW_PENDING:    { label: "Awaiting Review",  dot: "bg-amber-400",  text: "text-amber-200",  bg: "bg-amber-950/40", border: "border-amber-500/25" },
   IN_REVIEW:         { label: "In Review",        dot: "bg-amber-400",  text: "text-amber-200",  bg: "bg-amber-950/40", border: "border-amber-500/25" },
   COMPLETED:         { label: "Completed",        dot: "bg-green-400",  text: "text-green-200",  bg: "bg-green-950/40", border: "border-green-500/25" },

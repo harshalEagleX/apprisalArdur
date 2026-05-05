@@ -1,25 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  /* Foundation: backgrounds stay in the #0B-#16 dark range. */
-  --background: #0b0f14;
+  /* Foundation: backgrounds stay deep and low-noise. */
+  --background: #05070a;
   --foreground: #e5edf7;
   --surface: #11161c;
   --surface-muted: #161b22;
   --surface-raised: #1b222b;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
-  --grid-overlay: rgba(255, 255, 255, 0.04);
-  --ring: #3b82f6;
+  --grid-overlay: rgba(255, 255, 255, 0.032);
+  --ring: #cbd5e1;
+  --cursor-x: -9999px;
+  --cursor-y: -9999px;
 
-  --accent-blue: #3b82f6;
+  --accent-blue: #cbd5e1;
   --accent-green: #22c55e;
   --accent-amber: #f59e0b;
   --accent-red: #ef4444;
 
   --radius-panel: 14px;
   --shadow-panel: 0 18px 45px rgba(0, 0, 0, 0.36);
-  --shadow-glow-blue: 0 0 0 1px rgba(59, 130, 246, 0.28), 0 0 24px rgba(59, 130, 246, 0.24);
+  --shadow-glow-blue: 0 0 0 1px rgba(226, 232, 240, 0.18), 0 0 24px rgba(226, 232, 240, 0.12);
 }
 
 @theme inline {
@@ -79,7 +81,7 @@
 
 @layer utilities {
   .bg-slate-950 {
-    background-color: #0b0f14;
+    background-color: #05070a;
   }
 
   .bg-slate-900 {
@@ -106,6 +108,14 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "tnum" 1;
+  isolation: isolate;
+  position: relative;
+}
+
+.app-content-root {
+  min-height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 ::selection {
@@ -161,10 +171,37 @@ textarea:focus-visible {
 }
 
 .foundation-grid {
+  background-color: transparent;
   background-image:
     linear-gradient(var(--grid-overlay) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-overlay) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.foundation-grid.bg-slate-950 {
+  background-color: transparent;
+}
+
+.cursor-grid-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background-image:
+    linear-gradient(rgba(226, 232, 240, 0.34) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(226, 232, 240, 0.34) 1px, transparent 1px),
+    radial-gradient(circle 130px at var(--cursor-x) var(--cursor-y), rgba(226, 232, 240, 0.095), rgba(203, 213, 225, 0.032) 36%, transparent 68%);
+  background-size: 24px 24px, 24px 24px, 100% 100%;
+  -webkit-mask-image: radial-gradient(circle 125px at var(--cursor-x) var(--cursor-y), black 0%, rgba(0, 0, 0, 0.82) 28%, transparent 68%);
+  mask-image: radial-gradient(circle 125px at var(--cursor-x) var(--cursor-y), black 0%, rgba(0, 0, 0, 0.82) 28%, transparent 68%);
+  transition: opacity 1000ms ease-out;
+  will-change: opacity, mask-image;
+}
+
+.cursor-grid-active .cursor-grid-glow {
+  opacity: 0.52;
+  transition-duration: 90ms;
 }
 
 .foundation-shimmer {
@@ -179,12 +216,12 @@ textarea:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f14;
+  background: #05070a;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #334155;
-  border: 2px solid #0b0f14;
+  border: 2px solid #05070a;
   border-radius: 999px;
 }
 
@@ -206,7 +243,7 @@ textarea:focus-visible {
   bottom: 0;
   width: 26px;
   pointer-events: none;
-  background: linear-gradient(to left, rgba(11, 15, 20, 0.92), rgba(11, 15, 20, 0));
+  background: linear-gradient(to left, rgba(5, 7, 10, 0.92), rgba(5, 7, 10, 0));
 }
 
 body.review-focus-mode [data-reviewer-shell-header="true"] {
@@ -214,7 +251,7 @@ body.review-focus-mode [data-reviewer-shell-header="true"] {
 }
 
 body.review-focus-mode [data-reviewer-shell-content="true"] {
-  background: #0b0f14;
+  background: #05070a;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -225,5 +262,9 @@ body.review-focus-mode [data-reviewer-shell-content="true"] {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .cursor-grid-glow {
+    transition: none;
   }
 }

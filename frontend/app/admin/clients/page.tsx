@@ -37,7 +37,7 @@ export default function ClientsPage() {
 
   return (
     <div className="max-w-[1400px] p-6">
-      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-start sm:justify-between">
+      <div data-guide="admin-clients-header" className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Tenant registry</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Client organisations</h1>
@@ -45,20 +45,20 @@ export default function ClientsPage() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.16)] transition-colors hover:bg-blue-500"
+          className="flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(226,232,240,0.16)] transition-colors hover:bg-slate-500"
         >
           <Plus size={14} /> New client
         </button>
       </div>
 
-      <div className="mb-4 grid gap-2 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+      <div data-guide="admin-clients-search" className="mb-4 grid gap-2 lg:grid-cols-[1fr_auto_auto] lg:items-center">
         <div className="relative max-w-sm">
           <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search clients by name, code, or status..."
-            className="h-9 w-full rounded-md border border-white/10 bg-[#11161C] pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            className="h-9 w-full rounded-md border border-white/10 bg-[#11161C] pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.04] hover:text-slate-300" aria-label="Clear search">
@@ -71,7 +71,7 @@ export default function ClientsPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div data-guide="admin-clients-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
       ) : clients.length === 0 ? (
@@ -82,7 +82,7 @@ export default function ClientsPage() {
             description="Create a client organisation to start uploading and reviewing appraisal batches."
             action={
               <button onClick={() => setShowModal(true)}
-                className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-300 transition-colors">
                 <Plus size={14} /> Create first client
               </button>
             }
@@ -94,13 +94,13 @@ export default function ClientsPage() {
             icon={Search}
             title="No clients match"
             description="Clear the search to return to the full client list."
-            action={<button onClick={() => setSearch("")} className="text-sm text-blue-400 hover:text-blue-300">Clear search</button>}
+            action={<button onClick={() => setSearch("")} className="text-sm text-slate-400 hover:text-slate-300">Clear search</button>}
           />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div data-guide="admin-clients-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map(c => (
-            <div key={c.id} className="rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.16)] transition-colors hover:border-blue-500/25">
+            <div key={c.id} className="rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.16)] transition-colors hover:border-slate-500/25">
               {/* Avatar */}
               <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#161B22]">
                 <span className="text-base font-bold text-slate-300">{c.name[0].toUpperCase()}</span>

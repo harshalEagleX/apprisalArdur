@@ -457,7 +457,7 @@ export default function VerifyFilePage() {
     <DeviceGate minWidth={1024} title="Document review needs a laptop or desktop width"
       message="The PDF comparison and rule decision workspace needs side-by-side document and data panels. Please use a laptop, desktop, or a tablet in landscape mode."
       allowTablet={false}>
-      <div className="h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
+      <div className="foundation-grid h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
         {activeFocus && <RuleFocusOverlay focus={activeFocus} highlighting={highlighting} />}
 
         {(offline || sessionError) && (
@@ -502,7 +502,7 @@ export default function VerifyFilePage() {
           {progress && progress.totalToVerify > 0 && (
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               <div className="w-20 h-1.5 bg-[#0B0F14] rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${reviewProgress}%` }} />
+                <div className="h-full bg-slate-500 rounded-full transition-all" style={{ width: `${reviewProgress}%` }} />
               </div>
               <span className="text-[11px] text-slate-500 font-mono">{reviewedCount}/{progress.totalToVerify}</span>
               <span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-green-400" : "bg-slate-600"}`} title={realtimeConnected ? "Live updates connected" : "Live updates reconnecting"} />
@@ -530,7 +530,7 @@ export default function VerifyFilePage() {
             {focusMode ? "Exit focus" : "Focus"}
           </button>
           <button onClick={() => void handleSubmit()} disabled={!progress?.canSubmit || submitting || offline || !sessionToken}
-            className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40">
             {submitting ? <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : null}
             {submitting ? "Submitting…" : progress?.pending ? `Submit (${progress.pending} left)` : "Submit review"}
           </button>
@@ -545,7 +545,7 @@ export default function VerifyFilePage() {
               <div className="flex items-center gap-1 overflow-x-auto">
                 {documents.map(doc => (
                   <button key={doc.id} onClick={() => { setActiveDocumentId(doc.id); setPageCount(null); setPdfError(false); setActiveFocus(null); setActivePage(1); }}
-                    className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${activeDocument?.id === doc.id ? "bg-blue-600/20 border-blue-500/40 text-blue-200" : "bg-[#0B0F14]/70 border-white/10 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"}`}>
+                    className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${activeDocument?.id === doc.id ? "bg-slate-600/20 border-slate-500/40 text-slate-200" : "bg-[#0B0F14]/70 border-white/10 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"}`}>
                     {doc.fileType === "APPRAISAL" ? "Report" : doc.fileType === "ENGAGEMENT" ? "Order" : doc.fileType === "CONTRACT" ? "Contract" : "PDF"}
                   </button>
                 ))}
@@ -577,7 +577,7 @@ export default function VerifyFilePage() {
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center">
-                <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <svg className="animate-spin h-6 w-6 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
               </div>
             )}
           </div>
@@ -600,13 +600,13 @@ export default function VerifyFilePage() {
                   <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
                   <input ref={ruleSearchRef} value={ruleQuery} onChange={e => setRuleQuery(e.target.value)}
                     placeholder="Search rules..."
-                    className="h-7 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    className="h-7 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
                 </div>
                 {FILTERS.map(f => (
                   <button key={f} onClick={() => { setFilter(f); setSelectedRuleId(null); }}
                     aria-pressed={filter === f}
                     aria-keyshortcuts={f === "all" ? "1" : f === "fail" ? "2" : f === "verify" ? "3" : "4"}
-                    className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"}`}>
+                    className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"}`}>
                     {f === "all" ? `All (${counts.total})` : f === "fail" ? `Fail (${counts.fail})` : f === "verify" ? `Needs Review (${counts.review})` : `Pass (${counts.pass})`}
                   </button>
                 ))}

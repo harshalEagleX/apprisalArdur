@@ -60,7 +60,7 @@ export function ReviewerAssignControl({
         defaultValue=""
         onChange={e => e.target.value && onAssign(Number(e.target.value))}
         disabled={disabled}
-        className="h-8 w-full rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-40"
+        className="h-8 w-full rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 disabled:opacity-40"
         aria-label={`Assign reviewer for ${batch.parentBatchId}`}
       >
         <option value="">Assign…</option>
@@ -72,7 +72,7 @@ export function ReviewerAssignControl({
       </select>
       {recommended && (
         <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
-          <span className="truncate text-blue-300">
+          <span className="truncate text-slate-300">
             Recommended: {displayUser(recommended.reviewer)}
           </span>
           <span className="shrink-0 text-slate-500">{recommended.active} active</span>

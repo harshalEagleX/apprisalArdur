@@ -31,12 +31,12 @@ const ARTICLES: Article[] = [
     summary: "Step-by-step guide to getting your appraisal file checked.",
     content: (
       <ol className="space-y-3 text-sm text-slate-300">
-        <li className="flex gap-3"><span className="font-semibold text-blue-400">1.</span><span>Go to <strong>Batches</strong> and choose <strong>Upload batch</strong>.</span></li>
-        <li className="flex gap-3"><span className="font-semibold text-blue-400">2.</span><span>Prepare a <strong>ZIP file</strong> containing your appraisal, engagement letter, and purchase contract in separate folders (<code className="rounded bg-[#161B22] px-1">appraisal/</code>, <code className="rounded bg-[#161B22] px-1">engagement/</code>, <code className="rounded bg-[#161B22] px-1">contract/</code>).</span></li>
-        <li className="flex gap-3"><span className="font-semibold text-blue-400">3.</span><span>Choose the client organisation and select the ZIP file.</span></li>
-        <li className="flex gap-3"><span className="font-semibold text-blue-400">4.</span><span>Click <strong>Upload Batch</strong>, then run QC when the batch is ready.</span></li>
-        <li className="flex gap-3"><span className="font-semibold text-blue-400">5.</span><span>When processing is complete, the status changes to <em>Review Pending</em> or <em>Completed</em>.</span></li>
-        <li className="flex gap-3"><span className="font-semibold text-blue-400">6.</span><span>If you see <em>Review Pending</em>, assign a reviewer to check the items flagged by the system.</span></li>
+        <li className="flex gap-3"><span className="font-semibold text-slate-400">1.</span><span>Go to <strong>Batches</strong> and choose <strong>Upload batch</strong>.</span></li>
+        <li className="flex gap-3"><span className="font-semibold text-slate-400">2.</span><span>Prepare a <strong>ZIP file</strong> containing your appraisal, engagement letter, and purchase contract in separate folders (<code className="rounded bg-[#161B22] px-1">appraisal/</code>, <code className="rounded bg-[#161B22] px-1">engagement/</code>, <code className="rounded bg-[#161B22] px-1">contract/</code>).</span></li>
+        <li className="flex gap-3"><span className="font-semibold text-slate-400">3.</span><span>Choose the client organisation and select the ZIP file.</span></li>
+        <li className="flex gap-3"><span className="font-semibold text-slate-400">4.</span><span>Click <strong>Upload Batch</strong>, then run QC when the batch is ready.</span></li>
+        <li className="flex gap-3"><span className="font-semibold text-slate-400">5.</span><span>When processing is complete, the status changes to <em>Review Pending</em> or <em>Completed</em>.</span></li>
+        <li className="flex gap-3"><span className="font-semibold text-slate-400">6.</span><span>If you see <em>Review Pending</em>, assign a reviewer to check the items flagged by the system.</span></li>
       </ol>
     ),
   },
@@ -49,7 +49,7 @@ const ARTICLES: Article[] = [
       <div className="space-y-3 text-sm">
         {[
           { status: "Uploaded",       color: "bg-slate-700 text-slate-200",   meaning: "Your file arrived safely. No action needed.",                         action: "Wait for processing to start." },
-          { status: "Processing",     color: "bg-blue-900 text-blue-200",     meaning: "The system is reading your documents. This usually takes under a minute.", action: "Wait — do not re-upload." },
+          { status: "Processing",     color: "bg-slate-900 text-slate-200",     meaning: "The system is reading your documents. This usually takes under a minute.", action: "Wait — do not re-upload." },
           { status: "Review Pending", color: "bg-amber-900 text-amber-200",   meaning: "Some items need a human reviewer to check.",                          action: "A reviewer will handle this. Nothing for you to do." },
           { status: "In Review",      color: "bg-orange-900 text-orange-200", meaning: "A reviewer is currently examining your file.",                        action: "Wait for the reviewer to finish." },
           { status: "Completed",      color: "bg-green-900 text-green-200",   meaning: "All checks passed. File is fully processed.",                        action: "No further action needed." },
@@ -133,15 +133,15 @@ const ARTICLES: Article[] = [
         <p>Different users have different levels of access. If you see <strong>Access Denied</strong> or a page says you do not have permission:</p>
         <ul className="space-y-2">
           <li className="flex gap-2">
-            <span className="text-blue-400">→</span>
+            <span className="text-slate-400">→</span>
             <span>You are trying to access a page or feature that your account type does not include.</span>
           </li>
           <li className="flex gap-2">
-            <span className="text-blue-400">→</span>
+            <span className="text-slate-400">→</span>
             <span>This is normal — not every user needs access to every section.</span>
           </li>
           <li className="flex gap-2">
-            <span className="text-blue-400">→</span>
+            <span className="text-slate-400">→</span>
             <span>If you believe you need access, contact your administrator and explain what you need to do.</span>
           </li>
         </ul>
@@ -191,7 +191,7 @@ export default function HelpPage() {
         <div className="max-w-3xl mx-auto">
           <div className="mb-1 flex items-center justify-between">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-300">Operator guidance</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">Operator guidance</div>
               <h1 className="mt-2 text-2xl font-semibold tracking-normal">Help &amp; Guidance</h1>
             </div>
             <Link href="/" className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white">
@@ -204,7 +204,7 @@ export default function HelpPage() {
 
       <main className="max-w-3xl mx-auto p-6 space-y-3">
         {/* Search hint */}
-        <div className="foundation-fade-in flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-950/25 p-4 text-sm text-blue-100">
+        <div className="foundation-fade-in flex items-start gap-2 rounded-lg border border-slate-500/25 bg-slate-950/25 p-4 text-sm text-slate-100">
           <Search size={18} className="mt-0.5 flex-shrink-0" />
           <span>Click any topic below to expand the answer. If you cannot find what you need, contact your administrator.</span>
         </div>
@@ -215,7 +215,7 @@ export default function HelpPage() {
               onClick={() => setOpen(open === a.id ? null : a.id)}
               className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-white/5"
             >
-              <a.Icon size={20} className="mt-0.5 text-blue-400 flex-shrink-0" />
+              <a.Icon size={20} className="mt-0.5 text-slate-400 flex-shrink-0" />
               <div className="flex-1">
                 <div className="font-medium text-white">{a.title}</div>
                 <div className="mt-0.5 text-sm text-slate-400">{a.summary}</div>
@@ -235,7 +235,7 @@ export default function HelpPage() {
 
         {/* Still stuck */}
         <div className="foundation-fade-in rounded-lg border border-white/10 bg-[#11161C]/90 p-5 text-center shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-          <CircleHelp size={28} className="mx-auto mb-2 text-blue-400" />
+          <CircleHelp size={28} className="mx-auto mb-2 text-slate-400" />
           <div className="font-medium text-white mb-1">Still need help?</div>
           <p className="text-slate-400 text-sm">Contact your system administrator. Describe what you were trying to do and what happened — a screenshot helps if possible.</p>
         </div>

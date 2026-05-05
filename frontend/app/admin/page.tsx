@@ -78,15 +78,15 @@ export default function AdminOverviewPage() {
     : "No activity yet";
 
   return (
-    <div className="max-w-[1400px] p-6">
-      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div className="min-h-full w-full p-4 sm:p-5 2xl:p-6">
+      <div data-guide="admin-overview-header" className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Admin command surface</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Overview</h1>
           <p className="mt-1 text-sm text-slate-500">Operational home for QC intake, processing, assignment, and review follow-up.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/admin/batches" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.16)] transition-colors hover:bg-blue-500">
+          <Link href="/admin/batches" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(226,232,240,0.16)] transition-colors hover:bg-slate-500">
             <Upload size={14} /> Upload or run QC
           </Link>
           <Link href="/admin/users" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white">
@@ -96,12 +96,12 @@ export default function AdminOverviewPage() {
       </div>
 
       {loading ? (
-        <div className="mb-5 grid gap-3 lg:grid-cols-[1.2fr_1fr]">
+        <div data-guide="admin-overview-next-action" className="mb-5 grid auto-rows-fr gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
           <CardSkeleton />
           <CardSkeleton />
         </div>
       ) : (
-        <div className="mb-5 grid gap-3 lg:grid-cols-[1.2fr_1fr]">
+        <div data-guide="admin-overview-next-action" className="mb-5 grid auto-rows-fr gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
           <NextActionPanel action={nextAction} />
           <SystemSignal
             totalBatches={n("totalBatches")}
@@ -113,7 +113,7 @@ export default function AdminOverviewPage() {
       )}
 
       {/* Decision metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 mb-5">
+      <div data-guide="admin-overview-metrics" className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(10.75rem,1fr))] gap-3">
         {loading ? (
           Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
         ) : (
@@ -130,39 +130,39 @@ export default function AdminOverviewPage() {
         )}
       </div>
 
-      <div className="mb-5 rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+      <div data-guide="admin-overview-workflow" className="mb-5 rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-200">Workflow visibility</h2>
             <p className="mt-0.5 text-[11px] text-slate-500">Jump directly into the stage that needs attention.</p>
           </div>
-          <Link href="/admin/batches" className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
+          <Link href="/admin/batches" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300">
             All batches <ArrowRight size={12} />
           </Link>
         </div>
         {loading ? (
           <Skeleton className="h-16 w-full" />
         ) : (
-          <div className="grid gap-2 md:grid-cols-5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))] gap-2">
             {workflow.map(stage => <WorkflowStage key={stage.label} {...stage} />)}
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-5">
+      <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.38fr)]">
         <div className="space-y-5">
           <AttentionList loading={loading} alerts={alerts} />
           <RecentActivity loading={loading} recentBatches={recentBatches} />
         </div>
 
         {/* Reviewer workload */}
-        <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+        <div data-guide="admin-overview-reviewers" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
             <div>
               <span className="text-sm font-medium text-slate-200">Reviewer workload</span>
               <p className="mt-0.5 text-[11px] text-slate-500">Prioritize assignments by active load.</p>
             </div>
-            <Link href="/admin/users" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            <Link href="/admin/users" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 transition-colors">
               Manage <ArrowRight size={12} />
             </Link>
           </div>
@@ -178,7 +178,7 @@ export default function AdminOverviewPage() {
           ) : reviewers.length === 0 ? (
             <div className="px-5 py-10 text-center">
               <p className="text-slate-500 text-sm mb-3">No reviewers yet</p>
-              <Link href="/admin/users" className="text-xs text-blue-400 hover:underline">Add a reviewer</Link>
+              <Link href="/admin/users" className="text-xs text-slate-400 hover:underline">Add a reviewer</Link>
             </div>
           ) : (
             <div className="divide-y divide-white/10">
@@ -186,18 +186,18 @@ export default function AdminOverviewPage() {
                 .map(reviewer => ({ reviewer, active: workload[reviewer.id] ?? 0 }))
                 .sort((a, b) => b.active - a.active)
                 .map(({ reviewer: r, active }) => (
-                <div key={r.id} className="flex items-center gap-3 px-5 py-3">
+                <div key={r.id} className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center">
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-slate-200 truncate">{r.fullName ?? r.username}</div>
                     <div className="text-[11px] text-slate-500">{r.username}</div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#0B0F14]">
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                    <div className="h-1.5 min-w-20 flex-1 overflow-hidden rounded-full bg-[#0B0F14] sm:w-24 sm:flex-none">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{
                           width: `${Math.min(active * 20, 100)}%`,
-                          background: active > 3 ? "#f59e0b" : "#3b82f6",
+                          background: active > 3 ? "#f59e0b" : "#cbd5e1",
                         }}
                       />
                     </div>
@@ -228,11 +228,11 @@ function NextActionPanel({ action }: { action: {
   const tone = {
     red: "border-red-900/50 bg-red-950/25 text-red-200",
     amber: "border-amber-900/50 bg-amber-950/25 text-amber-200",
-    indigo: "border-blue-500/25 bg-blue-950/25 text-blue-200",
+    indigo: "border-slate-500/25 bg-slate-950/25 text-slate-200",
     green: "border-green-900/50 bg-green-950/25 text-green-200",
   }[action.tone];
   return (
-    <Link href={action.href} className={`group flex min-h-32 items-center gap-4 rounded-lg border p-4 transition-colors hover:border-blue-700/60 ${tone}`}>
+    <Link href={action.href} className={`group flex h-full min-h-32 flex-col gap-4 rounded-lg border p-4 transition-colors hover:border-slate-700/60 sm:flex-row sm:items-center ${tone}`}>
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-current/20 bg-slate-950/30">
         <Icon size={22} />
       </div>
@@ -241,7 +241,7 @@ function NextActionPanel({ action }: { action: {
         <div className="mt-1 text-lg font-semibold text-white">{action.title}</div>
         <div className="mt-1 text-sm leading-relaxed opacity-80">{action.detail}</div>
       </div>
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
+      <div className="flex items-center gap-2 text-sm font-semibold text-white sm:ml-auto">
         <span className="font-mono tabular-nums">{action.count}</span>
         <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
       </div>
@@ -256,12 +256,12 @@ function SystemSignal({ totalBatches, createdToday, latestActivity, clients }: {
   clients: number;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+    <div className="h-full rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
-        <Activity size={15} className="text-blue-400" />
+        <Activity size={15} className="text-slate-400" />
         System signals
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2">
         <MiniSignal label="Batches" value={totalBatches} />
         <MiniSignal label="New today" value={createdToday} />
         <MiniSignal label="Clients" value={clients} />
@@ -273,7 +273,7 @@ function SystemSignal({ totalBatches, createdToday, latestActivity, clients }: {
 
 function MiniSignal({ label, value, icon: Icon }: { label: string; value: number | string; icon?: React.ComponentType<{ size?: number; className?: string }> }) {
   return (
-    <div className="rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2">
+    <div className="min-w-0 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2">
       <div className="flex items-center gap-1.5 text-base font-semibold text-slate-100 tabular-nums">
         {Icon && <Icon size={13} className="text-slate-500" />}
         <span className="truncate">{value}</span>
@@ -290,14 +290,14 @@ function WorkflowStage({ label, value, href, tone }: {
   tone: "indigo" | "amber" | "blue" | "green" | "red";
 }) {
   const styles = {
-    indigo: "hover:border-indigo-700 text-indigo-200",
+    indigo: "hover:border-slate-700 text-slate-200",
     amber: "hover:border-amber-700 text-amber-200",
-    blue: "hover:border-blue-700 text-blue-200",
+    blue: "hover:border-slate-700 text-slate-200",
     green: "hover:border-green-700 text-green-200",
     red: "hover:border-red-700 text-red-200",
   };
   return (
-    <Link href={href} className={`rounded-lg border border-white/10 bg-[#0B0F14]/60 px-3 py-3 transition-colors hover:bg-white/[0.03] ${styles[tone]}`}>
+    <Link href={href} className={`min-h-24 rounded-lg border border-white/10 bg-[#0B0F14]/60 px-3 py-3 transition-colors hover:bg-white/[0.03] ${styles[tone]}`}>
       <div className="text-xl font-semibold tabular-nums">{value}</div>
       <div className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
     </Link>
@@ -338,7 +338,7 @@ function AttentionList({ loading, alerts }: { loading: boolean; alerts: Array<{
             const Icon = alert.icon;
             return (
               <Link key={alert.key} href={alert.href} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.04]">
-                <Icon size={16} className={alert.tone === "red" ? "text-red-300" : alert.tone === "amber" ? "text-amber-300" : "text-indigo-300"} />
+                <Icon size={16} className={alert.tone === "red" ? "text-red-300" : alert.tone === "amber" ? "text-amber-300" : "text-slate-300"} />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-slate-200">{alert.title}</div>
                   <div className="mt-0.5 truncate text-[11px] text-slate-500">{alert.detail}</div>
@@ -362,7 +362,7 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
           <span className="text-sm font-medium text-slate-200">Recent activity</span>
           <p className="mt-0.5 text-[11px] text-slate-500">Resume recent batches or verify the last system output.</p>
         </div>
-        <Link href="/admin/batches" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+        <Link href="/admin/batches" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 transition-colors">
           View all <ArrowRight size={12} />
         </Link>
       </div>
@@ -381,7 +381,7 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
           <Package size={20} className="mx-auto mb-2 text-slate-600" />
           <p className="text-sm font-medium text-slate-300">No batches yet</p>
           <p className="mt-1 text-xs text-slate-500">Upload the first ZIP archive to start the workflow.</p>
-          <Link href="/admin/batches" className="mt-3 inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300">
+          <Link href="/admin/batches" className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-300">
             Upload first batch <ArrowRight size={13} />
           </Link>
         </div>

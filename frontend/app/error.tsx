@@ -17,7 +17,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         {error.digest && <p className="mb-6 text-xs text-slate-600">Error ID: {error.digest}</p>}
         <div className="flex justify-center gap-3">
           <button onClick={reset}
-            className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500">
+            className="rounded-md bg-slate-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-500">
             Try Again
           </button>
           <Link href="/"

@@ -18,7 +18,7 @@ export default function Spinner({ size = 16, className }: SpinnerProps) {
 export function PageSpinner({ label = "Loading…" }: { label?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 gap-3">
-      <Spinner size={24} className="text-blue-500" />
+      <Spinner size={24} className="text-slate-500" />
       <span className="text-slate-500 text-sm">{label}</span>
     </div>
   );

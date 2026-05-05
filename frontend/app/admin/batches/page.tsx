@@ -45,8 +45,8 @@ function SummaryPill({ icon: Icon, label, value, tone }: {
 }) {
   const tones = {
     slate: "border-white/10 bg-[#11161C] text-slate-300",
-    blue:  "border-blue-900/50 bg-blue-950/30 text-blue-200",
-    indigo:"border-blue-500/25 bg-blue-950/30 text-blue-200",
+    blue:  "border-slate-900/50 bg-slate-950/30 text-slate-200",
+    indigo:"border-slate-500/25 bg-slate-950/30 text-slate-200",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
   };
@@ -66,7 +66,7 @@ function RecoveryMetric({ label, value, tone }: { label: string; value: number |
   const tones = {
     slate: "border-white/10 bg-[#0B0F14]/70 text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
-    blue:  "border-blue-900/50 bg-blue-950/30 text-blue-200",
+    blue:  "border-slate-900/50 bg-slate-950/30 text-slate-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
     red:   "border-red-900/50 bg-red-950/30 text-red-200",
   };
@@ -287,21 +287,21 @@ export default function BatchesPage() {
           <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Batches</h1>
           <p className="mt-1 text-sm text-slate-500">Upload, validate, process, assign, and recover appraisal document sets.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div data-guide="admin-batches-actions" className="flex flex-wrap items-center gap-2">
           <button onClick={handleReconcile} disabled={reconciling} title="Find and recover batches stuck in QC_PROCESSING"
             className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white disabled:opacity-50">
             <RefreshCw size={13} className={reconciling ? "animate-spin" : ""} />
             Reconcile
           </button>
           <button onClick={() => setShowUpload(true)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.16)] transition-colors hover:bg-blue-500">
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(226,232,240,0.16)] transition-colors hover:bg-slate-500">
             <Plus size={14} /> Upload batch
           </button>
         </div>
       </div>
 
       {/* Summary pills */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div data-guide="admin-batches-summary" className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <SummaryPill icon={FileStack}    label="On page"      value={pageStats.total}     tone="slate"  />
         <SummaryPill icon={Clock3}       label="QC running"   value={pageStats.running}   tone="indigo" />
         <SummaryPill icon={UserPlus}     label="Needs review" value={pageStats.review}    tone="amber"  />
@@ -310,17 +310,17 @@ export default function BatchesPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+      <div data-guide="admin-batches-filters" className="mb-4 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search all batches by ID or client…"
-                className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
             </div>
             <select value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(0); }}
-              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:w-48"
+              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 sm:w-48"
               aria-label="Filter by status">
               <option value="">All statuses</option>
               {STATUSES.filter(Boolean).map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
@@ -340,7 +340,7 @@ export default function BatchesPage() {
               {MODEL_OPTIONS[modelProvider].label}
             </span>
             <select value={textModel} onChange={e => setTextModel(e.target.value)}
-              className="h-8 min-w-[150px] rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="h-8 min-w-[150px] rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
               aria-label="Select QC text model">
               {MODEL_OPTIONS[modelProvider].text.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -360,7 +360,7 @@ export default function BatchesPage() {
       {reconcileResult && <ReconcileSummary result={reconcileResult} onDismiss={() => setReconcileResult(null)} />}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+      <div data-guide="admin-batches-table" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
         <div className="data-scroll">
           <table className="w-full min-w-[1060px] text-sm">
             <thead>
@@ -381,7 +381,7 @@ export default function BatchesPage() {
                       title={debouncedSearch || statusFilter ? "No batches match your filters" : "No batches yet"}
                       description={!debouncedSearch && !statusFilter ? "Upload a ZIP archive to get started." : undefined}
                       action={!debouncedSearch && !statusFilter ? (
-                        <button onClick={() => setShowUpload(true)} className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                        <button onClick={() => setShowUpload(true)} className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-300 transition-colors">
                           <Plus size={14} /> Upload first batch
                         </button>
                       ) : undefined}
