@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import ProductWatermark from "@/components/shared/ProductWatermark";
+import { GuideProvider } from "@/components/ui/guide/GuideTooltip";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,8 +30,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
-        <ProductWatermark />
+        <GuideProvider>
+          {children}
+          <ProductWatermark />
+        </GuideProvider>
       </body>
     </html>
   );

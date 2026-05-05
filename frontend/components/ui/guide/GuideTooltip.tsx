@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CircleHelp, X } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type TooltipStep = {
@@ -15,7 +15,7 @@ type GuideState = {
   stepIndex:  number;
   tourId:     string;
   steps:      TooltipStep[];
-  start:  (id: string, steps: TooltipStep[]) => void;
+  start:  (id: string, steps: TooltipStep[], options?: { force?: boolean }) => void;
   next:   () => void;
   prev:   () => void;
   finish: () => void;
@@ -48,8 +48,8 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  const start = useCallback((id: string, s: TooltipStep[]) => {
-    if (isCompleted(id)) return;   // already seen — don't re-show
+  const start = useCallback((id: string, s: TooltipStep[], options?: { force?: boolean }) => {
+    if (!options?.force && isCompleted(id)) return;   // already seen — don't auto-show
     setTourId(id); setSteps(s); setStepIndex(0); setActive(true);
   }, [isCompleted]);
 
@@ -81,6 +81,35 @@ export const useGuide = () => {
   return ctx;
 };
 
+export function GuideButton({
+  tourId,
+  steps,
+  label = "Guide",
+  compact = false,
+}: {
+  tourId: string;
+  steps: TooltipStep[];
+  label?: string;
+  compact?: boolean;
+}) {
+  const { start } = useGuide();
+
+  return (
+    <button
+      data-guide="guide-launcher"
+      type="button"
+      onClick={() => start(tourId, steps, { force: true })}
+      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#161B22]/70 text-sm font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-100 ${
+        compact ? "w-8 px-0" : "px-2.5"
+      }`}
+      title="Open guided tour"
+    >
+      <CircleHelp size={14} />
+      {!compact && <span>{label}</span>}
+    </button>
+  );
+}
+
 // ── Overlay & tooltip ────────────────────────────────────────────────────────
 function TooltipOverlay() {
   const { steps, stepIndex, next, prev, finish } = useContext(GuideCtx)!;
@@ -90,17 +119,30 @@ function TooltipOverlay() {
 
   useEffect(() => {
     if (!step) return;
-    const frame = window.requestAnimationFrame(() => {
+    const syncPosition = () => {
       const el = document.querySelector(step.target);
       if (el) {
         const r = el.getBoundingClientRect();
-        setPos({ top: r.top + window.scrollY, left: r.left + window.scrollX, w: r.width, h: r.height, found: true });
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setPos({ top: r.top, left: r.left, w: r.width, h: r.height, found: true });
       } else {
         setPos(p => ({ ...p, found: false }));
       }
+    };
+
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.querySelector(step.target);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      syncPosition();
     });
-    return () => window.cancelAnimationFrame(frame);
+    const settle = window.setTimeout(syncPosition, 360);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
+    };
   }, [step]);
 
   if (!step) return null;
@@ -110,25 +152,28 @@ function TooltipOverlay() {
   let tipTop  = pos.top + pos.h + GAP;
   let tipLeft = pos.left;
 
-  if (direction === "top")   { tipTop  = pos.top - GAP - 240; }
+  if (direction === "top")   { tipTop  = pos.top - GAP - 210; }
   if (direction === "right") { tipLeft = pos.left + pos.w + GAP; tipTop = pos.top; }
   if (direction === "left")  { tipLeft = pos.left - GAP - 280; tipTop = pos.top; }
 
   return (
     <>
       {/* Dim overlay */}
-      <div className="fixed inset-0 bg-black/50 z-40 pointer-events-none" />
+      <div className="fixed inset-0 z-[80] bg-black/55 pointer-events-none" />
 
       {/* Highlight ring around target */}
       {pos.found && (
-        <div className="fixed z-41 rounded-lg ring-2 ring-blue-400 ring-offset-2 pointer-events-none transition-all"
+        <div className="fixed z-[90] rounded-lg ring-2 ring-blue-400 ring-offset-2 ring-offset-[#0B0F14] pointer-events-none transition-all"
              style={{ top: pos.top - 4, left: pos.left - 4, width: pos.w + 8, height: pos.h + 8 }} />
       )}
 
       {/* Tooltip card */}
       <div ref={tooltipRef}
-           className="foundation-fade-in fixed z-50 w-72 rounded-lg border border-blue-500/35 bg-[#11161C] p-5 shadow-[0_20px_55px_rgba(0,0,0,0.42)]"
-           style={{ top: Math.max(8, tipTop), left: Math.max(8, Math.min(tipLeft, window.innerWidth - 300)) }}>
+           className="foundation-fade-in fixed z-[100] w-72 rounded-lg border border-blue-500/35 bg-[#11161C] p-5 shadow-[0_20px_55px_rgba(0,0,0,0.42)]"
+           style={{
+             top: Math.max(8, Math.min(tipTop, window.innerHeight - 260)),
+             left: Math.max(8, Math.min(tipLeft, window.innerWidth - 300)),
+           }}>
         <div className="flex justify-between items-start mb-2">
           <span className="text-xs text-blue-400 font-medium">Step {stepIndex + 1} of {steps.length}</span>
           <button onClick={finish} className="text-slate-500 hover:text-slate-300" title="Close guide">

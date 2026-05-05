@@ -10,6 +10,7 @@ import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
 import ActivityMonitor from "./ActivityMonitor";
 import DeviceGate from "./DeviceGate";
+import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideTooltip";
 
 const NAV = [
   { href: "/admin",          label: "Overview",   Icon: LayoutDashboard },
@@ -17,6 +18,33 @@ const NAV = [
   { href: "/admin/users",    label: "Users",      Icon: Users },
   { href: "/admin/clients",  label: "Clients",    Icon: Building2 },
   { href: "/analytics",      label: "Analytics",  Icon: BarChart2 },
+];
+
+const ADMIN_GUIDE_STEPS: TooltipStep[] = [
+  {
+    target: '[data-guide="admin-sidebar"]',
+    title: "Admin navigation",
+    body: "Use this sidebar to move between operational areas: overview, batches, users, clients, and analytics.",
+    position: "right",
+  },
+  {
+    target: '[data-guide="admin-nav-batches"]',
+    title: "Batch operations",
+    body: "Batches is where admins upload ZIP files, run QC, assign reviewers, recover errors, and manage processing state.",
+    position: "right",
+  },
+  {
+    target: '[data-guide="admin-main"]',
+    title: "Primary workspace",
+    body: "The main panel changes by page. It is designed for scanning status, acting on exceptions, and keeping QC work moving.",
+    position: "left",
+  },
+  {
+    target: '[data-guide="guide-launcher"]',
+    title: "Open this guide anytime",
+    body: "This button restarts the tour whenever you need it. It is not a one-time-only tooltip anymore.",
+    position: "top",
+  },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -48,7 +76,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     >
     <div className="foundation-grid min-h-screen bg-slate-950 text-white flex">
       {/* Sidebar */}
-      <aside className={`sticky top-0 h-screen flex-shrink-0 border-r border-white/10 bg-[#11161C]/95 shadow-[12px_0_36px_rgba(0,0,0,0.18)] backdrop-blur flex flex-col transition-all duration-200 ${narrow ? "w-14" : "w-60"}`}>
+      <aside
+        data-guide="admin-sidebar"
+        className={`sticky top-0 h-screen flex-shrink-0 border-r border-white/10 bg-[#11161C]/95 shadow-[12px_0_36px_rgba(0,0,0,0.18)] backdrop-blur flex flex-col transition-all duration-200 ${narrow ? "w-14" : "w-60"}`}
+      >
 
         {/* Logo + collapse toggle */}
         <div className="h-16 flex items-center justify-between px-3 border-b border-white/10">
@@ -104,6 +135,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 key={href}
                 href={href}
+                data-guide={`admin-nav-${label.toLowerCase()}`}
                 title={narrow ? label : undefined}
                 className={`group relative flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors ${
                   active
@@ -121,9 +153,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Sign out */}
         <div className="p-2 border-t border-white/10">
+          <div className={`mb-2 ${narrow ? "flex justify-center" : ""}`}>
+            <GuideButton tourId="admin-shell" steps={ADMIN_GUIDE_STEPS} compact={narrow} />
+          </div>
           <button
             onClick={handleSignOut}
             disabled={signingOut}
+            data-guide="admin-signout"
             title={narrow ? "Sign out" : undefined}
             className="flex items-center gap-3 w-full px-2.5 py-2 rounded-md text-sm text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-colors disabled:opacity-60"
           >
@@ -134,7 +170,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main */}
-      <main className="min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.05),transparent_28%)]">
+      <main
+        data-guide="admin-main"
+        className="min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.05),transparent_28%)]"
+      >
         <div className="min-h-full">
           {children}
         </div>

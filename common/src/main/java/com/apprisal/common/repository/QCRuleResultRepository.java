@@ -1,6 +1,7 @@
 package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.QCRuleResult;
+import org.springframework.data.jpa.repository.EntityGraph;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -30,6 +31,7 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
     /**
      * Find all rule results for a QC result.
      */
+    @EntityGraph(attributePaths = {"overrideRequestedBy", "overrideApprovedBy"})
     List<QCRuleResult> findByQcResultId(Long qcResultId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
