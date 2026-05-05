@@ -380,16 +380,17 @@ public class VerificationService {
 
     /**
      * Recalculate all counters for a QC result based on current rule statuses.
-     * Called after each reviewer decision to keep counters accurate.
+     * Called after every reviewer decision to keep counters accurate.
+     *
+     * Uses a JPQL UPDATE rather than load-mutate-save: loading the parent
+     * QCResult forces Hibernate to dirty-check its 138-item @OneToMany rule
+     * list, and saving it produces a QCResult_AUD row via Envers — combined
+     * cost was ~1-2s per decision. The bulk UPDATE bypasses both and runs in
+     * a few ms.
      */
-    @Transactional
     private void recalculateCounters(@NonNull Long qcResultId) {
-        QCResult qcResult = qcResultRepository.findById(qcResultId)
-                .orElseThrow(() -> new RuntimeException("QC Result not found: " + qcResultId));
-
         int passCount = 0;
         int failCount = 0;
-        int verifyCount = 0;
         int manualPassCount = 0;
 
         for (Object[] row : qcRuleResultRepository.countByStatusForQcResult(qcResultId)) {
@@ -403,17 +404,13 @@ public class VerificationService {
                 manualPassCount = count;
             }
         }
+        int verifyCount = 0;
         Object[] progressCounts = firstProgressRow(qcResultId);
         if (progressCounts != null && progressCounts.length >= 3 && progressCounts[2] instanceof Number pending) {
             verifyCount = pending.intValue();
         }
 
-        qcResult.setPassedCount(passCount);
-        qcResult.setFailedCount(failCount);
-        qcResult.setVerifyCount(verifyCount);
-        qcResult.setManualPassCount(manualPassCount);
-
-        qcResultRepository.save(qcResult);
+        qcResultRepository.updateCounters(qcResultId, passCount, failCount, verifyCount, manualPassCount);
 
         log.debug("Recalculated counters for QCResult {}: pass={}, fail={}, verify={}, manualPass={}",
                 qcResultId, passCount, failCount, verifyCount, manualPassCount);

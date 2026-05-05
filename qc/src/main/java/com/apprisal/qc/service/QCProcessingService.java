@@ -337,7 +337,11 @@ public class QCProcessingService {
                 safeModelConfig.textModel(),
                 safeModelConfig.visionModel(),
                 existing != null ? existing.startedAt() : Instant.now().toString(),
-                Instant.now().toString()
+                Instant.now().toString(),
+                null,
+                null,
+                0.0,
+                0L
         ));
         if (running || "saving".equals(stage) || "complete".equals(stage) || "error".equals(stage)) {
             try {
@@ -349,6 +353,34 @@ public class QCProcessingService {
         realtimeEventPublisher.publish("/topic/qc/batch/" + batchId + "/progress", progressPayload(batchId, progress));
     }
 
+    /**
+     * Merge a Python sub-stage update into the existing QCProgress for this
+     * batch. Top-level stage / current / total are preserved; only the sub_*
+     * fields and updated_at change. Skipped silently if no parent progress
+     * exists yet (the worker has not entered the python stage).
+     */
+    private void updateSubProgress(Long batchId, String subStage, String subMessage, double subPercent, long subElapsedMs) {
+        QCProgress merged = progressByBatch.computeIfPresent(batchId, (id, existing) -> new QCProgress(
+                existing.stage(),
+                existing.message(),
+                existing.current(),
+                existing.total(),
+                existing.running(),
+                existing.modelProvider(),
+                existing.modelName(),
+                existing.visionModel(),
+                existing.startedAt(),
+                Instant.now().toString(),
+                subStage,
+                subMessage,
+                subPercent,
+                subElapsedMs
+        ));
+        if (merged != null) {
+            realtimeEventPublisher.publish("/topic/qc/batch/" + batchId + "/progress", progressPayload(batchId, merged));
+        }
+    }
+
     private Map<String, Object> progressPayload(Long batchId, QCProgress progress) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("batchId", batchId);
@@ -357,12 +389,17 @@ public class QCProcessingService {
         payload.put("current", progress.current());
         payload.put("total", progress.total());
         payload.put("percent", progress.percent());
+        payload.put("smoothedPercent", progress.smoothedPercent());
         payload.put("running", progress.running());
         payload.put("modelProvider", progress.modelProvider());
         payload.put("modelName", progress.modelName());
         payload.put("visionModel", progress.visionModel());
         payload.put("startedAt", progress.startedAt());
         payload.put("updatedAt", progress.updatedAt());
+        payload.put("subStage", progress.subStage());
+        payload.put("subMessage", progress.subMessage());
+        payload.put("subPercent", progress.subPercent());
+        payload.put("subElapsedMs", progress.subElapsedMs());
         return payload;
     }
 
@@ -402,13 +439,25 @@ public class QCProcessingService {
                     .orElseThrow(() -> new IllegalStateException("QC Result not found"));
         }
 
-        // Call Python service — send all three document types when available
+        // Call Python service — send all three document types when available.
+        // The stage callback receives sub-progress updates (~1.5s cadence) and
+        // merges them into the QCProgress for this batch so the UI bar smooths
+        // through ocr_engagement → ocr_contract → appraisal_ocr → phase2 →
+        // vision → llm_enrichment → rules → assemble.
+        Long progressBatchId = appraisal.getBatch().getId();
         PythonQCResponse pythonResponse = pythonClient.processQC(
                 pair.getAppraisalPath(),
                 pair.getEngagementPath(),
                 pair.getContractPath(),
-                modelConfig);
-        throwIfCancelled(appraisal.getBatch().getId());
+                modelConfig,
+                snapshot -> {
+                    String subStage = snapshot.stage() != null ? snapshot.stage() : "python";
+                    String subMessage = snapshot.message() != null ? snapshot.message()
+                            : "Processing " + appraisal.getFilename();
+                    updateSubProgress(progressBatchId, subStage, subMessage,
+                            snapshot.subPercent(), snapshot.elapsedMs());
+                });
+        throwIfCancelled(progressBatchId);
 
         // A duplicate worker can pass the first exists check, spend time in Python,
         // and only then discover that another worker already saved the result.
@@ -630,9 +679,23 @@ public class QCProcessingService {
             String modelName,
             String visionModel,
             String startedAt,
-            String updatedAt) {
+            String updatedAt,
+            String subStage,
+            String subMessage,
+            double subPercent,
+            long subElapsedMs) {
         public int percent() {
             return total > 0 ? Math.min(100, Math.round((current * 100.0f) / total)) : 0;
+        }
+
+        // Smooth percent across the active file using Python-reported sub_percent
+        // so the bar moves while a single file is being OCR/LLM/rule processed.
+        public int smoothedPercent() {
+            if (total <= 0) return 0;
+            float perFile = 100.0f / total;
+            float base = current * perFile;
+            float within = (float) (Math.max(0.0, Math.min(1.0, subPercent)) * perFile);
+            return Math.min(100, Math.round(base + within));
         }
     }
 }

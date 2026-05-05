@@ -13,9 +13,12 @@ import logging
 import os
 import re
 import time
-from typing import Dict, List, Optional, Any, Tuple, Any
+from typing import Callable, Dict, List, Optional, Any, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime
+
+# Optional callback signature: (stage, message, sub_percent_0_to_1) -> None
+ProgressReporter = Callable[[str, str, float], None]
 
 from pydantic import BaseModel, Field as PydanticField
 
@@ -139,6 +142,7 @@ class SmartQCProcessor:
         model_provider: str = "ollama",
         model_name: Optional[str] = None,
         vision_model: Optional[str] = None,
+        report_progress: Optional[ProgressReporter] = None,
     ) -> QCResults:
         """
         Process an appraisal PDF through the complete QC pipeline.
@@ -159,7 +163,16 @@ class SmartQCProcessor:
         model_name = (model_name or DEFAULT_TEXT_MODEL).strip()
         vision_model = (vision_model or DEFAULT_VISION_MODEL).strip()
 
+        def _emit(stage: str, message: str, sub_percent: float) -> None:
+            if report_progress is None:
+                return
+            try:
+                report_progress(stage, message, sub_percent)
+            except Exception as cb_exc:  # callback must never break the pipeline
+                logger.debug("progress callback failed: %s", cb_exc)
+
         # ── Step 1: Check OCR Cache ─────────────────────────────────────────
+        _emit("appraisal_ocr", "Checking OCR cache for appraisal", 0.30)
         import fitz as _fitz
         try:
             _doc = _fitz.open(pdf_path)
@@ -208,8 +221,11 @@ class SmartQCProcessor:
                     )
 
         # ── Step 2: OCR Extraction (if not cached) ──────────────────────────
-        if not cache_hit:
+        if cache_hit:
+            _emit("appraisal_ocr", "Reusing cached OCR pages", 0.45)
+        else:
             logger.info("Cache MISS — running OCR for %s", pdf_path)
+            _emit("appraisal_ocr", "Running OCR on appraisal PDF", 0.32)
             extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
 
             # Save to cache for next time
@@ -234,6 +250,8 @@ class SmartQCProcessor:
 
         # Raw OCR/native extraction output remains the default source of truth.
         full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
+
+        _emit("phase2_extraction", "Extracting structured fields", 0.55)
 
         # Step 2: Phase 2 Multi-Layer Extraction
         # Source A: Phase 2 engine — pass page_images for llava:13b checkbox fallback
@@ -295,6 +313,7 @@ class SmartQCProcessor:
 
         vision_results = []
         if (vision_model or "").lower().startswith("llava"):
+            _emit("vision", f"Running vision model {vision_model}", 0.65)
             try:
                 from app.services.vision_pipeline import analyze_pages_sync
                 vision_results = analyze_pages_sync(extraction_result.page_images)
@@ -312,18 +331,21 @@ class SmartQCProcessor:
             vision_results=vision_results,
         )
 
+        _emit("llm_enrichment", f"Enriching context with {model_name}", 0.70)
         try:
             from app.services.llm_enrichment import enrich_context_sync
             enrich_context_sync(ctx)
         except Exception as e:
             logger.info("LLM enrichment not run before rules: %s", e)
-        
+
         # Step 7: Execute rule engine
         logger.info("Executing rule engine")
+        _emit("rules", "Executing QC rules", 0.90)
         rule_results = engine.execute(ctx)
         from app.rule_engine.cross_field_validator import CrossFieldValidator
         rule_results.extend(CrossFieldValidator().validate(ctx))
 
+        _emit("persist", "Saving extracted fields and rule results", 0.96)
         # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
         if document_id:
             page_confidences = [p.confidence for p in extraction_result.page_details]
@@ -331,6 +353,7 @@ class SmartQCProcessor:
             save_extracted_fields(document_id, field_meta, page_confidences)
             save_rule_results(document_id, rule_results)
 
+        _emit("assemble", "Assembling QC results", 0.99)
         # Step 9: Assemble results
         results = self._assemble_results(
             extraction_result=extraction_result,

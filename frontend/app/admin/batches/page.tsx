@@ -37,6 +37,10 @@ interface BatchProgress {
   modelProvider?: string;
   modelName?: string;
   visionModel?: string;
+  subStage?: string | null;
+  subMessage?: string | null;
+  subPercent?: number;
+  smoothedPercent?: number;
 }
 
 type ReconcileResult = {
@@ -210,12 +214,21 @@ export default function BatchesPage() {
         const modelLabel = progressRes.modelName
           ? `${progressRes.modelProvider ?? "model"}: ${progressRes.modelName}`
           : undefined;
+        // Prefer server-side smoothedPercent (current+subPercent across files); fall
+        // back to a client-side smooth using subPercent so older backends still work.
+        const subPercent = Math.max(0, Math.min(1, progressRes.subPercent ?? 0));
+        const clientSmoothed = Math.min(100, Math.round(((done + subPercent) / total) * 100));
+        const smoothedPercent = progressRes.smoothedPercent ?? clientSmoothed;
         updateJob(jobKey, done, total, {
           message: progressRes.message || "QC processing is running",
           stage: progressRes.stage || "processing",
           modelLabel,
           unitLabel: total === 1 ? "appraisal set" : "appraisal sets",
           detail: `${statusRes.totalFiles ?? batchFileCount} uploaded file${(statusRes.totalFiles ?? batchFileCount) === 1 ? "" : "s"} in this batch`,
+          subStage: progressRes.subStage ?? null,
+          subMessage: progressRes.subMessage ?? null,
+          subPercent,
+          smoothedPercent,
         });
         setProgress(p => ({
           ...p,
@@ -225,6 +238,10 @@ export default function BatchesPage() {
             message: progressRes.message || "QC processing is running",
             stage: progressRes.stage || "processing",
             percent: progressRes.percent ?? Math.round((done / total) * 100),
+            smoothedPercent,
+            subStage: progressRes.subStage ?? null,
+            subMessage: progressRes.subMessage ?? null,
+            subPercent,
             modelProvider: progressRes.modelProvider,
             modelName: progressRes.modelName,
             visionModel: progressRes.visionModel,
@@ -252,7 +269,10 @@ export default function BatchesPage() {
     };
 
     void poll();
-    const interval = setInterval(poll, 5000);
+    // 2s tick keeps the bar moving inside long Python stages (LLM enrichment can
+    // sit at the same coarse `current/total` for 30–120s). Java publishes via
+    // WebSocket too, but polling is a simple, reliable baseline.
+    const interval = setInterval(poll, 2000);
 
     pollingRef.current[batchId] = interval;
   }
@@ -512,7 +532,8 @@ export default function BatchesPage() {
             ) : filtered.map(b => {
               const isLoading = actionLoading.has(b.id);
               const prog = progress[b.id];
-              const pct = prog ? prog.percent : 0;
+              const pct = prog ? (prog.smoothedPercent ?? prog.percent) : 0;
+              const subLabel = prog?.subStage ? prog.subStage.replace(/_/g, " ") : null;
 
               return (
                 <tr key={b.id} className={`transition-colors ${b.status === "QC_PROCESSING" ? "bg-indigo-950/10" : "hover:bg-slate-800/30"}`}>
@@ -546,6 +567,11 @@ export default function BatchesPage() {
                         <div className="mt-0.5 text-[10px] text-slate-600">
                           {prog.current}/{prog.total} appraisal set{prog.total === 1 ? "" : "s"} · {b.fileCount ?? b.files?.length ?? 0} files · {prog.stage.replace(/_/g, " ")}
                         </div>
+                        {subLabel && (
+                          <div className="mt-0.5 text-[10px] text-indigo-300 max-w-[170px] truncate" title={prog.subMessage ?? subLabel}>
+                            {subLabel}{prog.subMessage ? ` — ${prog.subMessage}` : ""}
+                          </div>
+                        )}
                         {prog.modelName && (
                           <div className="mt-0.5 text-[10px] text-blue-400 max-w-[150px] truncate">
                             {prog.modelProvider ?? "model"} · {prog.modelName}

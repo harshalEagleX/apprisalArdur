@@ -49,10 +49,15 @@ export default function ActivityMonitor() {
       {!collapsed && (
         <div className="divide-y divide-slate-800">
           {jobs.map(job => {
-            const pct = job.total > 0
+            const fallbackPct = job.total > 0
               ? Math.max(0, Math.min(100, Math.round((job.current / job.total) * 100)))
               : 0;
+            // Prefer the smoothed percent (current+subPercent) computed on the
+            // server / poll loop so the bar moves while a single file's Python
+            // pipeline progresses through OCR → extraction → LLM → rules.
+            const pct = job.smoothedPercent ?? fallbackPct;
             const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
+            const subLabel = job.subStage ? job.subStage.replace(/_/g, " ") : null;
             return (
               <div key={job.id} className="px-3 py-3">
                 <div className="flex items-start justify-between mb-2">
@@ -69,6 +74,11 @@ export default function ActivityMonitor() {
                     {job.modelLabel && (
                       <div className="text-[10px] text-blue-400 mt-0.5 truncate">
                         {job.modelLabel}
+                      </div>
+                    )}
+                    {subLabel && (
+                      <div className="text-[10px] text-indigo-300 mt-0.5 truncate" title={job.subMessage ?? subLabel}>
+                        {subLabel}{job.subMessage ? ` — ${job.subMessage}` : ""}
                       </div>
                     )}
                   </div>

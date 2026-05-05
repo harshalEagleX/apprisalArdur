@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2,
   Crosshair, ZoomIn, ZoomOut, Save, Cloud, WifiOff, ArrowDownCircle,
@@ -85,9 +85,21 @@ function focusForRule(rule: QCRuleResult): RuleFocus {
   };
 }
 
+function safeReviewerQueuePath(value: string | null) {
+  if (!value) return "/reviewer/queue";
+  try {
+    const decoded = decodeURIComponent(value);
+    return decoded.startsWith("/reviewer/queue") ? decoded : "/reviewer/queue";
+  } catch {
+    return value.startsWith("/reviewer/queue") ? value : "/reviewer/queue";
+  }
+}
+
 export default function VerifyFilePage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const qcResultId = Number(id);
+  const returnTo = safeReviewerQueuePath(searchParams.get("returnTo"));
   const [rules, setRules]         = useState<QCRuleResult[]>([]);
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState<Filter>("all");
@@ -394,7 +406,7 @@ export default function VerifyFilePage() {
         body: JSON.stringify({ notes: submitNotes.trim(), sessionToken }),
       });
       if (!response.ok) throw new Error("Review submit failed");
-      window.location.href = "/reviewer/queue";
+      window.location.href = returnTo;
     } finally {
       setSubmitting(false);
       setSignoffOpen(false);
@@ -661,7 +673,7 @@ export default function VerifyFilePage() {
       )}
       {/* Top bar */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 h-12 bg-slate-900 border-b border-slate-800">
-        <a href="/reviewer/queue" className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors flex-shrink-0">
+        <a href={returnTo} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors flex-shrink-0">
           <ArrowLeft size={14} /> Queue
         </a>
         <div className="w-px h-4 bg-slate-700 flex-shrink-0" />

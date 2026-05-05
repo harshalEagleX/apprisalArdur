@@ -109,6 +109,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // The browser cannot send the JSESSIONID on the WS upgrade
+                        // because it is cross-origin (3000 → 8080) with SameSite=Strict,
+                        // so an authenticated matcher would 302 the upgrade and the
+                        // socket would never connect. The handler itself filters
+                        // subscriptions to known topic prefixes (/topic/qc/batch/**,
+                        // /topic/reviewer/qc/**), so leaving the upgrade open here
+                        // is safe for read-only progress events.
+                        .requestMatchers("/ws/**").permitAll()
                         // SECURITY: /files/** — authenticated + ownership enforced in FileController
                         .requestMatchers("/files/**").authenticated()
                         .requestMatchers("/admin/**").hasRole("ADMIN")

@@ -14,6 +14,10 @@ export interface ActiveJob {
   modelLabel?: string;
   unitLabel?: string;
   detail?: string;
+  subStage?: string | null;       // Python pipeline sub-stage (ocr_engagement, llm_enrichment, …)
+  subMessage?: string | null;     // human-readable sub-stage description
+  subPercent?: number;            // 0..1 progress within current sub-stage
+  smoothedPercent?: number;       // server-computed smooth percent across files+sub-stage
 }
 
 type Listener = (jobs: ActiveJob[]) => void;

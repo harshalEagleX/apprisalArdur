@@ -97,6 +97,12 @@ export default function ReviewerQueuePage() {
   const oldestPending = oldestItem
     ? new Date(oldestItem.processedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : "None";
+  const queueReturnPath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (view !== "all") params.set("view", view);
+    return params.toString() ? `/reviewer/queue?${params}` : "/reviewer/queue";
+  }, [query, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,7 +128,7 @@ export default function ReviewerQueuePage() {
 
   function openQueueItem(item?: QCResult) {
     if (!item) return;
-    window.location.href = `/reviewer/verify/${item.id}`;
+    window.location.href = reviewHref(item.id, queueReturnPath);
   }
 
   function moveSelection(delta: number) {
@@ -154,6 +160,11 @@ export default function ReviewerQueuePage() {
           setQuery("");
           searchRef.current?.blur();
         }
+        return;
+      }
+      if (inTextField && tagName === "input" && event.key === "Enter") {
+        event.preventDefault();
+        openQueueItem(orderedScoped.find(item => item.id === selectedId) ?? nextItem);
         return;
       }
       if (inTextField) return;
@@ -207,7 +218,7 @@ export default function ReviewerQueuePage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextItem, orderedScoped, query, selectedId]);
+  }, [nextItem, orderedScoped, query, queueReturnPath, selectedId]);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-7">
@@ -236,7 +247,7 @@ export default function ReviewerQueuePage() {
 
       {!loading && !error && (
         <div className="mb-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
-          <ReviewerNextAction item={nextItem} />
+          <ReviewerNextAction item={nextItem} returnTo={queueReturnPath} />
           <div className="grid grid-cols-2 gap-2">
             <QueueSignal icon={CalendarDays} label="Processed today" value={processedToday} />
             <QueueSignal icon={Clock} label="Oldest pending" value={oldestPending} />
@@ -336,7 +347,7 @@ export default function ReviewerQueuePage() {
                 <AlertCircle size={12} className="text-red-400" />
                 <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Requires attention — has failures</span>
               </div>
-              <QueueList items={urgent} selectedId={selectedId} onSelect={setSelectedId} />
+              <QueueList items={urgent} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
             </section>
           )}
 
@@ -349,7 +360,7 @@ export default function ReviewerQueuePage() {
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pending review</span>
                 </div>
               )}
-              <QueueList items={normal} selectedId={selectedId} onSelect={setSelectedId} />
+              <QueueList items={normal} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
             </section>
           )}
         </div>
@@ -358,7 +369,7 @@ export default function ReviewerQueuePage() {
   );
 }
 
-function ReviewerNextAction({ item }: { item?: QCResult }) {
+function ReviewerNextAction({ item, returnTo }: { item?: QCResult; returnTo: string }) {
   if (!item) {
     return (
       <div className="rounded-lg border border-green-900/50 bg-green-950/25 p-4 text-green-100">
@@ -373,7 +384,7 @@ function ReviewerNextAction({ item }: { item?: QCResult }) {
   const hasFailure = item.failedCount > 0;
   return (
     <a
-      href={`/reviewer/verify/${item.id}`}
+      href={reviewHref(item.id, returnTo)}
       aria-keyshortcuts="N"
       className={`group flex min-h-24 items-center gap-4 rounded-lg border p-4 transition-colors ${
         hasFailure
@@ -414,7 +425,7 @@ function QueueSignal({ icon: Icon, label, value }: {
   );
 }
 
-function QueueList({ items, selectedId, onSelect }: { items: QCResult[]; selectedId: number | null; onSelect: (id: number) => void }) {
+function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[]; selectedId: number | null; returnTo: string; onSelect: (id: number) => void }) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900 divide-y divide-slate-800">
       {items.map(item => {
@@ -475,7 +486,7 @@ function QueueList({ items, selectedId, onSelect }: { items: QCResult[]; selecte
 
             {/* Action */}
             <a
-              href={`/reviewer/verify/${item.id}`}
+              href={reviewHref(item.id, returnTo)}
               onFocus={() => onSelect(item.id)}
               aria-keyshortcuts="Enter"
               className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700 md:min-w-[126px]"
@@ -487,6 +498,10 @@ function QueueList({ items, selectedId, onSelect }: { items: QCResult[]; selecte
       })}
     </div>
   );
+}
+
+function reviewHref(id: number, returnTo: string) {
+  return `/reviewer/verify/${id}?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 function QueueStat({ icon: Icon, label, value, tone }: {

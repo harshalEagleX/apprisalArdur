@@ -347,6 +347,7 @@ async def process_qc(
     model_provider: str = Form("ollama"),
     text_model: Optional[str] = Form(None),
     vision_model: Optional[str] = Form(None),
+    progress_token: Optional[str] = Form(None),
 ):
     """
     Full QC pipeline: OCR → Extract → Subject & Contract Rules → Results
@@ -378,9 +379,17 @@ async def process_qc(
                 "model_provider": model_provider,
                 "text_model": text_model,
                 "vision_model": vision_model,
-                "request_id": request_id
+                "request_id": request_id,
+                "progress_token": progress_token,
             }
         )
+
+        from app.services.progress_store import progress_store
+
+        def _emit(stage: str, message: str, sub_percent: float) -> None:
+            progress_store.set(progress_token, stage, message, sub_percent)
+
+        _emit("starting", "Starting QC pipeline", 0.02)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Stream appraisal PDF to disk
@@ -397,6 +406,7 @@ async def process_qc(
             # Process engagement letter if provided
             engagement_text = None
             if engagement_letter:
+                _emit("ocr_engagement", "Reading engagement letter", 0.08)
                 eng_path = os.path.join(temp_dir, f"qc_eng_{uuid.uuid4()}")
                 with open(eng_path, "wb") as buffer:
                     shutil.copyfileobj(engagement_letter.file, buffer)
@@ -415,6 +425,7 @@ async def process_qc(
             # Process contract / purchase agreement if provided
             contract_text = None
             if contract_file:
+                _emit("ocr_contract", "Reading purchase contract", 0.18)
                 con_path = os.path.join(temp_dir, f"qc_con_{uuid.uuid4()}")
                 with open(con_path, "wb") as buffer:
                     shutil.copyfileobj(contract_file.file, buffer)
@@ -454,10 +465,12 @@ async def process_qc(
                             model_provider=model_provider,
                             model_name=text_model,
                             vision_model=vision_model,
+                            report_progress=_emit,
                         )
 
             results = await run_in_threadpool(_run_processor)
 
+            _emit("complete", "QC pipeline complete", 1.0)
             logger.info("QC processing completed", extra={"request_id": request_id})
             payload = results.model_dump()
             payload["file_hash"] = file_hash
@@ -477,6 +490,21 @@ async def process_qc(
             status_code=500,
             detail={"error": "QC_PROCESSING_ERROR", "message": str(e)}
         )
+
+
+@app.get("/qc/progress/{progress_token}")
+async def get_qc_progress(progress_token: str):
+    """Return the current sub-stage for an in-flight /qc/process call.
+
+    The Java QC worker generates a token, sends it as `progress_token` in the
+    multipart form, and polls this endpoint while waiting for the response.
+    Returns 404 if the token is unknown or has expired.
+    """
+    from app.services.progress_store import progress_store
+    snapshot = progress_store.get(progress_token)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail={"error": "UNKNOWN_TOKEN"})
+    return snapshot
 
 
 @app.get("/qc/rules")

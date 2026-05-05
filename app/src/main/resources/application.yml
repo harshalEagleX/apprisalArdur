@@ -26,6 +26,12 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
           time_zone: Asia/Kolkata
+          # Without batching, the post-Python save inserts ~138 QCRuleResult rows
+          # plus their Envers audit rows one-by-one — ~50-60s on the live system.
+          # batch_size collapses those into multiplexed multi-row INSERTs.
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
         format_sql: false
     show-sql: false
     open-in-view: false

@@ -13,7 +13,11 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Service for calling the Python OCR/QC service.
@@ -49,8 +53,14 @@ public class PythonClientService {
     }
 
     public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath, QCModelConfig modelConfig) {
+        return processQC(appraisalPath, engagementPath, contractPath, modelConfig, null);
+    }
+
+    public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath,
+                                      QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback) {
         String url = config.getUrl() + "/qc/process";
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        String progressToken = UUID.randomUUID().toString();
 
         log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}, contract: {}, model: {}",
                 url, appraisalPath.getFileName(),
@@ -71,6 +81,7 @@ public class PythonClientService {
         body.add("model_provider", safeModelConfig.provider());
         body.add("text_model", safeModelConfig.textModel());
         body.add("vision_model", safeModelConfig.visionModel());
+        body.add("progress_token", progressToken);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -81,12 +92,25 @@ public class PythonClientService {
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
+        // Background poller — pulls sub-stage updates from Python while the main
+        // /qc/process call is in flight. Daemon thread so it never blocks shutdown.
+        AtomicBoolean stopPoller = new AtomicBoolean(false);
+        Thread poller = null;
+        if (stageCallback != null) {
+            poller = new Thread(() -> pollSubProgress(progressToken, stageCallback, stopPoller),
+                    "qc-py-progress-" + progressToken.substring(0, 8));
+            poller.setDaemon(true);
+            poller.start();
+        }
+
         // Verify PDF file exists before sending
         if (!appraisalPath.toFile().exists()) {
+            stopPoller.set(true);
             throw new RuntimeException("Appraisal PDF not found on disk: " + appraisalPath);
         }
 
         int maxAttempts = Math.max(1, config.getRetryAttempts() + 1);
+        try {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 ResponseEntity<PythonQCResponse> response = restTemplate.exchange(
@@ -139,7 +163,73 @@ public class PythonClientService {
         }
 
         throw new IllegalStateException("Python QC retry loop exited without a result");
+        } finally {
+            stopPoller.set(true);
+            if (poller != null) {
+                poller.interrupt();
+            }
+        }
     }
+
+    /**
+     * Poll Python /qc/progress/{token} every ~1.5s and forward each snapshot
+     * to the stage callback. Runs on a dedicated daemon thread, exits as soon
+     * as stop is signalled or the token returns 404 repeatedly.
+     */
+    private void pollSubProgress(String token, Consumer<PythonProgress> callback, AtomicBoolean stop) {
+        String url = config.getUrl() + "/qc/progress/" + token;
+        HttpHeaders headers = new HttpHeaders();
+        if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+            headers.set("X-API-Key", config.getApiKey());
+        }
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        int consecutive404 = 0;
+        while (!stop.get() && !Thread.currentThread().isInterrupted()) {
+            try {
+                Thread.sleep(1500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (stop.get()) return;
+            try {
+                @SuppressWarnings("rawtypes")
+                ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+                consecutive404 = 0;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> body = resp.getBody();
+                if (body == null) continue;
+                String stage = stringFromMap(body, "stage");
+                String message = stringFromMap(body, "message");
+                Number subPercent = numberFromMap(body, "sub_percent");
+                Number elapsedMs = numberFromMap(body, "elapsed_ms");
+                callback.accept(new PythonProgress(
+                        stage,
+                        message,
+                        subPercent != null ? subPercent.doubleValue() : 0.0,
+                        elapsedMs != null ? elapsedMs.longValue() : 0L));
+            } catch (org.springframework.web.client.HttpClientErrorException.NotFound nf) {
+                // Token not registered yet (Python has not started writing) or
+                // already evicted. Tolerate a few 404s, then give up.
+                if (++consecutive404 >= 5) return;
+            } catch (Exception e) {
+                log.debug("progress poll for {} failed: {}", token, e.getMessage());
+            }
+        }
+    }
+
+    private static String stringFromMap(Map<String, Object> m, String k) {
+        Object v = m.get(k);
+        return v != null ? v.toString() : null;
+    }
+
+    private static Number numberFromMap(Map<String, Object> m, String k) {
+        Object v = m.get(k);
+        return v instanceof Number ? (Number) v : null;
+    }
+
+    public record PythonProgress(String stage, String message, double subPercent, long elapsedMs) { }
 
     private void sleepBeforeRetry(int attempt) {
         try {

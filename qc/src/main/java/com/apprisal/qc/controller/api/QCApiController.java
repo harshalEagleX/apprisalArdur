@@ -179,17 +179,22 @@ public class QCApiController {
 
         var progress = qcProcessingService.getProgress(batchId);
         if (progress == null) {
-            return ResponseEntity.ok(Map.of(
-                    "stage", "idle",
-                    "message", "QC has not started",
-                    "current", 0,
-                    "total", 1,
-                "percent", 0,
-                "running", false,
-                "modelProvider", "ollama",
-                "modelName", QCModelConfig.defaults().textModel(),
-                "visionModel", QCModelConfig.defaults().visionModel()
-            ));
+            Map<String, Object> idle = new LinkedHashMap<>();
+            idle.put("stage", "idle");
+            idle.put("message", "QC has not started");
+            idle.put("current", 0);
+            idle.put("total", 1);
+            idle.put("percent", 0);
+            idle.put("smoothedPercent", 0);
+            idle.put("running", false);
+            idle.put("modelProvider", "ollama");
+            idle.put("modelName", QCModelConfig.defaults().textModel());
+            idle.put("visionModel", QCModelConfig.defaults().visionModel());
+            idle.put("subStage", null);
+            idle.put("subMessage", null);
+            idle.put("subPercent", 0.0);
+            idle.put("subElapsedMs", 0L);
+            return ResponseEntity.ok(idle);
         }
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -198,12 +203,17 @@ public class QCApiController {
         body.put("current", progress.current());
         body.put("total", progress.total());
         body.put("percent", progress.percent());
+        body.put("smoothedPercent", progress.smoothedPercent());
         body.put("running", progress.running());
         body.put("modelProvider", progress.modelProvider());
         body.put("modelName", progress.modelName());
         body.put("visionModel", progress.visionModel());
         body.put("startedAt", progress.startedAt());
         body.put("updatedAt", progress.updatedAt());
+        body.put("subStage", progress.subStage());
+        body.put("subMessage", progress.subMessage());
+        body.put("subPercent", progress.subPercent());
+        body.put("subElapsedMs", progress.subElapsedMs());
         return ResponseEntity.ok(body);
     }
 

@@ -100,4 +100,27 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
      * Check if a batch file already has a QC result.
      */
     boolean existsByBatchFileId(Long batchFileId);
+
+    /**
+     * Single-statement counter refresh used after every reviewer decision.
+     *
+     * Replaces a load-mutate-save cycle that was forcing dirty-checks on the
+     * entity's 138-item @OneToMany rule list and producing an Envers audit row
+     * per save, costing ~1-2s per call. JPQL UPDATE bypasses both.
+     */
+    @Modifying
+    @Query("""
+        UPDATE QCResult qr
+           SET qr.passedCount = :passedCount,
+               qr.failedCount = :failedCount,
+               qr.verifyCount = :verifyCount,
+               qr.manualPassCount = :manualPassCount,
+               qr.updatedAt = CURRENT_TIMESTAMP
+         WHERE qr.id = :qcResultId
+        """)
+    int updateCounters(@Param("qcResultId") Long qcResultId,
+                       @Param("passedCount") int passedCount,
+                       @Param("failedCount") int failedCount,
+                       @Param("verifyCount") int verifyCount,
+                       @Param("manualPassCount") int manualPassCount);
 }

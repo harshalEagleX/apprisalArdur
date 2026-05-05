@@ -34,11 +34,26 @@ function sanitizeErrorMessage(message: string): string {
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${JAVA}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${JAVA}${path}`, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      ...options,
+    });
+  } catch (err) {
+    // Spring Security 302-redirects unauthenticated /api/** calls to /login.
+    // The browser follows the redirect cross-origin; the /login response
+    // doesn't carry the right CORS headers, so fetch surfaces a generic
+    // `TypeError: Failed to fetch`. Bounce the user to login instead of
+    // letting the calling page crash.
+    if (typeof window !== "undefined"
+        && err instanceof TypeError
+        && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw err;
+  }
 
   if (res.status === 401 || res.status === 302) {
     if (typeof window !== "undefined") window.location.href = "/login";
@@ -187,12 +202,17 @@ export const getBatchQCProgress = (batchId: number) =>
     current: number;
     total: number;
     percent: number;
+    smoothedPercent?: number;
     running: boolean;
     modelProvider?: string;
     modelName?: string;
     visionModel?: string;
     startedAt?: string;
     updatedAt?: string;
+    subStage?: string | null;
+    subMessage?: string | null;
+    subPercent?: number;
+    subElapsedMs?: number;
   }>(`/api/qc/progress/${batchId}`);
 
 export const assignReviewer = (batchId: number, reviewerId: number) =>
