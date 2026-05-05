@@ -156,8 +156,17 @@ public class BatchService {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
 
+        // Touch both lazy associations NOW, before the bulk @Modifying deletes
+        // below fire clearAutomatically=true and evict all entities from the
+        // persistence context.  Once evicted, any uninitialized proxy
+        // (Client, files) can no longer be resolved — LazyInitializationException.
+        // Forcing getCode() / getFiles().size() initialises both proxies into
+        // in-memory objects, so they remain accessible after the context clear.
+        String clientCode = batch.getClient().getCode();
+        int fileCount = batch.getFiles().size();
+
         long started = System.nanoTime();
-        log.info("Deleting batch {} with {} files", batch.getParentBatchId(), batch.getFiles().size());
+        log.info("Deleting batch {} with {} files", batch.getParentBatchId(), fileCount);
 
         long dbStarted = System.nanoTime();
         int metricsDeleted = metricsRepository.deleteByBatchId(batchId);
@@ -181,7 +190,7 @@ public class BatchService {
 
         // Delete batch storage directory
         try {
-            Path batchDir = Paths.get(storagePath, batch.getClient().getCode(), batch.getParentBatchId());
+            Path batchDir = Paths.get(storagePath, clientCode, batch.getParentBatchId());
             if (Files.exists(batchDir)) {
                 try (var paths = Files.walk(batchDir)) {
                     paths.sorted((a, b) -> b.compareTo(a)) // Delete files before directories
