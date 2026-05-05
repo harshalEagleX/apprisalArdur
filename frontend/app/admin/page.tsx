@@ -78,17 +78,18 @@ export default function AdminOverviewPage() {
     : "No activity yet";
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="max-w-[1400px] p-6">
       <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Overview</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Operational home for QC intake, processing, assignment, and review follow-up</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Admin command surface</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Overview</h1>
+          <p className="mt-1 text-sm text-slate-500">Operational home for QC intake, processing, assignment, and review follow-up.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/admin/batches" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+          <Link href="/admin/batches" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.16)] transition-colors hover:bg-blue-500">
             <Upload size={14} /> Upload or run QC
           </Link>
-          <Link href="/admin/users" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-300 transition-colors hover:bg-slate-800">
+          <Link href="/admin/users" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white">
             <Users size={14} /> Manage reviewers
           </Link>
         </div>
@@ -129,7 +130,7 @@ export default function AdminOverviewPage() {
         )}
       </div>
 
-      <div className="mb-5 rounded-lg border border-slate-800 bg-slate-900 p-4">
+      <div className="mb-5 rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-200">Workflow visibility</h2>
@@ -155,8 +156,8 @@ export default function AdminOverviewPage() {
         </div>
 
         {/* Reviewer workload */}
-        <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+        <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
             <div>
               <span className="text-sm font-medium text-slate-200">Reviewer workload</span>
               <p className="mt-0.5 text-[11px] text-slate-500">Prioritize assignments by active load.</p>
@@ -166,7 +167,7 @@ export default function AdminOverviewPage() {
             </Link>
           </div>
           {loading ? (
-            <div className="divide-y divide-slate-800">
+            <div className="divide-y divide-white/10">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex items-center px-5 py-3 gap-3">
                   <Skeleton className="h-3.5 flex-1" />
@@ -180,7 +181,7 @@ export default function AdminOverviewPage() {
               <Link href="/admin/users" className="text-xs text-blue-400 hover:underline">Add a reviewer</Link>
             </div>
           ) : (
-            <div className="divide-y divide-slate-800">
+            <div className="divide-y divide-white/10">
               {reviewers
                 .map(reviewer => ({ reviewer, active: workload[reviewer.id] ?? 0 }))
                 .sort((a, b) => b.active - a.active)
@@ -191,7 +192,7 @@ export default function AdminOverviewPage() {
                     <div className="text-[11px] text-slate-500">{r.username}</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#0B0F14]">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{
@@ -227,7 +228,7 @@ function NextActionPanel({ action }: { action: {
   const tone = {
     red: "border-red-900/50 bg-red-950/25 text-red-200",
     amber: "border-amber-900/50 bg-amber-950/25 text-amber-200",
-    indigo: "border-indigo-900/50 bg-indigo-950/25 text-indigo-200",
+    indigo: "border-blue-500/25 bg-blue-950/25 text-blue-200",
     green: "border-green-900/50 bg-green-950/25 text-green-200",
   }[action.tone];
   return (
@@ -255,7 +256,7 @@ function SystemSignal({ totalBatches, createdToday, latestActivity, clients }: {
   clients: number;
 }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <div className="rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
         <Activity size={15} className="text-blue-400" />
         System signals
@@ -272,7 +273,7 @@ function SystemSignal({ totalBatches, createdToday, latestActivity, clients }: {
 
 function MiniSignal({ label, value, icon: Icon }: { label: string; value: number | string; icon?: React.ComponentType<{ size?: number; className?: string }> }) {
   return (
-    <div className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
+    <div className="rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2">
       <div className="flex items-center gap-1.5 text-base font-semibold text-slate-100 tabular-nums">
         {Icon && <Icon size={13} className="text-slate-500" />}
         <span className="truncate">{value}</span>
@@ -296,7 +297,7 @@ function WorkflowStage({ label, value, href, tone }: {
     red: "hover:border-red-700 text-red-200",
   };
   return (
-    <Link href={href} className={`rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-3 transition-colors ${styles[tone]}`}>
+    <Link href={href} className={`rounded-lg border border-white/10 bg-[#0B0F14]/60 px-3 py-3 transition-colors hover:bg-white/[0.03] ${styles[tone]}`}>
       <div className="text-xl font-semibold tabular-nums">{value}</div>
       <div className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
     </Link>
@@ -313,8 +314,8 @@ function AttentionList({ loading, alerts }: { loading: boolean; alerts: Array<{
   icon: React.ComponentType<{ size?: number; className?: string }>;
 }> }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+      <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
         <div>
           <span className="text-sm font-medium text-slate-200">Attention areas</span>
           <p className="mt-0.5 text-[11px] text-slate-500">Urgent work is sorted first.</p>
@@ -332,11 +333,11 @@ function AttentionList({ loading, alerts }: { loading: boolean; alerts: Array<{
           <p className="mt-1 text-xs text-slate-500">Processing, review, and error queues are clear.</p>
         </div>
       ) : (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-white/10">
           {alerts.map(alert => {
             const Icon = alert.icon;
             return (
-              <Link key={alert.key} href={alert.href} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-800/40">
+              <Link key={alert.key} href={alert.href} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.04]">
                 <Icon size={16} className={alert.tone === "red" ? "text-red-300" : alert.tone === "amber" ? "text-amber-300" : "text-indigo-300"} />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-slate-200">{alert.title}</div>
@@ -355,8 +356,8 @@ function AttentionList({ loading, alerts }: { loading: boolean; alerts: Array<{
 
 function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBatches: Batch[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+      <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
         <div>
           <span className="text-sm font-medium text-slate-200">Recent activity</span>
           <p className="mt-0.5 text-[11px] text-slate-500">Resume recent batches or verify the last system output.</p>
@@ -366,7 +367,7 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
         </Link>
       </div>
       {loading ? (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-white/10">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center justify-between px-5 py-3 gap-3">
               <Skeleton className="h-3.5 w-40" />
@@ -387,7 +388,7 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
       ) : (
         <div className="divide-y divide-slate-800">
           {recentBatches.slice(0, 6).map(b => (
-            <Link key={b.id} href="/admin/batches" className="flex items-center gap-3 px-5 py-3 hover:bg-slate-800/40 transition-colors">
+            <Link key={b.id} href="/admin/batches" className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.04]">
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-mono text-slate-300 truncate">{b.parentBatchId}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{b.client?.name ?? "—"}</div>

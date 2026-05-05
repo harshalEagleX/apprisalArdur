@@ -45,7 +45,10 @@ export function useBatchPolling(
   const pollingRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
   // Keep a stable ref to the latest onBatchComplete to avoid stale closure in poll()
   const onBatchCompleteRef = useRef(onBatchComplete);
-  onBatchCompleteRef.current = onBatchComplete;
+
+  useEffect(() => {
+    onBatchCompleteRef.current = onBatchComplete;
+  }, [onBatchComplete]);
 
   const stopPolling = useCallback((batchId: number) => {
     const jobKey = `qc-${batchId}`;

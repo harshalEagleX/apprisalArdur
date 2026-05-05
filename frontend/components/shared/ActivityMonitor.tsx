@@ -22,22 +22,22 @@ export default function ActivityMonitor() {
   if (jobs.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+    <div className="foundation-fade-in fixed bottom-4 right-4 z-40 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_20px_55px_rgba(0,0,0,0.42)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800 bg-slate-900">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#11161C] px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <Activity size={13} className="text-blue-400 animate-pulse" />
-          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+          <Activity size={13} className="text-blue-300" />
+          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-300">
             Background activity
           </span>
-          <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+          <span className="rounded-full border border-blue-500/25 bg-blue-950/35 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-blue-100">
             {jobs.length}
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCollapsed(c => !c)}
-            className="text-slate-500 hover:text-slate-300 transition-colors p-0.5"
+            className="p-0.5 text-slate-500 transition-colors hover:text-slate-300"
             title={collapsed ? "Expand" : "Collapse"}
           >
             {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -47,7 +47,7 @@ export default function ActivityMonitor() {
 
       {/* Jobs */}
       {!collapsed && (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-white/10">
           {jobs.map(job => {
             const fallbackPct = job.total > 0
               ? Math.max(0, Math.min(100, Math.round((job.current / job.total) * 100)))
@@ -60,45 +60,45 @@ export default function ActivityMonitor() {
             const subLabel = job.subStage ? job.subStage.replace(/_/g, " ") : null;
             return (
               <div key={job.id} className="px-3 py-3">
-                <div className="flex items-start justify-between mb-2">
+                <div className="mb-2 flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-slate-200 truncate">{job.label}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
+                    <div className="truncate text-xs font-medium text-slate-200">{job.label}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">
                       {job.current} / {job.total} {job.unitLabel ?? "files"} &middot; {elapsed}s elapsed
                     </div>
                     {job.detail && (
-                      <div className="text-[10px] text-slate-600 mt-0.5 truncate">
+                      <div className="mt-0.5 truncate text-[10px] text-slate-600">
                         {job.detail}
                       </div>
                     )}
                     {job.modelLabel && (
-                      <div className="text-[10px] text-blue-400 mt-0.5 truncate">
+                      <div className="mt-0.5 truncate text-[10px] text-blue-300">
                         {job.modelLabel}
                       </div>
                     )}
                     {subLabel && (
-                      <div className="text-[10px] text-indigo-300 mt-0.5 truncate" title={job.subMessage ?? subLabel}>
+                      <div className="mt-0.5 truncate text-[10px] text-blue-200" title={job.subMessage ?? subLabel}>
                         {subLabel}{job.subMessage ? ` — ${job.subMessage}` : ""}
                       </div>
                     )}
                   </div>
                   <button
                     onClick={() => removeJob(job.id)}
-                    className="text-slate-600 hover:text-slate-400 ml-2 flex-shrink-0 transition-colors"
+                    className="ml-2 flex-shrink-0 text-slate-600 transition-colors hover:text-slate-400"
                     title="Dismiss"
                   >
                     <X size={12} />
                   </button>
                 </div>
                 {/* Progress bar */}
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-1.5 overflow-hidden rounded-full bg-[#0B0F14]">
                   <div
-                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-[10px] text-slate-500 truncate pr-2">
+                <div className="mt-1 flex justify-between">
+                  <span className="truncate pr-2 text-[10px] text-slate-500">
                     {job.message || (pct < 100 ? "Processing…" : "Finalising…")}
                   </span>
                   <span className="text-[10px] text-slate-500 font-mono">{pct}%</span>

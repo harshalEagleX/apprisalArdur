@@ -53,7 +53,7 @@ export const BatchRow = memo(function BatchRow({
 
   return (
     <tr
-      className={`transition-colors ${b.status === "QC_PROCESSING" ? "bg-indigo-950/10" : "hover:bg-slate-800/30"}`}
+      className={`transition-colors ${b.status === "QC_PROCESSING" ? "bg-blue-950/10" : "hover:bg-white/[0.03]"}`}
     >
       {/* Batch ID */}
       <td className="px-4 py-3">
@@ -86,9 +86,9 @@ export const BatchRow = memo(function BatchRow({
               </span>
               <span className="font-mono">{pct}%</span>
             </div>
-            <div className="w-32 h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-32 h-1 bg-[#0B0F14] rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                className="h-full bg-blue-500 rounded-full transition-all duration-500"
                 style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
               />
             </div>
@@ -98,7 +98,7 @@ export const BatchRow = memo(function BatchRow({
             </div>
             {subLabel && (
               <div
-                className="mt-0.5 text-[10px] text-indigo-300 max-w-[170px] truncate"
+                className="mt-0.5 text-[10px] text-blue-300 max-w-[170px] truncate"
                 title={progress.subMessage ?? subLabel}
               >
                 {subLabel}
@@ -163,7 +163,7 @@ export const BatchRow = memo(function BatchRow({
             <button
               onClick={() => onProcessQC(b)}
               disabled={isLoading}
-              className="h-8 min-w-[88px] px-2.5 rounded-md bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-800/50 text-indigo-200 text-xs font-medium transition-colors disabled:opacity-40 inline-flex items-center justify-center gap-1.5"
+              className="inline-flex h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-950/45 px-2.5 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-900/50 disabled:opacity-40"
             >
               {isLoading ? spinnerSvg : <Play size={12} />}
               {b.status === "ERROR" ? "Retry" : "Run QC"}
@@ -183,7 +183,7 @@ export const BatchRow = memo(function BatchRow({
             <button
               onClick={() => onStopQC(b)}
               disabled={isLoading}
-              className="h-8 min-w-[70px] px-2.5 rounded-md border border-red-900/60 bg-red-950/30 hover:bg-red-950/60 text-red-300 text-xs font-medium transition-colors disabled:opacity-40 inline-flex items-center justify-center gap-1"
+              className="inline-flex h-8 min-w-[70px] items-center justify-center gap-1 rounded-md border border-red-500/25 bg-red-950/30 px-2.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-950/60 disabled:opacity-40"
               title="Stop QC processing"
             >
               <Square size={11} />
@@ -193,7 +193,7 @@ export const BatchRow = memo(function BatchRow({
 
           {/* Assign reviewer */}
           {b.status === "QC_PROCESSING" && (
-            <span className="h-7 px-2 rounded-md border border-slate-800 text-[11px] text-slate-500 flex items-center">
+            <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[11px] text-slate-500">
               Assign after QC
             </span>
           )}

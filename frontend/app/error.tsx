@@ -9,19 +9,19 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-      <div className="text-center max-w-md">
-        <AlertTriangle size={48} className="mx-auto mb-4 text-amber-400" />
-        <h1 className="text-2xl font-semibold mb-2">Something went wrong</h1>
-        <p className="text-slate-400 mb-2 text-sm">{error.message || "An unexpected error occurred."}</p>
-        {error.digest && <p className="text-slate-600 text-xs mb-6">Error ID: {error.digest}</p>}
-        <div className="flex gap-3 justify-center">
+    <div className="foundation-grid flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+      <div className="foundation-fade-in max-w-md rounded-lg border border-white/10 bg-[#11161C]/90 p-8 text-center shadow-[0_20px_55px_rgba(0,0,0,0.36)]">
+        <AlertTriangle size={40} className="mx-auto mb-4 text-amber-400" />
+        <h1 className="mb-2 text-2xl font-semibold tracking-normal">Something went wrong</h1>
+        <p className="mb-2 text-sm text-slate-400">{error.message || "An unexpected error occurred."}</p>
+        {error.digest && <p className="mb-6 text-xs text-slate-600">Error ID: {error.digest}</p>}
+        <div className="flex justify-center gap-3">
           <button onClick={reset}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500">
             Try Again
           </button>
           <Link href="/"
-            className="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            className="rounded-md border border-white/10 px-5 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/5">
             Go Home
           </Link>
         </div>

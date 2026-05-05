@@ -64,7 +64,7 @@ export function PdfDocumentViewer({
               {highlighting && targetPage === pageNumber && targetBox && (
                 <div
                   ref={highlightRef}
-                  className="pointer-events-none absolute z-20 rounded-[3px] border-2 border-amber-300 bg-amber-300/20 shadow-[0_0_32px_rgba(251,191,36,0.45)] transition-all"
+                  className="pointer-events-none absolute z-20 rounded-[3px] border-2 border-amber-300 bg-amber-300/18 shadow-[0_0_28px_rgba(245,158,11,0.36)] transition-all"
                   style={{
                     left: `${targetBox.x * 100}%`,
                     top: `${targetBox.y * 100}%`,
@@ -79,7 +79,7 @@ export function PdfDocumentViewer({
                 loading={<PageSpinner label="Loading page..." />}
                 renderAnnotationLayer
                 renderTextLayer
-                className="overflow-hidden rounded-md bg-white shadow-2xl shadow-black/40"
+                className="overflow-hidden rounded-md bg-white shadow-[0_18px_48px_rgba(0,0,0,0.46)]"
               />
             </div>
           );
@@ -91,7 +91,7 @@ export function PdfDocumentViewer({
 
 function DocumentError() {
   return (
-    <div className="flex min-h-80 flex-col items-center justify-center gap-2 rounded-lg border border-amber-800/30 bg-amber-950/10 px-6 text-center text-slate-400">
+    <div className="flex min-h-80 flex-col items-center justify-center gap-2 rounded-lg border border-amber-500/25 bg-amber-950/10 px-6 text-center text-slate-400">
       <AlertTriangle size={18} className="text-amber-500" />
       <div className="text-sm">Document could not be loaded</div>
       <div className="max-w-md text-xs text-slate-500">Check that the reviewer is assigned to this batch and that the PDF file exists.</div>

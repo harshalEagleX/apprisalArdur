@@ -11,10 +11,10 @@ const ICON = {
 };
 
 const COLORS = {
-  success: "border-green-700  bg-green-950  text-green-300",
-  error:   "border-red-700   bg-red-950    text-red-300",
-  notice:  "border-amber-700 bg-amber-950  text-amber-300",
-  info:    "border-slate-600 bg-slate-900  text-slate-200",
+  success: "border-green-500/30 bg-green-950/70 text-green-200",
+  error:   "border-red-500/30   bg-red-950/70   text-red-200",
+  notice:  "border-amber-500/30 bg-amber-950/70 text-amber-200",
+  info:    "border-blue-500/25  bg-[#11161C]    text-slate-200",
 };
 
 const ICON_COLORS = {
@@ -41,7 +41,7 @@ export default function ToastContainer() {
         return (
           <div
             key={t.id}
-            className={`flex items-start gap-3 p-3.5 rounded-xl border shadow-2xl ${COLORS[t.type]} animate-in slide-in-from-right-4 duration-200`}
+            className={`flex items-start gap-3 rounded-lg border p-3.5 shadow-[0_18px_45px_rgba(0,0,0,0.38)] backdrop-blur ${COLORS[t.type]} animate-in slide-in-from-right-4 duration-200`}
           >
             <Icon size={16} className={`mt-0.5 flex-shrink-0 ${ICON_COLORS[t.type]}`} />
             <div className="flex-1 min-w-0">

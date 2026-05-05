@@ -44,30 +44,30 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative mx-4 w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+      <div className="relative mx-4 w-full max-w-md rounded-lg border border-white/10 bg-[#11161C] shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h2 className="text-sm font-semibold text-white">New client organisation</h2>
             <p className="mt-0.5 text-[11px] text-slate-500">Create the tenant used for uploads, reviewers, and reporting.</p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300" aria-label="Close client dialog">
+          <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300" aria-label="Close client dialog">
             <X size={16} />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-800 bg-red-950/60 px-3 py-2.5 text-xs text-red-300">
+            <div className="flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-950/45 px-3 py-2.5 text-xs text-red-200">
               <AlertCircle size={13} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
-          <section className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Organisation name <span className="text-red-400">*</span></label>
             <input value={name} onChange={e => setName(e.target.value)} required
               placeholder="Acme Lending" className={inputClass(fieldErrors.name)} />
             {fieldErrors.name && <FieldError>{fieldErrors.name}</FieldError>}
           </section>
-          <section className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Short code <span className="text-red-400">*</span></label>
             <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} required
               placeholder="ACME" maxLength={10} className={inputClass(fieldErrors.code)} />
@@ -75,8 +75,8 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
             {fieldErrors.code && <FieldError>{fieldErrors.code}</FieldError>}
           </section>
           <div className="flex gap-2 justify-end pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center gap-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">Cancel</button>
+            <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-md border border-blue-400/30 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50">
               {saving && <Spinner size={13} />}
               {saving ? "Creating…" : "Create"}
             </button>
@@ -87,7 +87,7 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
   );
 }
 
-const INPUT = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors";
+const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
 
 function inputClass(error?: string) {
   return `${INPUT} ${error ? "border-red-700 focus:ring-red-500 focus:border-red-600" : ""}`;

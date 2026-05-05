@@ -18,10 +18,12 @@ export function useKeyboardShortcuts(
 ): void {
   // Store the latest handler in a ref so the event listener closure never goes stale
   const handlerRef = useRef<(e: KeyboardEvent) => void>(shortcuts);
-  handlerRef.current = shortcuts;
-
   const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
+
+  useEffect(() => {
+    handlerRef.current = shortcuts;
+    enabledRef.current = enabled;
+  }, [enabled, shortcuts]);
 
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {

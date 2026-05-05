@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
+import { AlertCircle, ArrowRight, BrainCircuit, LockKeyhole, ShieldCheck } from "lucide-react";
 import { login } from "@/lib/api";
+import Spinner from "@/components/shared/Spinner";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -10,50 +12,109 @@ export default function LoginPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(""); setLoading(true);
-    try { await login(username, password); window.location.href = "/"; }
-    catch (err: unknown) { setError(err instanceof Error ? err.message : "Login failed"); }
-    finally { setLoading(false); }
+    setError("");
+    setLoading(true);
+    try {
+      await login(username, password);
+      window.location.href = "/";
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-600 mb-5">
-            <span className="text-xl font-bold text-white">A</span>
+    <main className="foundation-grid relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(59,130,246,0.12),transparent_34%),linear-gradient(to_bottom,rgba(11,15,20,0.2),#0B0F14_78%)]" />
+      <div className="relative mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-6 py-10 lg:grid-cols-[1fr_25rem]">
+        <section className="hidden max-w-2xl lg:block">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-950/20 px-3 py-1.5 text-xs font-medium text-blue-200">
+            <BrainCircuit size={14} />
+            AI Document Intelligence Platform
           </div>
-          <h1 className="text-xl font-semibold text-white">Ardur Appraisal QC</h1>
-          <p className="text-slate-500 text-sm mt-1">Sign in to your account</p>
-        </div>
-        {error && (
-          <div className="mb-4 px-4 py-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-sm text-center">{error}</div>
-        )}
-        <form onSubmit={submit} className="space-y-3 bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
-            <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-              placeholder="Enter username" required autoFocus
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors" />
+          <h1 className="max-w-xl text-[40px] font-semibold leading-tight tracking-normal text-white">
+            Appraisal decisions with audit-grade clarity.
+          </h1>
+          <p className="mt-4 max-w-lg text-sm leading-6 text-slate-400">
+            Upload, process, verify, and sign off document intelligence workflows from one controlled operations surface.
+          </p>
+          <div className="mt-8 grid max-w-xl gap-3 sm:grid-cols-3">
+            <Signal icon={ShieldCheck} label="Role gated" value="Admin / Reviewer" />
+            <Signal icon={LockKeyhole} label="Session mode" value="Cookie secured" />
+            <Signal icon={BrainCircuit} label="QC engine" value="Human in loop" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="Enter password" required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors" />
+        </section>
+
+        <section className="mx-auto w-full max-w-sm lg:mx-0">
+          <div className="mb-7">
+            <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-blue-500/25 bg-blue-950/35 shadow-[0_0_28px_rgba(59,130,246,0.18)]">
+              <span className="text-base font-semibold text-white">A</span>
+            </div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">Secure workspace</div>
+            <h2 className="mt-2 text-2xl font-semibold tracking-normal text-white">Ardur Appraisal QC</h2>
+            <p className="mt-1 text-sm text-slate-500">Sign in to continue your review or operations workflow.</p>
           </div>
-          <button type="submit" disabled={loading}
-            className="w-full mt-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
-            {loading && (
-              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-            )}
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+
+          {error && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-950/45 px-3 py-2.5 text-sm text-red-200">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={submit} className="rounded-lg border border-white/10 bg-[#11161C]/95 p-5 shadow-[0_22px_60px_rgba(0,0,0,0.34)] backdrop-blur">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="Enter username"
+                required
+                autoFocus
+                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter password"
+                required
+                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-blue-400/30 bg-blue-600 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.18)] transition-all hover:bg-blue-500 disabled:opacity-50"
+            >
+              {loading ? <Spinner size={14} /> : <ArrowRight size={14} />}
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+            <div className="mt-4 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-slate-600">
+              Access is restricted to assigned administrators and reviewers. Every saved decision is tied to your session.
+            </div>
+          </form>
+        </section>
       </div>
+    </main>
+  );
+}
+
+function Signal({ icon: Icon, label, value }: {
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#11161C]/80 p-3">
+      <Icon size={15} className="mb-2 text-blue-300" />
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">{label}</div>
+      <div className="mt-1 text-xs text-slate-300">{value}</div>
     </div>
   );
 }

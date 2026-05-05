@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 export function Skeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("animate-pulse bg-slate-800 rounded", className)} />
+    <div className={cn("foundation-shimmer rounded", className)} />
   );
 }
 
@@ -25,7 +25,7 @@ export function TableSkeleton({ rows = 5, cols = 5 }: { rows?: number; cols?: nu
 
 export function CardSkeleton() {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+    <div className="rounded-lg border border-white/10 bg-[#11161C] p-4 space-y-3">
       <Skeleton className="h-7 w-16" />
       <Skeleton className="h-4 w-28" />
     </div>

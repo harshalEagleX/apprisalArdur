@@ -51,7 +51,7 @@ export function ReviewerAssignControl({
   const age = formatAge(batch.updatedAt ?? batch.createdAt);
 
   return (
-    <div className="min-w-[210px] rounded-md border border-slate-800 bg-slate-950/60 p-2">
+    <div className="min-w-[210px] rounded-md border border-white/10 bg-[#0B0F14]/70 p-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-[10px] uppercase tracking-wide text-slate-500">Assign reviewer</span>
         <span className="text-[10px] text-amber-300">{age}</span>
@@ -60,7 +60,7 @@ export function ReviewerAssignControl({
         defaultValue=""
         onChange={e => e.target.value && onAssign(Number(e.target.value))}
         disabled={disabled}
-        className="h-8 w-full rounded-md border border-slate-700 bg-slate-800 px-2 text-xs text-slate-300 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40"
+        className="h-8 w-full rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-40"
         aria-label={`Assign reviewer for ${batch.parentBatchId}`}
       >
         <option value="">Assign…</option>

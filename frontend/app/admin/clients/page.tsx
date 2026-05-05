@@ -36,15 +36,16 @@ export default function ClientsPage() {
   const activeCount = clients.filter(c => (c.status ?? "ACTIVE") === "ACTIVE").length;
 
   return (
-    <div className="p-6 max-w-[1400px]">
+    <div className="max-w-[1400px] p-6">
       <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Client organisations</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Tenant organisations whose appraisals this platform reviews</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Tenant registry</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Client organisations</h1>
+          <p className="mt-1 text-sm text-slate-500">Tenant organisations whose appraisals this platform reviews.</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1.5 font-medium transition-colors"
+          className="flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.16)] transition-colors hover:bg-blue-500"
         >
           <Plus size={14} /> New client
         </button>
@@ -57,10 +58,10 @@ export default function ClientsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search clients by name, code, or status..."
-            className="h-9 w-full rounded-lg border border-slate-700 bg-slate-900 pl-8 pr-9 text-sm text-white placeholder-slate-500 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="h-9 w-full rounded-md border border-white/10 bg-[#11161C] pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300" aria-label="Clear search">
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.04] hover:text-slate-300" aria-label="Clear search">
               <XCircle size={13} />
             </button>
           )}
@@ -74,7 +75,7 @@ export default function ClientsPage() {
           {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
       ) : clients.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl">
+        <div className="rounded-lg border border-white/10 bg-[#11161C]">
           <EmptyState
             icon={Building2}
             title="No client organisations"
@@ -88,7 +89,7 @@ export default function ClientsPage() {
           />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900">
+        <div className="rounded-lg border border-white/10 bg-[#11161C]">
           <EmptyState
             icon={Search}
             title="No clients match"
@@ -99,9 +100,9 @@ export default function ClientsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map(c => (
-            <div key={c.id} className="rounded-lg border border-slate-800 bg-slate-900 p-5 transition-colors hover:border-slate-700">
+            <div key={c.id} className="rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.16)] transition-colors hover:border-blue-500/25">
               {/* Avatar */}
-              <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#161B22]">
                 <span className="text-base font-bold text-slate-300">{c.name[0].toUpperCase()}</span>
               </div>
               <div className="font-semibold text-slate-200 text-sm">{c.name}</div>
@@ -109,8 +110,8 @@ export default function ClientsPage() {
               <div className="mt-3 flex items-center gap-2">
                 <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-medium ${
                   c.status === "ACTIVE"
-                    ? "bg-green-950/50 border-green-800/50 text-green-400"
-                    : "bg-slate-800 border-slate-700 text-slate-500"
+                    ? "bg-green-950/40 border-green-500/25 text-green-200"
+                    : "bg-[#161B22] border-white/10 text-slate-500"
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${c.status === "ACTIVE" ? "bg-green-400" : "bg-slate-500"}`} />
                   {c.status ?? "Active"}
@@ -138,8 +139,8 @@ function ClientSummary({ icon: Icon, label, value, tone }: {
   tone: "slate" | "green";
 }) {
   const styles = tone === "green"
-    ? "border-green-900/50 bg-green-950/30 text-green-200"
-    : "border-slate-800 bg-slate-900 text-slate-300";
+    ? "border-green-500/25 bg-green-950/30 text-green-200"
+    : "border-white/10 bg-[#11161C] text-slate-300";
   return (
     <div className={`flex h-9 items-center gap-2 rounded-lg border px-3 ${styles}`}>
       <Icon size={14} className="opacity-80" />

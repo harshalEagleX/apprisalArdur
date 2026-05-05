@@ -13,10 +13,13 @@ export function useWebSocket(
   const [connected, setConnected] = useState(false);
   // Keep a stable ref to the latest onMessage callback to avoid stale closures
   const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
   // Keep a stable ref to the latest topics list so the reconnect logic reads current topics
   const topicsRef = useRef(topics);
-  topicsRef.current = topics;
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+    topicsRef.current = topics;
+  }, [onMessage, topics]);
 
   useEffect(() => {
     let ws: WebSocket | null = null;

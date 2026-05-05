@@ -128,7 +128,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={!uploading ? onClose : undefined} />
       <div
         ref={dialogRef}
-        className="relative mx-4 w-full max-w-lg rounded-lg border border-slate-700 bg-slate-900 shadow-2xl focus:outline-none"
+        className="relative mx-4 w-full max-w-lg rounded-lg border border-white/10 bg-[#11161C] shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-dialog-title"
@@ -137,13 +137,13 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
         onKeyDown={handleDialogKeyDown}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h2 id="upload-dialog-title" className="text-sm font-semibold text-white">Upload batch</h2>
             <p id="upload-dialog-description" className="text-[11px] text-slate-500 mt-0.5">ZIP must contain appraisal and engagement folders. Contracts are optional.</p>
           </div>
           {!uploading && (
-            <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300" aria-label="Close upload dialog">
+            <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300" aria-label="Close upload dialog">
               <X size={16} />
             </button>
           )}
@@ -151,14 +151,14 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-800 bg-red-950/60 px-3 py-2.5 text-xs text-red-300">
+            <div className="flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-950/45 px-3 py-2.5 text-xs text-red-200">
               <AlertCircle size={13} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Client selector */}
-          <section className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
             <div className="mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Batch owner</h3>
               <p className="mt-0.5 text-[11px] text-slate-600">This controls storage paths and client-level reporting.</p>
@@ -173,7 +173,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
           </section>
 
           {/* Drop zone */}
-          <section className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
             <div className="mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Archive</h3>
               <p className="mt-0.5 text-[11px] text-slate-600">Maximum 50 MB. The backend validates the folder structure after upload.</p>
@@ -188,12 +188,12 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
               role="button"
               tabIndex={uploading ? -1 : 0}
               aria-label={file ? `Selected ZIP archive ${file.name}. Press Enter to choose a different file.` : "Choose ZIP archive"}
-              className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
-                uploading ? "cursor-not-allowed opacity-60 border-slate-700" :
-                dragging ? "border-blue-500 bg-blue-950/30 cursor-copy" :
-                file ? "border-green-700 bg-green-950/20 cursor-pointer" :
-                fieldErrors.file ? "border-red-700 bg-red-950/10 cursor-pointer" :
-                "border-slate-700 hover:border-slate-600 cursor-pointer"
+              className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                uploading ? "cursor-not-allowed border-white/10 opacity-60" :
+                dragging ? "cursor-copy border-blue-500 bg-blue-950/30" :
+                file ? "cursor-pointer border-green-500/50 bg-green-950/20" :
+                fieldErrors.file ? "cursor-pointer border-red-500/50 bg-red-950/10" :
+                "cursor-pointer border-white/15 hover:border-blue-500/35"
               }`}
             >
               <input ref={inputRef} type="file" accept=".zip" className="hidden"
@@ -222,7 +222,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
                 <span>Uploading and validating…</span>
                 <span className="font-mono">{progress}%</span>
               </div>
-              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-[#0B0F14] rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
               </div>
             </div>
@@ -230,12 +230,12 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 
           <div className="flex gap-2 justify-end pt-1">
             {!uploading && (
-              <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">
+              <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
                 Cancel
               </button>
             )}
             <button type="submit" disabled={uploading || !file || !clientId}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center gap-2">
+              className="flex items-center gap-2 rounded-md border border-blue-400/30 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50">
               {uploading && <Spinner size={13} />}
               {uploading ? "Uploading…" : "Upload batch"}
             </button>
@@ -246,7 +246,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
   );
 }
 
-const INPUT = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:opacity-50";
+const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50";
 
 function FieldError({ children }: { children: React.ReactNode }) {
   return (

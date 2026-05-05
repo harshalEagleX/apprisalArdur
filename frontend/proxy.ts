@@ -5,7 +5,7 @@ const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 const PUBLIC_PATHS = ["/login"];
 const ADMIN_PATHS  = ["/admin", "/analytics"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {

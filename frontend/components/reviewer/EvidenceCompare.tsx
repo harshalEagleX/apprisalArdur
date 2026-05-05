@@ -22,11 +22,11 @@ function EvidenceValue({
   tone: "found" | "expected";
 }) {
   const compareTokens = new Set(tokenize(compareTo).map(normalizeToken).filter(Boolean));
-  const titleColor = tone === "found" ? "text-slate-500" : "text-blue-500";
-  const valueColor = tone === "found" ? "text-slate-300" : "text-blue-300";
+  const titleColor = tone === "found" ? "text-slate-500" : "text-blue-400";
+  const valueColor = tone === "found" ? "text-slate-300" : "text-blue-200";
   return (
     <div
-      className={`rounded-lg p-2.5 ${tone === "found" ? "bg-slate-800/50" : "border border-blue-800/30 bg-blue-950/30"}`}
+      className={`rounded-lg p-2.5 ${tone === "found" ? "border border-white/10 bg-[#11161C]/80" : "border border-blue-500/25 bg-blue-950/25"}`}
     >
       <div className={`mb-1 text-[10px] font-semibold uppercase tracking-wide ${titleColor}`}>
         {title}
@@ -40,7 +40,7 @@ function EvidenceValue({
               <span
                 key={`${token}-${index}`}
                 className={
-                  mismatch ? "rounded bg-amber-400/20 px-0.5 text-amber-200" : undefined
+                  mismatch ? "rounded bg-amber-400/18 px-0.5 text-amber-200 ring-1 ring-amber-400/20" : undefined
                 }
               >
                 {token}
@@ -75,16 +75,16 @@ export function EvidenceCompare({ rule, status }: EvidenceCompareProps) {
         : rule.message || "The rule evidence is shown for traceability.";
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2.5">
+    <div className="rounded-lg border border-white/10 bg-[#0B0F14]/45 p-2.5">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+        <span className="rounded border border-white/10 bg-[#11161C] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
           Evidence
         </span>
-        <span className="rounded border border-blue-900/50 bg-blue-950/30 px-1.5 py-0.5 text-[10px] text-blue-200">
+        <span className="rounded border border-blue-500/25 bg-blue-950/30 px-1.5 py-0.5 text-[10px] text-blue-200">
           {pageLabel}
         </span>
         {rule.confidence != null && (
-          <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400">
+          <span className="rounded border border-white/10 bg-[#11161C] px-1.5 py-0.5 text-[10px] text-slate-400">
             Confidence {Math.round(Number(rule.confidence) * 100)}%
           </span>
         )}
@@ -98,7 +98,7 @@ export function EvidenceCompare({ rule, status }: EvidenceCompareProps) {
           tone="expected"
         />
       </div>
-      <div className="mt-2 rounded-md border border-amber-900/30 bg-amber-950/15 px-2.5 py-2 text-xs leading-relaxed text-amber-200">
+      <div className="mt-2 rounded-md border border-amber-500/25 bg-amber-950/15 px-2.5 py-2 text-xs leading-relaxed text-amber-200">
         {why}
       </div>
     </div>

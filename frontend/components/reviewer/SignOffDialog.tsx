@@ -13,7 +13,7 @@ function SignOffStat({
 }) {
   return (
     <div
-      className={`rounded-lg border px-2.5 py-2 ${danger ? "border-red-900/50 bg-red-950/30 text-red-200" : "border-slate-800 bg-slate-950/50 text-slate-200"}`}
+      className={`rounded-lg border px-2.5 py-2 ${danger ? "border-red-500/25 bg-red-950/30 text-red-200" : "border-white/10 bg-[#0B0F14]/60 text-slate-200"}`}
     >
       <div className="text-base font-semibold tabular-nums">{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
@@ -99,7 +99,7 @@ export function SignOffDialog({
       />
       <div
         ref={dialogRef}
-        className="relative w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-2xl focus:outline-none"
+        className="relative w-full max-w-sm rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="signoff-dialog-title"
@@ -108,7 +108,7 @@ export function SignOffDialog({
         onKeyDown={handleKeyDown}
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-amber-800 bg-amber-950/60">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-amber-500/25 bg-amber-950/50">
             <AlertTriangle size={16} className="text-amber-300" />
           </div>
           <div className="min-w-0">
@@ -143,7 +143,7 @@ export function SignOffDialog({
           autoFocus
           inputMode="numeric"
           maxLength={4}
-          className="mt-1.5 h-10 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 font-mono text-sm tracking-[0.25em] text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 font-mono text-sm tracking-[0.25em] text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           placeholder="0000"
         />
 
@@ -152,7 +152,7 @@ export function SignOffDialog({
           value={notes}
           onChange={e => onNotesChange(e.target.value)}
           rows={3}
-          className="mt-1.5 w-full resize-none rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="mt-1.5 w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           placeholder="Optional summary for the completed review..."
         />
 
@@ -160,14 +160,14 @@ export function SignOffDialog({
           <button
             onClick={onCancel}
             disabled={submitting}
-            className="h-9 rounded-lg bg-slate-800 px-4 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+            className="h-9 rounded-md border border-white/10 bg-[#161B22] px-4 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={!canConfirm}
-            className="h-9 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            className="h-9 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
           >
             {submitting ? "Submitting..." : "Submit review"}
           </button>

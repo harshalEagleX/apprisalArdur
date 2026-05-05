@@ -127,7 +127,7 @@ function TooltipOverlay() {
 
       {/* Tooltip card */}
       <div ref={tooltipRef}
-           className="fixed z-50 w-72 bg-slate-900 border border-blue-600 rounded-2xl shadow-2xl p-5"
+           className="foundation-fade-in fixed z-50 w-72 rounded-lg border border-blue-500/35 bg-[#11161C] p-5 shadow-[0_20px_55px_rgba(0,0,0,0.42)]"
            style={{ top: Math.max(8, tipTop), left: Math.max(8, Math.min(tipLeft, window.innerWidth - 300)) }}>
         <div className="flex justify-between items-start mb-2">
           <span className="text-xs text-blue-400 font-medium">Step {stepIndex + 1} of {steps.length}</span>
@@ -141,19 +141,19 @@ function TooltipOverlay() {
         {/* Progress dots */}
         <div className="flex items-center gap-1 mb-4">
           {steps.map((_, i) => (
-            <div key={i} className={`h-1.5 rounded-full transition-all ${i === stepIndex ? "bg-blue-500 w-4" : "bg-slate-700 w-1.5"}`} />
+            <div key={i} className={`h-1.5 rounded-full transition-all ${i === stepIndex ? "w-4 bg-blue-500" : "w-1.5 bg-white/15"}`} />
           ))}
         </div>
 
         <div className="flex gap-2">
           {stepIndex > 0 && (
             <button onClick={prev}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04]">
               <ArrowLeft size={12} /> Back
             </button>
           )}
           <button onClick={next}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500">
             {stepIndex === steps.length - 1 ? <>Done <Check size={12} /></> : <>Next <ArrowRight size={12} /></>}
           </button>
         </div>

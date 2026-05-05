@@ -15,16 +15,16 @@ import { EvidenceCompare } from "./EvidenceCompare";
 type Decision = "PASS" | "FAIL";
 
 const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
-  pass:        { border: "border-green-800/40",  bg: "bg-green-950/20",  text: "text-green-300" },
-  fail:        { border: "border-red-800/40",    bg: "bg-red-950/20",    text: "text-red-300" },
-  verify:      { border: "border-amber-800/40",  bg: "bg-amber-950/20",  text: "text-amber-300" },
-  MANUAL_PASS: { border: "border-teal-800/40",   bg: "bg-teal-950/20",   text: "text-teal-300" },
+  pass:        { border: "border-green-500/25",  bg: "bg-green-950/18",  text: "text-green-200" },
+  fail:        { border: "border-red-500/25",    bg: "bg-red-950/18",    text: "text-red-200" },
+  verify:      { border: "border-amber-500/25",  bg: "bg-amber-950/18",  text: "text-amber-200" },
+  MANUAL_PASS: { border: "border-green-500/25",  bg: "bg-green-950/18",  text: "text-green-200" },
 };
 
 const SEV_STYLE: Record<string, string> = {
-  BLOCKING: "bg-red-950/60 border-red-800/50 text-red-400",
-  STANDARD: "bg-slate-800 border-slate-700 text-slate-400",
-  ADVISORY: "bg-slate-800/50 border-slate-700/50 text-slate-500",
+  BLOCKING: "bg-red-950/50 border-red-500/25 text-red-200",
+  STANDARD: "bg-[#161B22] border-white/10 text-slate-400",
+  ADVISORY: "bg-[#161B22]/70 border-white/10 text-slate-500",
 };
 
 function ruleStatus(status: string): string {
@@ -130,7 +130,7 @@ export const RuleCard = memo(function RuleCard({
   return (
     <div
       id={`rule-${rule.id}`}
-      className={`rounded-xl border p-3 ${s.border} ${s.bg} ${active ? "ring-1 ring-amber-400/70" : ""}`}
+      className={`rounded-lg border p-3 shadow-[0_10px_24px_rgba(0,0,0,0.12)] ${s.border} ${s.bg} ${active ? "ring-1 ring-blue-500/60" : ""}`}
     >
       <button
         onClick={() => {
@@ -140,7 +140,7 @@ export const RuleCard = memo(function RuleCard({
         className="w-full text-left"
       >
         <div className="flex items-start gap-2">
-          <span className="font-mono text-[10px] bg-slate-800/60 border border-slate-700/40 px-1.5 py-0.5 rounded text-slate-400 flex-shrink-0 mt-0.5">
+          <span className="font-mono text-[10px] bg-[#0B0F14]/70 border border-white/10 px-1.5 py-0.5 rounded text-slate-400 flex-shrink-0 mt-0.5">
             {rule.ruleId}
           </span>
           <div className="flex-1 min-w-0">
@@ -158,19 +158,19 @@ export const RuleCard = memo(function RuleCard({
                 </span>
               )}
               {!saving && savedNow && (
-                <span className="text-[10px] text-teal-400 flex items-center gap-0.5">
+                <span className="text-[10px] text-green-300 flex items-center gap-0.5">
                   <CheckCircle2 size={9} />
                   saved
                 </span>
               )}
               {!saving && decision && !savedNow && (
-                <span className="text-[10px] text-teal-400 flex items-center gap-0.5">
+                <span className="text-[10px] text-green-300 flex items-center gap-0.5">
                   <CheckCircle2 size={9} />
                   saved earlier
                 </span>
               )}
               {rule.overridePending && (
-                <span className="text-[10px] text-blue-300 border border-blue-800/50 bg-blue-950/40 rounded px-1.5 py-0.5">
+                <span className="text-[10px] text-blue-200 border border-blue-500/25 bg-blue-950/35 rounded px-1.5 py-0.5">
                   second approval pending
                 </span>
               )}
@@ -178,10 +178,10 @@ export const RuleCard = memo(function RuleCard({
                 <span
                   className={`text-[10px] rounded border px-1.5 py-0.5 ${
                     slaExpired
-                      ? "border-red-700/60 bg-red-950/50 text-red-200"
+                      ? "border-red-500/35 bg-red-950/45 text-red-200"
                       : slaUnderHour
-                        ? "border-amber-700/50 bg-amber-950/40 text-amber-200"
-                        : "border-slate-700/50 bg-slate-900/60 text-slate-400"
+                        ? "border-amber-500/30 bg-amber-950/35 text-amber-200"
+                        : "border-white/10 bg-[#0B0F14]/60 text-slate-400"
                   }`}
                 >
                   {slaLabel}
@@ -210,7 +210,7 @@ export const RuleCard = memo(function RuleCard({
             rule.expectedValue) && <EvidenceCompare rule={rule} status={normalizedStatus} />}
 
           {rule.actionItem && (
-            <div className="flex items-start gap-2 bg-amber-950/20 border border-amber-800/20 rounded-lg p-2.5 text-xs text-amber-300">
+            <div className="flex items-start gap-2 bg-amber-950/18 border border-amber-500/25 rounded-lg p-2.5 text-xs text-amber-200">
               <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
               <span className="leading-relaxed">{rule.actionItem}</span>
             </div>
@@ -223,7 +223,7 @@ export const RuleCard = memo(function RuleCard({
           )}
 
           {isVerify && (
-            <details className="rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-2 text-xs text-slate-400">
+            <details className="rounded-lg border border-white/10 bg-[#0B0F14]/55 px-2.5 py-2 text-xs text-slate-400">
               <summary className="cursor-pointer text-slate-300 font-medium">Rule help</summary>
               <div className="mt-2 space-y-2 leading-relaxed">
                 <p>
@@ -248,12 +248,12 @@ export const RuleCard = memo(function RuleCard({
           {rule.reviewRequired ? (
             <div className="space-y-2">
               {isVerify && waitMs > 0 && (
-                <div className="text-[11px] text-amber-300 bg-amber-950/20 border border-amber-800/30 rounded-lg px-2.5 py-2">
+                <div className="text-[11px] text-amber-200 bg-amber-950/18 border border-amber-500/25 rounded-lg px-2.5 py-2">
                   Read the question and document reference. Actions unlock in {waitSeconds}s.
                 </div>
               )}
               {isBlockingVerify && (
-                <label className="flex items-start gap-2 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 rounded-lg px-2.5 py-2">
+                <label className="flex items-start gap-2 text-[11px] text-slate-300 bg-[#0B0F14]/55 border border-white/10 rounded-lg px-2.5 py-2">
                   <input
                     type="checkbox"
                     checked={acknowledged}
@@ -264,13 +264,13 @@ export const RuleCard = memo(function RuleCard({
                 </label>
               )}
               {isFail && (
-                <div className="text-[11px] text-red-200 bg-red-950/20 border border-red-800/30 rounded-lg px-2.5 py-2">
+                <div className="text-[11px] text-red-200 bg-red-950/18 border border-red-500/25 rounded-lg px-2.5 py-2">
                   PASS here is an override. Enter a specific reason of at least 20 characters; a
                   second reviewer must approve it before sign-off.
                 </div>
               )}
               {rule.overridePending && (
-                <div className="text-[11px] text-blue-200 bg-blue-950/20 border border-blue-800/30 rounded-lg px-2.5 py-2">
+                <div className="text-[11px] text-blue-200 bg-blue-950/18 border border-blue-500/25 rounded-lg px-2.5 py-2">
                   Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
                   different reviewer must press Pass to approve it.
                 </div>
@@ -282,7 +282,7 @@ export const RuleCard = memo(function RuleCard({
                   className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
                     decision === "PASS"
                       ? "bg-green-600 text-white"
-                      : "bg-slate-800 hover:bg-green-900/40 hover:text-green-300 text-slate-400 border border-slate-700"
+                      : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
                   }`}
                 >
                   {saving ? spinnerSvg : <Check size={12} />} Save Pass
@@ -294,7 +294,7 @@ export const RuleCard = memo(function RuleCard({
                     className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
                       decision === "FAIL"
                         ? "bg-red-600 text-white"
-                        : "bg-slate-800 hover:bg-red-900/40 hover:text-red-300 text-slate-400 border border-slate-700"
+                        : "bg-[#161B22] hover:bg-red-950/35 hover:text-red-200 text-slate-400 border border-white/10"
                     }`}
                   >
                     {saving ? spinnerSvg : <X size={12} />} Save Fail
@@ -311,7 +311,7 @@ export const RuleCard = memo(function RuleCard({
                     : "Add a comment (optional)..."
                 }
                 rows={2}
-                className="w-full bg-slate-800/50 border border-slate-700/40 rounded-lg px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 resize-none focus:outline-none focus:ring-1 focus:ring-blue-600/50 transition-colors"
+                className="w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/55 px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
               {decision && (
                 <div className="text-[10px] text-slate-600">

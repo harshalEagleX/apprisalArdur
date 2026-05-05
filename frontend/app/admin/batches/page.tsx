@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Search, Plus, RefreshCw, ChevronLeft, ChevronRight,
-  FileStack, Clock3, CheckCircle2, AlertTriangle, Play, UserPlus, SlidersHorizontal, XCircle,
+  FileStack, Clock3, CheckCircle2, Play, UserPlus, SlidersHorizontal, XCircle,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import {
@@ -11,7 +11,6 @@ import {
   type Batch, type User, type QCModelSelection,
 } from "@/lib/api";
 import { removeJob } from "@/lib/jobs";
-import StatusBadge from "@/components/shared/StatusBadge";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import UploadModal from "@/components/admin/UploadModal";
 import { BatchRow } from "@/components/admin/BatchRow";
@@ -45,9 +44,9 @@ function SummaryPill({ icon: Icon, label, value, tone }: {
   tone: "slate" | "blue" | "indigo" | "amber" | "green";
 }) {
   const tones = {
-    slate: "border-slate-800 bg-slate-900 text-slate-300",
+    slate: "border-white/10 bg-[#11161C] text-slate-300",
     blue:  "border-blue-900/50 bg-blue-950/30 text-blue-200",
-    indigo:"border-indigo-900/50 bg-indigo-950/30 text-indigo-200",
+    indigo:"border-blue-500/25 bg-blue-950/30 text-blue-200",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
   };
@@ -65,7 +64,7 @@ function SummaryPill({ icon: Icon, label, value, tone }: {
 // ── Reconcile summary ─────────────────────────────────────────────────────────
 function RecoveryMetric({ label, value, tone }: { label: string; value: number | string; tone: "slate" | "amber" | "blue" | "green" | "red" }) {
   const tones = {
-    slate: "border-slate-800 bg-slate-950/60 text-slate-300",
+    slate: "border-white/10 bg-[#0B0F14]/70 text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     blue:  "border-blue-900/50 bg-blue-950/30 text-blue-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
@@ -82,7 +81,7 @@ function RecoveryMetric({ label, value, tone }: { label: string; value: number |
 function ReconcileSummary({ result, onDismiss }: { result: ReconcileResult; onDismiss: () => void }) {
   const changed = result.retried + result.abandoned;
   return (
-    <div className="mb-4 rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <div className="mb-4 rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${changed > 0 ? "border-amber-800/50 bg-amber-950/40 text-amber-300" : "border-green-800/50 bg-green-950/30 text-green-300"}`}>
           <RefreshCw size={14} />
@@ -97,7 +96,7 @@ function ReconcileSummary({ result, onDismiss }: { result: ReconcileResult; onDi
             <RecoveryMetric label="QC service"  value={result.pythonHealthy ? "Healthy" : "Needs check"} tone={result.pythonHealthy ? "green" : "red"} />
           </div>
         </div>
-        <button onClick={onDismiss} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300" aria-label="Dismiss reconciliation result">
+        <button onClick={onDismiss} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.04] hover:text-slate-300" aria-label="Dismiss reconciliation result">
           <XCircle size={14} />
         </button>
       </div>
@@ -140,7 +139,12 @@ export default function BatchesPage() {
   const searchMountedRef              = useRef(false);
 
   const setActionBusy = useCallback((id: number, on: boolean) => {
-    setActionLoading(prev => { const n = new Set(prev); on ? n.add(id) : n.delete(id); return n; });
+    setActionLoading(prev => {
+      const n = new Set(prev);
+      if (on) n.add(id);
+      else n.delete(id);
+      return n;
+    });
   }, []);
 
   // Debounce search
@@ -190,7 +194,7 @@ export default function BatchesPage() {
     window.history.replaceState(null, "", params.toString() ? `/admin/batches?${params}` : "/admin/batches");
   }, [debouncedSearch, page, statusFilter]);
 
-  const { progress, startPolling, stopPolling } = useBatchPolling(batches, (_batchId, _status) => {
+  const { progress, startPolling, stopPolling } = useBatchPolling(batches, () => {
     void load();
   });
 
@@ -275,21 +279,22 @@ export default function BatchesPage() {
   const activeFilterLabel = statusFilter ? statusFilter.replace(/_/g, " ") : "All statuses";
 
   return (
-    <div className="p-6 max-w-[1500px]">
+    <div className="max-w-[1500px] p-6">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Batches</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Upload and manage appraisal document sets</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Document intake</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Batches</h1>
+          <p className="mt-1 text-sm text-slate-500">Upload, validate, process, assign, and recover appraisal document sets.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleReconcile} disabled={reconciling} title="Find and recover batches stuck in QC_PROCESSING"
-            className="h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-slate-300 text-sm inline-flex items-center gap-1.5 transition-colors">
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white disabled:opacity-50">
             <RefreshCw size={13} className={reconciling ? "animate-spin" : ""} />
             Reconcile
           </button>
           <button onClick={() => setShowUpload(true)}
-            className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm inline-flex items-center gap-1.5 font-medium transition-colors">
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.16)] transition-colors hover:bg-blue-500">
             <Plus size={14} /> Upload batch
           </button>
         </div>
@@ -305,41 +310,41 @@ export default function BatchesPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+      <div className="mb-4 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search all batches by ID or client…"
-                className="w-full h-9 bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
+                className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
             </div>
             <select value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(0); }}
-              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-300 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-48"
+              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:w-48"
               aria-label="Filter by status">
               <option value="">All statuses</option>
               {STATUSES.filter(Boolean).map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
             </select>
             {(search || statusFilter) && (
               <button onClick={() => { setSearch(""); setStatus(""); setPage(0); }}
-                className="h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-400 text-sm inline-flex items-center justify-center gap-1.5 transition-colors">
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white">
                 <XCircle size={13} /> Clear
               </button>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-2 py-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 py-2">
             <span className="inline-flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <SlidersHorizontal size={12} /> QC model
             </span>
-            <span className="h-8 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs leading-8 text-slate-300">
+            <span className="h-8 rounded-md border border-white/10 bg-[#11161C] px-2 text-xs leading-8 text-slate-300">
               {MODEL_OPTIONS[modelProvider].label}
             </span>
             <select value={textModel} onChange={e => setTextModel(e.target.value)}
-              className="h-8 min-w-[150px] rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="h-8 min-w-[150px] rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               aria-label="Select QC text model">
               {MODEL_OPTIONS[modelProvider].text.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
-            <span className="h-8 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs leading-8 text-slate-300">
+            <span className="h-8 rounded-md border border-white/10 bg-[#11161C] px-2 text-xs leading-8 text-slate-300">
               Vision {visionModel}
             </span>
           </div>
@@ -348,24 +353,24 @@ export default function BatchesPage() {
           <span>Showing {batches.length} of {totalElements} matching row{totalElements === 1 ? "" : "s"} on page {page + 1}</span>
           <span className="hidden h-1 w-1 rounded-full bg-slate-700 sm:inline-block" />
           <span>{activeFilterLabel}</span>
-          {debouncedSearch && <span>Global search <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-400">{debouncedSearch}</span></span>}
+          {debouncedSearch && <span>Global search <span className="rounded border border-white/10 bg-[#161B22] px-1.5 py-0.5 font-mono text-slate-400">{debouncedSearch}</span></span>}
         </div>
       </div>
 
       {reconcileResult && <ReconcileSummary result={reconcileResult} onDismiss={() => setReconcileResult(null)} />}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+      <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
         <div className="data-scroll">
           <table className="w-full min-w-[1060px] text-sm">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/40">
+              <tr className="border-b border-white/10 bg-[#0B0F14]/80">
                 {["Batch", "Client", "Status", "Files", "Reviewer", "Date", "Actions"].map((h, i) => (
-                  <th key={h} className={`sticky top-0 z-10 bg-slate-950 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${i === 6 ? "text-right" : "text-left"}`}>{h}</th>
+                  <th key={h} className={`sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${i === 6 ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-white/10">
               {loading ? (
                 <tr><td colSpan={7} className="p-0"><TableSkeleton rows={6} cols={7} /></td></tr>
               ) : batches.length === 0 ? (
@@ -407,12 +412,12 @@ export default function BatchesPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-slate-700 text-slate-400 disabled:opacity-30 hover:text-white hover:bg-slate-800 text-sm transition-colors">
+            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-30">
             <ChevronLeft size={14} /> Previous
           </button>
           <span className="text-xs text-slate-500">Page {page + 1} of {totalPages}</span>
           <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-slate-700 text-slate-400 disabled:opacity-30 hover:text-white hover:bg-slate-800 text-sm transition-colors">
+            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-30">
             Next <ChevronRight size={14} />
           </button>
         </div>
@@ -426,7 +431,8 @@ export default function BatchesPage() {
         }} />
       <ConfirmDialog open={!!deleteTarget} title="Delete batch"
         message={`Delete "${deleteTarget?.parentBatchId}"? All associated files and QC results will be permanently removed. This cannot be undone.`}
-        confirmLabel="Delete batch" danger onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
+        confirmLabel="Delete batch" danger confirmationText={deleteTarget?.parentBatchId}
+        onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
       <BatchRecoveryDrawer
         batch={recoveryTarget}
         busy={recoveryTarget ? actionLoading.has(recoveryTarget.id) : false}

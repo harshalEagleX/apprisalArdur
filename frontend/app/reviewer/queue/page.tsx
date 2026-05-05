@@ -225,19 +225,20 @@ export default function ReviewerQueuePage() {
       {/* Header */}
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Verification queue</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Appraisal files assigned to you that need a decision</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Reviewer decision desk</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Verification queue</h1>
+          <p className="mt-1 text-sm text-slate-500">Assigned appraisal files that need evidence-based human decisions.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {items.length > 0 && (
-            <span className="text-xs bg-amber-950/60 border border-amber-800/50 text-amber-300 px-2.5 py-1 rounded-full font-medium">
+            <span className="rounded-md border border-amber-500/25 bg-amber-950/35 px-2.5 py-1 text-xs font-medium text-amber-200">
               {items.length} pending
             </span>
           )}
           <button
             onClick={() => loadQueue(true)}
             disabled={refreshing}
-            className="h-8 px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-400 text-sm flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
           >
             <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
             Refresh
@@ -262,7 +263,7 @@ export default function ReviewerQueuePage() {
         <QueueStat icon={ListFilter} label="Verify rules" value={stats.verifyRules} tone="blue" />
       </div>
 
-      <div className="mb-5 rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+      <div className="mb-5 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="relative flex-1 md:max-w-md">
             <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -271,12 +272,12 @@ export default function ReviewerQueuePage() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search file name, QC result, or decision..."
-              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-900 pl-8 pr-9 text-sm text-white placeholder-slate-500 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
                 title="Clear search"
                 aria-label="Clear search"
               >
@@ -293,8 +294,8 @@ export default function ReviewerQueuePage() {
                 aria-keyshortcuts={next === "all" ? "1" : next === "failures" ? "2" : "3"}
                 className={`h-9 rounded-md px-3 text-xs font-medium transition-colors ${
                   view === next
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-blue-600 text-white shadow-[0_0_18px_rgba(59,130,246,0.16)]"
+                    : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
                 }`}
               >
                 {next === "all" ? "All" : next === "failures" ? "Failures" : "Review only"}
@@ -309,7 +310,7 @@ export default function ReviewerQueuePage() {
 
       {/* Error */}
       {error && (
-        <div className="mb-5 flex items-start gap-3 p-4 bg-red-950/40 border border-red-800/50 rounded-xl text-red-300 text-sm">
+        <div className="mb-5 flex items-start gap-3 rounded-lg border border-red-500/25 bg-red-950/40 p-4 text-sm text-red-200">
           <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
@@ -318,7 +319,7 @@ export default function ReviewerQueuePage() {
       {loading ? (
         <PageSpinner label="Loading your queue…" />
       ) : items.length === 0 && !error ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl">
+        <div className="rounded-lg border border-white/10 bg-[#11161C]">
           <EmptyState
             icon={CheckCircle2}
             title="Queue is clear"
@@ -326,7 +327,7 @@ export default function ReviewerQueuePage() {
           />
         </div>
       ) : scoped.length === 0 && !error ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-900">
+        <div className="rounded-lg border border-white/10 bg-[#11161C]">
           <EmptyState
             icon={Search}
             title="No queue items match"
@@ -372,7 +373,7 @@ export default function ReviewerQueuePage() {
 function ReviewerNextAction({ item, returnTo }: { item?: QCResult; returnTo: string }) {
   if (!item) {
     return (
-      <div className="rounded-lg border border-green-900/50 bg-green-950/25 p-4 text-green-100">
+      <div className="rounded-lg border border-green-500/25 bg-green-950/25 p-4 text-green-100 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <CheckCircle2 size={16} />
           Nothing needs review right now
@@ -388,11 +389,11 @@ function ReviewerNextAction({ item, returnTo }: { item?: QCResult; returnTo: str
       aria-keyshortcuts="N"
       className={`group flex min-h-24 items-center gap-4 rounded-lg border p-4 transition-colors ${
         hasFailure
-          ? "border-red-900/50 bg-red-950/25 text-red-100 hover:border-red-700"
-          : "border-amber-900/50 bg-amber-950/25 text-amber-100 hover:border-amber-700"
+          ? "border-red-500/25 bg-red-950/25 text-red-100 hover:border-red-500/45"
+          : "border-amber-500/25 bg-amber-950/25 text-amber-100 hover:border-amber-500/45"
       }`}
     >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-current/20 bg-slate-950/30">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-current/20 bg-[#0B0F14]/40">
         {hasFailure ? <ShieldAlert size={20} /> : <PlayCircle size={20} />}
       </div>
       <div className="min-w-0 flex-1">
@@ -415,7 +416,7 @@ function QueueSignal({ icon: Icon, label, value }: {
   value: number | string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-3">
+    <div className="rounded-lg border border-white/10 bg-[#11161C] px-3 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
       <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-100">
         <Icon size={14} className="text-slate-500" />
         <span className="truncate">{value}</span>
@@ -427,7 +428,7 @@ function QueueSignal({ icon: Icon, label, value }: {
 
 function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[]; selectedId: number | null; returnTo: string; onSelect: (id: number) => void }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900 divide-y divide-slate-800">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)] divide-y divide-white/10">
       {items.map(item => {
         const total      = item.totalRules;
         const passRate   = total > 0 ? Math.round((item.passedCount / total) * 100) : 0;
@@ -439,10 +440,10 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
             id={`queue-item-${item.id}`}
             key={item.id}
             onMouseEnter={() => onSelect(item.id)}
-            className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-slate-800/30 md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""} ${selectedId === item.id ? "ring-1 ring-blue-500/70 ring-inset" : ""}`}
+            className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-white/[0.03] md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""} ${selectedId === item.id ? "ring-1 ring-blue-500/60 ring-inset" : ""}`}
           >
             {/* File icon */}
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${hasFailure ? "bg-red-950/60 border border-red-800/40" : "bg-slate-800 border border-slate-700"}`}>
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${hasFailure ? "bg-red-950/50 border border-red-500/25" : "bg-[#161B22] border border-white/10"}`}>
               <svg className={`w-4 h-4 ${hasFailure ? "text-red-400" : "text-slate-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
@@ -453,12 +454,12 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-slate-200 truncate" title={item.batchFile.filename}>{item.batchFile.filename}</div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
+                <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
                 <span className="text-[11px] text-slate-500">
                   Processed {new Date(item.processedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </span>
                 {item.cacheHit && (
-                  <span className="text-[10px] bg-slate-800 border border-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">cached</span>
+                  <span className="text-[10px] bg-[#161B22] border border-white/10 text-slate-500 px-1.5 py-0.5 rounded font-mono">cached</span>
                 )}
               </div>
             </div>
@@ -470,7 +471,7 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
               <RuleStat label="Review" count={item.verifyCount}  color="text-amber-400" />
               <div className="flex flex-col items-end gap-1 w-16">
                 <span className="text-[10px] text-slate-600 font-mono">{passRate}% pass</span>
-                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-full h-1 bg-[#0B0F14] rounded-full overflow-hidden">
                   <div className="h-full rounded-full" style={{
                     width: `${passRate}%`,
                     background: passRate >= 80 ? "#22c55e" : passRate >= 50 ? "#f59e0b" : "#ef4444",
@@ -489,7 +490,7 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
               href={reviewHref(item.id, returnTo)}
               onFocus={() => onSelect(item.id)}
               aria-keyshortcuts="Enter"
-              className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700 md:min-w-[126px]"
+              className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-500 md:min-w-[126px]"
             >
               {actionLabel} <ChevronRight size={13} />
             </a>
@@ -511,13 +512,13 @@ function QueueStat({ icon: Icon, label, value, tone }: {
   tone: "slate" | "red" | "amber" | "blue";
 }) {
   const styles = {
-    slate: "border-slate-800 bg-slate-900 text-slate-300",
-    red: "border-red-900/50 bg-red-950/25 text-red-200",
-    amber: "border-amber-900/50 bg-amber-950/25 text-amber-200",
-    blue: "border-blue-900/50 bg-blue-950/25 text-blue-200",
+    slate: "border-white/10 bg-[#11161C] text-slate-300",
+    red: "border-red-500/25 bg-red-950/25 text-red-200",
+    amber: "border-amber-500/25 bg-amber-950/25 text-amber-200",
+    blue: "border-blue-500/25 bg-blue-950/25 text-blue-200",
   };
   return (
-    <div className={`flex h-14 items-center gap-3 rounded-lg border px-3 ${styles[tone]}`}>
+    <div className={`flex h-14 items-center gap-3 rounded-lg border px-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)] ${styles[tone]}`}>
       <Icon size={16} className="shrink-0 opacity-80" />
       <div className="min-w-0">
         <div className="text-lg font-semibold leading-none tabular-nums">{value}</div>

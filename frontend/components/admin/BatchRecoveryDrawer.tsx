@@ -14,7 +14,7 @@ function RecoveryMetric({
   tone: "slate" | "amber" | "blue" | "green" | "red";
 }) {
   const tones = {
-    slate: "border-slate-800 bg-slate-950/60 text-slate-300",
+    slate: "border-white/10 bg-[#0B0F14]/70 text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     blue: "border-blue-900/50 bg-blue-950/30 text-blue-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
@@ -153,15 +153,15 @@ export function BatchRecoveryDrawer({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <aside
         ref={drawerRef}
-        className="relative flex h-full w-full max-w-lg flex-col border-l border-slate-800 bg-slate-950 shadow-2xl"
+        className="relative flex h-full w-full max-w-lg flex-col border-l border-white/10 bg-[#0B0F14] shadow-[0_0_60px_rgba(0,0,0,0.5)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="batch-recovery-title"
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
-        <div className="flex items-start gap-3 border-b border-slate-800 p-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-red-900/60 bg-red-950/40 text-red-300">
+        <div className="flex items-start gap-3 border-b border-white/10 p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-red-500/25 bg-red-950/40 text-red-300">
             <AlertTriangle size={18} />
           </div>
           <div className="min-w-0 flex-1">
@@ -180,7 +180,7 @@ export function BatchRecoveryDrawer({
           </div>
           <button
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-900 hover:text-slate-300"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
             aria-label="Close recovery drawer"
           >
             <XCircle size={16} />
@@ -195,7 +195,7 @@ export function BatchRecoveryDrawer({
             <RecoveryMetric label="Failed stage" value={advice.stage} tone="amber" />
           </div>
 
-          <section className="mt-5 rounded-lg border border-red-900/40 bg-red-950/20 p-4">
+          <section className="mt-5 rounded-lg border border-red-500/25 bg-red-950/20 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-red-200">
               Full error
             </h3>
@@ -205,7 +205,7 @@ export function BatchRecoveryDrawer({
             </p>
           </section>
 
-          <section className="mt-4 rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+          <section className="mt-4 rounded-lg border border-white/10 bg-[#11161C]/80 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Suggested recovery
             </h3>
@@ -214,31 +214,31 @@ export function BatchRecoveryDrawer({
           </section>
         </div>
 
-        <div className="border-t border-slate-800 p-4">
+        <div className="border-t border-white/10 p-4">
           <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={() => void copyBatchError(batch)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
             >
               <FileStack size={14} /> Copy error
             </button>
             <button
               onClick={() => onRetry(batch)}
               disabled={busy || batch.status === "VALIDATION_FAILED"}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
             >
               <Play size={14} /> Retry QC
             </button>
             <button
               onClick={onReupload}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
             >
               <Upload size={14} /> Upload replacement
             </button>
             <button
               onClick={() => onDelete(batch)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-900/60 bg-red-950/30 px-3 text-sm text-red-200 transition-colors hover:bg-red-950/60"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-red-500/25 bg-red-950/30 px-3 text-sm text-red-200 transition-colors hover:bg-red-950/60"
             >
               <Trash2 size={14} /> Delete batch
             </button>

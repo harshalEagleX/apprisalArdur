@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, ChevronDown, ChevronUp, Check, X, AlertTriangle, CheckCircle2,
+  ArrowLeft, AlertTriangle, CheckCircle2,
   Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search,
 } from "lucide-react";
 import {
@@ -38,13 +38,6 @@ type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: numb
 type DecisionEvent = {
   ruleResultId: number; decision: Decision; savedAt: string; status: string;
   reviewerVerified?: boolean | null; overridePending?: boolean; reviewerComment?: string;
-};
-
-const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
-  pass:        { border: "border-green-800/40",  bg: "bg-green-950/20",  text: "text-green-300" },
-  fail:        { border: "border-red-800/40",    bg: "bg-red-950/20",    text: "text-red-300" },
-  verify:      { border: "border-amber-800/40",  bg: "bg-amber-950/20",  text: "text-amber-300" },
-  MANUAL_PASS: { border: "border-teal-800/40",   bg: "bg-teal-950/20",   text: "text-teal-300" },
 };
 
 function ruleStatus(status: string) {
@@ -82,7 +75,7 @@ function CountBadge({ label, count, style }: { label: string; count: number; sty
 
 function RuleFocusOverlay({ focus, highlighting }: { focus: RuleFocus; highlighting: boolean }) {
   return (
-    <div className={`pointer-events-none fixed left-3 top-3 z-50 max-w-[180px] rounded-md border px-2 py-1 text-[10px] shadow-lg transition-colors ${highlighting ? "bg-amber-300/95 border-amber-100 text-slate-950" : "bg-slate-900/95 border-slate-700 text-slate-200 opacity-90"}`}>
+    <div className={`pointer-events-none fixed left-3 top-3 z-50 max-w-[180px] rounded-md border px-2 py-1 text-[10px] shadow-lg transition-colors ${highlighting ? "bg-amber-300/95 border-amber-100 text-slate-950" : "bg-[#11161C]/95 border-white/10 text-slate-200 opacity-90"}`}>
       <div className="flex items-center gap-1 font-semibold leading-tight"><Crosshair size={10} /><span className="truncate">{focus.ruleId}</span></div>
       <div className="mt-0.5 leading-snug opacity-70">{focus.note}</div>
       {!focus.located && <div className="mt-0.5 leading-snug text-amber-300">Re-run QC after location extraction is available.</div>}
@@ -257,10 +250,10 @@ export default function VerifyFilePage() {
     ?? nextPendingRule ?? filtered[0];
 
   const saveTone = saveNotice?.tone === "error"
-    ? "border-red-800/50 bg-red-950/50 text-red-200"
+    ? "border-red-500/25 bg-red-950/45 text-red-200"
     : saveNotice?.tone === "success"
-      ? "border-green-800/50 bg-green-950/50 text-green-200"
-      : "border-slate-700 bg-slate-900 text-slate-300";
+      ? "border-green-500/25 bg-green-950/45 text-green-200"
+      : "border-white/10 bg-[#11161C] text-slate-300";
 
   useEffect(() => {
     if (filtered.length === 0) return;
@@ -330,7 +323,7 @@ export default function VerifyFilePage() {
         return { ...prev, pending, canSubmit: pending === 0 && prev.totalToVerify > 0 };
       });
       void getQCProgress(qcResultId).then(setProgress).catch(() => undefined);
-    } catch (error) {
+    } catch {
       setSaveNotice({ text: `${rule.ruleId} was not saved`, tone: "error" });
       void Promise.all([loadRules(), getQCProgress(qcResultId).then(setProgress)]).catch(() => undefined);
     } finally {
@@ -370,7 +363,10 @@ export default function VerifyFilePage() {
     acknowledged, comments, decisions, documents, filter, filtered,
     offline, ruleQuery, saving, sessionError, sessionToken,
   });
-  kbStateRef.current = { activeRule, acknowledged, comments, decisions, documents, filter, filtered, offline, ruleQuery, saving, sessionError, sessionToken };
+
+  useEffect(() => {
+    kbStateRef.current = { activeRule, acknowledged, comments, decisions, documents, filter, filtered, offline, ruleQuery, saving, sessionError, sessionToken };
+  }, [activeRule, acknowledged, comments, decisions, documents, filter, filtered, offline, ruleQuery, saving, sessionError, sessionToken]);
 
   useKeyboardShortcuts(useCallback((event: KeyboardEvent) => {
     const target = event.target as HTMLElement | null;
@@ -427,10 +423,10 @@ export default function VerifyFilePage() {
         {activeFocus && <RuleFocusOverlay focus={activeFocus} highlighting={highlighting} />}
 
         {(offline || sessionError) && (
-          <div className={`flex items-center gap-3 px-4 py-2 text-xs border-b ${offline ? "bg-red-950/60 border-red-800/50 text-red-200" : "bg-amber-950/60 border-amber-800/50 text-amber-100"}`}>
+          <div className={`flex items-center gap-3 border-b px-4 py-2 text-xs ${offline ? "border-red-500/25 bg-red-950/50 text-red-200" : "border-amber-500/25 bg-amber-950/45 text-amber-100"}`}>
             <span className="flex-1">{offline ? "You're offline. Decisions are frozen until the connection is restored." : sessionError}</span>
             {sessionAckRequired && (
-              <button onClick={() => void beginSession(true)} className="h-7 rounded-md border border-amber-700/60 bg-amber-900/30 px-2.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-800/40">
+              <button onClick={() => void beginSession(true)} className="h-7 rounded-md border border-amber-500/30 bg-amber-900/30 px-2.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-800/40">
                 Review prior decisions and continue
               </button>
             )}
@@ -438,7 +434,7 @@ export default function VerifyFilePage() {
         )}
 
         {documentWarnings.length > 0 && (
-          <div className="border-b border-red-800/40 bg-red-950/40 px-4 py-2 text-xs text-red-100">
+          <div className="border-b border-red-500/25 bg-red-950/40 px-4 py-2 text-xs text-red-100">
             <div className="font-semibold">Document quality warning</div>
             <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1">
               {documentWarnings.map((w, i) => <span key={i}>{w}</span>)}
@@ -447,11 +443,11 @@ export default function VerifyFilePage() {
         )}
 
         {/* Top bar */}
-        <header className="flex-shrink-0 flex items-center gap-3 px-4 h-12 bg-slate-900 border-b border-slate-800">
+        <header className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-white/10 bg-[#11161C] px-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
           <a href={returnTo} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors flex-shrink-0">
             <ArrowLeft size={14} /> Queue
           </a>
-          <div className="w-px h-4 bg-slate-700 flex-shrink-0" />
+          <div className="w-px h-4 bg-white/10 flex-shrink-0" />
           <span className="text-sm font-medium text-slate-300 truncate flex-1">QC Result #{qcResultId}</span>
           <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
             <CountBadge label="Pass"         count={counts.pass}   style="text-green-400 bg-green-950/50 border-green-800/50" />
@@ -460,25 +456,25 @@ export default function VerifyFilePage() {
           </div>
           {progress && progress.totalToVerify > 0 && (
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-              <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-20 h-1.5 bg-[#0B0F14] rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${reviewProgress}%` }} />
               </div>
               <span className="text-[11px] text-slate-500 font-mono">{reviewedCount}/{progress.totalToVerify}</span>
               <span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-green-400" : "bg-slate-600"}`} title={realtimeConnected ? "Live updates connected" : "Live updates reconnecting"} />
             </div>
           )}
-          <div className={`hidden lg:flex h-8 min-w-[150px] items-center gap-1.5 rounded-md border px-2 text-[11px] ${saveNotice ? saveTone : offline ? "border-red-800/50 bg-red-950/40 text-red-200" : "border-slate-800 bg-slate-950/60 text-slate-400"}`}>
+          <div className={`hidden lg:flex h-8 min-w-[150px] items-center gap-1.5 rounded-md border px-2 text-[11px] ${saveNotice ? saveTone : offline ? "border-red-500/25 bg-red-950/40 text-red-200" : "border-white/10 bg-[#0B0F14]/70 text-slate-400"}`}>
             {offline ? <WifiOff size={12} /> : saveNotice?.tone === "success" ? <CheckCircle2 size={12} /> : <Cloud size={12} />}
             <span className="truncate">{saveNotice?.text ?? (offline ? "Saving paused" : realtimeConnected ? "Live save ready" : "REST save ready")}</span>
           </div>
           {nextPendingRule && (
             <button onClick={jumpToNextPending} aria-keyshortcuts="N"
-              className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white">
+              className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
               <ArrowDownCircle size={13} /> Next item
             </button>
           )}
           <button onClick={() => void handleSubmit()} disabled={!progress?.canSubmit || submitting || offline || !sessionToken}
-            className="flex-shrink-0 flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-semibold transition-colors">
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md border border-blue-400/30 bg-blue-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-40">
             {submitting ? <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : null}
             {submitting ? "Submitting…" : progress?.pending ? `Submit (${progress.pending} left)` : "Submit review"}
           </button>
@@ -486,14 +482,14 @@ export default function VerifyFilePage() {
 
         <div className="flex flex-1 overflow-hidden">
           {/* PDF viewer */}
-          <div className="w-[55%] flex-shrink-0 border-r border-slate-800 flex flex-col">
-            <div className="flex-shrink-0 px-4 py-2 border-b border-slate-800 flex items-center gap-2">
+          <div className="w-[55%] flex-shrink-0 border-r border-white/10 flex flex-col">
+            <div className="flex-shrink-0 border-b border-white/10 bg-[#11161C]/60 px-4 py-2 flex items-center gap-2">
               <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <span className="text-xs text-slate-500 flex-shrink-0">Documents</span>
               <div className="flex items-center gap-1 overflow-x-auto">
                 {documents.map(doc => (
                   <button key={doc.id} onClick={() => { setActiveDocumentId(doc.id); setPageCount(null); setPdfError(false); setActiveFocus(null); setActivePage(1); }}
-                    className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${activeDocument?.id === doc.id ? "bg-blue-600/20 border-blue-500/50 text-blue-200" : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300"}`}>
+                    className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${activeDocument?.id === doc.id ? "bg-blue-600/20 border-blue-500/40 text-blue-200" : "bg-[#0B0F14]/70 border-white/10 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"}`}>
                     {doc.fileType === "APPRAISAL" ? "Report" : doc.fileType === "ENGAGEMENT" ? "Order" : doc.fileType === "CONTRACT" ? "Contract" : "PDF"}
                   </button>
                 ))}
@@ -501,9 +497,9 @@ export default function VerifyFilePage() {
               {activeDocument && (
                 <div className="ml-auto flex items-center gap-1 text-[11px] text-slate-500">
                   {pageCount != null && <span className="mr-1 hidden font-mono text-slate-600 lg:inline">{activePage}/{pageCount}</span>}
-                  <button onClick={() => setZoom(v => Math.max(0.6, Math.round((v - 0.1) * 10) / 10))} disabled={zoom <= 0.6} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 disabled:opacity-30 hover:text-white" title="Zoom out" aria-keyshortcuts="-"><ZoomOut size={13} /></button>
-                  <button onClick={() => setZoom(1)} className="h-7 min-w-12 rounded-md border border-slate-800 bg-slate-900 px-2 font-mono text-slate-400 hover:text-white" title="Reset zoom" aria-keyshortcuts="0">{Math.round(zoom * 100)}%</button>
-                  <button onClick={() => setZoom(v => Math.min(1.8, Math.round((v + 0.1) * 10) / 10))} disabled={zoom >= 1.8} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 disabled:opacity-30 hover:text-white" title="Zoom in" aria-keyshortcuts="+"><ZoomIn size={13} /></button>
+                  <button onClick={() => setZoom(v => Math.max(0.6, Math.round((v - 0.1) * 10) / 10))} disabled={zoom <= 0.6} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom out" aria-keyshortcuts="-"><ZoomOut size={13} /></button>
+                  <button onClick={() => setZoom(1)} className="h-7 min-w-12 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 font-mono text-slate-400 hover:bg-white/[0.04] hover:text-white" title="Reset zoom" aria-keyshortcuts="0">{Math.round(zoom * 100)}%</button>
+                  <button onClick={() => setZoom(v => Math.min(1.8, Math.round((v + 0.1) * 10) / 10))} disabled={zoom >= 1.8} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom in" aria-keyshortcuts="+"><ZoomIn size={13} /></button>
                 </div>
               )}
             </div>
@@ -532,14 +528,14 @@ export default function VerifyFilePage() {
 
           {/* Rules panel */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-shrink-0 border-b border-slate-800 px-3 py-2">
+            <div className="flex-shrink-0 border-b border-white/10 bg-[#11161C]/60 px-3 py-2">
               <div className="mb-2 flex items-center gap-2">
                 <div className="mr-2 hidden min-w-0 flex-1 lg:block">
                   <div className="text-xs font-medium text-slate-300">Decision checklist</div>
                   <div className="text-[11px] text-slate-600">{progress?.pending ? `${progress.pending} server-confirmed decision${progress.pending === 1 ? "" : "s"} left` : "Ready for sign-off"}</div>
                 </div>
                 <button onClick={jumpToNextPending} disabled={!nextPendingRule}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-40" title="Next pending rule (N)">
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40" title="Next pending rule (N)">
                   <ArrowDownCircle size={13} /> Next item
                 </button>
               </div>
@@ -548,13 +544,13 @@ export default function VerifyFilePage() {
                   <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
                   <input ref={ruleSearchRef} value={ruleQuery} onChange={e => setRuleQuery(e.target.value)}
                     placeholder="Search rules..."
-                    className="h-7 w-full rounded-md border border-slate-800 bg-slate-900 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                    className="h-7 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                 </div>
                 {FILTERS.map(f => (
                   <button key={f} onClick={() => { setFilter(f); setSelectedRuleId(null); }}
                     aria-pressed={filter === f}
                     aria-keyshortcuts={f === "all" ? "1" : f === "fail" ? "2" : f === "verify" ? "3" : "4"}
-                    className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"}`}>
+                    className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"}`}>
                     {f === "all" ? `All (${counts.total})` : f === "fail" ? `Fail (${counts.fail})` : f === "verify" ? `Needs Review (${counts.review})` : `Pass (${counts.pass})`}
                   </button>
                 ))}
