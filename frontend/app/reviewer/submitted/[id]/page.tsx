@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, CheckCircle2, XCircle, AlertTriangle, FileText,
-  RefreshCw, Send, ClipboardList, BookOpen,
+  RefreshCw, Send, ClipboardList, BookOpen, ChevronDown,
 } from "lucide-react";
 import { getQCRules, type QCRuleResult } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
@@ -89,14 +89,20 @@ export default function SubmittedReviewPage() {
   const [showReasonBox, setShowReasonBox] = useState(false);
   const [error, setError]           = useState("");
   const [copied, setCopied]         = useState(false);
+  const [questionsOpen, setQuestionsOpen] = useState(false);
 
-  useEffect(() => {
+  const loadResults = useCallback(() => {
     setLoading(true);
     getQCRules(qcResultId)
       .then(data => setRules(data.map(r => ({ ...r, status: r.status.toLowerCase() }))))
       .catch(() => setError("Could not load review results."))
       .finally(() => setLoading(false));
   }, [qcResultId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadResults, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadResults]);
 
   const failRules = useMemo(
     () => rules.filter(r => r.status === "fail"),
@@ -115,6 +121,12 @@ export default function SubmittedReviewPage() {
     r.status === "pass" || r.status === "manual_pass"
   ).length;
   const failCount = failRules.length;
+  const reviewedRules = rules.filter(r =>
+    r.verifyQuestion?.trim()
+    || r.reviewerVerified != null
+    || r.reviewerComment?.trim()
+    || r.reviewRequired
+  );
 
   const fullRejectionText = rejectionBlocks
     .map((b, i) => `${i + 1}. [${b.rule.ruleId}] ${b.language}`)
@@ -176,6 +188,14 @@ export default function SubmittedReviewPage() {
                 {txType}
               </span>
             )}
+            {reviewedRules.length > 0 && (
+              <a
+                href="#review-questions"
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-slate-500/30 bg-slate-950/40 text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
+              >
+                <BookOpen size={10} /> Review questions
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -183,6 +203,33 @@ export default function SubmittedReviewPage() {
       {error && (
         <div className="mb-4 rounded-lg border border-red-500/25 bg-red-950/40 px-4 py-3 text-sm text-red-200">
           {error}
+        </div>
+      )}
+
+      {reviewedRules.length > 0 && (
+        <div id="review-questions" className="mb-6 space-y-3">
+          <button
+            type="button"
+            onClick={() => setQuestionsOpen(open => !open)}
+            aria-expanded={questionsOpen}
+            className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#11161C] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+          >
+            <BookOpen size={14} className="text-slate-400" />
+            <span className="flex-1 text-sm font-semibold text-white">
+              Saved Review Questions ({reviewedRules.length})
+            </span>
+            <ChevronDown
+              size={15}
+              className={`text-slate-500 transition-transform ${questionsOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {questionsOpen && (
+            <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] divide-y divide-white/10">
+              {reviewedRules.map(rule => (
+                <ReviewQuestionRow key={rule.id} rule={rule} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -344,11 +391,57 @@ function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: stri
 
       {/* Rejection language */}
       <div className="px-3 py-3">
+        {rule.verifyQuestion?.trim() && (
+          <div className="mb-3 rounded-md border border-amber-500/20 bg-amber-950/20 px-3 py-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+              Review question
+            </div>
+            <p className="text-xs leading-relaxed text-amber-100/90">{rule.verifyQuestion}</p>
+          </div>
+        )}
         <div className="text-[10px] font-semibold uppercase tracking-wide text-red-400 mb-1.5">
           Rejection language
         </div>
         <p className="text-xs text-slate-200 leading-relaxed">{language}</p>
       </div>
+    </div>
+  );
+}
+
+function ReviewQuestionRow({ rule }: { rule: QCRuleResult }) {
+  const decision = rule.reviewerVerified === true
+    ? "PASS"
+    : rule.reviewerVerified === false
+      ? "FAIL"
+      : "Not marked";
+  const decisionClass = rule.reviewerVerified === true
+    ? "border-green-500/25 bg-green-950/30 text-green-300"
+    : rule.reviewerVerified === false
+      ? "border-red-500/25 bg-red-950/30 text-red-300"
+      : "border-white/10 bg-[#0B0F14]/70 text-slate-400";
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded bg-[#0B0F14]/70 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+          {rule.ruleId}
+        </span>
+        <span className="min-w-0 flex-1 text-xs font-medium text-slate-200">{rule.ruleName}</span>
+        <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${decisionClass}`}>
+          {decision}
+        </span>
+      </div>
+      {rule.verifyQuestion?.trim() && (
+        <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-950/15 px-3 py-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">Generated question</div>
+          <p className="text-xs leading-relaxed text-amber-100/90">{rule.verifyQuestion}</p>
+        </div>
+      )}
+      {rule.reviewerComment?.trim() && (
+        <div className="mt-2 text-xs leading-relaxed text-slate-400">
+          <span className="font-semibold text-slate-300">Reviewer note:</span> {rule.reviewerComment}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ package com.apprisal.user.service;
 import com.apprisal.common.entity.*;
 import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.QCResultRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,15 +20,18 @@ public class DashboardService {
 
         private final BatchRepository batchRepository;
         private final BatchFileRepository batchFileRepository;
+        private final QCResultRepository qcResultRepository;
         private final UserService userService;
         private final ClientService clientService;
 
         public DashboardService(BatchRepository batchRepository,
                         BatchFileRepository batchFileRepository,
+                        QCResultRepository qcResultRepository,
                         UserService userService,
                         ClientService clientService) {
                 this.batchRepository = batchRepository;
                 this.batchFileRepository = batchFileRepository;
+                this.qcResultRepository = qcResultRepository;
                 this.userService = userService;
                 this.clientService = clientService;
         }
@@ -46,7 +50,7 @@ public class DashboardService {
                 // Batch counts
                 metrics.put("totalBatches", batchRepository.count());
                 metrics.put("pendingOcr", batchRepository.countByStatus(BatchStatus.QC_PROCESSING));
-                metrics.put("pendingReview", batchRepository.countByStatus(BatchStatus.REVIEW_PENDING));
+                metrics.put("pendingReview", qcResultRepository.countPendingReviewerWork());
                 metrics.put("inReview", batchRepository.countByStatus(BatchStatus.IN_REVIEW));
                 metrics.put("completed", batchRepository.countByStatus(BatchStatus.COMPLETED));
                 metrics.put("errors", batchRepository.countByStatus(BatchStatus.ERROR));
@@ -62,8 +66,7 @@ public class DashboardService {
                 List<User> reviewers = userService.findByRole(Role.REVIEWER);
                 Map<Long, Long> reviewerWorkload = new HashMap<>();
                 for (User reviewer : reviewers) {
-                        long activeCount = batchRepository.countByAssignedReviewerIdAndStatus(reviewer.getId(),
-                                        BatchStatus.IN_REVIEW);
+                        long activeCount = qcResultRepository.countPendingReviewerWorkForReviewer(reviewer.getId());
                         reviewerWorkload.put(reviewer.getId(), activeCount);
                 }
                 metrics.put("reviewerWorkload", reviewerWorkload);
@@ -114,8 +117,7 @@ public class DashboardService {
                 Map<String, Object> metrics = new HashMap<>();
 
                 // Assigned batch counts
-                long pendingReview = batchRepository.countByAssignedReviewerIdAndStatus(reviewerId,
-                                BatchStatus.REVIEW_PENDING);
+                long pendingReview = qcResultRepository.countPendingReviewerWorkForReviewer(reviewerId);
                 long inReview = batchRepository.countByAssignedReviewerIdAndStatus(reviewerId, BatchStatus.IN_REVIEW);
                 long completed = batchRepository.countByAssignedReviewerIdAndStatus(reviewerId, BatchStatus.COMPLETED);
 

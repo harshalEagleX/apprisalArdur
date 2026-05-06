@@ -61,7 +61,7 @@ public class AnalyticsService {
 
         snap.put("totalBatches", batchRepo.countByStatus(BatchStatus.COMPLETED)
                                + batchRepo.countByStatus(BatchStatus.REVIEW_PENDING));
-        snap.put("pendingReview", batchRepo.countByStatus(BatchStatus.REVIEW_PENDING));
+        snap.put("pendingReview", qcResultRepo.countPendingReviewerWork());
         snap.put("periodDays", days);
         return snap;
     }

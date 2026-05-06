@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import {
-  Network, RefreshCw, Filter, ZoomIn, ZoomOut, Maximize2,
-  GitBranch, Clock, User, FileText, AlertCircle, CheckCircle2,
+  Network, RefreshCw, Maximize2,
+  GitBranch, Clock, FileText, AlertCircle, CheckCircle2,
 } from "lucide-react";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
@@ -74,9 +74,9 @@ const NODE_SIZE: Record<NodeKind, number> = {
   ASSIGN:         6,
 };
 
-// ── Dynamic ForceGraph (SSR disabled — uses WebGL) ───────────────────────────
+// ── Dynamic ForceGraph (SSR disabled — uses browser canvas APIs) ─────────────
 const ForceGraph2D = dynamic(
-  () => import("react-force-graph").then(m => m.ForceGraph2D),
+  () => import("@/components/admin/AuditForceGraph"),
   { ssr: false, loading: () => <GraphSkeleton /> }
 );
 
@@ -176,7 +176,7 @@ export default function AdminAuditPage() {
   const [highlighted, setHighlighted]   = useState<Set<string>>(new Set());
   const graphRef = useRef<{ zoomToFit: (ms?: number) => void } | null>(null);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true); setError("");
     try {
       const res = await fetch(`${JAVA}/api/admin/batches?page=0&size=50`, { credentials: "include" });
@@ -198,9 +198,12 @@ export default function AdminAuditPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => {
+    const handle = window.setTimeout(() => { void loadData(); }, 0);
+    return () => window.clearTimeout(handle);
+  }, [loadData]);
 
   const graphData = useMemo(() => {
     const raw = buildGraph(batches, auditMap);

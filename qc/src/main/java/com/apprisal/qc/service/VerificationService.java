@@ -435,7 +435,7 @@ public class VerificationService {
 
         Batch batch = batchFile.getBatch();
         boolean hasPendingReviewerWork = qcResultRepository.findByBatchId(batch.getId()).stream()
-                .anyMatch(result -> result.getQcDecision() == QCDecision.TO_VERIFY
+                .anyMatch(result -> result.getQcDecision() != QCDecision.AUTO_PASS
                         && result.getFinalDecision() == null);
         if (hasPendingReviewerWork || batch.getStatus() == BatchStatus.COMPLETED) {
             return;

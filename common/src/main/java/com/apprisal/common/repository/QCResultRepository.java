@@ -51,33 +51,51 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     long countByQcDecision(QCDecision qcDecision);
 
     /**
-     * Find all TO_VERIFY results that haven't been reviewed (ADMIN: all).
+     * Find all reviewer-routed results that haven't been reviewed (ADMIN: all).
+     *
+     * AUTO_FAIL batches are still routed to reviewer sign-off, so the open
+     * review queue cannot be limited to TO_VERIFY only.
      */
     @Query("""
         SELECT DISTINCT qr FROM QCResult qr
         JOIN FETCH qr.batchFile bf
         JOIN FETCH bf.batch b
         LEFT JOIN FETCH b.assignedReviewer
-        WHERE qr.qcDecision = 'TO_VERIFY'
+        WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
         ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """)
     List<QCResult> findPendingVerification();
 
     /**
-     * Find TO_VERIFY results assigned to a specific reviewer (REVIEWER: own batches only).
+     * Find reviewer-routed results assigned to a specific reviewer.
      */
     @Query("""
         SELECT DISTINCT qr FROM QCResult qr
         JOIN FETCH qr.batchFile bf
         JOIN FETCH bf.batch b
         JOIN FETCH b.assignedReviewer reviewer
-        WHERE qr.qcDecision = 'TO_VERIFY'
+        WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
           AND reviewer.id = :reviewerId
         ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """)
     List<QCResult> findPendingVerificationForReviewer(@Param("reviewerId") Long reviewerId);
+
+    @Query("""
+        SELECT COUNT(qr) FROM QCResult qr
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+        """)
+    long countPendingReviewerWork();
+
+    @Query("""
+        SELECT COUNT(qr) FROM QCResult qr
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+        """)
+    long countPendingReviewerWorkForReviewer(@Param("reviewerId") Long reviewerId);
 
     /**
      * Recently submitted results (finalDecision IS NOT NULL), most recent first, capped at 30.
@@ -100,9 +118,8 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     @Query("""
         SELECT DISTINCT qr FROM QCResult qr
         JOIN FETCH qr.batchFile bf
-        JOIN bf.batch b
         WHERE qr.finalDecision IS NOT NULL
-          AND b.assignedReviewer.id = :reviewerId
+          AND qr.reviewedBy.id = :reviewerId
         ORDER BY qr.reviewedAt DESC
         """)
     org.springframework.data.domain.Page<QCResult> findRecentlyReviewedForReviewerPage(

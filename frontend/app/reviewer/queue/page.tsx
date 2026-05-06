@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock, AlertCircle, CheckCircle2, ChevronRight, RefreshCw,
   Search, XCircle, ListFilter, FileText, ShieldAlert, PlayCircle, CalendarDays,
+  Archive,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { type QCResult } from "@/lib/api";
@@ -14,8 +15,22 @@ const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 type QueueView = "all" | "failures" | "review";
 const QUEUE_VIEWS: QueueView[] = ["all", "failures", "review"];
 
+interface SubmittedReviewItem {
+  id: number;
+  finalDecision?: "PASS" | "FAIL";
+  totalRules: number;
+  passedCount: number;
+  failedCount: number;
+  reviewedAt?: string;
+  batchFile?: {
+    id: number;
+    filename: string;
+  };
+}
+
 export default function ReviewerQueuePage() {
   const [items, setItems]     = useState<QCResult[]>([]);
+  const [submittedItems, setSubmittedItems] = useState<SubmittedReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -31,27 +46,34 @@ export default function ReviewerQueuePage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
-  async function loadQueue(showRefreshSpinner = false) {
+  const loadQueue = useCallback(async (showRefreshSpinner = false) => {
     if (showRefreshSpinner) setRefreshing(true);
     else setLoading(true);
     setError("");
     try {
-      const r = await fetch(`${JAVA}/api/reviewer/qc/results/pending`, { credentials: "include" });
-      if (!r.ok) { setError(`Server responded with ${r.status}`); return; }
-      const data: QCResult[] = await r.json();
+      const [pendingRes, submittedRes] = await Promise.all([
+        fetch(`${JAVA}/api/reviewer/qc/results/pending`, { credentials: "include" }),
+        fetch(`${JAVA}/api/reviewer/qc/results/submitted`, { credentials: "include" }),
+      ]);
+      if (!pendingRes.ok) { setError(`Server responded with ${pendingRes.status}`); return; }
+      const data: QCResult[] = await pendingRes.json();
       setItems(data);
+      if (submittedRes.ok) {
+        const submitted: SubmittedReviewItem[] = await submittedRes.json();
+        setSubmittedItems(submitted);
+      }
     } catch {
       setError("Could not reach the server. Is the backend running?");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadQueue(); }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [loadQueue]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -81,6 +103,7 @@ export default function ReviewerQueuePage() {
     failures: items.filter(i => i.failedCount > 0).length,
     reviewOnly: items.filter(i => i.failedCount === 0).length,
     verifyRules: items.reduce((sum, item) => sum + item.verifyCount, 0),
+    submitted: submittedItems.length,
   };
   const prioritized = [...items].sort((a, b) =>
     (b.failedCount - a.failedCount) ||
@@ -89,7 +112,9 @@ export default function ReviewerQueuePage() {
   );
   const nextItem = prioritized[0];
   const todayKey = new Date().toDateString();
-  const processedToday = items.filter(item => new Date(item.processedAt).toDateString() === todayKey).length;
+  const reviewedToday = submittedItems.filter(item =>
+    item.reviewedAt && new Date(item.reviewedAt).toDateString() === todayKey
+  ).length;
   const oldestItem = items.reduce<QCResult | undefined>((oldest, item) => {
     if (!oldest) return item;
     return new Date(item.processedAt).getTime() < new Date(oldest.processedAt).getTime() ? item : oldest;
@@ -250,17 +275,18 @@ export default function ReviewerQueuePage() {
         <div data-guide="reviewer-queue-next" className="mb-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
           <ReviewerNextAction item={nextItem} returnTo={queueReturnPath} />
           <div className="grid grid-cols-2 gap-2">
-            <QueueSignal icon={CalendarDays} label="Processed today" value={processedToday} />
+            <QueueSignal icon={CalendarDays} label="Reviewed today" value={reviewedToday} />
             <QueueSignal icon={Clock} label="Oldest pending" value={oldestPending} />
           </div>
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
         <QueueStat icon={FileText} label="Assigned files" value={stats.total} tone="slate" />
         <QueueStat icon={ShieldAlert} label="With failures" value={stats.failures} tone="red" />
         <QueueStat icon={Clock} label="Review only" value={stats.reviewOnly} tone="amber" />
         <QueueStat icon={ListFilter} label="Verify rules" value={stats.verifyRules} tone="blue" />
+        <QueueStat icon={Archive} label="Completed by you" value={stats.submitted} tone="green" />
       </div>
 
       <div data-guide="reviewer-queue-filters" className="mb-5 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
@@ -319,54 +345,115 @@ export default function ReviewerQueuePage() {
       {loading ? (
         <PageSpinner label="Loading your queue…" />
       ) : items.length === 0 && !error ? (
-        <div className="rounded-lg border border-white/10 bg-[#11161C]">
-          <EmptyState
-            icon={CheckCircle2}
-            title="Queue is clear"
-            description="No files require your review right now. Check back later or refresh."
-          />
+        <div className="space-y-6">
+          <div className="rounded-lg border border-white/10 bg-[#11161C]">
+            <EmptyState
+              icon={CheckCircle2}
+              title="Queue is clear"
+              description="No files require your review right now. Recently completed work is listed below."
+            />
+          </div>
+          <SubmittedReviews items={submittedItems} returnTo={queueReturnPath} />
         </div>
       ) : scoped.length === 0 && !error ? (
-        <div className="rounded-lg border border-white/10 bg-[#11161C]">
-          <EmptyState
-            icon={Search}
-            title="No queue items match"
-            description="Clear the search or change the queue filter."
-            action={
-              <button onClick={() => { setQuery(""); setView("all"); }} className="text-sm text-slate-400 hover:text-slate-300">
-                Reset queue filters
-              </button>
-            }
-          />
+        <div className="space-y-6">
+          <div className="rounded-lg border border-white/10 bg-[#11161C]">
+            <EmptyState
+              icon={Search}
+              title="No queue items match"
+              description="Clear the search or change the queue filter."
+              action={
+                <button onClick={() => { setQuery(""); setView("all"); }} className="text-sm text-slate-400 hover:text-slate-300">
+                  Reset queue filters
+                </button>
+              }
+            />
+          </div>
+          <SubmittedReviews items={submittedItems} returnTo={queueReturnPath} />
         </div>
       ) : (
-        <div data-guide="reviewer-queue-list" className="space-y-6">
-          {/* Urgent — files with failures */}
-          {urgent.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-2 px-1">
-                <AlertCircle size={12} className="text-red-400" />
-                <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Requires attention — has failures</span>
-              </div>
-              <QueueList items={urgent} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
-            </section>
-          )}
-
-          {/* Normal queue */}
-          {normal.length > 0 && (
-            <section>
-              {urgent.length > 0 && (
+        <div className="space-y-6">
+          <div data-guide="reviewer-queue-list" className="space-y-6">
+            {/* Urgent — files with failures */}
+            {urgent.length > 0 && (
+              <section>
                 <div className="flex items-center gap-2 mb-2 px-1">
-                  <Clock size={12} className="text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pending review</span>
+                  <AlertCircle size={12} className="text-red-400" />
+                  <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Requires attention — has failures</span>
                 </div>
-              )}
-              <QueueList items={normal} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
-            </section>
-          )}
+                <QueueList items={urgent} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
+              </section>
+            )}
+
+            {/* Normal queue */}
+            {normal.length > 0 && (
+              <section>
+                {urgent.length > 0 && (
+                  <div className="flex items-center gap-2 mb-2 px-1">
+                    <Clock size={12} className="text-slate-400" />
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pending review</span>
+                  </div>
+                )}
+                <QueueList items={normal} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
+              </section>
+            )}
+          </div>
+          <SubmittedReviews items={submittedItems} returnTo={queueReturnPath} />
         </div>
       )}
     </div>
+  );
+}
+
+function SubmittedReviews({ items, returnTo }: { items: SubmittedReviewItem[]; returnTo: string }) {
+  if (items.length === 0) return null;
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <Archive size={12} className="text-slate-400" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Completed by you</span>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)] divide-y divide-white/10">
+        {items.map(item => {
+          const reviewedAt = item.reviewedAt
+            ? new Date(item.reviewedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+            : "Submitted";
+          const filename = item.batchFile?.filename ?? `QC Result #${item.id}`;
+
+          return (
+            <div key={item.id} className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-white/[0.03] md:flex-row md:items-center">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-green-500/25 bg-green-950/30">
+                <CheckCircle2 size={16} className="text-green-300" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-slate-200" title={filename}>{filename}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
+                  <span className="text-[11px] text-slate-500">{reviewedAt}</span>
+                  {item.finalDecision && (
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${item.finalDecision === "PASS" ? "border-green-500/25 bg-green-950/30 text-green-300" : "border-red-500/25 bg-red-950/30 text-red-300"}`}>
+                      {item.finalDecision}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <RuleStat label="Pass" count={item.passedCount} color="text-green-400" />
+                <RuleStat label="Fail" count={item.failedCount} color="text-red-400" />
+                <RuleStat label="Rules" count={item.totalRules} color="text-slate-400" />
+              </div>
+              <a
+                href={`/reviewer/submitted/${item.id}?returnTo=${encodeURIComponent(returnTo)}`}
+                className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-500/40 hover:bg-white/[0.04]"
+              >
+                View decisions <ChevronRight size={13} />
+              </a>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -509,13 +596,14 @@ function QueueStat({ icon: Icon, label, value, tone }: {
   icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
   value: number;
-  tone: "slate" | "red" | "amber" | "blue";
+  tone: "slate" | "red" | "amber" | "blue" | "green";
 }) {
   const styles = {
     slate: "border-white/10 bg-[#11161C] text-slate-300",
     red: "border-red-500/25 bg-red-950/25 text-red-200",
     amber: "border-amber-500/25 bg-amber-950/25 text-amber-200",
     blue: "border-slate-500/25 bg-slate-950/25 text-slate-200",
+    green: "border-green-500/25 bg-green-950/25 text-green-200",
   };
   return (
     <div className={`flex h-14 items-center gap-3 rounded-lg border px-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)] ${styles[tone]}`}>
