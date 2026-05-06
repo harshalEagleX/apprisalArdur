@@ -1,6 +1,7 @@
 package com.apprisal.qc.service;
 
 import com.apprisal.common.entity.*;
+import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.repository.QCRuleResultRepository;
 import com.apprisal.common.service.AuditLogService;
@@ -31,13 +32,16 @@ public class VerificationService {
 
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
+    private final BatchRepository batchRepository;
     private final AuditLogService auditLogService;
 
     public VerificationService(QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
+            BatchRepository batchRepository,
             AuditLogService auditLogService) {
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
+        this.batchRepository = batchRepository;
         this.auditLogService = auditLogService;
     }
 
@@ -283,12 +287,13 @@ public class VerificationService {
         qcResult.setReviewedAt(LocalDateTime.now());
         qcResult.setReviewerNotes(overallNotes);
 
-        qcResultRepository.save(qcResult);
+        QCResult saved = qcResultRepository.save(qcResult);
+        completeBatchIfReviewFinished(saved);
 
         log.info("QC Result {} verification complete: finalDecision={}, reviewedBy={}",
                 qcResultId, finalDecision, reviewer.getUsername());
 
-        return qcResult;
+        return saved;
     }
 
     /**
@@ -311,7 +316,9 @@ public class VerificationService {
         qcResult.setReviewedAt(LocalDateTime.now());
         qcResult.setReviewerNotes(notes);
 
-        return qcResultRepository.save(qcResult);
+        QCResult saved = qcResultRepository.save(qcResult);
+        completeBatchIfReviewFinished(saved);
+        return saved;
     }
 
     /**
@@ -326,7 +333,9 @@ public class VerificationService {
         qcResult.setReviewedAt(LocalDateTime.now());
         qcResult.setReviewerNotes(reason);
 
-        return qcResultRepository.save(qcResult);
+        QCResult saved = qcResultRepository.save(qcResult);
+        completeBatchIfReviewFinished(saved);
+        return saved;
     }
 
     /**
@@ -352,7 +361,9 @@ public class VerificationService {
         qcResult.setReviewedAt(LocalDateTime.now());
         qcResult.setReviewerNotes(notes);
 
-        return qcResultRepository.save(qcResult);
+        QCResult saved = qcResultRepository.save(qcResult);
+        completeBatchIfReviewFinished(saved);
+        return saved;
     }
 
     /**
@@ -414,6 +425,26 @@ public class VerificationService {
 
         log.debug("Recalculated counters for QCResult {}: pass={}, fail={}, verify={}, manualPass={}",
                 qcResultId, passCount, failCount, verifyCount, manualPassCount);
+    }
+
+    private void completeBatchIfReviewFinished(QCResult qcResult) {
+        BatchFile batchFile = qcResult.getBatchFile();
+        if (batchFile == null || batchFile.getBatch() == null) {
+            return;
+        }
+
+        Batch batch = batchFile.getBatch();
+        boolean hasPendingReviewerWork = qcResultRepository.findByBatchId(batch.getId()).stream()
+                .anyMatch(result -> result.getQcDecision() == QCDecision.TO_VERIFY
+                        && result.getFinalDecision() == null);
+        if (hasPendingReviewerWork || batch.getStatus() == BatchStatus.COMPLETED) {
+            return;
+        }
+
+        batch.setStatus(BatchStatus.COMPLETED);
+        batch.setErrorMessage(null);
+        batchRepository.save(batch);
+        log.info("Batch {} completed after reviewer verification", batch.getId());
     }
 
     private boolean isPassDecision(String decision) {

@@ -1,0 +1,27 @@
+{
+  "name": "ardur-testing-brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-agent Playwright simulation harness for Ardur Appraisal QC.",
+  "scripts": {
+    "test": "playwright test",
+    "test:full-lifecycle": "playwright test src/runners/full-lifecycle.spec.ts --workers=1",
+    "test:load": "bash scripts/reset-and-prep.sh && playwright test src/runners/load-test.spec.ts --workers=1",
+    "test:parallel": "playwright test --workers=5",
+    "typecheck": "tsc --noEmit",
+    "install:browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.44",
+    "@langchain/openai": "^1.4.5",
+    "@playwright/test": "^1.57.0",
+    "dotenv": "^17.2.3",
+    "openai": "^6.9.1",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.25",
+    "typescript": "^5.9.3"
+  }
+}
