@@ -97,7 +97,7 @@ export const RuleCard = memo(function RuleCard({
   const canAct =
     sessionReady && !offline && !saving && waitMs === 0 && (!isBlockingVerify || acknowledged);
   const canPass = canAct && overrideReasonOk;
-  const canFail = canAct && isVerify;
+  const canFail = canAct && (isVerify || isFail);
 
   // SLA / wait countdown timer — only mount when needed
   useEffect(() => {
@@ -265,29 +265,60 @@ export const RuleCard = memo(function RuleCard({
               )}
               {isFail && (
                 <div className="text-[11px] text-red-200 bg-red-950/18 border border-red-500/25 rounded-lg px-2.5 py-2">
-                  PASS here is an override. Enter a specific reason of at least 20 characters; a
-                  second reviewer must approve it before sign-off.
+                  <strong>Confirm Fail</strong> to acknowledge this finding — it stays as a failure in the final report.
+                  To override to PASS, enter a specific reason of at least 20 characters; a second reviewer must approve it before sign-off.
                 </div>
               )}
               {rule.overridePending && (
                 <div className="text-[11px] text-slate-200 bg-slate-950/18 border border-slate-500/25 rounded-lg px-2.5 py-2">
                   Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
-                  different reviewer must press Pass to approve it.
+                  different reviewer must press Override to Pass to approve it.
                 </div>
               )}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onDecision("PASS")}
-                  disabled={!canPass}
-                  className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
-                    decision === "PASS"
-                      ? "bg-green-600 text-white"
-                      : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
-                  }`}
-                >
-                  {saving ? spinnerSvg : <Check size={12} />} Save Pass
-                </button>
-                {normalizedStatus === "verify" && (
+
+              {/* Fail rules: Confirm Fail (primary) + Override to Pass (secondary) */}
+              {isFail && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onDecision("FAIL")}
+                    disabled={!canFail}
+                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                      decision === "FAIL"
+                        ? "bg-red-600 text-white"
+                        : "bg-[#161B22] hover:bg-red-950/35 hover:text-red-200 text-slate-400 border border-white/10"
+                    }`}
+                  >
+                    {saving ? spinnerSvg : <X size={12} />} Confirm Fail
+                  </button>
+                  <button
+                    onClick={() => onDecision("PASS")}
+                    disabled={!canPass}
+                    title={!overrideReasonOk ? "Add a specific override reason (min 20 chars) to enable" : undefined}
+                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                      decision === "PASS"
+                        ? "bg-green-600 text-white"
+                        : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
+                    }`}
+                  >
+                    {saving ? spinnerSvg : <Check size={12} />} Override to Pass
+                  </button>
+                </div>
+              )}
+
+              {/* Verify rules: Save Pass (primary) + Save Fail (secondary) */}
+              {isVerify && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onDecision("PASS")}
+                    disabled={!canPass}
+                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                      decision === "PASS"
+                        ? "bg-green-600 text-white"
+                        : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
+                    }`}
+                  >
+                    {saving ? spinnerSvg : <Check size={12} />} Save Pass
+                  </button>
                   <button
                     onClick={() => onDecision("FAIL")}
                     disabled={!canFail}
@@ -299,15 +330,16 @@ export const RuleCard = memo(function RuleCard({
                   >
                     {saving ? spinnerSvg : <X size={12} />} Save Fail
                   </button>
-                )}
-              </div>
+                </div>
+              )}
+
               <textarea
                 ref={commentRef}
                 value={comment}
                 onChange={e => onComment(e.target.value)}
                 placeholder={
                   isFail
-                    ? "Reason for override - be specific (minimum 20 characters)."
+                    ? "Reason for override to Pass — be specific (minimum 20 characters). Leave blank to Confirm Fail."
                     : "Add a comment (optional)..."
                 }
                 rows={2}
@@ -315,7 +347,7 @@ export const RuleCard = memo(function RuleCard({
               />
               {decision && (
                 <div className="text-[10px] text-slate-600">
-                  Comments are stored when you press Save Pass or Save Fail.
+                  {isFail ? "Decision stored — Confirm Fail or Override to Pass." : "Comments are stored when you press Save Pass or Save Fail."}
                 </div>
               )}
             </div>

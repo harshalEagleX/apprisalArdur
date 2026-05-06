@@ -196,28 +196,81 @@ class ErrorResponse(BaseModel):
     message: str
 
 
+async def _check_ollama_readiness() -> dict:
+    """Probe Ollama for reachability and required model availability."""
+    required_model = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("http://localhost:11434/api/tags")
+        if resp.status_code != 200:
+            return {"reachable": False, "model_available": False,
+                    "error": f"Ollama HTTP {resp.status_code}"}
+        models = [m.get("name", "") for m in resp.json().get("models", [])]
+        base = required_model.split(":")[0]
+        available = any(base in m for m in models)
+        return {"reachable": True, "model_available": available,
+                "required_model": required_model, "loaded_models": models}
+    except Exception as exc:
+        return {"reachable": False, "model_available": False, "error": str(exc)}
+
+
+def _check_db_connection() -> bool:
+    try:
+        from app.database import get_db
+        from sqlalchemy import text as _text
+        with get_db() as db:
+            db.execute(_text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+def _check_celery_worker() -> bool:
+    """Return True if at least one Celery worker is connected to Redis."""
+    try:
+        from app.tasks.celery_app import celery_app as _celery
+        # inspect().ping() returns {} when no workers respond; non-empty means at least one is up
+        result = _celery.control.inspect(timeout=2.0).ping()
+        return bool(result)
+    except Exception:
+        return False
+
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint with binary validation."""
+    """Health check: binaries + DB + Ollama model readiness."""
     binary_issues = validate_binaries()
     system_info = get_system_info()
-    
-    if binary_issues:
-        logger.warning("Health check degraded", extra={"issues": binary_issues})
+    db_ok          = await run_in_threadpool(_check_db_connection)
+    ollama         = await _check_ollama_readiness()
+    celery_worker  = await run_in_threadpool(_check_celery_worker)
+
+    degraded = bool(binary_issues) or not db_ok or not ollama.get("reachable")
+    ready    = not degraded and ollama.get("model_available", False)
+    status   = "ready" if ready else ("degraded" if degraded else "healthy")
+
+    if degraded:
+        logger.warning("Health check degraded",
+                       extra={"binary_issues": binary_issues, "db_ok": db_ok, "ollama": ollama})
     else:
         logger.debug("Health check passed")
-    
+
     return {
-        "status": "healthy" if not binary_issues else "degraded",
+        "status": status,
+        "ready": ready,
         "timestamp": datetime.utcnow().isoformat(),
         "tesseract_available": TESSERACT_AVAILABLE,
         "binary_issues": binary_issues,
+        "db_connected": db_ok,
+        "ollama": ollama,
+        "celery_worker_running": celery_worker,
         "system_info": system_info,
         "ocr_config": {
             "tesseract_cmd": OCR_CONFIG['tesseract_cmd'],
             "pdf_dpi": OCR_CONFIG['pdf_dpi'],
             "max_workers": OCR_CONFIG['max_workers'],
-        }
+        },
     }
 
 
@@ -490,6 +543,133 @@ async def process_qc(
             status_code=500,
             detail={"error": "QC_PROCESSING_ERROR", "message": str(e)}
         )
+
+
+# ── Async job queue (Celery) ──────────────────────────────────────────────────
+# Jobs directory — files saved here survive until the Celery worker finishes.
+_ASYNC_JOBS_DIR = os.getenv("ASYNC_JOBS_DIR", "/tmp/ocr_jobs")
+
+
+@app.post("/qc/submit", status_code=202)
+async def submit_qc_job(
+    request: Request,
+    _auth: None = Security(_require_api_key),
+    file: UploadFile = File(...),
+    engagement_letter: Optional[UploadFile] = None,
+    contract_file: Optional[UploadFile] = None,
+    model_provider: str = Form("ollama"),
+    text_model: Optional[str] = Form(None),
+    vision_model: Optional[str] = Form(None),
+):
+    """
+    Submit a QC job to the Celery async queue.
+
+    Returns 202 immediately with a job_id.  Java polls GET /qc/job/{job_id}
+    every few seconds until status == SUCCESS or FAILURE.
+
+    The Celery worker must be running:
+        celery -A app.tasks.celery_app worker --loglevel=info --concurrency=1
+    """
+    request_id = getattr(request.state, "request_id", None)
+
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400,
+                            detail={"error": "INVALID_FILE_TYPE", "message": "Only PDF files are accepted"})
+
+    job_id = str(uuid.uuid4())
+    job_dir = os.path.join(_ASYNC_JOBS_DIR, job_id)
+    os.makedirs(job_dir, exist_ok=True)
+
+    try:
+        # --- Save appraisal PDF ---
+        pdf_path = os.path.join(job_dir, "appraisal.pdf")
+        with open(pdf_path, "wb") as buf:
+            shutil.copyfileobj(file.file, buf)
+
+        err = validate_upload(pdf_path, request_id)
+        if err:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail={"error": "INVALID_FILE", "message": err})
+
+        file_hash = sha256_file(pdf_path)
+
+        # --- Save optional supporting files ---
+        engagement_path = None
+        if engagement_letter:
+            p = os.path.join(job_dir, "engagement.pdf")
+            with open(p, "wb") as buf:
+                shutil.copyfileobj(engagement_letter.file, buf)
+            engagement_path = p
+
+        contract_path = None
+        if contract_file:
+            p = os.path.join(job_dir, "contract.pdf")
+            with open(p, "wb") as buf:
+                shutil.copyfileobj(contract_file.file, buf)
+            contract_path = p
+
+        # --- Enqueue Celery task ---
+        from app.tasks.celery_app import process_document_async
+        process_document_async.apply_async(
+            task_id=job_id,
+            kwargs={
+                "pdf_path": pdf_path,
+                "file_hash": file_hash,
+                "original_filename": file.filename,
+                "engagement_path": engagement_path,
+                "contract_path": contract_path,
+                "model_provider": model_provider,
+                "text_model": text_model,
+                "vision_model": vision_model,
+                "job_dir": job_dir,
+            },
+        )
+
+        logger.info("QC job queued", extra={"job_id": job_id, "file": file.filename,
+                                             "request_id": request_id})
+        return {"job_id": job_id, "status": "QUEUED", "file_hash": file_hash,
+                "poll_url": f"/qc/job/{job_id}"}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        logger.error("Failed to queue QC job", extra={"error": str(exc), "request_id": request_id},
+                     exc_info=True)
+        raise HTTPException(status_code=500,
+                            detail={"error": "QUEUE_ERROR", "message": str(exc)})
+
+
+@app.get("/qc/job/{job_id}")
+async def get_job_status(job_id: str, _auth: None = Security(_require_api_key)):
+    """
+    Poll the status of an async QC job submitted via POST /qc/submit.
+
+    Returns:
+        status  PENDING | STARTED | SUCCESS | FAILURE
+        result  Full QC payload when status == SUCCESS, else null
+        error   Error message when status == FAILURE, else null
+    """
+    try:
+        from celery.result import AsyncResult
+        from app.tasks.celery_app import celery_app as _celery
+        ar = AsyncResult(job_id, app=_celery)
+        state = ar.state
+
+        if state == "SUCCESS":
+            return {"job_id": job_id, "status": "SUCCESS", "result": ar.result, "error": None}
+        elif state == "FAILURE":
+            return {"job_id": job_id, "status": "FAILURE", "result": None,
+                    "error": str(ar.result)}
+        elif state == "STARTED":
+            return {"job_id": job_id, "status": "STARTED", "result": None,
+                    "meta": ar.info if isinstance(ar.info, dict) else {}}
+        else:
+            return {"job_id": job_id, "status": state or "PENDING", "result": None, "error": None}
+
+    except Exception as exc:
+        raise HTTPException(status_code=500,
+                            detail={"error": "STATUS_ERROR", "message": str(exc)})
 
 
 @app.get("/qc/progress/{progress_token}")

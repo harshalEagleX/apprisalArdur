@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Users, Building2,
-  BarChart2, LogOut, ChevronLeft, BrainCircuit,
+  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network,
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/admin/users",    label: "Users",      Icon: Users },
   { href: "/admin/clients",  label: "Clients",    Icon: Building2 },
   { href: "/analytics",      label: "Analytics",  Icon: BarChart2 },
+  { href: "/admin/audit",    label: "Audit Graph", Icon: Network },
 ];
 
 const ADMIN_GUIDE_STEPS: TooltipStep[] = [

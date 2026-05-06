@@ -8,7 +8,17 @@ async function checkServices(): Promise<void> {
   const ocrUrl = `${config.javaBaseUrl.replace("8080", "5001")}/health`;
   try {
     const res = await fetch(ocrUrl, { signal: AbortSignal.timeout(10_000) });
-    console.log(`[load-test] OCR service: ${res.ok ? "healthy" : "not healthy"} (${res.status})`);
+    const body = await res.json().catch(() => ({}));
+    const status  = body.status  ?? (res.ok ? "healthy" : "degraded");
+    const ready   = body.ready   ?? false;
+    const ollama  = body.ollama  ?? {};
+    const celery  = body.celery_worker_running ?? "unknown";
+    console.log(`[load-test] OCR service: ${status} ready=${ready}`);
+    console.log(`[load-test]   ollama reachable=${ollama.reachable} model_available=${ollama.model_available}`);
+    console.log(`[load-test]   celery_worker=${celery}`);
+    if (!ready) {
+      console.warn("[load-test] OCR service is NOT fully ready — QC may fail or fall back to sync mode");
+    }
   } catch {
     console.warn("[load-test] OCR service unreachable on :5001 — QC will fail");
   }

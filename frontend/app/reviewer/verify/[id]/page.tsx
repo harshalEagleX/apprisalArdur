@@ -113,8 +113,8 @@ export default function VerifyFilePage() {
   const [offline, setOffline]           = useState(() => typeof navigator !== "undefined" ? !navigator.onLine : false);
   const [acknowledged, setAcknowledged] = useState<Record<number, boolean>>({});
   const [signoffOpen, setSignoffOpen]   = useState(false);
-  const [signoffCode, setSignoffCode]   = useState("");
   const [submitNotes, setSubmitNotes]   = useState("");
+  const [submitError, setSubmitError]   = useState("");
   const [saveNotice, setSaveNotice]     = useState<{ text: string; tone: "success" | "error" | "info" } | null>(null);
   const [focusMode, setFocusMode]       = useState(false);
 
@@ -123,6 +123,8 @@ export default function VerifyFilePage() {
   const inFlightDecisionIds = useRef<Set<number>>(new Set());
   const commentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const focusModeRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
 
   // ── Hooks ────────────────────────────────────────────────────────────────
   const {
@@ -319,8 +321,8 @@ export default function VerifyFilePage() {
     if (!sessionToken) return "Review session is not ready yet.";
     if (offline) return "You're offline. Decisions cannot be saved until your connection is restored.";
     if (saving === rule.id) return "This decision is already saving.";
-    if (s === "fail" && decision === "PASS" && (comments[rule.id] ?? "").trim().length < 20) return "Add a specific override reason of at least 20 characters before saving Pass.";
-    if (s !== "verify" && decision === "FAIL") return "Only Needs Review rules can be saved as Fail.";
+    if (s === "fail" && decision === "PASS" && (comments[rule.id] ?? "").trim().length < 20) return "Add a specific override reason of at least 20 characters before saving Override to Pass.";
+    if (s !== "verify" && s !== "fail" && decision === "FAIL") return "Only Needs Review and Fail rules can be decided.";
     if (s === "verify" && rule.severity === "BLOCKING" && !acknowledged[rule.id]) return "Acknowledge the referenced document sections before saving this blocking rule.";
     return null;
   }
@@ -356,7 +358,7 @@ export default function VerifyFilePage() {
     const freshProgress = await getQCProgress(qcResultId);
     setProgress(freshProgress);
     if (!freshProgress.canSubmit) return;
-    setSignoffCode(""); setSubmitNotes(""); setSignoffOpen(true);
+    setSubmitNotes(""); setSignoffOpen(true);
   }
 
   async function toggleFocusMode() {
@@ -378,8 +380,7 @@ export default function VerifyFilePage() {
 
   async function performSubmit() {
     if (!sessionToken) return;
-    const expected = String(qcResultId).slice(-4);
-    if (signoffCode.trim() !== expected) return;
+    setSubmitError("");
     setSubmitting(true);
     try {
       const response = await fetch(`${JAVA}/api/reviewer/qc/${qcResultId}/submit`, {
@@ -387,9 +388,27 @@ export default function VerifyFilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes: submitNotes.trim(), sessionToken }),
       });
-      if (!response.ok) throw new Error("Review submit failed");
-      window.location.href = returnTo;
-    } finally { setSubmitting(false); setSignoffOpen(false); }
+      if (!response.ok) {
+        let msg = "Submit failed. Some rules may still need a decision.";
+        try {
+          const body = await response.json() as { error?: string; message?: string };
+          if (body.message) msg = body.message;
+          else if (body.error) msg = body.error;
+        } catch { /* ignore parse errors */ }
+        setSubmitError(msg);
+        setSubmitting(false);
+        // reload progress + rules so the reviewer can see what's still pending
+        void Promise.all([loadRules(), getQCProgress(qcResultId).then(setProgress).catch(() => undefined)]);
+        return;
+      }
+      // Success — close dialog then navigate so the browser can complete the fetch lifecycle
+      setSignoffOpen(false);
+      window.location.href = `/reviewer/submitted/${qcResultId}?returnTo=${encodeURIComponent(returnTo)}`;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error during submit.";
+      setSubmitError(msg);
+      setSubmitting(false);
+    }
   }
 
   // ── Keyboard shortcuts (stable listener, reads refs) ────────────────────
@@ -451,6 +470,41 @@ export default function VerifyFilePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
+
+  // ── PDF viewer drag-to-pan ────────────────────────────────────────────────
+  function onViewerMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const el = viewerRef.current;
+    if (!el) return;
+    dragStartRef.current = { x: e.clientX, y: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+    setIsDragging(true);
+    e.preventDefault();
+  }
+
+  function onViewerMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (!dragStartRef.current || !viewerRef.current) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    viewerRef.current.scrollLeft = dragStartRef.current.scrollLeft - dx;
+    viewerRef.current.scrollTop = dragStartRef.current.scrollTop - dy;
+  }
+
+  function onViewerMouseUp() {
+    setIsDragging(false);
+    dragStartRef.current = null;
+  }
+
+  function onViewerKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const el = viewerRef.current;
+    if (!el) return;
+    const step = e.shiftKey ? 200 : 80;
+    if (e.key === "ArrowDown")  { e.preventDefault(); el.scrollTop  += step; }
+    if (e.key === "ArrowUp")    { e.preventDefault(); el.scrollTop  -= step; }
+    if (e.key === "ArrowRight") { e.preventDefault(); el.scrollLeft += step; }
+    if (e.key === "ArrowLeft")  { e.preventDefault(); el.scrollLeft -= step; }
+    if (e.key === "PageDown")   { e.preventDefault(); el.scrollTop  += el.clientHeight * 0.9; }
+    if (e.key === "PageUp")     { e.preventDefault(); el.scrollTop  -= el.clientHeight * 0.9; }
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -560,7 +614,16 @@ export default function VerifyFilePage() {
               )}
             </div>
             {activeDocument ? (
-              <div ref={viewerRef} className={`relative flex-1 overflow-auto bg-slate-950 ${highlighting ? "ring-2 ring-amber-400 ring-inset" : ""}`}>
+              <div
+                ref={viewerRef}
+                tabIndex={0}
+                className={`relative flex-1 overflow-auto bg-slate-950 focus:outline-none select-none ${isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : ""} ${highlighting ? "ring-2 ring-amber-400 ring-inset" : ""}`}
+                onMouseDown={onViewerMouseDown}
+                onMouseMove={onViewerMouseMove}
+                onMouseUp={onViewerMouseUp}
+                onMouseLeave={onViewerMouseUp}
+                onKeyDown={onViewerKeyDown}
+              >
                 <div className="min-h-full flex justify-center px-4 py-12">
                   <div className="relative">
                     <PdfDocumentViewer key={activeDocument.id} fileUrl={activeDocumentUrl}
@@ -644,12 +707,11 @@ export default function VerifyFilePage() {
           totalReviewed={progress?.totalToVerify ?? 0}
           passed={passedDecisions}
           failed={failedDecisions}
-          code={signoffCode}
           notes={submitNotes}
           submitting={submitting}
-          onCodeChange={setSignoffCode}
+          submitError={submitError}
           onNotesChange={setSubmitNotes}
-          onCancel={() => setSignoffOpen(false)}
+          onCancel={() => { setSignoffOpen(false); setSubmitError(""); }}
           onConfirm={() => void performSubmit()}
         />
       </div>

@@ -2,6 +2,7 @@ package com.apprisal.qc.service;
 
 import com.apprisal.qc.config.OcrServiceConfig;
 import com.apprisal.common.dto.python.PythonQCResponse;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
@@ -13,6 +14,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -30,10 +33,13 @@ public class PythonClientService {
 
     private final RestTemplate restTemplate;
     private final OcrServiceConfig config;
+    private final ObjectMapper objectMapper;
 
-    public PythonClientService(RestTemplate restTemplate, OcrServiceConfig config) {
+    public PythonClientService(RestTemplate restTemplate, OcrServiceConfig config,
+                               ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.config = config;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -231,6 +237,140 @@ public class PythonClientService {
 
     public record PythonProgress(String stage, String message, double subPercent, long elapsedMs) { }
 
+    // ── Async job queue (Celery) ───────────────────────────────────────────────
+
+    /** Response from POST /qc/submit. */
+    public record JobSubmitResponse(String jobId, String status, String fileHash) {}
+
+    /**
+     * Submit a QC job to the Python Celery queue.
+     * Returns immediately with a job_id; caller polls via {@link #waitForJobResult}.
+     *
+     * @throws RuntimeException if the submit endpoint returns an error
+     */
+    public JobSubmitResponse submitQCJob(Path appraisalPath, Path engagementPath,
+                                         Path contractPath, QCModelConfig modelConfig) {
+        String url = config.getUrl() + "/qc/submit";
+        QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+
+        log.info("Submitting async QC job: appraisal={} engagement={} contract={} model={}",
+                appraisalPath.getFileName(),
+                engagementPath != null ? engagementPath.getFileName() : "none",
+                contractPath   != null ? contractPath.getFileName()   : "none",
+                cfg.label());
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
+        if (engagementPath != null)
+            body.add("engagement_letter", new FileSystemResource(engagementPath.toFile()));
+        if (contractPath != null)
+            body.add("contract_file", new FileSystemResource(contractPath.toFile()));
+        body.add("model_provider", cfg.provider());
+        body.add("text_model",     cfg.textModel());
+        body.add("vision_model",   cfg.visionModel());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        if (config.getApiKey() != null && !config.getApiKey().isBlank())
+            headers.set("X-API-Key", config.getApiKey());
+
+        @SuppressWarnings("rawtypes")
+        ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.POST,
+                new HttpEntity<>(body, headers), Map.class);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> rb = resp.getBody();
+        if (rb == null) throw new RuntimeException("/qc/submit returned empty body");
+
+        String jobId    = Objects.requireNonNull(stringFromMap(rb, "job_id"), "job_id missing");
+        String status   = stringFromMap(rb, "status");
+        String fileHash = stringFromMap(rb, "file_hash");
+        log.info("QC job queued: jobId={} fileHash={}", jobId, fileHash);
+        return new JobSubmitResponse(jobId, status, fileHash);
+    }
+
+    /**
+     * Poll GET /qc/job/{jobId} until the job reaches SUCCESS or FAILURE, or timeout expires.
+     *
+     * Checks for batch cancellation on every poll so the thread can be interrupted cleanly.
+     *
+     * @param jobId           Celery task id returned by {@link #submitQCJob}
+     * @param timeout         Maximum total wait time (use config timeout as upper bound)
+     * @param batchCancelled  Supplier checked on each poll; throws CancellationException if true
+     * @return Full QC response payload
+     * @throws RuntimeException on FAILURE status or timeout
+     */
+    public PythonQCResponse waitForJobResult(String jobId, Duration timeout,
+                                              java.util.function.BooleanSupplier batchCancelled) {
+        String url = config.getUrl() + "/qc/job/" + jobId;
+        HttpHeaders headers = new HttpHeaders();
+        if (config.getApiKey() != null && !config.getApiKey().isBlank())
+            headers.set("X-API-Key", config.getApiKey());
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        Instant deadline        = Instant.now().plus(timeout);
+        // If the job stays PENDING (never moves to STARTED) for 60 s the Celery
+        // worker is probably not running — surface that early so the caller can
+        // fall back to sync mode without burning the full timeout.
+        Instant workerGraceEnd  = Instant.now().plusSeconds(60);
+        int pollIntervalMs      = 6_000; // 6 s between polls — Ollama takes 30-120 s per job
+        int attempt             = 0;
+
+        while (Instant.now().isBefore(deadline)) {
+            if (batchCancelled != null && batchCancelled.getAsBoolean()) {
+                throw new java.util.concurrent.CancellationException("QC stopped by admin");
+            }
+
+            if (attempt++ > 0) {
+                try { Thread.sleep(pollIntervalMs); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new java.util.concurrent.CancellationException("Interrupted while polling QC job");
+                }
+            }
+
+            try {
+                @SuppressWarnings("rawtypes")
+                ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> body = resp.getBody();
+                if (body == null) continue;
+
+                String state = stringFromMap(body, "status");
+                log.debug("QC job {} status={} attempt={}", jobId, state, attempt);
+
+                if ("SUCCESS".equals(state)) {
+                    Object resultObj = body.get("result");
+                    if (resultObj == null)
+                        throw new RuntimeException("QC job " + jobId + " SUCCESS but result is null");
+                    try {
+                        byte[] json = objectMapper.writeValueAsBytes(resultObj);
+                        return objectMapper.readValue(json, PythonQCResponse.class);
+                    } catch (Exception je) {
+                        throw new RuntimeException("Failed to deserialise QC job result: " + je.getMessage(), je);
+                    }
+                } else if ("FAILURE".equals(state)) {
+                    String err = stringFromMap(body, "error");
+                    throw new RuntimeException("QC job " + jobId + " failed: " + err);
+                }
+
+                // Still PENDING after grace window → worker is not running, give up fast
+                if ("PENDING".equals(state) && Instant.now().isAfter(workerGraceEnd)) {
+                    throw new RuntimeException("Celery worker not running — job " + jobId
+                            + " stayed PENDING for >60 s");
+                }
+                // STARTED / QUEUED / PENDING within grace — keep polling
+
+            } catch (org.springframework.web.client.RestClientException rce) {
+                log.warn("Poll attempt {} for job {} failed: {}", attempt, jobId, rce.getMessage());
+            } catch (RuntimeException rte) {
+                throw rte; // propagate our own exceptions (worker-not-running, deserialise errors)
+            }
+        }
+
+        throw new RuntimeException("QC job " + jobId + " did not complete within "
+                + timeout.toMinutes() + " minutes");
+    }
+
     private void sleepBeforeRetry(int attempt) {
         try {
             Thread.sleep(Math.min(5_000L, attempt * 1_000L));
@@ -239,6 +379,9 @@ public class PythonClientService {
             throw new RuntimeException("Interrupted while waiting to retry Python QC request", e);
         }
     }
+
+    /** Expose config so callers can read timeout/retry settings. */
+    public OcrServiceConfig getConfig() { return config; }
 
     /**
      * Check if Python service is healthy.

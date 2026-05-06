@@ -25,12 +25,16 @@ run_sql() {
 
 echo ""
 echo "══════════════════════════════════════════════════"
-echo "  STEP 0  Stop OCR service (clears stale threads)"
+echo "  STEP 0  Stop OCR service + Celery worker"
 echo "══════════════════════════════════════════════════"
-pkill -f "python main.py" 2>/dev/null || true
-pkill -f "uvicorn.*main" 2>/dev/null || true
+pkill -f "python main.py"   2>/dev/null || true
+pkill -f "uvicorn.*main"    2>/dev/null || true
+pkill -f "celery.*worker"   2>/dev/null || true
 sleep 2
-echo "  ✓ OCR service stopped"
+# Clean any stale async job directories so leftover files from a prior run
+# don't confuse the new Celery worker
+rm -rf /tmp/ocr_jobs 2>/dev/null || true
+echo "  ✓ OCR service + Celery worker stopped"
 
 echo ""
 echo "══════════════════════════════════════════════════"
@@ -137,6 +141,30 @@ for i in $(seq 1 20); do
   fi
   sleep 2
 done
+
+echo ""
+echo "══════════════════════════════════════════════════"
+echo "  STEP 3b  Start Celery worker (async QC queue)"
+echo "══════════════════════════════════════════════════"
+# concurrency=1 is correct for M1 8 GB: Ollama is single-lane anyway.
+# The worker serialises OCR jobs so Ollama never gets two simultaneous requests.
+CELERY_LOG="$LOG_DIR/celery.log"
+(
+  source /opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh
+  conda activate apprisal
+  cd "$OCR_DIR"
+  nohup celery -A app.tasks.celery_app worker \
+    --loglevel=info \
+    --concurrency=1 \
+    >> "$CELERY_LOG" 2>&1 &
+  echo $! > /tmp/apprisal_celery.pid
+)
+sleep 3
+if pgrep -f "celery.*worker" > /dev/null 2>&1; then
+  echo "  ✓ Celery worker running (PID $(cat /tmp/apprisal_celery.pid 2>/dev/null || echo '?'))"
+else
+  echo "  WARNING: Celery worker did not start — QC will fall back to sync mode"
+fi
 
 echo ""
 echo "══════════════════════════════════════════════════"

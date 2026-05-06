@@ -1,12 +1,16 @@
 package com.apprisal.controller.api;
 
+import com.apprisal.common.entity.AuditLog;
 import com.apprisal.common.entity.Client;
+import com.apprisal.common.entity.QCResult;
 import com.apprisal.common.entity.Role;
 import com.apprisal.common.entity.User;
 import com.apprisal.user.service.UserService;
 import com.apprisal.user.service.ClientService;
 import com.apprisal.batch.service.BatchService;
 import com.apprisal.common.service.AuditLogService;
+import com.apprisal.common.repository.AuditLogRepository;
+import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.security.UserPrincipal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,6 +20,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.lang.NonNull;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,15 +38,21 @@ public class AdminApiController {
     private final ClientService clientService;
     private final BatchService batchService;
     private final AuditLogService auditLogService;
+    private final AuditLogRepository auditLogRepository;
+    private final QCResultRepository qcResultRepository;
 
     public AdminApiController(UserService userService,
             ClientService clientService,
             BatchService batchService,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            AuditLogRepository auditLogRepository,
+            QCResultRepository qcResultRepository) {
         this.userService = userService;
         this.clientService = clientService;
         this.batchService = batchService;
         this.auditLogService = auditLogService;
+        this.auditLogRepository = auditLogRepository;
+        this.qcResultRepository = qcResultRepository;
     }
 
     // ── User Management ───────────────────────────────────────────────────────
@@ -145,6 +158,36 @@ public class AdminApiController {
             return ResponseEntity.ok(client);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Batch audit log for graph ─────────────────────────────────────────────
+
+    @GetMapping("/batches/{id}/audit")
+    public ResponseEntity<List<Map<String, Object>>> getBatchAuditLog(@PathVariable @NonNull Long id) {
+        try {
+            // Collect all QCResult IDs for files in this batch
+            List<QCResult> qcResults = qcResultRepository.findByBatchId(id);
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (QCResult qcr : qcResults) {
+                List<AuditLog> logs = auditLogRepository.findByEntityTypeAndEntityId("QCResult", qcr.getId());
+                for (AuditLog entry : logs) {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", entry.getId());
+                    row.put("action", entry.getAction());
+                    row.put("entityType", entry.getEntityType());
+                    row.put("entityId", entry.getEntityId());
+                    row.put("details", entry.getDetails());
+                    row.put("createdAt", entry.getCreatedAt() != null ? entry.getCreatedAt().toString() : null);
+                    if (entry.getUser() != null) {
+                        row.put("user", Map.of("id", entry.getUser().getId(), "username", entry.getUser().getUsername()));
+                    }
+                    result.add(row);
+                }
+            }
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok(List.of());
         }
     }
 

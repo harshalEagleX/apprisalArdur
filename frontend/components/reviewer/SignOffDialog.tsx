@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useRef } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, AlertCircle } from "lucide-react";
 
 function SignOffStat({
   label,
@@ -27,10 +27,9 @@ export interface SignOffDialogProps {
   totalReviewed: number;
   passed: number;
   failed: number;
-  code: string;
   notes: string;
   submitting: boolean;
-  onCodeChange: (value: string) => void;
+  submitError?: string;
   onNotesChange: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -42,10 +41,9 @@ export function SignOffDialog({
   totalReviewed,
   passed,
   failed,
-  code,
   notes,
   submitting,
-  onCodeChange,
+  submitError,
   onNotesChange,
   onCancel,
   onConfirm,
@@ -88,9 +86,6 @@ export function SignOffDialog({
 
   if (!open) return null;
 
-  const expected = String(qcResultId).slice(-4);
-  const canConfirm = code.trim() === expected && !submitting;
-
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div
@@ -112,16 +107,10 @@ export function SignOffDialog({
             <AlertTriangle size={16} className="text-amber-300" />
           </div>
           <div className="min-w-0">
-            <h3
-              id="signoff-dialog-title"
-              className="text-sm font-semibold text-white"
-            >
+            <h3 id="signoff-dialog-title" className="text-sm font-semibold text-white">
               Submit review
             </h3>
-            <p
-              id="signoff-dialog-description"
-              className="mt-1 text-sm leading-relaxed text-slate-400"
-            >
+            <p id="signoff-dialog-description" className="mt-1 text-sm leading-relaxed text-slate-400">
               This will sign off QC Result #{qcResultId}. The action cannot be undone.
             </p>
           </div>
@@ -129,31 +118,31 @@ export function SignOffDialog({
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <SignOffStat label="Reviewed" value={totalReviewed} />
-          <SignOffStat label="Passed" value={passed} />
-          <SignOffStat label="Failed" value={failed} danger={failed > 0} />
+          <SignOffStat label="Passed"   value={passed} />
+          <SignOffStat label="Failed"   value={failed} danger={failed > 0} />
         </div>
 
-        <label className="mt-4 block text-xs font-medium text-slate-400">
-          Type last 4 digits:{" "}
-          <span className="font-mono text-slate-200">{expected}</span>
-        </label>
-        <input
-          value={code}
-          onChange={e => onCodeChange(e.target.value)}
-          autoFocus
-          inputMode="numeric"
-          maxLength={4}
-          className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 font-mono text-sm tracking-[0.25em] text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
-          placeholder="0000"
-        />
+        {failed > 0 && !submitError && (
+          <div className="mt-3 rounded-lg border border-red-500/25 bg-red-950/20 px-3 py-2 text-xs text-red-200 leading-relaxed">
+            {failed} rule{failed === 1 ? "" : "s"} confirmed as fail. Rejection language will be generated after submission.
+          </div>
+        )}
 
-        <label className="mt-4 block text-xs font-medium text-slate-400">Sign-off notes</label>
+        {submitError && (
+          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-950/35 px-3 py-2.5 text-xs text-red-200 leading-relaxed flex items-start gap-2">
+            <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-red-400" />
+            <span>{submitError}</span>
+          </div>
+        )}
+
+        <label className="mt-4 block text-xs font-medium text-slate-400">Sign-off notes (optional)</label>
         <textarea
           value={notes}
           onChange={e => onNotesChange(e.target.value)}
+          autoFocus
           rows={3}
           className="mt-1.5 w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
-          placeholder="Optional summary for the completed review..."
+          placeholder="Summary for the completed review..."
         />
 
         <div className="mt-5 flex justify-end gap-2">
@@ -166,10 +155,10 @@ export function SignOffDialog({
           </button>
           <button
             onClick={onConfirm}
-            disabled={!canConfirm}
+            disabled={submitting}
             className="h-9 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40"
           >
-            {submitting ? "Submitting..." : "Submit review"}
+            {submitting ? "Submitting…" : "Submit review"}
           </button>
         </div>
       </div>

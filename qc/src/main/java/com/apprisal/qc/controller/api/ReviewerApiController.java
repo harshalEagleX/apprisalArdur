@@ -6,8 +6,11 @@ import com.apprisal.common.entity.QCRuleResult;
 import com.apprisal.common.entity.Role;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.repository.QCRuleResultRepository;
+import com.apprisal.common.repository.AuditLogRepository;
 import com.apprisal.common.security.UserPrincipal;
 import com.apprisal.common.realtime.RealtimeEventPublisher;
+import com.apprisal.common.service.AuditLogService;
+import com.apprisal.common.entity.AuditLog;
 import com.apprisal.qc.service.VerificationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -17,6 +20,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,15 +42,58 @@ public class ReviewerApiController {
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final AuditLogService auditLogService;
+    private final AuditLogRepository auditLogRepository;
 
     public ReviewerApiController(VerificationService verificationService,
                                  QCResultRepository qcResultRepository,
                                  QCRuleResultRepository qcRuleResultRepository,
-                                 RealtimeEventPublisher realtimeEventPublisher) {
+                                 RealtimeEventPublisher realtimeEventPublisher,
+                                 AuditLogService auditLogService,
+                                 AuditLogRepository auditLogRepository) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.auditLogService = auditLogService;
+        this.auditLogRepository = auditLogRepository;
+    }
+
+    // ── Submitted queue (recently completed by this reviewer) ─────────────────
+
+    @GetMapping("/qc/results/submitted")
+    public ResponseEntity<List<Map<String, Object>>> getSubmittedQueue(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            List<QCResult> submitted;
+            if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
+                submitted = qcResultRepository.findRecentlyReviewedForReviewer(principal.getUser().getId());
+            } else {
+                submitted = qcResultRepository.findRecentlyReviewed();
+            }
+
+            List<Map<String, Object>> body = submitted.stream().map(r -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id",            r.getId());
+                m.put("finalDecision", r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
+                m.put("failedCount",   r.getFailedCount());
+                m.put("passedCount",   r.getPassedCount());
+                m.put("totalRules",    r.getTotalRules());
+                m.put("reviewedAt",    r.getReviewedAt() != null ? r.getReviewedAt().toString() : null);
+                if (r.getBatchFile() != null) {
+                    m.put("batchFile", Map.of(
+                            "id",       r.getBatchFile().getId(),
+                            "filename", r.getBatchFile().getFilename() != null ? r.getBatchFile().getFilename() : ""
+                    ));
+                }
+                return m;
+            }).toList();
+
+            return ResponseEntity.ok(body);
+        } catch (Exception e) {
+            log.error("Failed to load submitted queue: {}", e.getMessage(), e);
+            return ResponseEntity.ok(List.of());
+        }
     }
 
     // ── Pending queue ──────────────────────────────────────────────────────────
@@ -318,6 +365,104 @@ public class ReviewerApiController {
         } catch (Exception e) {
             log.error("Failed to get rules for qcResultId={}: {}", qcResultId, e.getMessage(), e);
             return ResponseEntity.badRequest().body(List.of());
+        }
+    }
+
+    // ── Submitted result summary ───────────────────────────────────────────────
+
+    @GetMapping("/qc/{qcResultId}/result")
+    public ResponseEntity<Map<String, Object>> getSubmittedResult(
+            @PathVariable Long qcResultId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+            QCResult result = verificationService.getForVerification(qcResultId);
+            Map<String, Object> body = new HashMap<>();
+            body.put("id", result.getId());
+            body.put("finalDecision", result.getFinalDecision() != null ? result.getFinalDecision().name() : null);
+            body.put("reviewedAt", result.getReviewedAt() != null ? result.getReviewedAt().toString() : null);
+            body.put("reviewerNotes", result.getReviewerNotes());
+            return ResponseEntity.ok(body);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Re-review request ──────────────────────────────────────────────────────
+
+    @PostMapping("/qc/{qcResultId}/request-re-review")
+    public ResponseEntity<Map<String, Object>> requestReReview(
+            @PathVariable Long qcResultId,
+            @RequestBody(required = false) Map<String, String> request,
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
+        try {
+            if (principal == null) {
+                return ResponseEntity.status(401).body(Map.of("success", false, "error", "Authentication required"));
+            }
+            if (principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+            String reason = request != null ? request.getOrDefault("reason", "") : "";
+            if (reason.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Re-review reason is required"));
+            }
+
+            auditLogService.log(principal.getUser(), "RE_REVIEW_REQUESTED", "QCResult", qcResultId,
+                    "reason=" + reason, clientIp(httpRequest), httpRequest.getHeader("User-Agent"));
+
+            // Notify admin via realtime broadcast
+            Map<String, Object> event = new HashMap<>();
+            event.put("type", "RE_REVIEW_REQUESTED");
+            event.put("qcResultId", qcResultId);
+            event.put("requestedBy", displayName(principal.getUser()));
+            event.put("reason", reason);
+            realtimeEventPublisher.publish("/topic/admin/notifications", event);
+
+            log.info("Re-review requested for QCResult {} by {}: {}", qcResultId, principal.getUser().getUsername(), reason);
+            return ResponseEntity.ok(Map.of("success", true, "message", "Re-review request submitted. Admin will be notified."));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("success", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to request re-review: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("success", false, "error", "Re-review request failed"));
+        }
+    }
+
+    // ── Audit log for graph (ADMIN sees all, REVIEWER sees own) ───────────────
+
+    @GetMapping("/qc/{qcResultId}/audit")
+    public ResponseEntity<List<Map<String, Object>>> getAuditLog(
+            @PathVariable Long qcResultId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+            List<AuditLog> logs = auditLogRepository.findByEntityTypeAndEntityId("QCResult", qcResultId);
+            List<Map<String, Object>> body = new ArrayList<>();
+            for (AuditLog entry : logs) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id", entry.getId());
+                row.put("action", entry.getAction());
+                row.put("entityType", entry.getEntityType());
+                row.put("entityId", entry.getEntityId());
+                row.put("details", entry.getDetails());
+                row.put("createdAt", entry.getCreatedAt() != null ? entry.getCreatedAt().toString() : null);
+                if (entry.getUser() != null) {
+                    row.put("user", Map.of("id", entry.getUser().getId(), "username", entry.getUser().getUsername()));
+                }
+                body.add(row);
+            }
+            return ResponseEntity.ok(body);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(List.of());
+        } catch (Exception e) {
+            return ResponseEntity.ok(List.of());
         }
     }
 

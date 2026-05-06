@@ -2,9 +2,7 @@ package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.QCRuleResult;
 import org.springframework.data.jpa.repository.EntityGraph;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,7 +17,10 @@ import java.time.LocalDateTime;
 @Repository
 public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long> {
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    // Hibernate 7.2 bug: @Lock(PESSIMISTIC_WRITE) + JOIN FETCH triggers NPE in
+    // TableLock.applyLoadedState when the entity isn't yet in the L1 cache.
+    // Concurrent saves are guarded by isDuplicateSubmission + validateFreshDecision,
+    // so a plain eager-fetch (no lock) is safe here.
     @Query("""
         SELECT rr FROM QCRuleResult rr
         JOIN FETCH rr.qcResult qr

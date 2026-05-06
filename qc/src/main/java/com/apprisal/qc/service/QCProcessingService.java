@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -439,24 +440,51 @@ public class QCProcessingService {
                     .orElseThrow(() -> new IllegalStateException("QC Result not found"));
         }
 
-        // Call Python service — send all three document types when available.
-        // The stage callback receives sub-progress updates (~1.5s cadence) and
-        // merges them into the QCProgress for this batch so the UI bar smooths
-        // through ocr_engagement → ocr_contract → appraisal_ocr → phase2 →
-        // vision → llm_enrichment → rules → assemble.
         Long progressBatchId = appraisal.getBatch().getId();
-        PythonQCResponse pythonResponse = pythonClient.processQC(
-                pair.getAppraisalPath(),
-                pair.getEngagementPath(),
-                pair.getContractPath(),
-                modelConfig,
-                snapshot -> {
-                    String subStage = snapshot.stage() != null ? snapshot.stage() : "python";
-                    String subMessage = snapshot.message() != null ? snapshot.message()
-                            : "Processing " + appraisal.getFilename();
-                    updateSubProgress(progressBatchId, subStage, subMessage,
-                            snapshot.subPercent(), snapshot.elapsedMs());
-                });
+
+        // --- Async queue path (Celery worker) ---
+        // Submit the job and poll for completion so Python HTTP threads are never
+        // held open for the full OCR+LLM duration (5-15 min on M1 8 GB).
+        // On each poll we check for batch cancellation so Stop QC is still instant.
+        PythonQCResponse pythonResponse;
+        try {
+            PythonClientService.JobSubmitResponse job = pythonClient.submitQCJob(
+                    pair.getAppraisalPath(),
+                    pair.getEngagementPath(),
+                    pair.getContractPath(),
+                    modelConfig);
+
+            updateSubProgress(progressBatchId, "queued",
+                    "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
+
+            Duration timeout = Duration.ofSeconds(Math.max(600, (long) pythonClient.getConfig().getTimeoutSeconds() * 2));
+            pythonResponse = pythonClient.waitForJobResult(
+                    job.jobId(),
+                    timeout,
+                    () -> isCancellationRequested(progressBatchId));
+
+        } catch (CancellationException ce) {
+            throw ce;
+        } catch (Exception asyncEx) {
+            // If /qc/submit is not available (old Python build) or Celery worker is
+            // not running, fall back to the synchronous /qc/process call.
+            log.warn("Async queue unavailable for batch {} file {} ({}), falling back to sync call",
+                    progressBatchId, appraisal.getFilename(), asyncEx.getMessage());
+            updateSubProgress(progressBatchId, "python_sync",
+                    "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
+            pythonResponse = pythonClient.processQC(
+                    pair.getAppraisalPath(),
+                    pair.getEngagementPath(),
+                    pair.getContractPath(),
+                    modelConfig,
+                    snapshot -> {
+                        String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
+                        String subMessage = snapshot.message() != null ? snapshot.message()
+                                : "Processing " + appraisal.getFilename();
+                        updateSubProgress(progressBatchId, subStage, subMessage,
+                                snapshot.subPercent(), snapshot.elapsedMs());
+                    });
+        }
         throwIfCancelled(progressBatchId);
 
         // A duplicate worker can pass the first exists check, spend time in Python,

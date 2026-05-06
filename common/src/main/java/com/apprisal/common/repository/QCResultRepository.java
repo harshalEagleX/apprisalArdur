@@ -80,6 +80,39 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     List<QCResult> findPendingVerificationForReviewer(@Param("reviewerId") Long reviewerId);
 
     /**
+     * Recently submitted results (finalDecision IS NOT NULL), most recent first, capped at 30.
+     */
+    @Query("""
+        SELECT DISTINCT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        WHERE qr.finalDecision IS NOT NULL
+        ORDER BY qr.reviewedAt DESC
+        """)
+    org.springframework.data.domain.Page<QCResult> findRecentlyReviewedPage(org.springframework.data.domain.Pageable pageable);
+
+    default List<QCResult> findRecentlyReviewed() {
+        return findRecentlyReviewedPage(org.springframework.data.domain.PageRequest.of(0, 30)).getContent();
+    }
+
+    /**
+     * Recently submitted results for a specific reviewer.
+     */
+    @Query("""
+        SELECT DISTINCT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN bf.batch b
+        WHERE qr.finalDecision IS NOT NULL
+          AND b.assignedReviewer.id = :reviewerId
+        ORDER BY qr.reviewedAt DESC
+        """)
+    org.springframework.data.domain.Page<QCResult> findRecentlyReviewedForReviewerPage(
+            @Param("reviewerId") Long reviewerId, org.springframework.data.domain.Pageable pageable);
+
+    default List<QCResult> findRecentlyReviewedForReviewer(Long reviewerId) {
+        return findRecentlyReviewedForReviewerPage(reviewerId, org.springframework.data.domain.PageRequest.of(0, 30)).getContent();
+    }
+
+    /**
      * Check if a reviewer is assigned to the batch containing this QC result.
      */
     @Query("""

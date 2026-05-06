@@ -266,6 +266,17 @@ export const saveDecision = (
 
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
 
+export const requestReReview = (qcResultId: number, reason: string) =>
+  apiFetch<{ success: boolean; message: string }>(`/api/reviewer/qc/${qcResultId}/request-re-review`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+
+export const getSubmittedQCResult = (qcResultId: number) =>
+  apiFetch<{ id: number; finalDecision: string; reviewedAt: string; reviewerNotes?: string }>(
+    `/api/reviewer/qc/${qcResultId}/result`
+  );
+
 export const getRealtimeUrl = () => `${JAVA.replace(/^http/, "ws")}/ws/qc`;
 
 // ── Analytics (ADMIN only) ────────────────────────────────────────────────────
