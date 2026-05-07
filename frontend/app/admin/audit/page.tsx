@@ -109,23 +109,29 @@ export default function AdminAuditPage() {
     } catch { /* silent */ }
   }, []);
 
-  const loadGraph = useCallback(async (mode: ViewMode, q?: string, status?: string) => {
+  const loadGraph = useCallback(async (q?: string, status?: string) => {
     setLoading(true); setError("");
     try {
       let url = `${JAVA}/api/graph/overview`;
-      if (mode === "ALL" && !q && !status) {
-        url = `${JAVA}/api/graph/overview`;
-      } else if (q || status) {
+      if (q || status) {
         const p = new URLSearchParams();
         if (q) p.set("q", q);
         if (status) p.set("status", status);
         url = `${JAVA}/api/graph/search?${p.toString()}`;
       }
+      console.log("[audit-graph] loadGraph →", url);
       const data = await fetchGraph(url);
+      console.log("[audit-graph] overview response:", {
+        nodes: data.nodes.length,
+        links: data.links.length,
+        nodeTypes: [...new Set(data.nodes.map(n => n.type))],
+        sample: data.nodes.slice(0, 3),
+      });
       setGraphData(data);
       setSelectedNode(null);
       setHighlighted(new Set());
     } catch (e) {
+      console.error("[audit-graph] loadGraph error:", e);
       setError(String(e));
     } finally {
       setLoading(false);
@@ -135,28 +141,47 @@ export default function AdminAuditPage() {
   const loadBatchSubgraph = useCallback(async (batchId: number) => {
     setLoading(true); setError("");
     try {
-      const data = await fetchGraph(`${JAVA}/api/graph/batch/${batchId}`);
+      const url = `${JAVA}/api/graph/batch/${batchId}`;
+      console.log("[audit-graph] loadBatchSubgraph →", url);
+      const data = await fetchGraph(url);
+      console.log("[audit-graph] batch subgraph:", {
+        nodes: data.nodes.length,
+        links: data.links.length,
+        nodeTypes: [...new Set(data.nodes.map(n => n.type))],
+      });
       setGraphData(data);
       setSelectedNode(null); setHighlighted(new Set());
-    } catch (e) { setError(String(e)); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error("[audit-graph] loadBatchSubgraph error:", e);
+      setError(String(e));
+    } finally { setLoading(false); }
   }, []);
 
   const loadFileSubgraph = useCallback(async (fileId: string) => {
     const id = fileId.replace("file_", "");
     setLoading(true); setError("");
     try {
-      const data = await fetchGraph(`${JAVA}/api/graph/file/${id}`);
+      const url = `${JAVA}/api/graph/file/${id}`;
+      console.log("[audit-graph] loadFileSubgraph →", url);
+      const data = await fetchGraph(url);
+      console.log("[audit-graph] file subgraph:", {
+        nodes: data.nodes.length,
+        links: data.links.length,
+        nodeTypes: [...new Set(data.nodes.map(n => n.type))],
+        nodes_detail: data.nodes,
+      });
       setGraphData(data);
       setSelectedNode(null); setHighlighted(new Set());
-    } catch (e) { setError(String(e)); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error("[audit-graph] loadFileSubgraph error:", e);
+      setError(String(e));
+    } finally { setLoading(false); }
   }, []);
 
   // Initial load
   useEffect(() => {
     void loadBatchList();
-    void loadGraph("ALL");
+    void loadGraph();
   }, [loadGraph, loadBatchList]);
 
   // Resize observer
@@ -172,8 +197,8 @@ export default function AdminAuditPage() {
   }, []);
 
   const handleSearch = useCallback(() => {
-    void loadGraph(viewMode, search.trim() || undefined, filterStatus || undefined);
-  }, [loadGraph, viewMode, search, filterStatus]);
+    void loadGraph(search.trim() || undefined, filterStatus || undefined);
+  }, [loadGraph, search, filterStatus]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
@@ -201,7 +226,7 @@ export default function AdminAuditPage() {
     setViewMode("ALL");
     setSelectedNode(null);
     setHighlighted(new Set());
-    void loadGraph("ALL", search.trim() || undefined, filterStatus || undefined);
+    void loadGraph(search.trim() || undefined, filterStatus || undefined);
   }, [loadGraph, search, filterStatus]);
 
   const stats = useMemo(() => ({
@@ -237,7 +262,7 @@ export default function AdminAuditPage() {
               className="w-full bg-[#161b22] border border-white/10 rounded-md pl-8 pr-8 py-1.5 text-xs text-slate-300 placeholder-slate-600 outline-none focus:border-indigo-500/50"
             />
             {search && (
-              <button onClick={() => { setSearch(""); void loadGraph(viewMode); }}
+              <button onClick={() => { setSearch(""); void loadGraph(); }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
                 <X size={11} />
               </button>
@@ -257,7 +282,7 @@ export default function AdminAuditPage() {
               <button key={m}
                 onClick={() => {
                   setViewMode(m);
-                  if (m === "ALL") void loadGraph("ALL", search.trim() || undefined, filterStatus || undefined);
+                  if (m === "ALL") void loadGraph(search.trim() || undefined, filterStatus || undefined);
                 }}
                 className={`py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === m ? "bg-indigo-600 text-white" : "bg-[#161b22] text-slate-400 hover:text-white border border-white/10"}`}>
                 {m === "ALL" ? "All" : "By Batch"}
@@ -323,7 +348,7 @@ export default function AdminAuditPage() {
                   className="flex-1 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs transition-colors">
                   Apply
                 </button>
-                <button onClick={() => { setFilterStatus(""); setSearch(""); void loadGraph("ALL"); }}
+                <button onClick={() => { setFilterStatus(""); setSearch(""); void loadGraph(); }}
                   className="py-1 px-2 rounded bg-[#161b22] border border-white/10 text-xs text-slate-400 hover:text-white">
                   Reset
                 </button>
@@ -355,7 +380,7 @@ export default function AdminAuditPage() {
             <StatRow icon={CheckCircle2} label="Decisions" value={stats.decisions} color="text-orange-400" />
             <StatRow icon={AlertCircle}  label="Submits"   value={stats.submits}   color="text-cyan-400" />
           </div>
-          <button onClick={() => void loadGraph(viewMode)}
+          <button onClick={() => void loadGraph()}
             className="mt-3 flex w-full items-center justify-center gap-1.5 py-1.5 rounded-md border border-white/10 text-xs text-slate-400 hover:text-white transition-colors">
             <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
