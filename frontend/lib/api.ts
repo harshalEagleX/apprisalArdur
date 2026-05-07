@@ -277,6 +277,19 @@ export const getSubmittedQCResult = (qcResultId: number) =>
     `/api/reviewer/qc/${qcResultId}/result`
   );
 
+export interface SubmittedQCResult {
+  id: number;
+  finalDecision: "PASS" | "FAIL";
+  failedCount: number;
+  passedCount: number;
+  totalRules: number;
+  reviewedAt: string;
+  batchFile: { id: number; filename: string };
+}
+
+export const getSubmittedQueue = () =>
+  apiFetch<SubmittedQCResult[]>("/api/reviewer/qc/results/submitted");
+
 export const getRealtimeUrl = () => `${JAVA.replace(/^http/, "ws")}/ws/qc`;
 
 // ── Analytics (ADMIN only) ────────────────────────────────────────────────────

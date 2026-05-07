@@ -174,7 +174,9 @@ export default function AdminAuditPage() {
   const [filter, setFilter]     = useState<DimFilter>("all");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [highlighted, setHighlighted]   = useState<Set<string>>(new Set());
-  const graphRef = useRef<{ zoomToFit: (ms?: number) => void } | null>(null);
+  const [graphSize, setGraphSize]       = useState({ w: 800, h: 600 });
+  const graphRef      = useRef<{ zoomToFit: (ms?: number) => void } | null>(null);
+  const graphContainerRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true); setError("");
@@ -204,6 +206,17 @@ export default function AdminAuditPage() {
     const handle = window.setTimeout(() => { void loadData(); }, 0);
     return () => window.clearTimeout(handle);
   }, [loadData]);
+
+  useEffect(() => {
+    const el = graphContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setGraphSize({ w: Math.floor(width), h: Math.floor(height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const graphData = useMemo(() => {
     const raw = buildGraph(batches, auditMap);
@@ -284,7 +297,7 @@ export default function AdminAuditPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Graph */}
-        <div className="flex-1 relative bg-[#080C10]">
+        <div ref={graphContainerRef} className="flex-1 relative bg-[#080C10]">
           {error && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="rounded-lg border border-red-500/25 bg-red-950/40 px-6 py-4 text-sm text-red-200 text-center">
@@ -301,7 +314,10 @@ export default function AdminAuditPage() {
             <ForceGraph2D
               ref={graphRef as never}
               graphData={graphData as never}
+              width={graphSize.w}
+              height={graphSize.h}
               backgroundColor="#080C10"
+              onEngineStop={() => { graphRef.current?.zoomToFit?.(300); }}
               nodeLabel={(n: unknown) => {
                 const node = n as GraphNode;
                 return `${node.kind}: ${node.label.replace(/\n/g, " ")}`;

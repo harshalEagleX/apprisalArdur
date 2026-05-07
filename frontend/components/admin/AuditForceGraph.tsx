@@ -48,6 +48,7 @@ export interface ForceGraph2DProps<
   linkDirectionalArrowRelPos?: Accessor<L, number>;
   onNodeClick?: (node: N, event: MouseEvent) => void;
   onBackgroundClick?: (event: MouseEvent) => void;
+  onEngineStop?: () => void;
   cooldownTicks?: number;
 }
 

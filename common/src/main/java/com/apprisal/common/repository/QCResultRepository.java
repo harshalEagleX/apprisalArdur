@@ -98,36 +98,29 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     long countPendingReviewerWorkForReviewer(@Param("reviewerId") Long reviewerId);
 
     /**
-     * Recently submitted results (finalDecision IS NOT NULL), most recent first, capped at 30.
+     * 30 most-recently-submitted results across all reviewers.
      */
     @Query("""
-        SELECT DISTINCT qr FROM QCResult qr
-        JOIN FETCH qr.batchFile bf
+        SELECT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile
         WHERE qr.finalDecision IS NOT NULL
         ORDER BY qr.reviewedAt DESC
+        LIMIT 30
         """)
-    org.springframework.data.domain.Page<QCResult> findRecentlyReviewedPage(org.springframework.data.domain.Pageable pageable);
-
-    default List<QCResult> findRecentlyReviewed() {
-        return findRecentlyReviewedPage(org.springframework.data.domain.PageRequest.of(0, 30)).getContent();
-    }
+    List<QCResult> findRecentlyReviewed();
 
     /**
-     * Recently submitted results for a specific reviewer.
+     * 30 most-recently-submitted results for a specific reviewer.
      */
     @Query("""
-        SELECT DISTINCT qr FROM QCResult qr
-        JOIN FETCH qr.batchFile bf
+        SELECT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile
         WHERE qr.finalDecision IS NOT NULL
           AND qr.reviewedBy.id = :reviewerId
         ORDER BY qr.reviewedAt DESC
+        LIMIT 30
         """)
-    org.springframework.data.domain.Page<QCResult> findRecentlyReviewedForReviewerPage(
-            @Param("reviewerId") Long reviewerId, org.springframework.data.domain.Pageable pageable);
-
-    default List<QCResult> findRecentlyReviewedForReviewer(Long reviewerId) {
-        return findRecentlyReviewedForReviewerPage(reviewerId, org.springframework.data.domain.PageRequest.of(0, 30)).getContent();
-    }
+    List<QCResult> findRecentlyReviewedForReviewer(@Param("reviewerId") Long reviewerId);
 
     /**
      * Check if a reviewer is assigned to the batch containing this QC result.
