@@ -41,6 +41,14 @@ def _normalize_date(value: Optional[str]) -> Optional[str]:
         return value
 
 
+_STOP_WORDS = frozenset({
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "shall", "can", "any", "all", "no",
+    "not", "if", "as", "so", "that", "this", "these", "those", "which",
+})
+
 def _filter_personal_property_items(items: list[str]) -> list[str]:
     filtered = []
     for item in items or []:
@@ -48,9 +56,15 @@ def _filter_personal_property_items(items: list[str]) -> list[str]:
         lower = cleaned.lower()
         if not cleaned:
             continue
+        # Reject items that are only stop words or single short tokens
+        if lower in _STOP_WORDS or (len(cleaned) < 4 and not re.search(r"\d", cleaned)):
+            continue
         if any(phrase in lower for phrase in _GAR_PERSONAL_PROPERTY_BOILERPLATE):
             continue
         if re.search(r"\b(?:as-is|debris|clean condition|otherwise identified in this agreement)\b", lower):
+            continue
+        # Reject items that look like sentence fragments (no noun/meaningful content)
+        if re.match(r"^[a-z\s]{1,6}$", lower) and lower.split()[0] in _STOP_WORDS:
             continue
         filtered.append(cleaned)
     return filtered

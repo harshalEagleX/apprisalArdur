@@ -596,6 +596,20 @@ class ExtractionService:
             letter.city = parts.get("city")
             letter.state = parts.get("state")
             letter.zip_code = parts.get("zip_code")
+            # Strip city/state/zip from property_address so it contains only the
+            # street. S-1 rule uses property_address as eng_street; if it contains
+            # city/state/zip the fuzzy comparison fails and the display shows a
+            # confusingly duplicated formatted string.
+            if letter.zip_code:
+                zip_pos = letter.property_address.find(letter.zip_code)
+                if zip_pos > 0:
+                    candidate = letter.property_address[:zip_pos].strip().rstrip(",").strip()
+                    candidate = re.sub(r"\s+[A-Z]{2}\s*$", "", candidate).strip().rstrip(",").strip()
+                    # Also strip the city name if it was parsed and appears at the end
+                    if letter.city and candidate.upper().endswith(letter.city.upper()):
+                        candidate = candidate[:-len(letter.city)].strip().rstrip(",").strip()
+                    if candidate:
+                        letter.property_address = candidate
         
         letter.county = self._extract_field(text, [r"County[:\s]+([^\n]+)"])
         
@@ -606,21 +620,18 @@ class ExtractionService:
         # Format examples:
         #   "Borrower Name: Name1; Name2\n\nName3; Name4\n\nEquity Solutions..."
         #   "Borrower Name: Name1\nPhone: ..."
+        # Capture only the first non-empty line after "Borrower Name:" — the
+        # multi-line lookahead approach over-captures when page breaks or
+        # sections appear before the Equity Solutions stop-word.
         borrower_match = re.search(
-            r"Borrower\s+Name[:\s]+"   # Match "Borrower Name:"
-            r"([\s\S]+?)"              # Capture content (including newlines) non-greedy
-            r"(?=\n\s*(?:"             # Lookahead: stop before...
-            r"[A-Z][a-z]*(?:\s+[A-Z][a-z]*)?\s*:"  # Any label with colon (Phone:, Cell Phone:, etc.)
-            r"|Equity Solutions"        # Or "Equity Solutions" 
-            r"))",
+            r"Borrower\s+Name[:\s]*\n+\s*([^\n;]{2,120}?)(?:\s*;[^\n]*)?(?:\n|$)",
             text,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
         if borrower_match:
-            raw = borrower_match.group(1)
-            # Normalize: remove extra whitespace, split by semicolon, clean, rejoin
-            names = [n.strip() for n in ' '.join(raw.split()).split(';') if n.strip()]
-            letter.borrower_name = '; '.join(names)
+            raw = borrower_match.group(1).strip()
+            names = [n.strip() for n in raw.split(";") if n.strip()]
+            letter.borrower_name = "; ".join(names) if names else raw
         
         letter.co_borrower_name = self._extract_field(text, [
             r"Co-?Borrower[:\s]+([^\n]+)",
@@ -650,22 +661,48 @@ class ExtractionService:
             r"Lender Address[:\s]+([^\n]+)",
         ])
         
-        # Transaction type
-        text_lower = text.lower()
-        if "purchase" in text_lower:
-            letter.assignment_type = "Purchase"
-        elif "refinance" in text_lower or "refi" in text_lower:
-            letter.assignment_type = "Refinance"
-        
-        # Loan type
-        if "fha" in text_lower:
-            letter.loan_type = "FHA"
-        elif "usda" in text_lower:
-            letter.loan_type = "USDA"
-        elif "va" in text_lower:
-            letter.loan_type = "VA"
+        # Transaction type — anchor on "Transaction Type:" field label if present
+        txn_match = re.search(r"Transaction\s+Type[:\s]+(\w+)", text, re.I)
+        if txn_match:
+            txn = txn_match.group(1).upper()
+            if "PURCHASE" in txn:
+                letter.assignment_type = "Purchase"
+            elif "REFIN" in txn:
+                letter.assignment_type = "Refinance"
         else:
-            letter.loan_type = "Conventional"
+            text_lower = text.lower()
+            if "purchase" in text_lower:
+                letter.assignment_type = "Purchase"
+            elif "refinance" in text_lower or "refi" in text_lower:
+                letter.assignment_type = "Refinance"
+
+        # Loan type — use the explicit "Loan Type:" field; fall back to keyword
+        # scan only when the label is absent.  The fallback ignores FHA Case
+        # Number and FHA mention in notes (e.g., "N/A") to avoid false positives.
+        loan_match = re.search(r"Loan\s+Type[:\s]+([^\n]{2,30})", text, re.I)
+        if loan_match:
+            lt = loan_match.group(1).strip().upper()
+            if "FHA" in lt and "N/A" not in lt:
+                letter.loan_type = "FHA"
+            elif "USDA" in lt or "RD" in lt:
+                letter.loan_type = "USDA"
+            elif lt.startswith("VA"):
+                letter.loan_type = "VA"
+            elif "CONV" in lt:
+                letter.loan_type = "Conventional"
+            else:
+                letter.loan_type = loan_match.group(1).strip().title()
+        else:
+            # No "Loan Type:" label — scan but require the keyword near loan context
+            text_lower = text.lower()
+            if re.search(r"loan\s+type[:\s]*fha|fha\s+loan|fha\s+mortgage", text_lower):
+                letter.loan_type = "FHA"
+            elif re.search(r"loan\s+type[:\s]*usda|usda\s+loan|rural\s+development", text_lower):
+                letter.loan_type = "USDA"
+            elif re.search(r"loan\s+type[:\s]*va|va\s+loan", text_lower):
+                letter.loan_type = "VA"
+            else:
+                letter.loan_type = "Conventional"
         
         # Contract details (if purchase)
         price_str = self._extract_field(text, [

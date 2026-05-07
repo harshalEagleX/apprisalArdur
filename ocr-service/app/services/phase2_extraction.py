@@ -214,6 +214,10 @@ class Phase2ExtractionEngine:
 
         county_m = self._extract("county", text, [
             r"County[:\s]+([A-Za-z][A-Za-z\s]+?)(?:\s*\n|$)",
+            # URAR 1004 data-block layout: PyMuPDF emits field values before form labels.
+            # The value stream on page 1 is: zip → borrower → owner → county → legal description.
+            # Non-capturing zip anchor so group(1) is the county name.
+            r"(?:\d{5})\n[^\n]+\n[^\n]+\n([A-Za-z]{3,}(?:\s+[A-Za-z]+)?)\n(?:Lot|Section|Block|Parcel|Phase|Tract|\d)",
         ], page_pos, pos_offset, spatial_labels=["County"])
         meta["county"] = county_m
 
@@ -282,6 +286,20 @@ class Phase2ExtractionEngine:
             occupant, occ_conf = "Tenant", 0.90
         elif vacant_state is True:
             occupant, occ_conf = "Vacant", 0.90
+        # Inference fallback: digital PDFs often lack checkbox text markers.
+        # Use contextual signals to infer occupancy when all states are None.
+        elif all(s is None for s in [owner_state, tenant_state, vacant_state]):
+            if re.search(r"\bowner\s+occupied\b|\boccupant[:\s]+owner\b", text, re.I):
+                occupant, occ_conf = "Owner", 0.75
+            elif re.search(r"\btenant\s+occupied\b|\boccupant[:\s]+tenant\b|\blease\b", text, re.I):
+                occupant, occ_conf = "Tenant", 0.70
+            elif re.search(r"\bvacant\b|\butilities\s+(?:are\s+)?off\b|\bproperty\s+is\s+vacant\b", text, re.I):
+                occupant, occ_conf = "Vacant", 0.70
+            elif re.search(r"\bpurchase\s+transaction\b|\bpurchase\b", text, re.I):
+                # Purchase transactions with no vacancy/tenant signal → likely owner occupied
+                occupant, occ_conf = "Owner", 0.65
+            else:
+                occupant, occ_conf = None, 0.30
         elif any(s is False for s in [owner_state, tenant_state, vacant_state]):
             # Some are explicitly [ ] but none are [X] — problem field
             occupant, occ_conf = None, 0.30
@@ -374,9 +392,23 @@ class Phase2ExtractionEngine:
                 source_page=page_for_pos(prior_sale_match.start() + pos_offset, page_pos)
             )
         else:
-            meta["offered_for_sale_12mo"] = FieldMetaResult(
-                "offered_for_sale_12mo", confidence=0.0, extraction_method="not_found"
+            # Inference: when DOM/MLS listing data is present, the property WAS offered for sale.
+            # Digital PDFs often omit checkbox text; listing data is a stronger signal than
+            # the absence of a Yes/No marker.
+            listing_evidence = re.search(
+                r"\bDOM\s*\d+\b|\bSGAMLS\b|\bMLS\s*#\s*\d+\b|\bList\s+(?:Price|Date)\b",
+                text, re.I
             )
+            if listing_evidence:
+                meta["offered_for_sale_12mo"] = FieldMetaResult(
+                    "offered_for_sale_12mo", raw_value="True", corrected_value="True",
+                    confidence=0.72, extraction_method="regex_fallback",
+                    source_page=page_for_pos(listing_evidence.start() + pos_offset, page_pos)
+                )
+            else:
+                meta["offered_for_sale_12mo"] = FieldMetaResult(
+                    "offered_for_sale_12mo", confidence=0.0, extraction_method="not_found"
+                )
 
         meta["data_source"] = self._extract("data_source", text, [
             r"Data Source[s]?[:\s]+([^\n]+)",
@@ -1551,7 +1583,47 @@ class Phase2ExtractionEngine:
         """
         comps = []
 
-        # ── Strategy 1: find explicit COMPARABLE headers ──────────────────────
+        # ── Strategy 1: data-stream extraction (primary) ──────────────────────
+        # PyMuPDF emits field VALUES before form LABELS in the text stream.
+        # "COMPARABLE SALE # 1" headers appear late in the page (form template
+        # background text). Instead, extract comparables by scanning for address
+        # lines that have a proximity indicator on the following line, which is
+        # the reliable data-driven pattern in URAR 1004 sales-grid pages.
+        #
+        # Pattern: <address>\n<city, state zip>\n<X.XX miles DIR>\n<price>
+        data_comp_pattern = re.compile(
+            r"(\d+\s+[A-Za-z][A-Za-z0-9 ,\.\-]{4,60})\n"   # address line
+            r"[A-Za-z][A-Za-z ,]+\d{5}\n"                    # city, state zip
+            r"(\d+\.?\d*\s+miles?\s+[NSEW]{1,2})\n"          # proximity line
+            r"([\d,]{4,})",                                   # sale price (no $)
+            re.I,
+        )
+        data_matches = list(data_comp_pattern.finditer(text))
+        for m in data_matches[:3]:
+            comps.append({
+                "address": FieldMetaResult(
+                    f"comp_{len(comps)+1}_address",
+                    raw_value=m.group(1).strip(),
+                    corrected_value=m.group(1).strip(),
+                    confidence=0.80,
+                    source_page=page_for_pos(m.start() + pos_offset, page_pos),
+                    extraction_method="regex_primary",
+                ),
+                "sale_price": FieldMetaResult(
+                    f"comp_{len(comps)+1}_sale_price",
+                    raw_value=m.group(3).replace(",", ""),
+                    corrected_value=m.group(3).replace(",", ""),
+                    confidence=0.80,
+                    source_page=page_for_pos(m.start() + pos_offset, page_pos),
+                    extraction_method="regex_primary",
+                ),
+            })
+
+        if len(comps) >= 3:
+            return comps
+
+        # ── Strategy 2: COMPARABLE SALE # N label headers (fallback) ─────────
+        # Use START of next header (not end) as section boundary.
         header_pattern = re.compile(
             r"COMPARABLE\s+(?:SALE\s+)?(?:NO\.?\s*|#\s*)?([1-4])\b",
             re.I,
@@ -1560,11 +1632,11 @@ class Phase2ExtractionEngine:
             (int(match.group(1)), match.start(), match.end())
             for match in header_pattern.finditer(text)
         ]
-        header_by_num = {}
+        header_by_num: dict = {}
         for num, start, end in headers:
             header_by_num.setdefault(num, (start, end))
 
-        for comp_num in range(1, 4):
+        for comp_num in range(len(comps) + 1, 4):
             header = header_by_num.get(comp_num)
             if not header:
                 comps.append({})
@@ -1574,7 +1646,7 @@ class Phase2ExtractionEngine:
             value_start = header[1]
             next_header = header_by_num.get(comp_num + 1)
             if next_header:
-                section_end = next_header[1]
+                section_end = next_header[0]   # START of next header (not end)
             else:
                 end_match = re.search(
                     r"\b(?:RECONCILIATION|SALES\s+COMPARISON\s+APPROACH|"

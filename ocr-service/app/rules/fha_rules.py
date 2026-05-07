@@ -8,30 +8,51 @@ from app.models.appraisal import ValidationContext
 def _text(ctx): return ctx.raw_text or ""
 def _verify(rule_id, name, message): return RuleResult(rule_id=rule_id, rule_name=name, status=RuleStatus.VERIFY, message=message, review_required=True)
 
+def _is_fha(ctx: ValidationContext) -> bool:
+    """True only when engagement letter or report text signals FHA loan type."""
+    if ctx.engagement_letter:
+        lt = (ctx.engagement_letter.loan_type or "").upper()
+        if lt and lt not in ("", "NONE"):
+            return "FHA" in lt
+    return bool(re.search(r"\bFHA\s+Case\s+(?:No\.?|Number|#)\b|\bCase\s+Number[:\s]+\d{3}-\d{7}\b", _text(ctx), re.I))
+
+def _skip_non_fha(rule_id: str, name: str) -> RuleResult:
+    return RuleResult(rule_id=rule_id, rule_name=name, status=RuleStatus.PASS,
+                      message="Rule not applicable for this assignment/loan type (FHA).")
+
 
 @rule(id="FHA-1", name="HUD Minimum Property Requirements")
-def validate_fha_mpr(ctx): return _verify("FHA-1", "HUD Minimum Property Requirements", "Verify property meets HUD MPR/MPS or is made Subject To required repairs.")
+def validate_fha_mpr(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-1", "HUD Minimum Property Requirements")
+    return _verify("FHA-1", "HUD Minimum Property Requirements", "Verify property meets HUD MPR/MPS or is made Subject To required repairs.")
 
 @rule(id="FHA-2", name="FHA Case Number")
 def validate_fha_case_number(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-2", "FHA Case Number")
     if re.search(r"\bFHA Case (?:No\.?|Number)\b.*\d{3}-\d{7}", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-2", rule_name="FHA Case Number", status=RuleStatus.PASS, message="FHA case number evidence detected.")
     return RuleResult(rule_id="FHA-2", rule_name="FHA Case Number", status=RuleStatus.FAIL, message="FHA case number not detected in expected format.")
 
 @rule(id="FHA-3", name="FHA Intended Use and Intended User")
 def validate_fha_intended_use(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-3", "FHA Intended Use and Intended User")
     if re.search(r"intended use|intended user|HUD|FHA", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-3", rule_name="FHA Intended Use and Intended User", status=RuleStatus.VERIFY, message="FHA/intended-use evidence found. Verify required FHA statements.")
     return _verify("FHA-3", "FHA Intended Use and Intended User", "FHA intended-use/user statements not detected.")
 
 @rule(id="FHA-4", name="FHA Minimum Property Requirements Statement")
-def validate_fha_mpr_statement(ctx): return _verify("FHA-4", "FHA Minimum Property Requirements Statement", "Verify FHA MPR statement is included and supported.")
+def validate_fha_mpr_statement(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-4", "FHA Minimum Property Requirements Statement")
+    return _verify("FHA-4", "FHA Minimum Property Requirements Statement", "Verify FHA MPR statement is included and supported.")
 
 @rule(id="FHA-5", name="FHA Comparable Sales Dating")
-def validate_fha_comp_dating(ctx): return _verify("FHA-5", "FHA Comparable Sales Dating", "Verify comparables 1, 2, and 3 are within 12 months or fully explained.")
+def validate_fha_comp_dating(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-5", "FHA Comparable Sales Dating")
+    return _verify("FHA-5", "FHA Comparable Sales Dating", "Verify comparables 1, 2, and 3 are within 12 months or fully explained.")
 
 @rule(id="FHA-6", name="FHA Repairs")
 def validate_fha_repairs(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-6", "FHA Repairs")
     if re.search(r"subject to repairs?|required repair|defective|safety", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-6", rule_name="FHA Repairs", status=RuleStatus.VERIFY, message="Repair/safety language found. Verify FHA repair treatment.")
     return _verify("FHA-6", "FHA Repairs", "Automated FHA repair detection is inconclusive. Verify systems, safety, and Subject To conditions.")
@@ -49,7 +70,9 @@ def validate_fha_security_bars(ctx):
     return RuleResult(rule_id="FHA-8", rule_name="Security Bars on Windows", status=RuleStatus.PASS, message="No security-bar trigger language detected.")
 
 @rule(id="FHA-9", name="FHA Photo Requirements")
-def validate_fha_photos(ctx): return _verify("FHA-9", "FHA Photo Requirements", "Verify FHA front/rear/side/attic/crawl-space photo requirements.")
+def validate_fha_photos(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-9", "FHA Photo Requirements")
+    return _verify("FHA-9", "FHA Photo Requirements", "Verify FHA front/rear/side/attic/crawl-space photo requirements.")
 
 @rule(id="FHA-10", name="Estimated Remaining Economic Life")
 def validate_fha_economic_life(ctx):
@@ -59,18 +82,24 @@ def validate_fha_economic_life(ctx):
 
 @rule(id="FHA-11", name="Attic/Crawl Space Inspection")
 def validate_fha_attic_crawl(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-11", "Attic/Crawl Space Inspection")
     if re.search(r"attic|crawl space", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-11", rule_name="Attic/Crawl Space Inspection", status=RuleStatus.VERIFY, message="Attic/crawl-space evidence found. Verify head-and-shoulders inspection comments/photos.")
     return _verify("FHA-11", "Attic/Crawl Space Inspection", "Attic/crawl-space inspection evidence not detected.")
 
 @rule(id="FHA-12", name="Well and Septic (FHA)")
 def validate_fha_well_septic(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-12", "Well and Septic (FHA)")
     if re.search(r"well|septic", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.VERIFY, message="Well/septic language found. Verify FHA distance, hookup, and marketability requirements.")
     return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.PASS, message="No well/septic evidence detected.")
 
 @rule(id="FHA-13", name="FHA Appliances")
-def validate_fha_appliances(ctx): return _verify("FHA-13", "FHA Appliances", "Verify built-in appliances were operated and operational status is stated.")
+def validate_fha_appliances(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-13", "FHA Appliances")
+    return _verify("FHA-13", "FHA Appliances", "Verify built-in appliances were operated and operational status is stated.")
 
 @rule(id="FHA-14", name="FHA Sketch Requirements")
-def validate_fha_sketch(ctx): return _verify("FHA-14", "FHA Sketch Requirements", "Verify sketch includes all structures and covered/uncovered designations.")
+def validate_fha_sketch(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-14", "FHA Sketch Requirements")
+    return _verify("FHA-14", "FHA Sketch Requirements", "Verify sketch includes all structures and covered/uncovered designations.")
