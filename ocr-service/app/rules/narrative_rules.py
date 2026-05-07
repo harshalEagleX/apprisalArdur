@@ -384,10 +384,18 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
     """
     commentary = ctx.report.sales_comparison.summary_commentary or ""
 
+    # Fallback: structured field is often empty because addendum text is not
+    # mapped into the domain model. Search raw text directly so that real
+    # adjustment commentary ("All adjustments were based on matched paired
+    # analysis...") is not missed.
+    if not commentary or len(commentary.strip()) < 20:
+        commentary = ctx.raw_text or ""
+
     ADJUSTMENT_PHRASES = [
         "adjustment", "adjusted", "adjusted for", "market support",
-        "paired sales", "extracted from", "market reaction", "dollar per",
-        "% adjustment", "percent adjustment",
+        "paired sales", "matched paired", "extracted from", "market reaction",
+        "dollar per", "% adjustment", "percent adjustment",
+        "all adjustments were based", "adjustment amounts",
     ]
     has_explanation = any(phrase in commentary.lower() for phrase in ADJUSTMENT_PHRASES)
 
@@ -423,10 +431,16 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
     """
     commentary = ctx.report.sales_comparison.summary_commentary or ""
 
+    # Fallback to raw text — same structural reason as COM-4.
+    if not commentary or len(commentary.strip()) < 20:
+        commentary = ctx.raw_text or ""
+
     RECON_PHRASES = [
         "reconciliation", "greater weight", "most weight", "best indicator",
         "final value", "opinion of value", "most representative", "closely reflects",
         "given more weight", "considered most reliable",
+        "comp 1 was given", "given full weight", "full weight for the final",
+        "sales comparison approach was given", "weight for the final value",
     ]
     has_recon_phrases = any(p in commentary.lower() for p in RECON_PHRASES)
 

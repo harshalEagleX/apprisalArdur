@@ -159,8 +159,18 @@ def validate_neighborhood_conformity(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="I-12", name="Additions to Subject")
 def validate_additions(ctx: ValidationContext) -> RuleResult:
-    if re.search(r"\b(addition|converted|unpermitted|permit)\b", _raw(ctx), re.I):
-        return RuleResult(rule_id="I-12", rule_name="Additions to Subject", status=RuleStatus.VERIFY, message="Possible addition/permit language found. Verify permits, conformity, marketability impact, and zoning compliance.")
+    text = _raw(ctx)
+    # "Phase 2" in a subdivision legal description (e.g., "Lot 34 Sagecreek S/D Phase 2")
+    # is NOT a building addition. Require addition/conversion language in an improvement
+    # context (not a subdivision/legal description context) before flagging.
+    import re as _re
+    has_addition = _re.search(r"\b(addition|converted|unpermitted)\b", text, _re.I)
+    has_permit = _re.search(r"\bpermit\b", text, _re.I) and not _re.search(
+        r"Appraiser.*Permit|inspection.*permit|building permit.*not required|permit.*not.*required", text, _re.I
+    )
+    if has_addition or has_permit:
+        return RuleResult(rule_id="I-12", rule_name="Additions to Subject", status=RuleStatus.VERIFY,
+                          message="Possible addition/permit language found. Verify permits, conformity, marketability impact, and zoning compliance.")
     return _verify("I-12", "Additions to Subject", "Automated addition detection is inconclusive. Verify whether additions exist and whether required commentary is present.")
 
 

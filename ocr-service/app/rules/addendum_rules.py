@@ -75,7 +75,16 @@ def validate_1004mc_trend(ctx: ValidationContext) -> RuleResult:
 @rule(id="ADD-8", name="1004MC Condo/Co-Op")
 def validate_1004mc_condo(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
-    if ctx.report.form_type == "1073" or re.search(r"condo|co-?op", text, re.I):
+    # FNMA forms include the disclaimer "not a manufactured home or a unit in a
+    # condominium or cooperative project" — this is a NEGATIVE signal (explicitly
+    # says NOT a condo), not evidence of a condo assignment.  Require affirmative
+    # condo signals before flagging.
+    affirmative_condo = (
+        ctx.report.form_type == "1073"
+        or re.search(r"(?:Property\s+Type|Subject\s+Type|Form\s+Type)\s*[:\s]+(?:Condo|Condominium|Co-?op)", text, re.I)
+        or re.search(r"HOA\s+(?:Project|Fee)|condo(?:minium)?\s+project|cooperative\s+project\s+(?:is|has)", text, re.I)
+    )
+    if affirmative_condo:
         return _verify("ADD-8", "1004MC Condo/Co-Op", "Condo/Co-op language detected. Verify all condo/co-op 1004MC shaded areas are completed.")
     return RuleResult(rule_id="ADD-8", rule_name="1004MC Condo/Co-Op", status=RuleStatus.PASS, message="Not a condo/co-op report based on extracted evidence.")
 

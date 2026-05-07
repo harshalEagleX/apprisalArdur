@@ -290,15 +290,38 @@ def validate_listing_comparables(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="SCA-24", name="Unique Design Properties")
 def validate_unique_design(ctx: ValidationContext) -> RuleResult:
-    return RuleResult(rule_id="SCA-24", rule_name="Unique Design Properties", status=RuleStatus.VERIFY, message="Unique-property comparable support requires manual review unless specific unique-design extraction is available.", review_required=True)
+    text = ctx.raw_text or ""
+    # Only flag when the SUBJECT is explicitly identified as a unique design.
+    # "One with Accessory Unit" is a form template LABEL for the Type field checkbox —
+    # it does not mean the subject property has an accessory unit.
+    unique_triggers = [
+        r"(?:subject|property)\s+(?:is|type)[:\s]+(?:log\s+home|geodesic|dome|earth|one\s+bedroom)",
+        r"\baccesory\s+dwelling\b|\bADU\b",
+        r"(?:1|one)\s+bedroom\s+(?:home|house|unit)\b",
+    ]
+    if any(re.search(p, text, re.I) for p in unique_triggers):
+        return RuleResult(rule_id="SCA-24", rule_name="Unique Design Properties", status=RuleStatus.VERIFY,
+                          message="Unique design property detected. Verify similar comparables or provide explanation.", review_required=True)
+    return RuleResult(rule_id="SCA-24", rule_name="Unique Design Properties", status=RuleStatus.PASS,
+                      message="No unique-design property indicators detected.")
 
 
 @rule(id="SCA-25", name="New Construction")
 def validate_new_construction(ctx: ValidationContext) -> RuleResult:
     text = ctx.raw_text or ""
-    if re.search(r"new construction|proposed construction|under construction", text, re.I):
-        return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.VERIFY, message="New construction language found. Verify at least one comparable from competing development or explanation.")
-    return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.PASS, message="No new-construction trigger language detected.")
+    subj = ctx.report.subject
+    # Check effective age = 0 OR Year Built in last 2 years as new-construction signals
+    import re as _re
+    from datetime import datetime
+    year_built = getattr(subj, "year_built", None) or ""
+    is_new_by_year = bool(year_built and str(year_built).isdigit() and int(year_built) >= datetime.now().year - 1)
+    cond = getattr(subj, "condition", "") or ""
+    is_new_by_cond = bool(_re.match(r"C[12]", cond))
+    if is_new_by_year or is_new_by_cond or _re.search(r"new construction|proposed construction|under construction", text, _re.I):
+        return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.VERIFY,
+                          message="New construction detected (Year Built recent / C1-C2 condition). Verify at least one comparable from competing development or provide explanation.")
+    return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.PASS,
+                      message="No new-construction trigger language detected.")
 
 
 @rule(id="SCA-26", name="Square Footage")
@@ -308,6 +331,15 @@ def validate_square_footage(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="SCA-27", name="Comparable Photos")
 def validate_comparable_photos(ctx: ValidationContext) -> RuleResult:
-    if re.search(r"comp(?:arable)?\s+photo|MLS\s+photo|drive-?by|Comparable\s+Sale\s+#", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.VERIFY, message="Comparable photo/grid evidence found. Verify photo source meets loan-type requirement.")
-    return _verify("SCA-27", "Comparable Photos", "Comparable photo source/type not extracted. Verify MLS photos are acceptable for conventional and drive-by photos for FHA.")
+    # Conventional: MLS photos acceptable → auto-PASS
+    # FHA: drive-by photos required → VERIFY
+    lt = ""
+    if ctx.engagement_letter:
+        lt = (ctx.engagement_letter.loan_type or "Conventional").upper()
+    if "FHA" not in lt:
+        return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.PASS,
+                          message="MLS photos are acceptable for comparable sales on conventional loans.")
+    if re.search(r"comp(?:arable)?\s+photo|drive-?by", _text(ctx), re.I):
+        return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.VERIFY,
+                          message="Comparable photo evidence found. Verify drive-by photos meet FHA requirements.")
+    return _verify("SCA-27", "Comparable Photos", "FHA requires drive-by comparable photos. Verify all comparables have drive-by photography.")

@@ -17,6 +17,12 @@ def _verify(rule_id, name, message):
     return RuleResult(rule_id=rule_id, rule_name=name, status=RuleStatus.VERIFY, message=message, review_required=True)
 
 
+def _loan_type(ctx: ValidationContext) -> str:
+    if ctx.engagement_letter:
+        return (ctx.engagement_letter.loan_type or "Conventional").upper()
+    return "Conventional"
+
+
 @rule(id="PH-1", name="Required Subject Photos")
 def validate_subject_photos(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
@@ -52,13 +58,31 @@ def validate_fha_photos(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="PH-5", name="Comparable Photos")
 def validate_comparable_photos(ctx: ValidationContext) -> RuleResult:
+    lt = _loan_type(ctx)
+    # For conventional loans: MLS photos with drive-by commentary are acceptable.
+    # Only FHA requires actual drive-by photos.
+    if "FHA" not in lt:
+        return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.PASS,
+                          message="MLS photos are acceptable for conventional loans when drive-by commentary is provided.")
     if not re.search(r"comparable photo|comp(?:arable)?\s+\d|MLS photo|drive-?by|Comparable\s+Sale\s+#", _text(ctx), re.I):
-        return _verify("PH-5", "Comparable Photos", "Comparable photo evidence not detected. Verify MLS/drive-by requirements by loan type.")
-    return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.VERIFY, message="Comparable photo evidence found. Verify source is acceptable for the loan type.")
+        return _verify("PH-5", "Comparable Photos", "Comparable photo evidence not detected. FHA requires drive-by photos for all comparables.")
+    return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.VERIFY,
+                      message="Comparable photo evidence found. Verify drive-by photos meet FHA requirements.")
 
 
 @rule(id="PH-6", name="Obsolescence Photo Requirements")
 def validate_obsolescence_photos(ctx: ValidationContext) -> RuleResult:
-    if re.search(r"obsolescence|external factor|deferred maintenance|damage", _text(ctx), re.I):
-        return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.VERIFY, message="Obsolescence/condition issue language found. Verify sufficient photos and commentary.")
-    return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS, message="No obsolescence photo trigger language detected.")
+    text = _text(ctx)
+    # C1/C2 condition = new/nearly new property — no external obsolescence by definition.
+    # Only flag if the condition is C3+ AND obsolescence language is found.
+    condition = (ctx.report.subject.condition or "") if hasattr(ctx.report, "subject") else ""
+    is_new = re.match(r"C[12]", condition)
+    if is_new:
+        return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS,
+                          message=f"C1/C2 condition — no obsolescence expected for new construction.")
+    # For older properties, check for obsolescence language that requires photos
+    if re.search(r"external obsolescence|adverse.*external|deferred maintenance.*signif|damage.*structure", text, re.I):
+        return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.VERIFY,
+                          message="Obsolescence/condition issue language found. Verify sufficient photos and commentary.")
+    return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS,
+                      message="No significant obsolescence trigger language detected.")

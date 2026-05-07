@@ -278,8 +278,16 @@ class CrossFieldValidator:
         )
 
     def _is_fha(self, context: ValidationContext) -> bool:
-        loan_type = (context.engagement_letter.loan_type if context.engagement_letter else "") or ""
-        return "fha" in loan_type.lower() or bool(re.search(r"\bFHA\b", context.raw_text or ""))
+        # Check engagement letter loan_type first — it is authoritative.
+        if context.engagement_letter:
+            lt = (context.engagement_letter.loan_type or "").upper()
+            if lt and lt not in ("", "NONE"):
+                return "FHA" in lt
+        # Fallback: look for FHA case number pattern, NOT just the word "FHA"
+        # which appears in market-conditions commentary for conventional loans
+        # ("financing available including FHA, VA, and Conventional").
+        return bool(re.search(r"\bFHA\s+Case\s+(?:No\.?|Number|#)\b|\bCase\s+Number[:\s]+\d{3}-\d{7}\b",
+                               context.raw_text or "", re.I))
 
     def _date_from_text(self, text: str) -> Optional[datetime]:
         match = re.search(r"effective date[^0-9]{0,30}(\d{1,2}/\d{1,2}/\d{2,4})", text, re.I)

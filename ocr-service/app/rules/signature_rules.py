@@ -25,19 +25,30 @@ def validate_appraiser_info(ctx: ValidationContext) -> RuleResult:
     required = [
         r"Name\s+[A-Z][A-Za-z]+|Appraiser\s+Name",
         r"Company\s+Name|Company\s+Address",
-        r"State\s+Certification\s+#|State\s+License\s+#|License",
+        r"State\s+Certification\s*#|State\s+License\s*#|Cert(?:ification)?\s*#?\s*[A-Z]{1,3}\d{4,}",
     ]
     if not all(re.search(pattern, text, re.I) for pattern in required):
-        return _verify("SIG-2", "Appraiser Information", "Appraiser/company/license information not detected.")
-    return RuleResult(rule_id="SIG-2", rule_name="Appraiser Information", status=RuleStatus.VERIFY, message="Appraiser information evidence found. Verify all fields are complete.")
+        return _verify("SIG-2", "Appraiser Information", "Appraiser/company/license information not detected. Verify all signature page fields are complete.")
+    # All required fields detected — return PASS (not VERIFY)
+    return RuleResult(rule_id="SIG-2", rule_name="Appraiser Information", status=RuleStatus.PASS,
+                      message="Appraiser name, company, and certification/license detected.")
 
 
 @rule(id="SIG-3", name="Supervisory Appraiser")
 def validate_supervisory_appraiser(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
-    if re.search(r"SUPERVISORY APPRAISER.*(?:Name|Signature).{0,80}\S", text, re.I | re.S):
-        return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.VERIFY, message="Supervisory appraiser evidence found. Verify signature/certification requirements.")
-    return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.PASS, message="No supervisory appraiser evidence detected.")
+    # Every URAR form has "SUPERVISORY APPRAISER'S CERTIFICATION" boilerplate text.
+    # Only flag VERIFY when a supervisory appraiser name is ACTUALLY present.
+    # A blank supervisory section means no supervisor is required (certified appraiser).
+    supervisor_name = re.search(
+        r"(?:Supervisory\s+Appraiser\s+Name|Name\s+of\s+Supervisory\s+Appraiser)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)",
+        text, re.I,
+    )
+    if supervisor_name:
+        return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.VERIFY,
+                          message=f"Supervisory appraiser '{supervisor_name.group(1)}' found. Verify signature and certification requirements.")
+    return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.PASS,
+                      message="No supervisory appraiser involvement — section is blank (certified appraiser, no trainee).")
 
 
 @rule(id="SIG-4", name="Email Address")

@@ -1525,8 +1525,14 @@ class Phase2ExtractionEngine:
         return {}
 
     def _extract_neighborhood_boundaries(self, text: str) -> Dict[str, str]:
+        # In URAR PDFs, boundary VALUES appear in the early data block while
+        # "Neighborhood Boundaries" label appears late in the form-labels block.
+        # _section() would find the labels block (truthy but empty of values),
+        # causing the `section or text` fallback to never trigger the full scan.
+        # Fix: only use the section if it actually contains directional markers;
+        # otherwise scan the full text so the data-block values are found.
         section = self._section(text, r"Neighborhood\s+Boundaries", r"Neighborhood\s+Description|Market\s+Conditions|Site")
-        search_text = section or text
+        search_text = section if (section and re.search(r"\b(?:North|South|East|West)\s*[=:]", section, re.I)) else text
         found = {}
         for match in re.finditer(r"\b(North|South|East|West)\s*[=:]\s*([^;\n,]+?)(?=\s+(?:North|South|East|West)\s*[=:]|[;\n]|$)", search_text, re.I):
             direction = match.group(1).lower()
