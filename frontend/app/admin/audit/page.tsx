@@ -2,199 +2,129 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import {
-  Network, RefreshCw, Maximize2,
-  GitBranch, Clock, FileText, AlertCircle, CheckCircle2,
+  Network, RefreshCw, Maximize2, Search, X, ChevronRight,
+  GitBranch, Clock, FileText, AlertCircle, CheckCircle2, Filter,
 } from "lucide-react";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type NodeKind = "BATCH" | "FILE" | "REVIEW_SESSION" | "DECISION" | "RE_REVIEW" | "SUBMIT" | "ASSIGN";
-type EdgeKind = "CONTAINS" | "LEADS_TO" | "TRIGGERS" | "ASSIGNS";
+type NodeType = "BATCH" | "FILE" | "REVIEW_SESSION" | "DECISION" | "RE_REVIEW" | "SUBMIT";
+type ViewMode = "ALL" | "BY_BATCH" | "BY_FILE" | "BY_REVIEWER";
 
 interface GraphNode {
   id: string;
   label: string;
-  kind: NodeKind;
-  meta?: Record<string, string | number | null>;
+  type: NodeType;
+  status: string;
+  meta: Record<string, string | number | null | undefined>;
   x?: number;
   y?: number;
   z?: number;
 }
 
-interface GraphEdge {
-  source: string;
-  target: string;
-  kind: EdgeKind;
-  label?: string;
+interface GraphLink {
+  source: string | GraphNode;
+  target: string | GraphNode;
+  type: string;
+  timestamp?: string;
 }
 
-interface GraphData { nodes: GraphNode[]; links: GraphEdge[] }
-
-interface AuditEntry {
-  id: number;
-  action: string;
-  entityType: string;
-  entityId: number;
-  details: string;
-  createdAt: string;
-  user?: { id: number; username: string };
-}
+interface GraphData { nodes: GraphNode[]; links: GraphLink[] }
 
 interface BatchSummary {
   id: number;
   parentBatchId: string;
   status: string;
-  client: { name: string; code: string };
+  client?: { name: string; code: string };
   fileCount: number;
-  createdAt: string;
-  assignedReviewer?: { username: string };
+  assignedReviewer?: { id: number; username: string };
 }
 
-type DimFilter = "all" | "batch" | "file" | "session";
-
-// ── Node colors ───────────────────────────────────────────────────────────────
-const NODE_COLOR: Record<NodeKind, string> = {
+// ── Visual config ─────────────────────────────────────────────────────────────
+const NODE_COLOR: Record<NodeType, string> = {
   BATCH:          "#6366f1",
-  FILE:           "#64748b",
+  FILE:           "#22c55e",
   REVIEW_SESSION: "#f59e0b",
-  DECISION:       "#22c55e",
+  DECISION:       "#f97316",
   RE_REVIEW:      "#ef4444",
   SUBMIT:         "#06b6d4",
-  ASSIGN:         "#a78bfa",
 };
 
-const NODE_SIZE: Record<NodeKind, number> = {
-  BATCH:          12,
-  FILE:           8,
+const NODE_SIZE: Record<NodeType, number> = {
+  BATCH:          14,
+  FILE:           9,
   REVIEW_SESSION: 7,
-  DECISION:       5,
+  DECISION:       7,
   RE_REVIEW:      9,
   SUBMIT:         7,
-  ASSIGN:         6,
 };
 
-// ── Dynamic ForceGraph (SSR disabled — uses browser canvas APIs) ─────────────
+const EDGE_COLOR: Record<string, string> = {
+  CONTAINS:    "#ffffff22",
+  HAS_SESSION: "#f59e0b44",
+  RESULTED_IN: "#f9743644",
+  LED_TO:      "#06b6d444",
+  RE_REVIEW:   "#ef444466",
+  ASSIGNS:     "#a78bfa33",
+};
+
 const ForceGraph2D = dynamic(
   () => import("@/components/admin/AuditForceGraph"),
   { ssr: false, loading: () => <GraphSkeleton /> }
 );
 
-// ── Build graph from audit logs + batches ────────────────────────────────────
-function buildGraph(batches: BatchSummary[], auditMap: Record<number, AuditEntry[]>): GraphData {
-  const nodes: GraphNode[] = [];
-  const links: GraphEdge[] = [];
-  const nodeSet = new Set<string>();
-
-  function addNode(n: GraphNode) {
-    if (!nodeSet.has(n.id)) { nodes.push(n); nodeSet.add(n.id); }
-  }
-
-  function addEdge(src: string, tgt: string, kind: EdgeKind, label?: string) {
-    if (nodeSet.has(src) && nodeSet.has(tgt)) links.push({ source: src, target: tgt, kind, label });
-  }
-
-  for (const batch of batches) {
-    const batchNodeId = `batch-${batch.id}`;
-    addNode({
-      id: batchNodeId,
-      label: `Batch #${batch.id}\n${batch.client.name}`,
-      kind: "BATCH",
-      meta: { status: batch.status, client: batch.client.name, files: batch.fileCount },
-    });
-
-    if (batch.assignedReviewer) {
-      const assignId = `assign-${batch.id}`;
-      addNode({ id: assignId, label: `→ ${batch.assignedReviewer.username}`, kind: "ASSIGN" });
-      addEdge(batchNodeId, assignId, "ASSIGNS", "assigned");
-    }
-
-    const entries = auditMap[batch.id] ?? [];
-    const sessionsSeen = new Set<string>();
-
-    for (const entry of entries) {
-      const ts = entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString() : "?";
-      const who = entry.user?.username ?? "system";
-
-      if (entry.action === "REVIEW_SESSION_STARTED") {
-        const sessionId = `session-${entry.entityId}-${entry.id}`;
-        if (!sessionsSeen.has(sessionId)) {
-          sessionsSeen.add(sessionId);
-          addNode({
-            id: sessionId,
-            label: `Session\n${who} @ ${ts}`,
-            kind: "REVIEW_SESSION",
-            meta: { user: who, time: ts },
-          });
-          addEdge(batchNodeId, sessionId, "LEADS_TO", "started review");
-        }
-      }
-
-      if (entry.action === "REVIEW_DECISION_SAVED") {
-        const decisionId = `decision-${entry.id}`;
-        const detail = entry.details ?? "";
-        const isPass = detail.includes("decision=PASS");
-        const ruleId = detail.match(/ruleId=([^,]+)/)?.[1] ?? "rule";
-        addNode({
-          id: decisionId,
-          label: `${isPass ? "✓" : "✗"} ${ruleId}\n${who}`,
-          kind: "DECISION",
-          meta: { user: who, rule: ruleId, pass: isPass ? "yes" : "no" },
-        });
-        const parentSession = [...sessionsSeen].findLast(s => s.startsWith(`session-${entry.entityId}`));
-        if (parentSession) addEdge(parentSession, decisionId, "LEADS_TO", "decision");
-      }
-
-      if (entry.action === "REVIEW_SUBMITTED" || entry.action === "REVIEW_COMPLETE") {
-        const submitId = `submit-${entry.id}`;
-        addNode({ id: submitId, label: `Submitted\n${who} @ ${ts}`, kind: "SUBMIT", meta: { user: who } });
-        const parentSession = [...sessionsSeen].findLast(s => s.startsWith(`session-${entry.entityId}`));
-        if (parentSession) addEdge(parentSession, submitId, "LEADS_TO", "submitted");
-      }
-
-      if (entry.action === "RE_REVIEW_REQUESTED") {
-        const rrId = `rereview-${entry.id}`;
-        addNode({ id: rrId, label: `Re-review\n${who} @ ${ts}`, kind: "RE_REVIEW", meta: { user: who } });
-        const parentSession = [...sessionsSeen].findLast(s => s.startsWith(`session-${entry.entityId}`));
-        const target = parentSession ?? batchNodeId;
-        addEdge(target, rrId, "TRIGGERS", "re-review");
-      }
-    }
-  }
-
-  return { nodes, links };
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function fetchGraph(url: string): Promise<GraphData> {
+  const r = await fetch(url, { credentials: "include" });
+  if (!r.ok) throw new Error(`Graph API error: ${r.status}`);
+  return r.json() as Promise<GraphData>;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AdminAuditPage() {
-  const [batches, setBatches]   = useState<BatchSummary[]>([]);
-  const [auditMap, setAuditMap] = useState<Record<number, AuditEntry[]>>({});
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
-  const [filter, setFilter]     = useState<DimFilter>("all");
+  const [graphData, setGraphData]   = useState<GraphData>({ nodes: [], links: [] });
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState("");
+  const [viewMode, setViewMode]     = useState<ViewMode>("ALL");
+  const [search, setSearch]         = useState("");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [highlighted, setHighlighted]   = useState<Set<string>>(new Set());
   const [graphSize, setGraphSize]       = useState({ w: 800, h: 600 });
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filtersOpen, setFiltersOpen]   = useState(false);
+  const [batches, setBatches]           = useState<BatchSummary[]>([]);
   const graphRef      = useRef<{ zoomToFit: (ms?: number) => void } | null>(null);
-  const graphContainerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef  = useRef<HTMLDivElement | null>(null);
+  const searchRef     = useRef<HTMLInputElement>(null);
 
-  const loadData = useCallback(async () => {
+  // Load overview batches list for the batch picker
+  const loadBatchList = useCallback(async () => {
+    try {
+      const r = await fetch(`${JAVA}/api/admin/batches?page=0&size=100`, { credentials: "include" });
+      if (r.ok) {
+        const d = await r.json() as { content: BatchSummary[] };
+        setBatches(d.content ?? []);
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  const loadGraph = useCallback(async (mode: ViewMode, q?: string, status?: string) => {
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${JAVA}/api/admin/batches?page=0&size=50`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load batches");
-      const data = await res.json() as { content: BatchSummary[] };
-      setBatches(data.content ?? []);
-
-      // Load audit logs for each batch (limited scope)
-      const map: Record<number, AuditEntry[]> = {};
-      await Promise.allSettled(
-        (data.content ?? []).slice(0, 20).map(async (batch: BatchSummary) => {
-          const ar = await fetch(`${JAVA}/api/admin/batches/${batch.id}/audit`, { credentials: "include" });
-          if (ar.ok) map[batch.id] = await ar.json();
-        })
-      );
-      setAuditMap(map);
+      let url = `${JAVA}/api/graph/overview`;
+      if (mode === "ALL" && !q && !status) {
+        url = `${JAVA}/api/graph/overview`;
+      } else if (q || status) {
+        const p = new URLSearchParams();
+        if (q) p.set("q", q);
+        if (status) p.set("status", status);
+        url = `${JAVA}/api/graph/search?${p.toString()}`;
+      }
+      const data = await fetchGraph(url);
+      setGraphData(data);
+      setSelectedNode(null);
+      setHighlighted(new Set());
     } catch (e) {
       setError(String(e));
     } finally {
@@ -202,13 +132,36 @@ export default function AdminAuditPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const handle = window.setTimeout(() => { void loadData(); }, 0);
-    return () => window.clearTimeout(handle);
-  }, [loadData]);
+  const loadBatchSubgraph = useCallback(async (batchId: number) => {
+    setLoading(true); setError("");
+    try {
+      const data = await fetchGraph(`${JAVA}/api/graph/batch/${batchId}`);
+      setGraphData(data);
+      setSelectedNode(null); setHighlighted(new Set());
+    } catch (e) { setError(String(e)); }
+    finally { setLoading(false); }
+  }, []);
 
+  const loadFileSubgraph = useCallback(async (fileId: string) => {
+    const id = fileId.replace("file_", "");
+    setLoading(true); setError("");
+    try {
+      const data = await fetchGraph(`${JAVA}/api/graph/file/${id}`);
+      setGraphData(data);
+      setSelectedNode(null); setHighlighted(new Set());
+    } catch (e) { setError(String(e)); }
+    finally { setLoading(false); }
+  }, []);
+
+  // Initial load
   useEffect(() => {
-    const el = graphContainerRef.current;
+    void loadBatchList();
+    void loadGraph("ALL");
+  }, [loadGraph, loadBatchList]);
+
+  // Resize observer
+  useEffect(() => {
+    const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect;
@@ -218,23 +171,9 @@ export default function AdminAuditPage() {
     return () => ro.disconnect();
   }, []);
 
-  const graphData = useMemo(() => {
-    const raw = buildGraph(batches, auditMap);
-    if (filter === "all") return raw;
-    const keep: NodeKind[] = filter === "batch"
-      ? ["BATCH", "ASSIGN"]
-      : filter === "file"
-        ? ["BATCH", "FILE"]
-        : ["REVIEW_SESSION", "DECISION", "SUBMIT", "RE_REVIEW"];
-    const keepIds = new Set(raw.nodes.filter(n => keep.includes(n.kind)).map(n => n.id));
-    return {
-      nodes: raw.nodes.filter(n => keepIds.has(n.id)),
-      links: raw.links.filter(l =>
-        keepIds.has(typeof l.source === "string" ? l.source : (l.source as GraphNode).id) &&
-        keepIds.has(typeof l.target === "string" ? l.target : (l.target as GraphNode).id)
-      ),
-    };
-  }, [batches, auditMap, filter]);
+  const handleSearch = useCallback(() => {
+    void loadGraph(viewMode, search.trim() || undefined, filterStatus || undefined);
+  }, [loadGraph, viewMode, search, filterStatus]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
@@ -246,173 +185,418 @@ export default function AdminAuditPage() {
       if (tgt === node.id) connected.add(src);
     }
     setHighlighted(connected);
-  }, [graphData.links]);
+
+    // Drill-down on double-click for batch→file or file→journey
+    if (node.type === "BATCH") {
+      setViewMode("BY_BATCH");
+      const batchId = Number(node.id.replace("batch_", ""));
+      void loadBatchSubgraph(batchId);
+    } else if (node.type === "FILE") {
+      setViewMode("BY_FILE");
+      void loadFileSubgraph(node.id);
+    }
+  }, [graphData.links, loadBatchSubgraph, loadFileSubgraph]);
+
+  const handleBack = useCallback(() => {
+    setViewMode("ALL");
+    setSelectedNode(null);
+    setHighlighted(new Set());
+    void loadGraph("ALL", search.trim() || undefined, filterStatus || undefined);
+  }, [loadGraph, search, filterStatus]);
 
   const stats = useMemo(() => ({
-    batches: batches.length,
-    sessions: graphData.nodes.filter(n => n.kind === "REVIEW_SESSION").length,
-    decisions: graphData.nodes.filter(n => n.kind === "DECISION").length,
-    reReviews: graphData.nodes.filter(n => n.kind === "RE_REVIEW").length,
-    submits: graphData.nodes.filter(n => n.kind === "SUBMIT").length,
-  }), [batches, graphData.nodes]);
+    batches:  graphData.nodes.filter(n => n.type === "BATCH").length,
+    files:    graphData.nodes.filter(n => n.type === "FILE").length,
+    sessions: graphData.nodes.filter(n => n.type === "REVIEW_SESSION").length,
+    decisions:graphData.nodes.filter(n => n.type === "DECISION").length,
+    submits:  graphData.nodes.filter(n => n.type === "SUBMIT").length,
+  }), [graphData.nodes]);
 
   return (
-    <div className="flex h-screen flex-col bg-slate-950 text-white overflow-hidden">
-      {/* Header */}
-      <header className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-white/10 bg-[#11161C] px-4">
-        <Network size={15} className="text-indigo-400" />
-        <span className="text-sm font-semibold text-white">Audit Intelligence Graph</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          {(["all", "batch", "file", "session"] as DimFilter[]).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"}`}>
-              {f === "all" ? "All" : f === "batch" ? "By Batch" : f === "file" ? "By File" : "Sessions"}
-            </button>
-          ))}
-          <button onClick={() => void loadData()} disabled={loading}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-2.5 text-xs text-slate-400 hover:text-white">
-            <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Refresh
+    <div className="flex h-screen bg-slate-950 text-white overflow-hidden">
+
+      {/* ── Left control panel ───────────────────────────────────────── */}
+      <aside className="w-72 flex-shrink-0 flex flex-col border-r border-white/10 bg-[#0d1117] overflow-y-auto">
+
+        {/* Header */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+          <Network size={14} className="text-indigo-400" />
+          <span className="text-sm font-semibold">Audit Graph</span>
+        </div>
+
+        {/* Search */}
+        <div className="p-3 border-b border-white/10">
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSearch()}
+              placeholder="Search batches, files, reviewers…"
+              className="w-full bg-[#161b22] border border-white/10 rounded-md pl-8 pr-8 py-1.5 text-xs text-slate-300 placeholder-slate-600 outline-none focus:border-indigo-500/50"
+            />
+            {search && (
+              <button onClick={() => { setSearch(""); void loadGraph(viewMode); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                <X size={11} />
+              </button>
+            )}
+          </div>
+          <button onClick={handleSearch}
+            className="mt-2 w-full py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-xs font-medium transition-colors">
+            Search
           </button>
         </div>
-      </header>
 
-      {/* Stat bar */}
-      <div className="flex flex-shrink-0 items-center gap-4 border-b border-white/10 bg-[#0B0F14]/80 px-4 py-2">
-        <AuditStat icon={GitBranch}    label="Batches"   value={stats.batches}   color="text-indigo-400" />
-        <AuditStat icon={Clock}        label="Sessions"  value={stats.sessions}  color="text-amber-400" />
-        <AuditStat icon={CheckCircle2} label="Decisions" value={stats.decisions} color="text-green-400" />
-        <AuditStat icon={AlertCircle}  label="Re-reviews" value={stats.reReviews} color="text-red-400" />
-        <AuditStat icon={FileText}     label="Submits"   value={stats.submits}   color="text-cyan-400" />
-        <div className="ml-auto flex items-center gap-3">
-          {/* Legend */}
-          {(Object.entries(NODE_COLOR) as [NodeKind, string][]).map(([kind, color]) => (
-            <span key={kind} className="flex items-center gap-1 text-[10px] text-slate-500">
-              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-              {kind.replace("_", " ")}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* Graph */}
-        <div ref={graphContainerRef} className="flex-1 relative bg-[#080C10]">
-          {error && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="rounded-lg border border-red-500/25 bg-red-950/40 px-6 py-4 text-sm text-red-200 text-center">
-                <AlertCircle size={20} className="mx-auto mb-2" />
-                {error}
-                <div className="mt-2 text-xs text-slate-400">
-                  Make sure the admin audit endpoint is available.
-                </div>
-              </div>
-            </div>
-          )}
-          {loading && !error && <GraphSkeleton />}
-          {!loading && !error && (
-            <ForceGraph2D
-              ref={graphRef as never}
-              graphData={graphData as never}
-              width={graphSize.w}
-              height={graphSize.h}
-              backgroundColor="#080C10"
-              onEngineStop={() => { graphRef.current?.zoomToFit?.(300); }}
-              nodeLabel={(n: unknown) => {
-                const node = n as GraphNode;
-                return `${node.kind}: ${node.label.replace(/\n/g, " ")}`;
-              }}
-              nodeColor={(n: unknown) => {
-                const node = n as GraphNode;
-                const dim = highlighted.size > 0 && !highlighted.has(node.id);
-                const base = NODE_COLOR[node.kind] ?? "#64748b";
-                return dim ? base + "33" : base;
-              }}
-              nodeVal={(n: unknown) => NODE_SIZE[(n as GraphNode).kind] ?? 6}
-              nodeCanvasObject={(n: unknown, ctx: CanvasRenderingContext2D, globalScale: number) => {
-                const node = n as GraphNode & { x?: number; y?: number };
-                if (node.x == null || node.y == null) return;
-                const size = NODE_SIZE[node.kind] ?? 6;
-                const dim = highlighted.size > 0 && !highlighted.has(node.id);
-                ctx.globalAlpha = dim ? 0.18 : 1;
-                ctx.beginPath();
-                ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
-                ctx.fillStyle = NODE_COLOR[node.kind] ?? "#64748b";
-                ctx.fill();
-                if (highlighted.has(node.id)) {
-                  ctx.strokeStyle = "#ffffff55";
-                  ctx.lineWidth = 1.5;
-                  ctx.stroke();
-                }
-                const label = node.label.split("\n")[0];
-                const fontSize = Math.max(8, 12 / globalScale);
-                ctx.font = `${fontSize}px sans-serif`;
-                ctx.fillStyle = dim ? "#ffffff22" : "#e2e8f0";
-                ctx.textAlign = "center";
-                ctx.fillText(label, node.x, node.y + size + fontSize * 0.9);
-                ctx.globalAlpha = 1;
-              }}
-              linkColor={() => "#ffffff18"}
-              linkWidth={1}
-              linkDirectionalArrowLength={4}
-              linkDirectionalArrowRelPos={1}
-              onNodeClick={handleNodeClick as never}
-              onBackgroundClick={() => { setSelectedNode(null); setHighlighted(new Set()); }}
-              cooldownTicks={80}
-            />
-          )}
-
-          {/* Zoom controls */}
-          <div className="absolute bottom-4 right-4 flex flex-col gap-1">
-            <button onClick={() => (graphRef.current as { zoomToFit?: (ms: number) => void })?.zoomToFit?.(400)}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-[#11161C] text-slate-400 hover:text-white">
-              <Maximize2 size={13} />
-            </button>
+        {/* View mode */}
+        <div className="p-3 border-b border-white/10">
+          <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-2">View mode</p>
+          <div className="grid grid-cols-2 gap-1">
+            {(["ALL", "BY_BATCH"] as ViewMode[]).map(m => (
+              <button key={m}
+                onClick={() => {
+                  setViewMode(m);
+                  if (m === "ALL") void loadGraph("ALL", search.trim() || undefined, filterStatus || undefined);
+                }}
+                className={`py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === m ? "bg-indigo-600 text-white" : "bg-[#161b22] text-slate-400 hover:text-white border border-white/10"}`}>
+                {m === "ALL" ? "All" : "By Batch"}
+              </button>
+            ))}
+            {(["BY_FILE", "BY_REVIEWER"] as ViewMode[]).map(m => (
+              <button key={m}
+                onClick={() => setViewMode(m)}
+                className={`py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === m ? "bg-indigo-600 text-white" : "bg-[#161b22] text-slate-400 hover:text-white border border-white/10"}`}>
+                {m === "BY_FILE" ? "By File" : "By Reviewer"}
+              </button>
+            ))}
           </div>
+          {viewMode !== "ALL" && (
+            <button onClick={handleBack}
+              className="mt-2 flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300">
+              ← Back to all batches
+            </button>
+          )}
         </div>
 
-        {/* Node detail panel */}
-        {selectedNode && (
-          <div className="w-64 flex-shrink-0 border-l border-white/10 bg-[#11161C] p-4 overflow-y-auto">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="inline-block w-3 h-3 rounded-full flex-shrink-0"
-                style={{ background: NODE_COLOR[selectedNode.kind] }} />
-              <span className="text-xs font-semibold text-white uppercase tracking-wide">{selectedNode.kind.replace("_", " ")}</span>
-            </div>
-            <div className="text-sm font-medium text-slate-200 leading-snug whitespace-pre-line mb-3">
-              {selectedNode.label}
-            </div>
-            {selectedNode.meta && (
-              <div className="space-y-1.5">
-                {Object.entries(selectedNode.meta).map(([k, v]) => (
-                  <div key={k} className="flex items-start gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-slate-500 w-16 flex-shrink-0">{k}</span>
-                    <span className="text-[11px] text-slate-300 break-all">{String(v ?? "—")}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-500">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ background: NODE_COLOR[selectedNode.kind] }} />
-              {highlighted.size - 1} connected node{highlighted.size !== 2 ? "s" : ""}
+        {/* Batch picker (BY_BATCH mode) */}
+        {viewMode === "BY_BATCH" && batches.length > 0 && (
+          <div className="p-3 border-b border-white/10">
+            <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-2">Select batch</p>
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {batches.map(b => (
+                <button key={b.id}
+                  onClick={() => void loadBatchSubgraph(b.id)}
+                  className="w-full text-left px-2 py-1.5 rounded text-[11px] bg-[#161b22] hover:bg-white/5 text-slate-300 border border-white/5 truncate">
+                  <span className="font-medium">{b.parentBatchId}</span>
+                  <span className="ml-1 text-slate-500">{b.client?.name}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
+
+        {/* Filters */}
+        <div className="p-3 border-b border-white/10">
+          <button onClick={() => setFiltersOpen(o => !o)}
+            className="flex items-center gap-2 w-full text-[10px] uppercase tracking-widest text-slate-600 hover:text-slate-400">
+            <Filter size={10} />
+            Filters
+            <ChevronRight size={10} className={`ml-auto transition-transform ${filtersOpen ? "rotate-90" : ""}`} />
+          </button>
+          {filtersOpen && (
+            <div className="mt-2 space-y-2">
+              <div>
+                <label className="text-[10px] text-slate-500 block mb-1">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className="w-full bg-[#161b22] border border-white/10 rounded px-2 py-1.5 text-xs text-slate-300 outline-none">
+                  <option value="">All statuses</option>
+                  {["UPLOADED","QC_PROCESSING","REVIEW_PENDING","IN_REVIEW","COMPLETED","ERROR"].map(s => (
+                    <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={handleSearch}
+                  className="flex-1 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs transition-colors">
+                  Apply
+                </button>
+                <button onClick={() => { setFilterStatus(""); setSearch(""); void loadGraph("ALL"); }}
+                  className="py-1 px-2 rounded bg-[#161b22] border border-white/10 text-xs text-slate-400 hover:text-white">
+                  Reset
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Legend */}
+        <div className="p-3 border-b border-white/10">
+          <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-2">Legend</p>
+          <div className="space-y-1.5">
+            {(Object.entries(NODE_COLOR) as [NodeType, string][]).map(([type, color]) => (
+              <div key={type} className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
+                <span className="text-[11px] text-slate-400">{type.replace(/_/g, " ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="p-3 mt-auto">
+          <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-2">Current view</p>
+          <div className="space-y-1.5">
+            <StatRow icon={GitBranch}    label="Batches"   value={stats.batches}   color="text-indigo-400" />
+            <StatRow icon={FileText}     label="Files"     value={stats.files}     color="text-green-400" />
+            <StatRow icon={Clock}        label="Sessions"  value={stats.sessions}  color="text-amber-400" />
+            <StatRow icon={CheckCircle2} label="Decisions" value={stats.decisions} color="text-orange-400" />
+            <StatRow icon={AlertCircle}  label="Submits"   value={stats.submits}   color="text-cyan-400" />
+          </div>
+          <button onClick={() => void loadGraph(viewMode)}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 py-1.5 rounded-md border border-white/10 text-xs text-slate-400 hover:text-white transition-colors">
+            <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Refresh
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Graph canvas ─────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Breadcrumb bar */}
+        <div className="flex h-9 flex-shrink-0 items-center gap-2 border-b border-white/10 bg-[#0d1117] px-4 text-xs text-slate-500">
+          <button onClick={handleBack} className="hover:text-white transition-colors">All batches</button>
+          {viewMode !== "ALL" && (
+            <>
+              <ChevronRight size={10} />
+              <span className="text-slate-300">{viewMode === "BY_BATCH" ? "Batch view" : viewMode === "BY_FILE" ? "File journey" : "Reviewer view"}</span>
+            </>
+          )}
+          {selectedNode && (
+            <>
+              <ChevronRight size={10} />
+              <span className="text-slate-400 truncate max-w-xs">{selectedNode.label}</span>
+            </>
+          )}
+          <div className="ml-auto flex items-center gap-2 text-[10px]">
+            <span className="text-slate-600">{graphData.nodes.length} nodes</span>
+            <span className="text-slate-700">·</span>
+            <span className="text-slate-600">{graphData.links.length} edges</span>
+          </div>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* Graph */}
+          <div ref={containerRef} className="flex-1 relative bg-[#080C10]">
+            {error && <ErrorOverlay message={error} />}
+            {loading && !error && <GraphSkeleton />}
+            {!loading && !error && graphData.nodes.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-600">
+                No data — try refreshing or checking the API server.
+              </div>
+            )}
+            {!loading && !error && graphData.nodes.length > 0 && (
+              <ForceGraph2D
+                ref={graphRef as never}
+                graphData={graphData as never}
+                width={graphSize.w}
+                height={graphSize.h}
+                backgroundColor="#080C10"
+                onEngineStop={() => { graphRef.current?.zoomToFit?.(400); }}
+                nodeLabel={(n: unknown) => {
+                  const node = n as GraphNode;
+                  const lines = [
+                    `${node.type.replace(/_/g, " ")}: ${node.label}`,
+                    `Status: ${node.status}`,
+                  ];
+                  if (node.meta?.reviewer) lines.push(`Reviewer: ${String(node.meta.reviewer)}`);
+                  if (node.meta?.client)   lines.push(`Client: ${String(node.meta.client)}`);
+                  if (node.meta?.fileCount !== undefined) lines.push(`Files: ${String(node.meta.fileCount)}`);
+                  return lines.join("\n");
+                }}
+                nodeColor={(n: unknown) => {
+                  const node = n as GraphNode;
+                  const dim = highlighted.size > 0 && !highlighted.has(node.id);
+                  const base = NODE_COLOR[node.type as NodeType] ?? "#64748b";
+                  return dim ? base + "28" : base;
+                }}
+                nodeVal={(n: unknown) => NODE_SIZE[(n as GraphNode).type as NodeType] ?? 6}
+                nodeCanvasObject={(n: unknown, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                  const node = n as GraphNode & { x?: number; y?: number };
+                  if (node.x == null || node.y == null) return;
+                  const size  = NODE_SIZE[node.type as NodeType] ?? 6;
+                  const color = NODE_COLOR[node.type as NodeType] ?? "#64748b";
+                  const dim   = highlighted.size > 0 && !highlighted.has(node.id);
+                  ctx.globalAlpha = dim ? 0.15 : 1;
+                  ctx.beginPath();
+                  ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
+                  ctx.fillStyle = color;
+                  ctx.fill();
+                  if (highlighted.has(node.id) || node.id === selectedNode?.id) {
+                    ctx.strokeStyle = "#ffffff66";
+                    ctx.lineWidth = 1.5 / globalScale;
+                    ctx.stroke();
+                  }
+                  ctx.globalAlpha = 1;
+                }}
+                linkColor={(l: unknown) => {
+                  const link = l as GraphLink;
+                  return EDGE_COLOR[link.type] ?? "#ffffff14";
+                }}
+                linkWidth={1}
+                linkDirectionalArrowLength={4}
+                linkDirectionalArrowRelPos={1}
+                onNodeClick={handleNodeClick as never}
+                onBackgroundClick={() => { setSelectedNode(null); setHighlighted(new Set()); }}
+                cooldownTicks={100}
+              />
+            )}
+
+            {/* Zoom button */}
+            <button
+              onClick={() => graphRef.current?.zoomToFit?.(400)}
+              className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-[#11161C] text-slate-400 hover:text-white">
+              <Maximize2 size={13} />
+            </button>
+
+            {/* Click hint */}
+            {graphData.nodes.length > 0 && !selectedNode && !loading && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[11px] text-slate-700 pointer-events-none">
+                Click any node to inspect · Double-click a batch or file to drill in
+              </div>
+            )}
+          </div>
+
+          {/* ── Detail drawer ──────────────────────────────────────────── */}
+          {selectedNode && (
+            <aside className="w-72 flex-shrink-0 border-l border-white/10 bg-[#0d1117] overflow-y-auto flex flex-col">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                <span className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ background: NODE_COLOR[selectedNode.type as NodeType] ?? "#64748b" }} />
+                <span className="text-xs font-semibold text-white flex-1 truncate">
+                  {selectedNode.type.replace(/_/g, " ")}
+                </span>
+                <button onClick={() => { setSelectedNode(null); setHighlighted(new Set()); }}
+                  className="text-slate-500 hover:text-white">
+                  <X size={13} />
+                </button>
+              </div>
+
+              <div className="p-4 flex-1">
+                <p className="text-sm font-medium text-slate-200 leading-snug mb-4 break-words">
+                  {selectedNode.label}
+                </p>
+
+                {/* Status badge */}
+                <div className="mb-4">
+                  <StatusBadge status={selectedNode.status} />
+                </div>
+
+                {/* Meta fields */}
+                <div className="space-y-2">
+                  {Object.entries(selectedNode.meta)
+                    .filter(([, v]) => v != null && v !== "")
+                    .map(([k, v]) => (
+                      <div key={k} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wide text-slate-600">
+                          {k.replace(/([A-Z])/g, " $1").trim()}
+                        </span>
+                        <span className="text-[12px] text-slate-300 break-words">
+                          {formatMetaValue(k, v)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+
+                {/* Connected count */}
+                <div className="mt-6 pt-4 border-t border-white/10 text-[11px] text-slate-600">
+                  {highlighted.size - 1} directly connected node{highlighted.size !== 2 ? "s" : ""}
+                </div>
+
+                {/* Drill-in button */}
+                {selectedNode.type === "BATCH" && (
+                  <button
+                    onClick={() => {
+                      const id = Number(selectedNode.id.replace("batch_", ""));
+                      setViewMode("BY_BATCH");
+                      void loadBatchSubgraph(id);
+                    }}
+                    className="mt-3 w-full py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-xs font-medium transition-colors">
+                    View batch files
+                  </button>
+                )}
+                {selectedNode.type === "FILE" && (
+                  <button
+                    onClick={() => {
+                      setViewMode("BY_FILE");
+                      void loadFileSubgraph(selectedNode.id);
+                    }}
+                    className="mt-3 w-full py-1.5 rounded-md bg-green-700 hover:bg-green-600 text-xs font-medium transition-colors">
+                    View full file journey
+                  </button>
+                )}
+              </div>
+            </aside>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function AuditStat({ icon: Icon, label, value, color }: {
+// ── Small helpers ─────────────────────────────────────────────────────────────
+
+function formatMetaValue(key: string, val: string | number | null | undefined): string {
+  if (val == null) return "—";
+  const s = String(val);
+  if ((key.endsWith("At") || key.endsWith("Date")) && s.includes("T")) {
+    try { return new Date(s).toLocaleString(); } catch { /* fall through */ }
+  }
+  return s;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const colorMap: Record<string, string> = {
+    PASS:           "bg-green-950 text-green-400 border-green-800",
+    FAIL:           "bg-red-950 text-red-400 border-red-800",
+    DONE:           "bg-cyan-950 text-cyan-400 border-cyan-800",
+    COMPLETED:      "bg-green-950 text-green-400 border-green-800",
+    REVIEW_PENDING: "bg-amber-950 text-amber-400 border-amber-800",
+    QC_PROCESSING:  "bg-blue-950 text-blue-400 border-blue-800",
+    UPLOADED:       "bg-slate-800 text-slate-400 border-slate-700",
+    ERROR:          "bg-red-950 text-red-400 border-red-800",
+  };
+  const cls = colorMap[status] ?? "bg-slate-800 text-slate-400 border-slate-700";
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-medium ${cls}`}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function StatRow({ icon: Icon, label, value, color }: {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string; value: number; color: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <Icon size={12} className={color} />
+    <div className="flex items-center gap-2">
+      <Icon size={11} className={color} />
       <span className="text-xs text-slate-300 tabular-nums font-medium">{value}</span>
-      <span className="text-[10px] text-slate-600 uppercase tracking-wide">{label}</span>
+      <span className="text-[10px] text-slate-600">{label}</span>
+    </div>
+  );
+}
+
+function ErrorOverlay({ message }: { message: string }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="rounded-lg border border-red-500/25 bg-red-950/40 px-6 py-4 text-sm text-red-200 text-center max-w-sm">
+        <AlertCircle size={20} className="mx-auto mb-2" />
+        {message}
+        <div className="mt-2 text-xs text-slate-400">Check the Java API server is running.</div>
+      </div>
     </div>
   );
 }
@@ -428,8 +612,8 @@ function GraphSkeleton() {
           ))}
           <Network size={28} className="absolute inset-0 m-auto text-indigo-400" />
         </div>
-        <div className="text-sm text-slate-400">Loading audit graph…</div>
-        <div className="mt-1 text-xs text-slate-600">Building node relationships</div>
+        <div className="text-sm text-slate-400">Building graph…</div>
+        <div className="mt-1 text-xs text-slate-600">Fetching nodes and relationships</div>
       </div>
     </div>
   );
