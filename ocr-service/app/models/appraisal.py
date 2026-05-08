@@ -222,5 +222,7 @@ class ValidationContext(BaseModel):
     page_index: Optional[Dict[int, str]] = None
     vision_results: Optional[List[Any]] = None
     llm_enrichment: Optional[Dict[str, Any]] = None
+    supporting_document_missing: bool = False
+    missing_supporting_documents: List[str] = Field(default_factory=list)
 
     model_config = {"arbitrary_types_allowed": True}

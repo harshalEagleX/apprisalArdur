@@ -4,6 +4,32 @@
  */
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+const AUTH_TOKEN_KEY = "apprisal_auth_token";
+
+function storedAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function rememberAuthToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  if (token?.trim()) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  else window.localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  if (!headers) return normalized;
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => { normalized[key] = value; });
+    return normalized;
+  }
+  if (Array.isArray(headers)) {
+    for (const [key, value] of headers) normalized[key] = value;
+    return normalized;
+  }
+  return { ...headers };
+}
 
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   const text = await res.text();
@@ -35,11 +61,17 @@ function sanitizeErrorMessage(message: string): string {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   let res: Response;
+  const token = storedAuthToken();
+  const { headers, ...rest } = options ?? {};
   try {
     res = await fetch(`${JAVA}${path}`, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...options?.headers },
-      ...options,
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...normalizeHeaders(headers),
+      },
     });
   } catch (err) {
     // Spring Security 302-redirects unauthenticated /api/** calls to /login.
@@ -71,6 +103,19 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function login(username: string, password: string): Promise<void> {
+  const tokenRes = await fetch(`${JAVA}/api/auth/authenticate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!tokenRes.ok) {
+    rememberAuthToken(null);
+    throw new Error("Invalid username or password");
+  }
+  const tokenBody = await tokenRes.json() as { token?: string };
+  rememberAuthToken(tokenBody.token ?? null);
+
   const form = new URLSearchParams({ username, password });
   const res = await fetch(`${JAVA}/login`, {
     method: "POST",
@@ -80,10 +125,14 @@ export async function login(username: string, password: string): Promise<void> {
     redirect: "manual",
   });
   const ok = res.status === 0 || res.status === 200 || res.status === 301 || res.status === 302;
-  if (!ok) throw new Error("Invalid username or password");
+  if (!ok) {
+    rememberAuthToken(null);
+    throw new Error("Invalid username or password");
+  }
 }
 
 export async function logout(): Promise<void> {
+  rememberAuthToken(null);
   await fetch(`${JAVA}/logout`, {
     method: "POST",
     credentials: "include",
@@ -96,6 +145,9 @@ export async function logout(): Promise<void> {
 export async function getMe(): Promise<{ role: "ADMIN" | "REVIEWER"; username: string }> {
   return apiFetch("/api/me");
 }
+
+export const getPasswordPolicy = () =>
+  apiFetch<{ minLength: number }>("/api/config/password-policy");
 
 // ── Admin: Dashboard ──────────────────────────────────────────────────────────
 export const getAdminDashboard    = () => apiFetch<Record<string, unknown>>("/api/admin/dashboard");
@@ -264,6 +316,12 @@ export const saveDecision = (
     body: JSON.stringify({ ruleResultId, decision, comment, sessionToken, decisionLatencyMs, acknowledged }),
   });
 
+export const recordRuleFocus = (ruleResultId: number, sessionToken: string) =>
+  apiFetch<{ success: boolean }>("/api/reviewer/decision/focus", {
+    method: "POST",
+    body: JSON.stringify({ ruleResultId, sessionToken }),
+  });
+
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
 
 export const requestReReview = (qcResultId: number, reason: string) =>
@@ -290,7 +348,11 @@ export interface SubmittedQCResult {
 export const getSubmittedQueue = () =>
   apiFetch<SubmittedQCResult[]>("/api/reviewer/qc/results/submitted");
 
-export const getRealtimeUrl = () => `${JAVA.replace(/^http/, "ws")}/ws/qc`;
+export const getRealtimeUrl = () => {
+  const base = `${JAVA.replace(/^http/, "ws")}/ws/qc`;
+  const token = storedAuthToken();
+  return token ? `${base}?access_token=${encodeURIComponent(token)}` : base;
+};
 
 // ── Analytics (ADMIN only) ────────────────────────────────────────────────────
 export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/overview?days=${days}`);
@@ -356,6 +418,7 @@ export interface QCResult {
   manualPassCount: number;
   processingTimeMs?: number;
   cacheHit?: boolean;
+  missingDocuments?: string | null;
   processedAt: string;
 }
 
@@ -424,6 +487,22 @@ export interface ReviewSession {
 export interface QCFileInfo {
   id: number;
   qcDecision?: "AUTO_PASS" | "TO_VERIFY" | "AUTO_FAIL";
+  missingDocuments?: string | null;
   batchFile?: BatchFile;
   documents?: BatchFile[];
+  documentMatches?: DocumentMatch[];
+}
+
+export interface DocumentMatch {
+  id: number;
+  appraisalFileId?: number | null;
+  supportingFileId?: number | null;
+  supportingFileType?: "ENGAGEMENT" | "CONTRACT" | string | null;
+  supportingFilename?: string | null;
+  matchType?: string | null;
+  confidenceScore?: number | null;
+  matchReason?: string | null;
+  ambiguousCandidatesJson?: string | null;
+  rejectedCandidatesJson?: string | null;
+  matchedAt?: string | null;
 }

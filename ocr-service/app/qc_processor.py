@@ -113,6 +113,8 @@ class QCResults(BaseModel):
     
     # Non-rule processing notices, such as OCR fallback messages.
     processing_notices: List[str] = []
+    supporting_document_missing: bool = False
+    missing_supporting_documents: List[str] = []
 
 
 class SmartQCProcessor:
@@ -274,13 +276,19 @@ class SmartQCProcessor:
         
         # Step 4: Handle Engagement Letter
         engagement_letter = None
+        supporting_document_missing = False
+        missing_supporting_documents: List[str] = []
         if engagement_letter_text:
             # Parse explicitly provided text
             eng_extract = extraction_service.extract_engagement_letter(engagement_letter_text)
             engagement_letter = self._map_engagement_letter(eng_extract)
         else:
-            # FALLBACK: Create proxy from Report data
-            logger.info("No Engagement Letter found. Creating proxy from Report data for validation.")
+            # Fallback remains available for assignment/loan-type context only.
+            # Cross-document rules must see the missing flag and avoid comparing
+            # the appraisal against a fabricated copy of itself.
+            logger.info("No Engagement Letter found. Creating tagged proxy from Report data for non-cross-reference context.")
+            supporting_document_missing = True
+            missing_supporting_documents.append("ENGAGEMENT")
             engagement_letter = EngagementLetter(
                 borrower_name=report.subject.borrower,
                 property_address=report.subject.address,
@@ -329,6 +337,8 @@ class SmartQCProcessor:
             raw_text=full_text,
             page_index=extraction_result.page_index,
             vision_results=vision_results,
+            supporting_document_missing=supporting_document_missing,
+            missing_supporting_documents=missing_supporting_documents,
         )
 
         _emit("llm_enrichment", f"Enriching context with {model_name}", 0.70)
@@ -366,6 +376,8 @@ class SmartQCProcessor:
             model_provider=model_provider,
             model_name=model_name,
             vision_model=vision_model,
+            supporting_document_missing=supporting_document_missing,
+            missing_supporting_documents=missing_supporting_documents,
         )
 
         return results
@@ -593,6 +605,8 @@ class SmartQCProcessor:
         model_provider: str = "ollama",
         model_name: Optional[str] = None,
         vision_model: Optional[str] = None,
+        supporting_document_missing: bool = False,
+        missing_supporting_documents: Optional[List[str]] = None,
     ) -> QCResults:
         """Assemble final QC results."""
         model_provider = (model_provider or "ollama").strip().lower()
@@ -680,6 +694,8 @@ class SmartQCProcessor:
             action_items=action_items,
             suggestions=suggestions,
             processing_notices=extraction_result.notices,
+            supporting_document_missing=supporting_document_missing,
+            missing_supporting_documents=missing_supporting_documents or [],
         )
 
     def _public_status(self, status: RuleStatus) -> str:

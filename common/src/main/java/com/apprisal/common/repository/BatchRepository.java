@@ -75,6 +75,9 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @Query("SELECT COUNT(b) FROM Batch b WHERE b.assignedReviewer.id = :reviewerId AND b.status = :status")
     long countByAssignedReviewerIdAndStatus(@Param("reviewerId") Long reviewerId, @Param("status") BatchStatus status);
 
+    @Query("SELECT COUNT(b) > 0 FROM Batch b WHERE b.id = :batchId AND b.assignedReviewer.id = :reviewerId")
+    boolean isReviewerAssigned(@Param("batchId") Long batchId, @Param("reviewerId") Long reviewerId);
+
     List<Batch> findByAssignedReviewerIdAndStatus(Long reviewerId, BatchStatus status);
 
     // Duplicate upload detection
@@ -170,6 +173,31 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
         ORDER BY b.updatedAt ASC
         """)
     List<Batch> findStuckInQcProcessing(@Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * Find review batches whose per-QC locks have all expired but still have
+     * reviewer work pending. These should return to REVIEW_PENDING so the queue
+     * reflects that nobody is actively reviewing them.
+     */
+    @Query("""
+        SELECT b FROM Batch b
+        WHERE b.status = com.apprisal.common.entity.BatchStatus.IN_REVIEW
+          AND EXISTS (
+            SELECT 1 FROM QCResult pending
+            WHERE pending.batchFile.batch = b
+              AND pending.qcDecision <> com.apprisal.common.entity.QCDecision.AUTO_PASS
+              AND pending.finalDecision IS NULL
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM QCResult active
+            WHERE active.batchFile.batch = b
+              AND active.finalDecision IS NULL
+              AND active.reviewLockExpiresAt IS NOT NULL
+              AND active.reviewLockExpiresAt > :now
+          )
+        ORDER BY b.updatedAt ASC
+        """)
+    List<Batch> findExpiredInReviewBatches(@Param("now") LocalDateTime now);
 
     // Efficient TopN queries for dashboards
     List<Batch> findTop10ByOrderByCreatedAtDesc();

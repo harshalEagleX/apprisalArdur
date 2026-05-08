@@ -34,6 +34,7 @@ public class PythonClientService {
     private final RestTemplate restTemplate;
     private final OcrServiceConfig config;
     private final ObjectMapper objectMapper;
+    private final ThreadLocal<Integer> lastRetryCount = ThreadLocal.withInitial(() -> 0);
 
     public PythonClientService(RestTemplate restTemplate, OcrServiceConfig config,
                                ObjectMapper objectMapper) {
@@ -67,6 +68,7 @@ public class PythonClientService {
         String url = config.getUrl() + "/qc/process";
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         String progressToken = UUID.randomUUID().toString();
+        lastRetryCount.set(0);
 
         log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}, contract: {}, model: {}",
                 url, appraisalPath.getFileName(),
@@ -129,6 +131,7 @@ public class PythonClientService {
                 if (result == null) {
                     throw new RuntimeException("Python QC service returned empty response body");
                 }
+                lastRetryCount.set(Math.max(0, attempt - 1));
                 log.info("Python QC completed: passed={}, failed={}, verify={}, total_rules={}",
                         result.passed(), result.failed(), result.verify(), result.totalRules());
                 return result;
@@ -140,6 +143,7 @@ public class PythonClientService {
                         e.getStatusCode() + " — " + e.getResponseBodyAsString(), e);
             } catch (org.springframework.web.client.ResourceAccessException e) {
                 if (attempt >= maxAttempts) {
+                    lastRetryCount.set(Math.max(0, attempt - 1));
                     log.error("Python QC service timeout or connection refused for model {} after {} attempt(s): {}",
                             safeModelConfig.label(), attempt, e.getMessage());
                     throw new RuntimeException("Python QC service timed out after " + config.getTimeoutSeconds() + "s " +
@@ -151,6 +155,7 @@ public class PythonClientService {
                 sleepBeforeRetry(attempt);
             } catch (org.springframework.web.client.HttpServerErrorException e) {
                 if (attempt >= maxAttempts) {
+                    lastRetryCount.set(Math.max(0, attempt - 1));
                     log.error("Python QC service internal error ({}) after {} attempt(s): {}",
                             e.getStatusCode(), attempt, e.getResponseBodyAsString());
                     throw new RuntimeException("Python QC service error: " + e.getStatusCode(), e);
@@ -160,6 +165,7 @@ public class PythonClientService {
                 sleepBeforeRetry(attempt);
             } catch (RestClientException e) {
                 if (attempt >= maxAttempts) {
+                    lastRetryCount.set(Math.max(0, attempt - 1));
                     log.error("Failed to call Python QC service after {} attempt(s): {}", attempt, e.getMessage(), e);
                     throw new RuntimeException("Python QC service call failed: " + e.getMessage(), e);
                 }
@@ -252,6 +258,7 @@ public class PythonClientService {
                                          Path contractPath, QCModelConfig modelConfig) {
         String url = config.getUrl() + "/qc/submit";
         QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        lastRetryCount.set(0);
 
         log.info("Submitting async QC job: appraisal={} engagement={} contract={} model={}",
                 appraisalPath.getFileName(),
@@ -382,6 +389,8 @@ public class PythonClientService {
 
     /** Expose config so callers can read timeout/retry settings. */
     public OcrServiceConfig getConfig() { return config; }
+
+    public int getLastRetryCount() { return lastRetryCount.get(); }
 
     /**
      * Check if Python service is healthy.

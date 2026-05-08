@@ -26,6 +26,7 @@ import org.springframework.lang.NonNull;
 public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
+    public static final int PASSWORD_MIN_LENGTH = 8;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -73,8 +74,8 @@ public class UserService {
         if (username == null || username.trim().isEmpty()) {
             throw new ValidationException("username", "Username is required");
         }
-        if (password == null || password.length() < 6) {
-            throw new ValidationException("password", "Password must be at least 6 characters");
+        if (password == null || password.length() < PASSWORD_MIN_LENGTH) {
+            throw new ValidationException("password", "Password must be at least " + PASSWORD_MIN_LENGTH + " characters");
         }
         if (role == null) {
             throw new ValidationException("role", "Role is required");
@@ -120,8 +121,8 @@ public class UserService {
         if (id == null) {
             throw new ValidationException("id", "User ID is required");
         }
-        if (newPassword == null || newPassword.length() < 6) {
-            throw new ValidationException("password", "Password must be at least 6 characters");
+        if (newPassword == null || newPassword.length() < PASSWORD_MIN_LENGTH) {
+            throw new ValidationException("password", "Password must be at least " + PASSWORD_MIN_LENGTH + " characters");
         }
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));

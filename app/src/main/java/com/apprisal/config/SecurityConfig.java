@@ -110,13 +110,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
-                        // The browser cannot send the JSESSIONID on the WS upgrade
-                        // because it is cross-origin (3000 → 8080) with SameSite=Strict,
-                        // so an authenticated matcher would 302 the upgrade and the
-                        // socket would never connect. The handler itself filters
-                        // subscriptions to known topic prefixes (/topic/qc/batch/**,
-                        // /topic/reviewer/qc/**), so leaving the upgrade open here
-                        // is safe for read-only progress events.
+                        // The HTTP matcher stays open to avoid login redirects during
+                        // WebSocket upgrade. WebSocketAuthHandshakeInterceptor rejects
+                        // anonymous upgrades using the session principal or JWT token,
+                        // and QcWebSocketHandler authorizes every topic subscription.
                         .requestMatchers("/ws/**").permitAll()
                         // SECURITY: /files/** — authenticated + ownership enforced in FileController
                         .requestMatchers("/files/**").authenticated()
@@ -150,7 +147,8 @@ public class SecurityConfig {
                         .clearAuthentication(true)
                         .deleteCookies("JSESSIONID")
                         .permitAll())
-                .authenticationProvider(authenticationProvider());
+                .authenticationProvider(authenticationProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

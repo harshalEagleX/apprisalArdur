@@ -264,7 +264,23 @@ def save_rule_results(document_id: str, rule_results: list):
     try:
         doc_uuid = uuid.UUID(document_id)
         with get_db() as db:
-            for r in rule_results:
+            existing_count = db.query(RuleResultRecord.id).filter(
+                RuleResultRecord.document_id == doc_uuid
+            ).count()
+            expected_count = len(rule_results or [])
+            if existing_count == expected_count and expected_count > 0:
+                logger.info("Rule results already exist for document %s; skipping duplicate save", document_id)
+                return
+            if existing_count:
+                logger.warning(
+                    "Replacing incomplete/duplicate rule results for document %s: existing=%s expected=%s",
+                    document_id, existing_count, expected_count
+                )
+                db.query(RuleResultRecord).filter(
+                    RuleResultRecord.document_id == doc_uuid
+                ).delete(synchronize_session=False)
+
+            for r in rule_results or []:
                 record = RuleResultRecord(
                     document_id=doc_uuid,
                     rule_id=r.rule_id,

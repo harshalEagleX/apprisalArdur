@@ -150,4 +150,8 @@ public class ProcessingMetrics {
     public Boolean getCacheHit()            { return cacheHit; }
     public Long getFileSizeBytes()          { return fileSizeBytes; }
     public LocalDateTime getCreatedAt()     { return createdAt; }
+
+    public void setOperatorSessionId(Long operatorSessionId) { this.operatorSessionId = operatorSessionId; }
+    public void setQueueWaitMs(Long queueWaitMs)             { this.queueWaitMs = queueWaitMs; }
+    public void setRetryCount(Integer retryCount)            { this.retryCount = retryCount; }
 }

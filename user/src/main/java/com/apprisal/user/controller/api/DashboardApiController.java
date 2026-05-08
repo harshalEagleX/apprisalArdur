@@ -2,6 +2,7 @@ package com.apprisal.user.controller.api;
 
 import com.apprisal.common.entity.User;
 import com.apprisal.user.service.DashboardService;
+import com.apprisal.user.service.UserService;
 import com.apprisal.common.security.UserPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -41,6 +42,13 @@ public class DashboardApiController {
                 "id",       user.getId(),
                 "username", user.getUsername(),
                 "role",     user.getRole().name()
+        ));
+    }
+
+    @GetMapping("/config/password-policy")
+    public ResponseEntity<Map<String, Object>> getPasswordPolicy() {
+        return ResponseEntity.ok(Map.of(
+                "minLength", UserService.PASSWORD_MIN_LENGTH
         ));
     }
 

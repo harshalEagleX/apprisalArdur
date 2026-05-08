@@ -4,6 +4,7 @@ import com.apprisal.common.dto.AuthenticationRequest;
 import com.apprisal.common.dto.AuthenticationResponse;
 import com.apprisal.common.dto.RegisterRequest;
 import com.apprisal.common.entity.User;
+import com.apprisal.common.exception.ValidationException;
 import com.apprisal.common.repository.UserRepository;
 import com.apprisal.user.util.JwtUtils;
 import com.apprisal.common.security.UserPrincipal;
@@ -32,6 +33,9 @@ public class AuthenticationService {
         }
 
         public AuthenticationResponse register(RegisterRequest request) {
+                if (request.password() == null || request.password().length() < UserService.PASSWORD_MIN_LENGTH) {
+                        throw new ValidationException("password", "Password must be at least " + UserService.PASSWORD_MIN_LENGTH + " characters");
+                }
                 User user = User.builder()
                                 .username(request.username())
                                 .password(passwordEncoder.encode(request.password()))

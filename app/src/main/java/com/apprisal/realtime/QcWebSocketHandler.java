@@ -1,8 +1,16 @@
 package com.apprisal.realtime;
 
+import com.apprisal.config.WebSocketAuthHandshakeInterceptor;
+import com.apprisal.common.entity.Role;
+import com.apprisal.common.entity.User;
+import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.QCResultRepository;
+import com.apprisal.common.repository.UserRepository;
+import com.apprisal.common.security.UserPrincipal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -12,7 +20,9 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -22,13 +32,23 @@ public class QcWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(QcWebSocketHandler.class);
     private static final String SUBSCRIBE_PREFIX = "subscribe:";
+    private static final String ADMIN_NOTIFICATIONS_TOPIC = "/topic/admin/notifications";
 
     private final ObjectMapper objectMapper;
+    private final BatchRepository batchRepository;
+    private final QCResultRepository qcResultRepository;
+    private final UserRepository userRepository;
     private final ConcurrentMap<String, Set<WebSocketSession>> topicSessions = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<String>> sessionTopics = new ConcurrentHashMap<>();
 
-    public QcWebSocketHandler(ObjectMapper objectMapper) {
+    public QcWebSocketHandler(ObjectMapper objectMapper,
+                              BatchRepository batchRepository,
+                              QCResultRepository qcResultRepository,
+                              UserRepository userRepository) {
         this.objectMapper = objectMapper;
+        this.batchRepository = batchRepository;
+        this.qcResultRepository = qcResultRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -39,8 +59,8 @@ public class QcWebSocketHandler extends TextWebSocketHandler {
         }
 
         String topic = payload.substring(SUBSCRIBE_PREFIX.length()).trim();
-        if (!isAllowedTopic(topic)) {
-            log.warn("Ignoring invalid websocket topic subscription: {}", topic);
+        if (!isAuthorizedTopic(session, topic)) {
+            log.warn("Ignoring unauthorized websocket topic subscription: session={}, topic={}", session.getId(), topic);
             return;
         }
 
@@ -91,9 +111,79 @@ public class QcWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private boolean isAllowedTopic(String topic) {
-        return topic.startsWith("/topic/qc/batch/")
-                || topic.startsWith("/topic/reviewer/qc/");
+    private boolean isAuthorizedTopic(WebSocketSession session, String topic) {
+        Optional<User> user = currentUser(session);
+        if (user.isEmpty()) {
+            return false;
+        }
+        User actor = user.get();
+        if (ADMIN_NOTIFICATIONS_TOPIC.equals(topic)) {
+            return actor.getRole() == Role.ADMIN;
+        }
+        if (topic.startsWith("/topic/qc/batch/")) {
+            Long batchId = parseIdAfter(topic, "/topic/qc/batch/");
+            if (batchId == null) {
+                return false;
+            }
+            if (actor.getRole() == Role.ADMIN) {
+                return true;
+            }
+            return batchRepository.isReviewerAssigned(batchId, actor.getId());
+        }
+        if (topic.startsWith("/topic/reviewer/qc/")) {
+            Long qcResultId = parseIdAfter(topic, "/topic/reviewer/qc/");
+            if (qcResultId == null) {
+                return false;
+            }
+            return actor.getRole() == Role.ADMIN || qcResultRepository.isReviewerAssigned(qcResultId, actor.getId());
+        }
+        return false;
+    }
+
+    private Optional<User> currentUser(WebSocketSession session) {
+        Principal principal = session.getPrincipal();
+        Optional<User> principalUser = userFromAuthentication(principal instanceof Authentication authentication ? authentication : null);
+        if (principalUser.isPresent()) {
+            return principalUser;
+        }
+
+        Object handshakeAuth = session.getAttributes().get(WebSocketAuthHandshakeInterceptor.AUTHENTICATION_ATTRIBUTE);
+        if (handshakeAuth instanceof Authentication authentication) {
+            Optional<User> handshakeUser = userFromAuthentication(authentication);
+            if (handshakeUser.isPresent()) {
+                return handshakeUser;
+            }
+        }
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            return userRepository.findByUsername(principal.getName());
+        }
+        return Optional.empty();
+    }
+
+    private Optional<User> userFromAuthentication(Authentication authentication) {
+        if (authentication == null) {
+            return Optional.empty();
+        }
+        Object authPrincipal = authentication.getPrincipal();
+        if (authPrincipal instanceof UserPrincipal userPrincipal) {
+            return Optional.of(userPrincipal.getUser());
+        }
+        String name = authentication.getName();
+        if (name != null && !name.isBlank()) {
+            return userRepository.findByUsername(name);
+        }
+        return Optional.empty();
+    }
+
+    private Long parseIdAfter(String topic, String prefix) {
+        try {
+            String suffix = topic.substring(prefix.length());
+            int slash = suffix.indexOf('/');
+            String value = slash >= 0 ? suffix.substring(0, slash) : suffix;
+            return Long.parseLong(value);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void removeSession(WebSocketSession session) {

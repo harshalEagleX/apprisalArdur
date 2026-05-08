@@ -28,6 +28,8 @@ public record PythonQCResponse(
         @JsonProperty("model_provider")      String modelProvider,
         @JsonProperty("model_name")          String modelName,
         @JsonProperty("vision_model")        String visionModel,
+        @JsonProperty("supporting_document_missing") Boolean supportingDocumentMissing,
+        @JsonProperty("missing_supporting_documents") List<String> missingSupportingDocuments,
         @JsonProperty("rule_results")        List<PythonRuleResult> ruleResults,
         @JsonProperty("action_items")        List<String> actionItems,
         List<String> suggestions,

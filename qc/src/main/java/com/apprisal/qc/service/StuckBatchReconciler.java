@@ -3,6 +3,7 @@ package com.apprisal.qc.service;
 import com.apprisal.common.entity.Batch;
 import com.apprisal.common.entity.BatchStatus;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.service.BusinessEventService;
 import com.apprisal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -43,6 +45,7 @@ public class StuckBatchReconciler {
     private final BatchRepository batchRepository;
     private final QCProcessingService qcProcessingService;
     private final PythonClientService pythonClientService;
+    private final BusinessEventService businessEventService;
 
     @Value("${qc.reconciler.retry-after-minutes:15}")
     private int retryAfterMinutes;
@@ -55,10 +58,12 @@ public class StuckBatchReconciler {
 
     public StuckBatchReconciler(BatchRepository batchRepository,
                                 QCProcessingService qcProcessingService,
-                                PythonClientService pythonClientService) {
+                                PythonClientService pythonClientService,
+                                BusinessEventService businessEventService) {
         this.batchRepository = batchRepository;
         this.qcProcessingService = qcProcessingService;
         this.pythonClientService = pythonClientService;
+        this.businessEventService = businessEventService;
     }
 
     /**
@@ -83,6 +88,7 @@ public class StuckBatchReconciler {
             LocalDateTime abandonCutoff = now.minusMinutes(abandonAfterMinutes);
 
             List<Batch> stuckBatches = batchRepository.findStuckInQcProcessing(retryCutoff);
+            releaseExpiredReviewLocks(now);
 
             if (stuckBatches.isEmpty()) {
                 log.debug("Reconciler: no stuck batches found");
@@ -139,6 +145,18 @@ public class StuckBatchReconciler {
             // Reset updatedAt so the next reconciler run doesn't immediately re-trigger again
             // (processBatchAsync sets status to QC_PROCESSING which updates updatedAt via @PreUpdate)
             qcProcessingService.processBatchAsync(batchId);
+        }
+    }
+
+    private void releaseExpiredReviewLocks(LocalDateTime now) {
+        List<Batch> expiredReviewBatches = batchRepository.findExpiredInReviewBatches(now);
+        for (Batch batch : expiredReviewBatches) {
+            batch.setStatus(BatchStatus.REVIEW_PENDING);
+            batchRepository.save(batch);
+            businessEventService.batchEvent("REVIEW_LOCK_EXPIRED", batch.getAssignedReviewer(), batch, "RELEASED",
+                    Map.of("expired_at", now.toString()));
+            log.info("Reconciler: returned batch {} ({}) from IN_REVIEW to REVIEW_PENDING after expired review lock",
+                    batch.getId(), batch.getParentBatchId());
         }
     }
 

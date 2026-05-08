@@ -60,6 +60,11 @@ def _page_excerpt(ctx: ValidationContext, terms: list[str], limit: int = 2200) -
     return excerpt[:limit]
 
 
+def _engagement_document_missing(ctx: ValidationContext) -> bool:
+    missing = {str(v).upper() for v in (ctx.missing_supporting_documents or [])}
+    return bool(ctx.supporting_document_missing or "ENGAGEMENT" in missing)
+
+
 async def enrich_context(ctx: ValidationContext) -> dict[str, Any]:
     if not is_ollama_available():
         ctx.llm_enrichment = {"available": False, "reason": "ollama_unavailable"}
@@ -95,7 +100,7 @@ async def enrich_context(ctx: ValidationContext) -> dict[str, Any]:
     prompts: list[tuple[str, str, int]] = []
     keys: list[str] = []
 
-    if report_address and reference_address:
+    if report_address and reference_address and not _engagement_document_missing(ctx):
         keys.append("address_normalization")
         prompts.append((f"""
 Are these two addresses referring to the same physical location?

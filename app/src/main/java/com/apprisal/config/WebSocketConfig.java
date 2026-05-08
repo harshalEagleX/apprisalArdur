@@ -12,12 +12,15 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final QcWebSocketHandler qcWebSocketHandler;
+    private final WebSocketAuthHandshakeInterceptor authHandshakeInterceptor;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
     private String allowedOriginsConfig;
 
-    public WebSocketConfig(QcWebSocketHandler qcWebSocketHandler) {
+    public WebSocketConfig(QcWebSocketHandler qcWebSocketHandler,
+            WebSocketAuthHandshakeInterceptor authHandshakeInterceptor) {
         this.qcWebSocketHandler = qcWebSocketHandler;
+        this.authHandshakeInterceptor = authHandshakeInterceptor;
     }
 
     @Override
@@ -28,6 +31,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
                 .toArray(String[]::new);
 
         registry.addHandler(qcWebSocketHandler, "/ws/qc")
+                .addInterceptors(authHandshakeInterceptor)
                 .setAllowedOrigins(allowedOrigins);
     }
 }

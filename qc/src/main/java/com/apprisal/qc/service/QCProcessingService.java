@@ -8,6 +8,7 @@ import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.ProcessingMetricsRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.realtime.RealtimeEventPublisher;
+import com.apprisal.common.service.BusinessEventService;
 import com.apprisal.common.service.FileMatchingService;
 import com.apprisal.common.service.FileMatchingService.FilePair;
 import com.apprisal.common.util.AppTime;
@@ -52,8 +53,10 @@ public class QCProcessingService {
     private final ProcessingMetricsRepository metricsRepository;
     private final ObjectMapper objectMapper;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final BusinessEventService businessEventService;
     private final Map<Long, QCProgress> progressByBatch = new ConcurrentHashMap<>();
     private final Map<Long, Thread> runningThreads = new ConcurrentHashMap<>();
+    private final Map<Long, Instant> batchQcStartedAt = new ConcurrentHashMap<>();
     private final Set<Long> activeBatches = ConcurrentHashMap.newKeySet();
     private final Set<Long> cancellationRequests = ConcurrentHashMap.newKeySet();
 
@@ -78,7 +81,8 @@ public class QCProcessingService {
             BatchFileRepository batchFileRepository,
             ProcessingMetricsRepository metricsRepository,
             ObjectMapper objectMapper,
-            RealtimeEventPublisher realtimeEventPublisher) {
+            RealtimeEventPublisher realtimeEventPublisher,
+            BusinessEventService businessEventService) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
@@ -87,6 +91,7 @@ public class QCProcessingService {
         this.metricsRepository = metricsRepository;
         this.objectMapper = objectMapper;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.businessEventService = businessEventService;
     }
 
     /**
@@ -144,6 +149,7 @@ public class QCProcessingService {
         } finally {
             runningThreads.remove(batchId);
             activeBatches.remove(batchId);
+            batchQcStartedAt.remove(batchId);
             cancellationRequests.remove(batchId);
         }
     }
@@ -158,7 +164,10 @@ public class QCProcessingService {
         cancellationRequests.remove(batchId);
         int updated = batchRepository.markQcProcessingIfTriggerable(batchId, AppTime.now());
         if (updated > 0) {
+            batchQcStartedAt.put(batchId, Instant.now());
             updateProgress(batchId, "queued", "QC job queued with " + safeModelConfig.label(), 0, 1, true, safeModelConfig);
+            businessEventService.record("BATCH_QC_QUEUED", null, "java", "QUEUED",
+                    "Batch", batchId, batchId, null, null, null, Map.of("model", safeModelConfig.label()));
             log.info("Claimed batch {} for QC processing using {}", batchId, safeModelConfig.label());
             return true;
         }
@@ -183,6 +192,8 @@ public class QCProcessingService {
         activeBatches.remove(batchId);
         updateProgress(batchId, "stopped", message, 0, 1, false, QCModelConfig.defaults());
         if (updated > 0) {
+            businessEventService.record("BATCH_QC_CANCELLED", null, "java", "CANCELLED",
+                    "Batch", batchId, batchId, null, null, null, Map.of("message", message));
             log.warn("QC stop requested for batch {}{}", batchId, worker != null ? " and worker interrupted" : "");
             return true;
         }
@@ -200,6 +211,7 @@ public class QCProcessingService {
         batchRepository.findById(batchId).ifPresent(b -> {
             b.setStatus(BatchStatus.ERROR);
             b.setErrorMessage(errorMessage);
+            businessEventService.batchEvent("BATCH_QC_FAILED", null, b, "ERROR", Map.of("error_message", errorMessage));
         });
     }
 
@@ -231,6 +243,7 @@ public class QCProcessingService {
 
     public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId, QCModelConfig modelConfig) {
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        batchQcStartedAt.putIfAbsent(batchId, Instant.now());
         log.info("Starting QC processing for batch {}", batchId);
         updateProgress(batchId, "starting", "Starting QC processing with " + safeModelConfig.label(), 0, 1, true, safeModelConfig);
         throwIfCancelled(batchId);
@@ -241,6 +254,7 @@ public class QCProcessingService {
         if (batch.getStatus() != BatchStatus.QC_PROCESSING) {
             self.saveFinalBatchStatus(batchId, BatchStatus.QC_PROCESSING, null); // Python OCR + rules running
         }
+        businessEventService.batchEvent("BATCH_QC_STARTED", null, batch, "STARTED", Map.of("model", safeModelConfig.label()));
         updateProgress(batchId, "matching", "Matching appraisal, engagement, and contract files", 0, 1, true, safeModelConfig);
 
         // Get matched file pairs
@@ -298,6 +312,15 @@ public class QCProcessingService {
 
         BatchStatus newStatus = determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
         self.saveFinalBatchStatus(batchId, newStatus, newStatus == BatchStatus.ERROR ? "All appraisal files failed QC processing" : null);
+        businessEventService.record("BATCH_QC_COMPLETED", null, "java", newStatus.name(),
+                "Batch", batchId, batchId, null, null, null,
+                Map.of(
+                        "auto_pass_count", autoPassCount,
+                        "to_verify_count", toVerifyCount,
+                        "auto_fail_count", autoFailCount,
+                        "error_count", errorCount,
+                        "total_files", pairs.size()
+                ));
 
         log.info("Batch {} QC completed: autoPass={}, toVerify={}, autoFail={}, errors={}. New status: {}",
                 batchId, autoPassCount, toVerifyCount, autoFailCount, errorCount, newStatus);
@@ -441,6 +464,9 @@ public class QCProcessingService {
         }
 
         Long progressBatchId = appraisal.getBatch().getId();
+        Instant pythonStartedAt = Instant.now();
+        long queueWaitMs = queueWaitMs(progressBatchId, pythonStartedAt);
+        int retryCount = 0;
 
         // --- Async queue path (Celery worker) ---
         // Submit the job and poll for completion so Python HTTP threads are never
@@ -462,6 +488,7 @@ public class QCProcessingService {
                     job.jobId(),
                     timeout,
                     () -> isCancellationRequested(progressBatchId));
+            retryCount = pythonClient.getLastRetryCount();
 
         } catch (CancellationException ce) {
             throw ce;
@@ -484,6 +511,7 @@ public class QCProcessingService {
                         updateSubProgress(progressBatchId, subStage, subMessage,
                                 snapshot.subPercent(), snapshot.elapsedMs());
                     });
+            retryCount = pythonClient.getLastRetryCount();
         }
         throwIfCancelled(progressBatchId);
 
@@ -515,6 +543,7 @@ public class QCProcessingService {
                 .extractionMethod(pythonResponse.extractionMethod())
                 .pythonDocumentId(pythonResponse.documentId())
                 .cacheHit(pythonResponse.cacheHit())
+                .missingDocuments(missingDocumentsJson(pythonResponse))
                 .sourceDocumentHash(appraisal.getContentHash())
                 .sourceDocumentVersion(appraisal.getContentVersion())
                 .build();
@@ -558,10 +587,64 @@ public class QCProcessingService {
         batchFileRepository.save(appraisal);
         log.info("Saved QC result for file {}: decision={}", appraisal.getFilename(), decision);
 
+        recordQcEvents(qcResult, pythonResponse, decision, modelConfig);
+
         // Capture processing metrics for analytics
-        saveMetrics(qcResult, pythonResponse, appraisal);
+        saveMetrics(qcResult, pythonResponse, appraisal, modelConfig, queueWaitMs, retryCount);
 
         return qcResult;
+    }
+
+    private void recordQcEvents(QCResult qcResult, PythonQCResponse pythonResponse, QCDecision decision, QCModelConfig modelConfig) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("decision", decision.name());
+        payload.put("total_rules", pythonResponse.totalRules());
+        payload.put("passed", pythonResponse.passed());
+        payload.put("failed", pythonResponse.failed());
+        payload.put("verify", pythonResponse.verify());
+        payload.put("processing_time_ms", pythonResponse.processingTimeMs());
+        payload.put("model_provider", pythonResponse.modelProvider() != null ? pythonResponse.modelProvider() : modelConfig.provider());
+        payload.put("model_name", pythonResponse.modelName() != null ? pythonResponse.modelName() : modelConfig.textModel());
+        payload.put("vision_model", pythonResponse.visionModel() != null ? pythonResponse.visionModel() : modelConfig.visionModel());
+        payload.put("supporting_document_missing", Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing()));
+        payload.put("missing_supporting_documents", pythonResponse.missingSupportingDocuments());
+        businessEventService.qcEvent(Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "FILE_OCR_CACHED" : "FILE_OCR_EXTRACTED",
+                null,
+                qcResult,
+                Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "CACHE_HIT" : "EXTRACTED",
+                payload);
+        businessEventService.qcEvent("QC_COMPLETED", null, qcResult, decision.name(), payload);
+
+        if (qcResult.getRuleResults() == null) {
+            return;
+        }
+        for (QCRuleResult ruleResult : qcResult.getRuleResults()) {
+            Map<String, Object> rulePayload = new LinkedHashMap<>();
+            rulePayload.put("rule_id", ruleResult.getRuleId());
+            rulePayload.put("rule_name", ruleResult.getRuleName());
+            rulePayload.put("status", ruleResult.getStatus());
+            rulePayload.put("severity", ruleResult.getSeverity());
+            rulePayload.put("review_required", Boolean.TRUE.equals(ruleResult.getReviewRequired()));
+            rulePayload.put("needs_verification", Boolean.TRUE.equals(ruleResult.getNeedsVerification()));
+            rulePayload.put("confidence_score", ruleResult.getConfidenceScore());
+            rulePayload.put("pdf_page", ruleResult.getPdfPage());
+            businessEventService.record("QC_RULE_EVALUATED", null, "java", ruleResult.getStatus(),
+                    "QCRuleResult", ruleResult.getId(),
+                    qcResult.getBatchFile() != null && qcResult.getBatchFile().getBatch() != null ? qcResult.getBatchFile().getBatch().getId() : null,
+                    qcResult.getBatchFile() != null ? qcResult.getBatchFile().getId() : null,
+                    qcResult.getId(), ruleResult.getId(), rulePayload);
+        }
+    }
+
+    private String missingDocumentsJson(PythonQCResponse pythonResponse) {
+        if (!Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing())
+                && (pythonResponse.missingSupportingDocuments() == null || pythonResponse.missingSupportingDocuments().isEmpty())) {
+            return null;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("supporting_document_missing", Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing()));
+        payload.put("missing_supporting_documents", pythonResponse.missingSupportingDocuments());
+        return toJson(payload);
     }
 
     /**
@@ -621,7 +704,8 @@ public class QCProcessingService {
         return BatchStatus.REVIEW_PENDING;
     }
 
-    private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file) {
+    private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file, QCModelConfig modelConfig,
+            long queueWaitMs, int retryCount) {
         try {
             int total  = Objects.requireNonNullElse(r.totalRules(), 0);
             int passed = Objects.requireNonNullElse(r.passed(), 0);
@@ -657,6 +741,9 @@ public class QCProcessingService {
                 .rulesPassed(passed)
                 .rulesFailed(Objects.requireNonNullElse(r.failed(), 0))
                 .rulesVerify(Objects.requireNonNullElse(r.verify(), 0))
+                .modelVersion(r.modelName() != null ? r.modelName() : modelConfig.textModel())
+                .retryCount(retryCount)
+                .queueWaitMs(queueWaitMs)
                 .cacheHit(Boolean.TRUE.equals(r.cacheHit()))
                 .fileSizeBytes(file.getFileSize())
                 .build();
@@ -665,6 +752,14 @@ public class QCProcessingService {
         } catch (Exception e) {
             log.warn("Failed to save processing metrics for file {}: {}", file.getFilename(), e.getMessage());
         }
+    }
+
+    private long queueWaitMs(Long batchId, Instant pythonStartedAt) {
+        Instant startedAt = batchQcStartedAt.get(batchId);
+        if (startedAt == null || pythonStartedAt == null || pythonStartedAt.isBefore(startedAt)) {
+            return 0L;
+        }
+        return Duration.between(startedAt, pythonStartedAt).toMillis();
     }
 
     private String toJson(Object obj) {

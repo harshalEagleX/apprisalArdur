@@ -13,6 +13,16 @@ from app.rule_engine.smart_identifier import RuleResult, RuleSeverity, RuleStatu
 
 logger = logging.getLogger(__name__)
 
+MISSING_ENGAGEMENT_MESSAGE = (
+    "Engagement letter was not provided for this order. Cross-reference validation "
+    "against the order form cannot be performed. Please upload the engagement letter and reprocess."
+)
+
+
+def _engagement_document_missing(context: ValidationContext) -> bool:
+    missing = {str(v).upper() for v in (context.missing_supporting_documents or [])}
+    return bool(context.supporting_document_missing or "ENGAGEMENT" in missing)
+
 
 class CrossFieldValidator:
     def validate(self, context: ValidationContext) -> List[RuleResult]:
@@ -139,6 +149,17 @@ class CrossFieldValidator:
         return None
 
     def _subject_address_three_way(self, context: ValidationContext) -> Optional[RuleResult]:
+        if _engagement_document_missing(context):
+            return RuleResult(
+                rule_id="XF-4",
+                rule_name="Subject Address Across Sources",
+                status=RuleStatus.VERIFY,
+                message=MISSING_ENGAGEMENT_MESSAGE,
+                verify_question="Upload the engagement letter and reprocess before relying on cross-source address validation.",
+                review_required=True,
+                evidence=["Missing engagement letter"],
+            )
+
         subject = context.report.subject.address
         engagement = context.engagement_letter.property_address if context.engagement_letter else None
         grid = None

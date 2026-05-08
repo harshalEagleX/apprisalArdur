@@ -78,7 +78,6 @@ def process_document_async(
     Cleans up job_dir on completion or failure.
     """
     from app.qc_processor import qc_processor
-    from app.services.cache_service import save_rule_results
 
     self.update_state(state="STARTED", meta={"file_hash": file_hash,
                                               "filename": original_filename})
@@ -113,10 +112,6 @@ def process_document_async(
 
         payload = results.model_dump()
         payload["file_hash"] = file_hash
-
-        doc_id = payload.get("document_id")
-        if doc_id:
-            save_rule_results(doc_id, results.rule_results)
 
         logger.info("Async QC task complete: file=%s hash=%s", original_filename, file_hash[:12])
         return payload

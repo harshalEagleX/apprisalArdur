@@ -272,6 +272,38 @@ public class ReviewerApiController {
         }
     }
 
+    @PostMapping("/decision/focus")
+    public ResponseEntity<Map<String, Object>> recordRuleFocus(
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            if (principal == null) {
+                return ResponseEntity.status(401).body(errorBody("AUTH_REQUIRED", "Authentication required"));
+            }
+            Object rawRuleResultId = request != null ? request.get("ruleResultId") : null;
+            Long ruleResultId = rawRuleResultId instanceof Number n ? n.longValue()
+                    : rawRuleResultId != null ? Long.valueOf(rawRuleResultId.toString()) : null;
+            String sessionToken = request != null && request.get("sessionToken") != null
+                    ? request.get("sessionToken").toString()
+                    : null;
+            if (ruleResultId == null) throw new IllegalArgumentException("ruleResultId is required");
+            if (sessionToken == null || sessionToken.isBlank()) throw new IllegalArgumentException("sessionToken is required");
+
+            if (principal.getUser().getRole() == Role.REVIEWER) {
+                verificationService.assertReviewerOwnsRuleResult(ruleResultId, principal.getUser().getId());
+            }
+            verificationService.recordRuleFocused(ruleResultId, sessionToken, principal.getUser());
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(errorBody("ACCESS_DENIED", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(errorBody("INVALID_REQUEST", e.getMessage()));
+        } catch (Exception e) {
+            log.debug("Rule focus event was not recorded: {}", e.getMessage());
+            return ResponseEntity.status(409).body(errorBody("REVIEW_STATE_CONFLICT", e.getMessage()));
+        }
+    }
+
     @PostMapping("/qc/{qcResultId}/submit")
     public ResponseEntity<Map<String, Object>> submitSavedReview(
             @PathVariable Long qcResultId,

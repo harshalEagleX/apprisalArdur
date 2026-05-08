@@ -11,6 +11,32 @@ from app.models.appraisal import ValidationContext
 from app.services.external_services import ExternalServices
 
 
+MISSING_ENGAGEMENT_MESSAGE = (
+    "Engagement letter was not provided for this order. Cross-reference validation "
+    "against the order form cannot be performed. Please upload the engagement letter and reprocess."
+)
+
+
+def _engagement_document_missing(ctx: ValidationContext) -> bool:
+    missing = {str(v).upper() for v in (ctx.missing_supporting_documents or [])}
+    return bool(ctx.supporting_document_missing or "ENGAGEMENT" in missing)
+
+
+def _missing_engagement_result(rule_id: str, rule_name: str) -> RuleResult:
+    return RuleResult(
+        rule_id=rule_id,
+        rule_name=rule_name,
+        status=RuleStatus.VERIFY,
+        message=MISSING_ENGAGEMENT_MESSAGE,
+        action_item="Upload the engagement letter and reprocess this QC result.",
+        review_required=True,
+        details={
+            "supporting_document_missing": True,
+            "missing_supporting_documents": ["ENGAGEMENT"],
+        },
+    )
+
+
 @rule(id="S-1", name="Property Address Validation")
 def validate_property_address(ctx: ValidationContext) -> RuleResult:
     """
@@ -19,6 +45,9 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
     Validation: Cross-verify with USPS address verification
     Reject Conditions: Address/City/Zip/County mismatch
     """
+    if _engagement_document_missing(ctx):
+        return _missing_engagement_result("S-1", "Property Address Validation")
+
     if not ctx.report.subject.address:
         # If components are there but 'address' (street) is missing, we might still proceed, 
         # but usually address is required.
@@ -265,6 +294,9 @@ def validate_borrower_name(ctx: ValidationContext) -> RuleResult:
     Validation: Include ALL borrowers and co-borrowers
     Watch Items: Spelling errors, Middle names, Suffixes (JR/SR)
     """
+    if _engagement_document_missing(ctx):
+        return _missing_engagement_result("S-2", "Borrower Name Validation")
+
     if not ctx.report.subject.borrower:
         raise DataMissingException("Borrower Name (Report)")
     
@@ -647,6 +679,9 @@ def validate_lender_client(ctx: ValidationContext) -> RuleResult:
     Rule: Must match Client Engagement Letter EXACTLY
     Reference: "Client Displayed on Report" from engagement letter
     """
+    if _engagement_document_missing(ctx):
+        return _missing_engagement_result("S-10", "Lender/Client Information")
+
     if not ctx.engagement_letter:
         raise DataMissingException("Engagement Letter (for Lender Verification)")
     

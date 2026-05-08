@@ -7,8 +7,8 @@ import {
   Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search, Maximize2, Minimize2,
 } from "lucide-react";
 import {
-  getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo,
-  type BatchFile, type QCRuleResult,
+  getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus,
+  type BatchFile, type DocumentMatch, type QCRuleResult,
 } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
 import DeviceGate from "@/components/shared/DeviceGate";
@@ -101,6 +101,8 @@ export default function VerifyFilePage() {
   const [saved, setSaved]               = useState<Set<number>>(new Set());
   const [progress, setProgress]         = useState<ReviewProgress | null>(null);
   const [documents, setDocuments]       = useState<BatchFile[]>([]);
+  const [missingDocuments, setMissingDocuments] = useState<string | null>(null);
+  const [documentMatches, setDocumentMatches] = useState<DocumentMatch[]>([]);
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
   const [pdfError, setPdfError]         = useState(false);
   const [activeFocus, setActiveFocus]   = useState<RuleFocus | null>(null);
@@ -192,6 +194,8 @@ export default function VerifyFilePage() {
       .then(d => {
         const docs = d.documents?.length ? d.documents : d.batchFile ? [d.batchFile] : [];
         setDocuments(docs); setActiveDocumentId(d.batchFile?.id ?? docs[0]?.id ?? null);
+        setMissingDocuments(d.missingDocuments ?? null);
+        setDocumentMatches(d.documentMatches ?? []);
         setPdfError(docs.length === 0);
       }).catch(() => setPdfError(true));
   }, [qcResultId]);
@@ -241,6 +245,22 @@ export default function VerifyFilePage() {
     (doc.documentQualityFlags ?? "").split("\n").map(f => f.trim()).filter(Boolean)
       .map(f => `${doc.fileType === "ENGAGEMENT" ? "Order" : doc.fileType === "APPRAISAL" ? "Report" : "Contract"}: ${f}`)
   ), [documents]);
+  const missingDocumentWarnings = useMemo(() => {
+    if (!missingDocuments) return [];
+    try {
+      const parsed = JSON.parse(missingDocuments) as { missing_supporting_documents?: string[]; supporting_document_missing?: boolean };
+      return (parsed.missing_supporting_documents ?? []).map(doc => `${doc === "ENGAGEMENT" ? "Engagement letter" : doc} was not provided; cross-document rules require manual verification.`);
+    } catch {
+      return [missingDocuments];
+    }
+  }, [missingDocuments]);
+  const uncertainMatchWarnings = useMemo(() => documentMatches
+    .filter(match => (match.confidenceScore ?? 0) > 0 && (match.confidenceScore ?? 0) < 0.85)
+    .map(match => {
+      const label = match.supportingFileType === "ENGAGEMENT" ? "engagement letter" : match.supportingFileType === "CONTRACT" ? "contract" : "supporting document";
+      const percent = Math.round((match.confidenceScore ?? 0) * 100);
+      return `Document pairing is uncertain: ${label}${match.supportingFilename ? ` (${match.supportingFilename})` : ""} matched at ${percent}% confidence. Verify it matches this appraisal before reviewing rule results.`;
+    }), [documentMatches]);
   const activeDocumentUrl = activeDocument ? getPdfUrl(activeDocument.id) : undefined;
 
   const counts = {
@@ -286,6 +306,9 @@ export default function VerifyFilePage() {
   // ── Actions ───────────────────────────────────────────────────────────────
   function focusRule(rule: QCRuleResult) {
     setSelectedRuleId(rule.id);
+    if (sessionToken) {
+      void recordRuleFocus(rule.id, sessionToken).catch(() => undefined);
+    }
     const nextFocus = focusForRule(rule);
     if (!nextFocus.located) { setActiveFocus(nextFocus); setHighlighting(false); return; }
     const preferredDoc = documents.find(doc => doc.fileType === nextFocus.documentType) ?? documents.find(doc => doc.fileType === "APPRAISAL") ?? documents[0];
@@ -530,6 +553,15 @@ export default function VerifyFilePage() {
             <div className="font-semibold">Document quality warning</div>
             <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1">
               {documentWarnings.map((w, i) => <span key={i}>{w}</span>)}
+            </div>
+          </div>
+        )}
+
+        {(missingDocumentWarnings.length > 0 || uncertainMatchWarnings.length > 0) && (
+          <div className="border-b border-amber-500/25 bg-amber-950/45 px-4 py-2 text-xs text-amber-100">
+            <div className="flex items-center gap-1.5 font-semibold"><AlertTriangle size={13} /> Validation context warning</div>
+            <div className="mt-1 flex flex-col gap-0.5">
+              {[...missingDocumentWarnings, ...uncertainMatchWarnings].map((w, i) => <span key={i}>{w}</span>)}
             </div>
           </div>
         )}

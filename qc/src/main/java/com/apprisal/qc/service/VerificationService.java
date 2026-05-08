@@ -2,9 +2,12 @@ package com.apprisal.qc.service;
 
 import com.apprisal.common.entity.*;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.OperatorSessionRepository;
+import com.apprisal.common.repository.ProcessingMetricsRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.repository.QCRuleResultRepository;
 import com.apprisal.common.service.AuditLogService;
+import com.apprisal.common.service.BusinessEventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.Locale;
@@ -33,16 +38,25 @@ public class VerificationService {
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
     private final BatchRepository batchRepository;
+    private final ProcessingMetricsRepository processingMetricsRepository;
+    private final OperatorSessionRepository operatorSessionRepository;
     private final AuditLogService auditLogService;
+    private final BusinessEventService businessEventService;
 
     public VerificationService(QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
             BatchRepository batchRepository,
-            AuditLogService auditLogService) {
+            ProcessingMetricsRepository processingMetricsRepository,
+            OperatorSessionRepository operatorSessionRepository,
+            AuditLogService auditLogService,
+            BusinessEventService businessEventService) {
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.batchRepository = batchRepository;
+        this.processingMetricsRepository = processingMetricsRepository;
+        this.operatorSessionRepository = operatorSessionRepository;
         this.auditLogService = auditLogService;
+        this.businessEventService = businessEventService;
     }
 
     @Transactional
@@ -78,11 +92,22 @@ public class VerificationService {
         qcResult.setReviewLockedBy(reviewer);
         qcResult.setReviewLastActiveAt(now);
         qcResult.setReviewLockExpiresAt(now.plus(REVIEW_LOCK_TTL));
+
+        Batch batch = qcResult.getBatchFile() != null ? qcResult.getBatchFile().getBatch() : null;
+        if (batch != null && batch.getStatus() == BatchStatus.REVIEW_PENDING) {
+            batch.setStatus(BatchStatus.IN_REVIEW);
+            batchRepository.save(batch);
+        }
         QCResult saved = qcResultRepository.save(qcResult);
 
         markItemsPresented(qcResultId, saved.getReviewSessionToken());
         auditLogService.log(reviewer, "REVIEW_SESSION_STARTED", "QCResult", qcResultId,
                 "sessionToken=" + saved.getReviewSessionToken(), ipAddress, userAgent);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("session_token", saved.getReviewSessionToken());
+        payload.put("lock_expires_at", saved.getReviewLockExpiresAt() != null ? saved.getReviewLockExpiresAt().toString() : null);
+        payload.put("prior_action_count", priorActionCount);
+        businessEventService.qcEvent("REVIEW_OPENED", reviewer, saved, "STARTED", payload);
         return saved;
     }
 
@@ -110,6 +135,13 @@ public class VerificationService {
         if (sessionToken.equals(qcResult.getReviewSessionToken())) {
             qcResult.setReviewLockExpiresAt(LocalDateTime.now());
             qcResultRepository.save(qcResult);
+            Batch batch = qcResult.getBatchFile() != null ? qcResult.getBatchFile().getBatch() : null;
+            if (batch != null && batch.getStatus() == BatchStatus.IN_REVIEW && qcResult.getFinalDecision() == null) {
+                batch.setStatus(BatchStatus.REVIEW_PENDING);
+                batchRepository.save(batch);
+                businessEventService.qcEvent("REVIEW_RELEASED", qcResult.getReviewLockedBy(), qcResult, "RELEASED",
+                        Map.of("session_token", sessionToken));
+            }
         }
     }
 
@@ -160,6 +192,33 @@ public class VerificationService {
         return qcRuleResultRepository.findByQcResultId(qcResultId);
     }
 
+    @Transactional
+    public void recordRuleFocused(@NonNull Long ruleResultId, @NonNull String sessionToken, @NonNull User reviewer) {
+        QCRuleResult ruleResult = qcRuleResultRepository.findById(ruleResultId)
+                .orElseThrow(() -> new RuntimeException("Rule result not found: " + ruleResultId));
+        QCResult qcResult = ruleResult.getQcResult();
+        assertDocumentCurrent(qcResult);
+        assertSessionOwnsQcResult(qcResult, sessionToken);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("rule_id", ruleResult.getRuleId());
+        payload.put("rule_name", ruleResult.getRuleName());
+        payload.put("status", ruleResult.getStatus());
+        payload.put("severity", ruleResult.getSeverity());
+        payload.put("pdf_page", ruleResult.getPdfPage());
+        payload.put("has_bbox", ruleResult.getBboxX() != null && ruleResult.getBboxY() != null
+                && ruleResult.getBboxW() != null && ruleResult.getBboxH() != null);
+
+        Long batchId = qcResult != null && qcResult.getBatchFile() != null && qcResult.getBatchFile().getBatch() != null
+                ? qcResult.getBatchFile().getBatch().getId()
+                : null;
+        Long batchFileId = qcResult != null && qcResult.getBatchFile() != null ? qcResult.getBatchFile().getId() : null;
+        businessEventService.record("REVIEW_RULE_FOCUSED", reviewer, "frontend", "FOCUSED",
+                "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
+                qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
+        touchOperatorSession(reviewer);
+    }
+
     /**
      * Save a single decision (for auto-save AJAX calls).
      * 
@@ -185,6 +244,7 @@ public class VerificationService {
 
         boolean passed = isPassDecision(decision);
         String originalStatus = normalizedStatus(ruleResult.getStatus());
+        boolean wasOverridePending = Boolean.TRUE.equals(ruleResult.getOverridePending());
 
         if (passed && "fail".equals(originalStatus)) {
             handleFailOverride(ruleResult, comment, reviewer, sessionToken);
@@ -216,6 +276,7 @@ public class VerificationService {
                         + ", overridePending=" + Boolean.TRUE.equals(ruleResult.getOverridePending())
                         + ", latencyMs=" + decisionLatencyMs,
                 ipAddress, userAgent);
+        recordRuleDecisionEvent(ruleResult, reviewer, decision, decisionLatencyMs, acknowledged, originalStatus, wasOverridePending);
 
         log.info("Decision saved: ruleResultId={}, decision={}, newStatus={}",
                 ruleResultId, decision, ruleResult.getStatus());
@@ -289,6 +350,7 @@ public class VerificationService {
 
         QCResult saved = qcResultRepository.save(qcResult);
         completeBatchIfReviewFinished(saved);
+        recordReviewSubmitted(saved, reviewer, "submitVerification");
 
         log.info("QC Result {} verification complete: finalDecision={}, reviewedBy={}",
                 qcResultId, finalDecision, reviewer.getUsername());
@@ -318,6 +380,7 @@ public class VerificationService {
 
         QCResult saved = qcResultRepository.save(qcResult);
         completeBatchIfReviewFinished(saved);
+        recordReviewSubmitted(saved, reviewer, "acceptAll");
         return saved;
     }
 
@@ -335,6 +398,7 @@ public class VerificationService {
 
         QCResult saved = qcResultRepository.save(qcResult);
         completeBatchIfReviewFinished(saved);
+        recordReviewSubmitted(saved, reviewer, "rejectAll");
         return saved;
     }
 
@@ -363,6 +427,7 @@ public class VerificationService {
 
         QCResult saved = qcResultRepository.save(qcResult);
         completeBatchIfReviewFinished(saved);
+        recordReviewSubmitted(saved, reviewer, "completeSavedVerification");
         return saved;
     }
 
@@ -444,7 +509,98 @@ public class VerificationService {
         batch.setStatus(BatchStatus.COMPLETED);
         batch.setErrorMessage(null);
         batchRepository.save(batch);
+        businessEventService.batchEvent("BATCH_COMPLETED", qcResult.getReviewedBy(), batch, "COMPLETED",
+                Map.of("qc_result_id", qcResult.getId()));
         log.info("Batch {} completed after reviewer verification", batch.getId());
+    }
+
+    private void recordRuleDecisionEvent(QCRuleResult ruleResult, User reviewer, String decision,
+            Long decisionLatencyMs, Boolean acknowledged, String originalStatus, boolean wasOverridePending) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("rule_id", ruleResult.getRuleId());
+        payload.put("decision", decision);
+        payload.put("original_status", originalStatus);
+        payload.put("new_status", ruleResult.getStatus());
+        payload.put("latency_ms", decisionLatencyMs);
+        payload.put("acknowledged", Boolean.TRUE.equals(acknowledged));
+        payload.put("override_pending", Boolean.TRUE.equals(ruleResult.getOverridePending()));
+        QCResult qcResult = ruleResult.getQcResult();
+        Long batchId = qcResult != null && qcResult.getBatchFile() != null && qcResult.getBatchFile().getBatch() != null
+                ? qcResult.getBatchFile().getBatch().getId()
+                : null;
+        Long batchFileId = qcResult != null && qcResult.getBatchFile() != null ? qcResult.getBatchFile().getId() : null;
+        businessEventService.record("REVIEW_RULE_DECIDED", reviewer, "java", ruleResult.getStatus(),
+                "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
+                qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
+        recordReviewerDecisionActivity(reviewer, originalStatus, ruleResult.getStatus());
+
+        if ("fail".equals(originalStatus) && "PASS".equalsIgnoreCase(decision)) {
+            String eventType = wasOverridePending ? "OVERRIDE_APPROVED" : "OVERRIDE_REQUESTED";
+            String outcome = wasOverridePending ? "APPROVED" : "PENDING";
+            businessEventService.record(eventType, reviewer, "java", outcome,
+                    "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
+                    qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
+        } else if (wasOverridePending && "FAIL".equalsIgnoreCase(decision)) {
+            businessEventService.record("OVERRIDE_REJECTED", reviewer, "java", "REJECTED",
+                    "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
+                    qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
+        }
+    }
+
+    private void recordReviewSubmitted(QCResult qcResult, User reviewer, String source) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("source", source);
+        payload.put("final_decision", qcResult.getFinalDecision() != null ? qcResult.getFinalDecision().name() : null);
+        payload.put("reviewed_at", qcResult.getReviewedAt() != null ? qcResult.getReviewedAt().toString() : null);
+        payload.put("reviewer_notes_present", qcResult.getReviewerNotes() != null && !qcResult.getReviewerNotes().isBlank());
+        attachOperatorSessionToMetrics(qcResult, reviewer);
+        businessEventService.qcEvent("REVIEW_SUBMITTED", reviewer, qcResult,
+                qcResult.getFinalDecision() != null ? qcResult.getFinalDecision().name() : "UNKNOWN",
+                payload);
+    }
+
+    private void recordReviewerDecisionActivity(User reviewer, String originalStatus, String newStatus) {
+        activeSession(reviewer).ifPresent(session -> {
+            session.setLastActiveAt(LocalDateTime.now());
+            session.setStatus(OperatorSession.Status.ACTIVE);
+            if (!Objects.equals(normalizedStatus(originalStatus), normalizedStatus(newStatus))) {
+                session.setCorrectionsMade(Objects.requireNonNullElse(session.getCorrectionsMade(), 0) + 1);
+            }
+            operatorSessionRepository.save(session);
+        });
+    }
+
+    private void touchOperatorSession(User reviewer) {
+        activeSession(reviewer).ifPresent(session -> {
+            session.setLastActiveAt(LocalDateTime.now());
+            session.setStatus(OperatorSession.Status.ACTIVE);
+            operatorSessionRepository.save(session);
+        });
+    }
+
+    private void attachOperatorSessionToMetrics(QCResult qcResult, User reviewer) {
+        activeSession(reviewer).ifPresent(session -> {
+            processingMetricsRepository.findByQcResultId(qcResult.getId()).ifPresent(metrics -> {
+                metrics.setOperatorSessionId(session.getId());
+                processingMetricsRepository.save(metrics);
+            });
+            session.setFilesProcessed(Objects.requireNonNullElse(session.getFilesProcessed(), 0) + 1);
+            session.setLastActiveAt(LocalDateTime.now());
+            session.setStatus(OperatorSession.Status.ACTIVE);
+            operatorSessionRepository.save(session);
+        });
+    }
+
+    private java.util.Optional<OperatorSession> activeSession(User reviewer) {
+        if (reviewer == null || reviewer.getId() == null) {
+            return java.util.Optional.empty();
+        }
+        List<OperatorSession> active = operatorSessionRepository.findByUserIdAndStatus(reviewer.getId(), OperatorSession.Status.ACTIVE);
+        if (!active.isEmpty()) {
+            return java.util.Optional.of(active.get(0));
+        }
+        List<OperatorSession> idle = operatorSessionRepository.findByUserIdAndStatus(reviewer.getId(), OperatorSession.Status.IDLE);
+        return idle.stream().findFirst();
     }
 
     private boolean isPassDecision(String decision) {

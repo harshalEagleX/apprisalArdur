@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { AlertCircle, X } from "lucide-react";
-import { createUser, updateUser, getClients, type User, type Client } from "@/lib/api";
+import { createUser, updateUser, getClients, getPasswordPolicy, type User, type Client } from "@/lib/api";
 import Spinner from "@/components/shared/Spinner";
 
 interface Props {
@@ -19,6 +19,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
   const [role, setRole]         = useState<"ADMIN" | "REVIEWER">("REVIEWER");
   const [clientId, setClientId] = useState<number | "">("");
   const [clients, setClients]   = useState<Client[]>([]);
+  const [passwordMinLength, setPasswordMinLength] = useState(8);
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -36,6 +37,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
       setError("");
       setFieldErrors({});
       getClients().then(setClients).catch(() => null);
+      getPasswordPolicy().then(policy => setPasswordMinLength(policy.minLength || 8)).catch(() => setPasswordMinLength(8));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [open, user]);
@@ -47,7 +49,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
     setError("");
     const nextErrors: Record<string, string> = {};
     if (!isEdit && !username.trim()) nextErrors.username = "Username is required.";
-    if (!isEdit && password.length < 8) nextErrors.password = "Password must be at least 8 characters.";
+    if (!isEdit && password.length < passwordMinLength) nextErrors.password = `Password must be at least ${passwordMinLength} characters.`;
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) nextErrors.email = "Enter a valid email address.";
     if (role === "REVIEWER" && !clientId) nextErrors.clientId = "Assign reviewers to a client organisation.";
     setFieldErrors(nextErrors);
@@ -121,7 +123,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
             <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
             <Field label="Password" required error={fieldErrors.password}>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="Min. 8 characters" required minLength={8} className={inputClass(fieldErrors.password)} />
+                placeholder={`Min. ${passwordMinLength} characters`} required minLength={passwordMinLength} className={inputClass(fieldErrors.password)} />
             </Field>
             </section>
           )}

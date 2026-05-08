@@ -1,19 +1,27 @@
 package com.apprisal.common.service;
 
 import com.apprisal.common.entity.BatchFile;
+import com.apprisal.common.entity.DocumentMatch;
 import com.apprisal.common.entity.FileType;
 import com.apprisal.common.repository.BatchFileRepository;
+import com.apprisal.common.repository.DocumentMatchRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -29,9 +37,18 @@ public class FileMatchingService {
     private static final Logger log = LoggerFactory.getLogger(FileMatchingService.class);
 
     private final BatchFileRepository batchFileRepository;
+    private final DocumentMatchRepository documentMatchRepository;
+    private final BusinessEventService businessEventService;
+    private final ObjectMapper objectMapper;
 
-    public FileMatchingService(BatchFileRepository batchFileRepository) {
+    public FileMatchingService(BatchFileRepository batchFileRepository,
+                               DocumentMatchRepository documentMatchRepository,
+                               BusinessEventService businessEventService,
+                               ObjectMapper objectMapper) {
         this.batchFileRepository = batchFileRepository;
+        this.documentMatchRepository = documentMatchRepository;
+        this.businessEventService = businessEventService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -42,45 +59,13 @@ public class FileMatchingService {
      * @return Optional containing the matching engagement file, or empty if not
      *         found
      */
+    @Transactional
     public Optional<BatchFile> findEngagementForAppraisal(BatchFile appraisalFile) {
         if (appraisalFile.getFileType() != FileType.APPRAISAL) {
             throw new IllegalArgumentException("Expected APPRAISAL file type, got: " + appraisalFile.getFileType());
         }
 
-        String orderId = appraisalFile.getOrderId();
-        if (orderId == null || orderId.isBlank()) {
-            log.warn("Appraisal file {} has no orderId, cannot match with engagement", appraisalFile.getFilename());
-            return Optional.empty();
-        }
-
-        List<BatchFile> engagements = batchFileRepository.findByBatchIdAndOrderIdAndFileType(
-                appraisalFile.getBatch().getId(),
-                orderId,
-                FileType.ENGAGEMENT);
-
-        if (engagements.isEmpty()) {
-            Optional<BatchFile> fuzzyMatch = findBestFilenameMatch(appraisalFile, FileType.ENGAGEMENT);
-            if (fuzzyMatch.isPresent()) {
-                log.info("Matched engagement {} for appraisal {} using normalized filename fallback",
-                        fuzzyMatch.get().getFilename(), appraisalFile.getFilename());
-                return fuzzyMatch;
-            }
-
-            log.warn("No engagement found for appraisal {} (orderId={})",
-                    appraisalFile.getFilename(), orderId);
-            return Optional.empty();
-        }
-
-        if (engagements.size() > 1) {
-            log.warn("Multiple engagements ({}) found for orderId={}, using first one",
-                    engagements.size(), orderId);
-        }
-
-        BatchFile engagement = engagements.get(0);
-        log.debug("Found engagement {} for appraisal {} (orderId={})",
-                engagement.getFilename(), appraisalFile.getFilename(), orderId);
-
-        return Optional.of(engagement);
+        return matchSupportingFile(appraisalFile, FileType.ENGAGEMENT).supportingFile();
     }
 
     /**
@@ -89,12 +74,15 @@ public class FileMatchingService {
      * @param batchId The batch ID
      * @return List of file pairs (appraisal + optional engagement)
      */
+    @Transactional
     public List<FilePair> getMatchedPairs(Long batchId) {
         List<BatchFile> appraisals = batchFileRepository.findByBatchIdAndFileType(batchId, FileType.APPRAISAL);
         List<FilePair> pairs = new ArrayList<>();
 
         for (BatchFile appraisal : appraisals) {
-            if (appraisal.getFilename().startsWith("._")) continue;
+            if (appraisal.getFilename() != null && appraisal.getFilename().startsWith("._")) {
+                continue;
+            }
 
             Optional<BatchFile> engagement = findEngagementForAppraisal(appraisal);
             Optional<BatchFile> contract   = findContractForAppraisal(appraisal);
@@ -105,14 +93,49 @@ public class FileMatchingService {
         return pairs;
     }
 
+    @Transactional
     public Optional<BatchFile> findContractForAppraisal(BatchFile appraisalFile) {
+        return matchSupportingFile(appraisalFile, FileType.CONTRACT).supportingFile();
+    }
+
+    private MatchOutcome matchSupportingFile(BatchFile appraisalFile, FileType targetType) {
+        if (appraisalFile.getFileType() != FileType.APPRAISAL) {
+            throw new IllegalArgumentException("Expected APPRAISAL file type, got: " + appraisalFile.getFileType());
+        }
+
         String orderId = appraisalFile.getOrderId();
-        if (orderId == null || orderId.isBlank()) return Optional.empty();
+        MatchOutcome outcome;
+        if (orderId == null || orderId.isBlank()) {
+            log.warn("Appraisal file {} has no orderId, cannot match with {}", appraisalFile.getFilename(), targetType);
+            outcome = new MatchOutcome(Optional.empty(), "no_order_id", 0.0,
+                    "Appraisal file has no orderId; " + targetType + " matching was skipped.",
+                    List.of(), List.of());
+        } else {
+            List<BatchFile> exactMatches = batchFileRepository.findByBatchIdAndOrderIdAndFileType(
+                    appraisalFile.getBatch().getId(), orderId, targetType);
 
-        List<BatchFile> contracts = batchFileRepository.findByBatchIdAndOrderIdAndFileType(
-                appraisalFile.getBatch().getId(), orderId, FileType.CONTRACT);
+            if (!exactMatches.isEmpty()) {
+                List<BatchFile> orderedMatches = exactMatches.stream()
+                        .sorted(Comparator.comparing(BatchFile::getId, Comparator.nullsLast(Long::compareTo)))
+                        .toList();
+                BatchFile selected = orderedMatches.get(0);
+                double confidence = orderedMatches.size() == 1 ? 1.0 : 0.80;
+                String reason = orderedMatches.size() == 1
+                        ? "Exact orderId match on " + orderId + "."
+                        : "Multiple " + targetType + " files shared orderId " + orderId + "; first candidate selected.";
+                if (orderedMatches.size() > 1) {
+                    log.warn("Multiple {} files ({}) found for orderId={}, using first one",
+                            targetType, orderedMatches.size(), orderId);
+                }
+                outcome = new MatchOutcome(Optional.of(selected), "exact_order_id", confidence, reason,
+                        orderedMatches.size() > 1 ? orderedMatches : List.of(), List.of());
+            } else {
+                outcome = findBestFilenameMatch(appraisalFile, targetType);
+            }
+        }
 
-        return contracts.isEmpty() ? findBestFilenameMatch(appraisalFile, FileType.CONTRACT) : Optional.of(contracts.get(0));
+        persistMatch(appraisalFile, targetType, outcome);
+        return outcome;
     }
 
     /**
@@ -138,7 +161,7 @@ public class FileMatchingService {
         return baseName;
     }
 
-    private Optional<BatchFile> findBestFilenameMatch(BatchFile appraisalFile, FileType targetType) {
+    private MatchOutcome findBestFilenameMatch(BatchFile appraisalFile, FileType targetType) {
         List<BatchFile> candidates = batchFileRepository.findByBatchIdAndFileType(
                 appraisalFile.getBatch().getId(), targetType);
 
@@ -147,6 +170,7 @@ public class FileMatchingService {
 
         BatchFile best = null;
         int bestScore = 0;
+        List<ScoredCandidate> scored = new ArrayList<>();
         for (BatchFile candidate : candidates) {
             if (candidate.getFilename() == null || candidate.getFilename().startsWith("._")) {
                 continue;
@@ -154,16 +178,113 @@ public class FileMatchingService {
 
             String candidateKey = normalizedMatchKey(candidate.getFilename());
             int score = scoreMatch(appraisalKey, appraisalTokens, candidateKey, matchTokens(candidate.getFilename()));
+            scored.add(new ScoredCandidate(candidate, score));
             if (score > bestScore) {
                 best = candidate;
                 bestScore = score;
             }
         }
 
-        return bestScore >= 2 ? Optional.of(best) : Optional.empty();
+        scored.sort(Comparator.comparingInt(ScoredCandidate::score).reversed());
+        final int selectedScore = bestScore;
+        List<BatchFile> ambiguous = scored.stream()
+                .filter(c -> c.score() > 0 && c.score() == selectedScore)
+                .map(ScoredCandidate::file)
+                .toList();
+        List<BatchFile> rejected = scored.stream()
+                .filter(c -> c.score() > 0 && c.score() < selectedScore)
+                .limit(5)
+                .map(ScoredCandidate::file)
+                .toList();
+
+        if (bestScore < 2 || best == null) {
+            log.warn("No {} found for appraisal {} using orderId or filename fallback",
+                    targetType, appraisalFile.getFilename());
+            return new MatchOutcome(Optional.empty(), "missing", 0.0,
+                    "No " + targetType + " candidate matched by orderId or filename heuristics.",
+                    List.of(), candidates);
+        }
+
+        double confidence = bestScore >= 100 ? 0.90 : bestScore >= 50 ? 0.78 : Math.min(0.70, 0.45 + (bestScore * 0.05));
+        if (ambiguous.size() > 1) {
+            confidence = Math.min(confidence, 0.72);
+        }
+
+        log.info("Matched {} {} for appraisal {} using normalized filename fallback (score={}, confidence={})",
+                targetType, best.getFilename(), appraisalFile.getFilename(), bestScore, confidence);
+        return new MatchOutcome(Optional.of(best), "fuzzy_name", confidence,
+                "Filename heuristic selected best candidate with score " + bestScore + ".",
+                ambiguous.size() > 1 ? ambiguous : List.of(), rejected);
+    }
+
+    private void persistMatch(BatchFile appraisalFile, FileType targetType, MatchOutcome outcome) {
+        String ambiguousJson = toJson(outcome.ambiguousCandidates().stream().map(this::candidatePayload).toList());
+        String rejectedJson = toJson(outcome.rejectedCandidates().stream().map(this::candidatePayload).toList());
+        DocumentMatch match = documentMatchRepository
+                .findByAppraisalFile_IdAndSupportingFileType(appraisalFile.getId(), targetType)
+                .orElseGet(DocumentMatch::new);
+
+        boolean isNew = match.getId() == null;
+        boolean changed = isNew
+                || !Objects.equals(match.getSupportingFile() != null ? match.getSupportingFile().getId() : null,
+                        outcome.supportingFile().map(BatchFile::getId).orElse(null))
+                || match.getSupportingFileType() != targetType
+                || !Objects.equals(match.getMatchType(), outcome.matchType())
+                || !Objects.equals(match.getConfidenceScore(), outcome.confidenceScore())
+                || !Objects.equals(match.getMatchReason(), outcome.matchReason())
+                || !Objects.equals(match.getAmbiguousCandidatesJson(), ambiguousJson)
+                || !Objects.equals(match.getRejectedCandidatesJson(), rejectedJson);
+
+        if (!changed) {
+            return;
+        }
+
+        match.setAppraisalFile(appraisalFile);
+        match.setSupportingFile(outcome.supportingFile().orElse(null));
+        match.setSupportingFileType(targetType);
+        match.setMatchType(outcome.matchType());
+        match.setConfidenceScore(outcome.confidenceScore());
+        match.setMatchReason(outcome.matchReason());
+        match.setAmbiguousCandidatesJson(ambiguousJson);
+        match.setRejectedCandidatesJson(rejectedJson);
+
+        DocumentMatch saved = documentMatchRepository.save(match);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("supporting_file_type", targetType.name());
+        payload.put("supporting_file_id", outcome.supportingFile().map(BatchFile::getId).orElse(null));
+        payload.put("match_type", outcome.matchType());
+        payload.put("confidence_score", outcome.confidenceScore());
+        payload.put("match_reason", outcome.matchReason());
+
+        businessEventService.record("FILE_MATCHED", null, "java",
+                outcome.supportingFile().isPresent() ? "MATCHED" : "MISSING",
+                "DocumentMatch", saved.getId(),
+                appraisalFile.getBatch() != null ? appraisalFile.getBatch().getId() : null,
+                appraisalFile.getId(), null, null, payload);
+    }
+
+    private Map<String, Object> candidatePayload(BatchFile file) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", file.getId());
+        payload.put("filename", file.getFilename());
+        payload.put("order_id", file.getOrderId());
+        payload.put("file_type", file.getFileType() != null ? file.getFileType().name() : null);
+        return payload;
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            log.warn("Could not serialize document match candidates: {}", e.getMessage());
+            return "[]";
+        }
     }
 
     private static int scoreMatch(String appraisalKey, Set<String> appraisalTokens, String candidateKey, Set<String> candidateTokens) {
+        if (appraisalKey.isBlank() || candidateKey.isBlank()) {
+            return 0;
+        }
         if (appraisalKey.equals(candidateKey)) {
             return 100;
         }
@@ -210,6 +331,15 @@ public class FileMatchingService {
 
         return value;
     }
+
+    private record ScoredCandidate(BatchFile file, int score) {}
+
+    private record MatchOutcome(Optional<BatchFile> supportingFile,
+                                String matchType,
+                                double confidenceScore,
+                                String matchReason,
+                                List<BatchFile> ambiguousCandidates,
+                                List<BatchFile> rejectedCandidates) {}
 
     /**
      * DTO representing a matched pair of appraisal and engagement files.

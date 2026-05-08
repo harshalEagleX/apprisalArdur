@@ -2,10 +2,14 @@ package com.apprisal.qc.controller.api;
 
 import com.apprisal.common.entity.BatchFile;
 import com.apprisal.common.entity.BatchStatus;
+import com.apprisal.common.entity.DocumentMatch;
 import com.apprisal.common.entity.QCResult;
+import com.apprisal.common.entity.Role;
 import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.DocumentMatchRepository;
 import com.apprisal.common.repository.QCResultRepository;
+import com.apprisal.common.security.UserPrincipal;
 import com.apprisal.qc.service.PythonClientService;
 import com.apprisal.qc.service.QCModelConfig;
 import com.apprisal.qc.service.QCProcessingService;
@@ -14,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.lang.NonNull;
@@ -37,6 +42,7 @@ public class QCApiController {
     private final PythonClientService pythonClientService;
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
+    private final DocumentMatchRepository documentMatchRepository;
     private final StuckBatchReconciler reconciler;
 
     public QCApiController(
@@ -45,12 +51,14 @@ public class QCApiController {
             PythonClientService pythonClientService,
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
+            DocumentMatchRepository documentMatchRepository,
             StuckBatchReconciler reconciler) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
         this.pythonClientService = pythonClientService;
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
+        this.documentMatchRepository = documentMatchRepository;
         this.reconciler = reconciler;
     }
 
@@ -155,10 +163,19 @@ public class QCApiController {
     @GetMapping("/results/{batchId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
     @Transactional(readOnly = true)
-    public ResponseEntity<List<QCResult>> getBatchResults(@PathVariable @NonNull Long batchId) {
+    public ResponseEntity<List<QCResult>> getBatchResults(
+            @PathVariable @NonNull Long batchId,
+            @AuthenticationPrincipal UserPrincipal principal) {
         // FIX: distinguish "batch not found" (404) from "no results yet" (200 + [])
         if (!batchRepository.existsById(batchId)) {
             return ResponseEntity.notFound().build();
+        }
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (principal.getUser().getRole() == Role.REVIEWER
+                && !batchRepository.isReviewerAssigned(batchId, principal.getUser().getId())) {
+            return ResponseEntity.status(403).build();
         }
         List<QCResult> results = qcResultRepository.findByBatchId(batchId);
         return ResponseEntity.ok(results);
@@ -224,7 +241,16 @@ public class QCApiController {
     @GetMapping("/file/{qcResultId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
     @Transactional(readOnly = true)
-    public ResponseEntity<?> getQCResult(@PathVariable @NonNull Long qcResultId) {
+    public ResponseEntity<?> getQCResult(
+            @PathVariable @NonNull Long qcResultId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (principal.getUser().getRole() == Role.REVIEWER
+                && !qcResultRepository.isReviewerAssigned(qcResultId, principal.getUser().getId())) {
+            return ResponseEntity.status(403).build();
+        }
         return qcResultRepository.findWithBatchFileAndBatchById(qcResultId)
                 .map(r -> {
                     BatchFile primary = r.getBatchFile();
@@ -240,12 +266,19 @@ public class QCApiController {
                                     .thenComparing(f -> f.getFilename() != null ? f.getFilename() : ""))
                             .map(this::toBatchFileDto)
                             .toList();
+                    List<Map<String, Object>> matchDtos = primary != null
+                            ? documentMatchRepository.findByAppraisalFile_Id(primary.getId()).stream()
+                                    .map(this::toDocumentMatchDto)
+                                    .toList()
+                            : List.of();
 
                     Map<String, Object> body = new LinkedHashMap<>();
                     body.put("id", r.getId());
                     body.put("qcDecision", r.getQcDecision() != null ? r.getQcDecision().name() : null);
+                    body.put("missingDocuments", r.getMissingDocuments());
                     body.put("batchFile", primary != null ? toBatchFileDto(primary) : null);
                     body.put("documents", documentDtos);
+                    body.put("documentMatches", matchDtos);
                     return ResponseEntity.ok(body);
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -257,6 +290,22 @@ public class QCApiController {
         body.put("filename", file.getFilename() != null ? file.getFilename() : "");
         body.put("fileType", file.getFileType() != null ? file.getFileType().name() : "");
         body.put("documentQualityFlags", file.getDocumentQualityFlags());
+        return body;
+    }
+
+    private Map<String, Object> toDocumentMatchDto(DocumentMatch match) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", match.getId());
+        body.put("appraisalFileId", match.getAppraisalFile() != null ? match.getAppraisalFile().getId() : null);
+        body.put("supportingFileId", match.getSupportingFile() != null ? match.getSupportingFile().getId() : null);
+        body.put("supportingFileType", match.getSupportingFileType() != null ? match.getSupportingFileType().name() : null);
+        body.put("supportingFilename", match.getSupportingFile() != null ? match.getSupportingFile().getFilename() : null);
+        body.put("matchType", match.getMatchType());
+        body.put("confidenceScore", match.getConfidenceScore());
+        body.put("matchReason", match.getMatchReason());
+        body.put("ambiguousCandidatesJson", match.getAmbiguousCandidatesJson());
+        body.put("rejectedCandidatesJson", match.getRejectedCandidatesJson());
+        body.put("matchedAt", match.getMatchedAt() != null ? match.getMatchedAt().toString() : null);
         return body;
     }
 

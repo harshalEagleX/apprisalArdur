@@ -74,6 +74,9 @@ public class QCResult {
     @Column(name = "cache_hit")
     private Boolean cacheHit = false;
 
+    @Column(name = "missing_documents", columnDefinition = "TEXT")
+    private String missingDocuments;
+
     @Column(name = "source_document_hash", length = 64)
     private String sourceDocumentHash;
 
@@ -251,6 +254,9 @@ public class QCResult {
     public Boolean getCacheHit() { return cacheHit; }
     public void setCacheHit(Boolean cacheHit) { this.cacheHit = cacheHit; }
 
+    public String getMissingDocuments() { return missingDocuments; }
+    public void setMissingDocuments(String missingDocuments) { this.missingDocuments = missingDocuments; }
+
     public String getSourceDocumentHash() { return sourceDocumentHash; }
     public void setSourceDocumentHash(String sourceDocumentHash) { this.sourceDocumentHash = sourceDocumentHash; }
 
@@ -372,6 +378,7 @@ public class QCResult {
         private String  extractionMethod;
         private String  pythonDocumentId;      // IMPL FIX: was missing from builder
         private Boolean cacheHit = false;      // IMPL FIX: was missing from builder
+        private String missingDocuments;
         private String sourceDocumentHash;
         private Long sourceDocumentVersion;
 
@@ -428,6 +435,7 @@ public class QCResult {
         public QCResultBuilder extractionMethod(String v)   { this.extractionMethod = v; return this; }
         public QCResultBuilder pythonDocumentId(String v)   { this.pythonDocumentId = v; return this; }
         public QCResultBuilder cacheHit(Boolean v)          { this.cacheHit = v;          return this; }
+        public QCResultBuilder missingDocuments(String v)   { this.missingDocuments = v; return this; }
         public QCResultBuilder sourceDocumentHash(String v) { this.sourceDocumentHash = v; return this; }
         public QCResultBuilder sourceDocumentVersion(Long v){ this.sourceDocumentVersion = v; return this; }
 
@@ -446,6 +454,7 @@ public class QCResult {
             result.extractionMethod = this.extractionMethod;
             result.pythonDocumentId = this.pythonDocumentId;
             result.cacheHit         = this.cacheHit;
+            result.missingDocuments = this.missingDocuments;
             result.sourceDocumentHash = this.sourceDocumentHash;
             result.sourceDocumentVersion = this.sourceDocumentVersion;
             return result;

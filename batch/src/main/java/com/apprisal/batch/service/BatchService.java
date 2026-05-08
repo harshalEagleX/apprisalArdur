@@ -6,10 +6,12 @@ import com.apprisal.common.exception.ResourceNotFoundException;
 import com.apprisal.common.exception.ValidationException;
 import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
+import com.apprisal.common.repository.DocumentMatchRepository;
 import com.apprisal.common.repository.ProcessingMetricsRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.repository.QCRuleResultRepository;
 import com.apprisal.common.service.AuditLogService;
+import com.apprisal.common.service.BusinessEventService;
 import com.apprisal.common.service.FileMatchingService;
 import com.apprisal.common.util.AppTime;
 import org.slf4j.Logger;
@@ -52,8 +54,10 @@ public class BatchService {
     private final BatchFileRepository batchFileRepository;
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
+    private final DocumentMatchRepository documentMatchRepository;
     private final ProcessingMetricsRepository metricsRepository;
     private final AuditLogService auditLogService;
+    private final BusinessEventService businessEventService;
 
     @Value("${app.storage.path:./uploads}")
     private String storagePath;
@@ -62,14 +66,18 @@ public class BatchService {
             BatchFileRepository batchFileRepository,
             QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
+            DocumentMatchRepository documentMatchRepository,
             ProcessingMetricsRepository metricsRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            BusinessEventService businessEventService) {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
+        this.documentMatchRepository = documentMatchRepository;
         this.metricsRepository = metricsRepository;
         this.auditLogService = auditLogService;
+        this.businessEventService = businessEventService;
     }
 
     @Transactional(readOnly = true)
@@ -169,11 +177,12 @@ public class BatchService {
         log.info("Deleting batch {} with {} files", batch.getParentBatchId(), fileCount);
 
         long dbStarted = System.nanoTime();
+        int matchesDeleted = documentMatchRepository.deleteByBatchId(batchId);
         int metricsDeleted = metricsRepository.deleteByBatchId(batchId);
         int rulesDeleted = qcRuleResultRepository.deleteByBatchId(batchId);
         int resultsDeleted = qcResultRepository.deleteByBatchId(batchId);
-        log.info("Deleted batch {} QC rows in {} ms: metrics={}, ruleResults={}, qcResults={}",
-                batch.getParentBatchId(), elapsedMs(dbStarted), metricsDeleted, rulesDeleted, resultsDeleted);
+        log.info("Deleted batch {} QC rows in {} ms: documentMatches={}, metrics={}, ruleResults={}, qcResults={}",
+                batch.getParentBatchId(), elapsedMs(dbStarted), matchesDeleted, metricsDeleted, rulesDeleted, resultsDeleted);
 
         // Delete storage files
         long filesStarted = System.nanoTime();
@@ -252,6 +261,8 @@ public class BatchService {
             if (existing.isPresent()) {
                 log.info("Duplicate ZIP detected (hash={}), returning existing batch {}",
                         fileHash, existing.get().getId());
+                businessEventService.batchEvent("BATCH_DUPLICATE_UPLOAD", creator, existing.get(), "DUPLICATE",
+                        Map.of("file_hash", fileHash));
                 return existing.get();
             }
         }
@@ -309,6 +320,12 @@ public class BatchService {
         // ONE save in the success path — cascade creates all files atomically
         batch = Objects.requireNonNull(batchRepository.save(batch));
         auditLogService.logEntity(creator, "BATCH_UPLOAD", "Batch", batch.getId());
+        Map<String, Object> eventPayload = new HashMap<>();
+        eventPayload.put("parent_batch_id", batch.getParentBatchId());
+        eventPayload.put("client_id", client.getId());
+        eventPayload.put("file_count", batch.getFiles().size());
+        eventPayload.put("file_hash", fileHash);
+        businessEventService.batchEvent("BATCH_CREATED", creator, batch, "UPLOADED", eventPayload);
 
         return batch;
     }
@@ -487,8 +504,14 @@ public class BatchService {
         }
 
         log.info("Assigned batch {} to reviewer {}", batchId, reviewer.getUsername());
-        return batchRepository.findById(batchId)
+        Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
+        businessEventService.batchEvent("REVIEWER_ASSIGNED", reviewer, batch, "ASSIGNED",
+                Map.of(
+                        "reviewer_id", reviewer.getId(),
+                        "reviewer_username", reviewer.getUsername()
+                ));
+        return batch;
     }
 
     // Statistics methods
