@@ -27,6 +27,7 @@ public record PythonRuleResult(
         @JsonProperty("rejection_text")   String rejectionText,
         @JsonProperty("evidence")         java.util.List<String> evidence,
         @JsonProperty("review_required")  boolean reviewRequired,
+        @JsonProperty("target_field")     String targetField,
         @JsonProperty("source_page")      Integer sourcePage,
         @JsonProperty("bbox_x")           Float bboxX,
         @JsonProperty("bbox_y")           Float bboxY,

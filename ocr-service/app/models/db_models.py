@@ -40,6 +40,101 @@ class Document(Base):
     feedback     = relationship("FeedbackEvent",        back_populates="document", cascade="all, delete-orphan")
 
 
+# ── Durable processing lifecycle ──────────────────────────────────────────────
+
+class ProcessingJob(Base):
+    """
+    One durable Python-side processing attempt.
+
+    Java remains the business system of record; this table is Python's technical
+    journal for OCR, extraction, LLM, rule execution, retries, and failures.
+    """
+    __tablename__ = "processing_jobs"
+
+    id                    = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    idempotency_key        = Column(String(255), unique=True, index=True)
+    correlation_id         = Column(String(128), index=True)
+    batch_id               = Column(String(64), index=True)
+    batch_file_id          = Column(String(64), index=True)
+    qc_result_id           = Column(String(64), index=True)
+    source_document_hash   = Column(String(64), index=True)
+    original_filename      = Column(String(255))
+    model_provider         = Column(String(50))
+    model_name             = Column(String(100))
+    vision_model           = Column(String(100))
+    traceparent            = Column(String(128))
+    tracestate             = Column(Text)
+    rule_set_version       = Column(String(50), default="1.0")
+    current_stage          = Column(String(80), index=True)
+    status                 = Column(String(30), default="queued", index=True)
+    retry_count            = Column(Integer, default=0)
+    document_id            = Column(UUID(as_uuid=True), ForeignKey("documents.id"))
+    result_json            = Column(Text)
+    failure_reason         = Column(Text)
+    started_at             = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at           = Column(DateTime)
+    failed_at              = Column(DateTime)
+    updated_at             = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    document = relationship("Document")
+    stages   = relationship("ProcessingStage", back_populates="job", cascade="all, delete-orphan")
+    llm_calls = relationship("LLMCallLog", back_populates="job", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_processing_jobs_corr_status", "correlation_id", "status"),
+        Index("ix_processing_jobs_hash_status", "source_document_hash", "status"),
+    )
+
+
+class ProcessingStage(Base):
+    """Durable timing row for a major pipeline stage within a job."""
+    __tablename__ = "processing_stages"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    job_id         = Column(UUID(as_uuid=True), ForeignKey("processing_jobs.id"), nullable=False, index=True)
+    stage_name     = Column(String(80), nullable=False, index=True)
+    status         = Column(String(30), default="started", index=True)
+    started_at     = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at   = Column(DateTime)
+    duration_ms    = Column(Integer)
+    error_message  = Column(Text)
+    metadata_json  = Column(Text)
+
+    job = relationship("ProcessingJob", back_populates="stages")
+
+    __table_args__ = (
+        Index("ix_processing_stages_job_stage", "job_id", "stage_name"),
+    )
+
+
+class LLMCallLog(Base):
+    """Privacy-conscious metadata for each Ollama call."""
+    __tablename__ = "llm_call_logs"
+
+    id                  = Column(Integer, primary_key=True, autoincrement=True)
+    job_id              = Column(UUID(as_uuid=True), ForeignKey("processing_jobs.id"), index=True)
+    correlation_id       = Column(String(128), index=True)
+    stage_name           = Column(String(80))
+    task_name            = Column(String(100))
+    prompt_hash          = Column(String(64), nullable=False, index=True)
+    model_name           = Column(String(100))
+    started_at           = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at         = Column(DateTime)
+    duration_ms          = Column(Integer)
+    status               = Column(String(30), index=True)
+    timed_out            = Column(Boolean, default=False)
+    fallback_path        = Column(String(80))
+    confidence_label     = Column(String(30))
+    response_hash        = Column(String(64))
+    error_message        = Column(Text)
+
+    job = relationship("ProcessingJob", back_populates="llm_calls")
+
+    __table_args__ = (
+        Index("ix_llm_call_logs_job_stage", "job_id", "stage_name"),
+    )
+
+
 # ── OCR Cache: one row per page per unique PDF ────────────────────────────────
 
 class PageOCRResult(Base):
@@ -73,6 +168,7 @@ class ExtractedFieldRecord(Base):
 
     id                = Column(Integer, primary_key=True, autoincrement=True)
     document_id       = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    processing_job_id = Column(UUID(as_uuid=True), ForeignKey("processing_jobs.id"))
     field_name        = Column(String(100), nullable=False)
     field_value       = Column(Text)
     confidence_score  = Column(Float, default=0.0)
@@ -100,13 +196,20 @@ class RuleResultRecord(Base):
 
     id               = Column(Integer, primary_key=True, autoincrement=True)
     document_id      = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    processing_job_id = Column(UUID(as_uuid=True), ForeignKey("processing_jobs.id"))
     rule_id          = Column(String(20), nullable=False)
     rule_name        = Column(String(200))
     status           = Column(String(20))            # pass / fail / verify
+    severity         = Column(String(30))
     message          = Column(Text)
     action_item      = Column(Text)
     appraisal_value  = Column(Text)
     engagement_value = Column(Text)
+    extracted_value  = Column(Text)
+    expected_value   = Column(Text)
+    confidence_score = Column(Float)
+    target_field     = Column(String(100))
+    rule_version     = Column(String(50))
     review_required  = Column(Boolean, default=False)
     source_page      = Column(Integer)
     bbox_x           = Column(Float)
@@ -119,6 +222,7 @@ class RuleResultRecord(Base):
 
     __table_args__ = (
         Index("ix_rule_results_doc_rule", "document_id", "rule_id"),
+        Index("ix_rule_results_job_rule", "processing_job_id", "rule_id"),
         Index("ix_rule_results_status", "status"),
     )
 
@@ -130,6 +234,8 @@ class FeedbackEvent(Base):
 
     id                 = Column(Integer, primary_key=True, autoincrement=True)
     document_id        = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    processing_job_id  = Column(UUID(as_uuid=True), ForeignKey("processing_jobs.id"))
+    correlation_id     = Column(String(128), index=True)
     rule_id            = Column(String(20))
     field_name         = Column(String(100))
     original_status    = Column(String(20))
@@ -137,6 +243,15 @@ class FeedbackEvent(Base):
     original_value     = Column(Text)
     corrected_value    = Column(Text)
     operator_comment   = Column(Text)
+    reviewer_role      = Column(String(50))
+    decision_latency_ms = Column(Integer)
+    acknowledged       = Column(Boolean)
+    source_page        = Column(Integer)
+    bbox_x             = Column(Float)
+    bbox_y             = Column(Float)
+    bbox_w             = Column(Float)
+    bbox_h             = Column(Float)
+    confidence_score   = Column(Float)
     feedback_timestamp = Column(DateTime, default=datetime.utcnow)
     used_for_training  = Column(Boolean, default=False)
 
@@ -146,6 +261,34 @@ class FeedbackEvent(Base):
     __table_args__ = (
         Index("ix_feedback_doc", "document_id"),
         Index("ix_feedback_not_trained", "used_for_training"),
+    )
+
+
+class ConfidenceCalibration(Base):
+    """
+    Reviewer-derived calibration for raw extraction confidence.
+
+    Raw extractor confidence is method-local: a 0.70 regex score and a 0.70
+    OCR/model score do not mean the same thing. This table stores observed
+    reviewer correctness by field + extraction method so later runs can adjust
+    confidence using product evidence instead of hardcoded intuition.
+    """
+    __tablename__ = "confidence_calibration"
+
+    id                  = Column(Integer, primary_key=True, autoincrement=True)
+    field_name          = Column(String(100), nullable=False)
+    extraction_method   = Column(String(50), nullable=False)
+    reviewed_count      = Column(Integer, default=0, nullable=False)
+    correct_count       = Column(Integer, default=0, nullable=False)
+    incorrect_count     = Column(Integer, default=0, nullable=False)
+    historical_precision = Column(Float)
+    historical_recall   = Column(Float)
+    sample_size         = Column(Integer, default=0, nullable=False)
+    last_calibrated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("field_name", "extraction_method", name="uq_conf_calibration_field_method"),
+        Index("ix_conf_calibration_field_method", "field_name", "extraction_method"),
     )
 
 

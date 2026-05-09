@@ -201,10 +201,10 @@ class OCRPipeline:
         else:
             self.preprocessor = None
             if use_preprocessing and not (PREPROCESSOR_AVAILABLE and TESSERACT_AVAILABLE):
-                logger.notice("Image preprocessing requested but dependencies not available. Falling back to standard mode.")
+                logger.info("Image preprocessing requested but dependencies not available. Falling back to standard mode.")
         
         if force_image_ocr and not TESSERACT_AVAILABLE:
-            logger.notice("Force Image OCR requested but Tesseract not available. Falling back to hybrid mode.")
+            logger.info("Force Image OCR requested but Tesseract not available. Falling back to hybrid mode.")
 
     def extract_all_pages(self, pdf_path: str, force_ocr: bool = None) -> ExtractionResult:
         """
@@ -307,7 +307,7 @@ class OCRPipeline:
                         return PageText(pn, text, ExtractionMethod.TESSERACT,
                                         self._estimate_confidence(text), wc, htables, words, hocr_text)
                     except Exception as e:
-                        logger.notice("Forced Tesseract failed page %d: %s", pn, e)
+                        logger.info("Forced Tesseract failed page %d: %s", pn, e)
                         # Fall through to embedded
 
                 # Embedded text good enough
@@ -323,7 +323,7 @@ class OCRPipeline:
                             return PageText(pn, text, ExtractionMethod.TESSERACT,
                                             self._estimate_confidence(text), wc, htables, words, hocr_text)
                     except Exception as e:
-                        logger.notice("Tesseract fallback failed page %d: %s", pn, e)
+                        logger.info("Tesseract fallback failed page %d: %s", pn, e)
 
                 # Last resort: return whatever embedded gave us
                 conf = 0.5 if emb_wc < 10 else 0.7
@@ -376,7 +376,7 @@ class OCRPipeline:
                     word_index[page_num] = words
             doc.close()
         except Exception as e:
-            logger.notice("Word geometry extraction failed: %s", e)
+            logger.info("Word geometry extraction failed: %s", e)
         return word_index
 
     def _embedded_words(self, page: fitz.Page, page_number: int) -> List[OcrWord]:
@@ -739,7 +739,7 @@ class OCRPipeline:
                     has_tables=self._detect_tables(page)
                 )
             except Exception as e:
-                logger.notice(f"Forced Tesseract extraction failed for page {page_number}: {e}")
+                logger.info(f"Forced Tesseract extraction failed for page {page_number}: {e}")
                 # Fallback to embedded
         
         # Pass 1: Try embedded text extraction (fastest)
@@ -773,7 +773,7 @@ class OCRPipeline:
                         has_tables=self._detect_tables(page)
                     )
             except Exception as e:
-                logger.notice(f"Tesseract extraction failed for page {page_number}: {e}")
+                logger.info(f"Tesseract extraction failed for page {page_number}: {e}")
         
         # Return whatever we got from embedded extraction
         return PageText(
@@ -906,7 +906,7 @@ class OCRPipeline:
                         image_ext = base_image["ext"]
                         images.append((page_num + 1, image_bytes, image_ext))
                     except Exception as e:
-                        logger.notice(f"Failed to extract image {img_idx} from page {page_num + 1}: {e}")
+                        logger.info(f"Failed to extract image {img_idx} from page {page_num + 1}: {e}")
                         
             doc.close()
             
@@ -934,7 +934,7 @@ class OCRPipeline:
         start_time = time.time()
         
         if not self.use_preprocessing or not self.preprocessor:
-            logger.notice("Preprocessing not available. Falling back to standard extraction.")
+            logger.info("Preprocessing not available. Falling back to standard extraction.")
             return self.extract_all_pages(pdf_path)
         
         logger.info(f"Extracting with image preprocessing: {pdf_path}")

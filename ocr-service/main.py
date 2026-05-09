@@ -4,6 +4,7 @@ FastAPI application that extracts fields from appraisal PDFs.
 """
 
 import hashlib
+import json
 import os
 import re
 import time
@@ -25,7 +26,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security.api_key import APIKeyHeader
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydanticField
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -41,6 +42,7 @@ logger = setup_logging()
 # Import OCR configuration
 from app.config import OCR_CONFIG, TESSERACT_CMD, MAX_FILE_SIZE_BYTES, MAX_PAGE_COUNT, validate_binaries, get_system_info
 from app.ocr.ocr_pipeline import OCRPipeline
+from app.services import processing_lifecycle
 
 # Import rules at startup so @rule decorators register against the global engine
 import app.rules  # noqa: F401  (side-effect import)
@@ -77,6 +79,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+try:
+    from app.observability import setup_observability
+    setup_observability(app)
+except Exception as exc:
+    logger.debug("OpenTelemetry setup skipped: %s", exc)
+
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -91,7 +99,7 @@ app.add_middleware(
     allow_origins=[o.strip() for o in _ALLOWED_ORIGINS],
     allow_credentials=True,
     allow_methods=["POST", "GET", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Correlation-ID", "traceparent", "tracestate"],
 )
 
 # ── API-Key authentication ─────────────────────────────────────────────────────
@@ -103,7 +111,108 @@ def _require_api_key(api_key: str = Security(_api_key_header)) -> None:
     if not _API_KEY:
         return  # dev mode — no key required
     if api_key != _API_KEY:
-        raise HTTPException(status_code=403, detail={"error": "FORBIDDEN", "message": "Invalid or missing API key"})
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "UNAUTHORIZED", "message": "Invalid or missing API key"},
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+
+def _require_ws_api_key(websocket: WebSocket) -> bool:
+    if not _API_KEY:
+        return True
+    supplied = websocket.headers.get("x-api-key") or websocket.query_params.get("api_key")
+    return supplied == _API_KEY
+
+
+def _require_durable_job(job_id: Optional[str]) -> str:
+    if job_id:
+        return job_id
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "error": "OCR_DB_UNAVAILABLE",
+            "message": "Python OCR cannot process documents without a durable processing job.",
+        },
+    )
+
+
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+_SUPPORTING_FILE_SIZE_BYTES = int(os.getenv("SUPPORTING_FILE_SIZE_BYTES", str(MAX_FILE_SIZE_BYTES)))
+_ENV_FILE_SIZE_BYTES = int(os.getenv("ENV_FILE_SIZE_BYTES", str(2 * 1024 * 1024)))
+
+
+def _payload_too_large(label: str, max_bytes: int) -> HTTPException:
+    mb = max_bytes / (1024 * 1024)
+    return HTTPException(
+        status_code=413,
+        detail={"error": "PAYLOAD_TOO_LARGE", "message": f"{label} exceeds the {mb:.1f} MB limit"},
+    )
+
+
+def _copy_upload_limited(
+    upload: UploadFile,
+    destination: str,
+    *,
+    max_bytes: int = MAX_FILE_SIZE_BYTES,
+    label: str = "file",
+) -> int:
+    """Stream an UploadFile to disk while enforcing a hard byte limit."""
+    total = 0
+    with open(destination, "wb") as buffer:
+        while True:
+            chunk = upload.file.read(_UPLOAD_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise _payload_too_large(label, max_bytes)
+            buffer.write(chunk)
+    if total == 0:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "EMPTY_FILE", "message": f"{label} is empty"},
+        )
+    return total
+
+
+async def _read_upload_limited(upload: UploadFile, *, max_bytes: int, label: str) -> bytes:
+    data = await upload.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise _payload_too_large(label, max_bytes)
+    return data
+
+
+def _decode_b64_document(value: str, *, label: str, max_bytes: int = MAX_FILE_SIZE_BYTES) -> bytes:
+    """Decode a WebSocket base64 document with size and format checks."""
+    import base64
+    import binascii
+
+    if "," in value and value.strip().lower().startswith("data:"):
+        value = value.split(",", 1)[1]
+    compact = re.sub(r"\s+", "", value or "")
+    estimated_bytes = (len(compact) * 3) // 4
+    if estimated_bytes > max_bytes:
+        raise ValueError(f"{label} exceeds the {max_bytes / (1024 * 1024):.1f} MB limit")
+    try:
+        data = base64.b64decode(compact, validate=True)
+    except binascii.Error as exc:
+        raise ValueError(f"{label} is not valid base64") from exc
+    if not data:
+        raise ValueError(f"{label} is empty")
+    if len(data) > max_bytes:
+        raise ValueError(f"{label} exceeds the {max_bytes / (1024 * 1024):.1f} MB limit")
+    return data
+
+
+def _fail_job_for_http_exception(job_id: Optional[str], exc: HTTPException) -> None:
+    if not job_id or exc.status_code == 409:
+        return
+    detail = exc.detail
+    reason = detail if isinstance(detail, str) else json.dumps(detail, default=str)
+    stage = "input_validation" if exc.status_code < 500 else None
+    processing_lifecycle.fail_job(job_id, reason, stage)
+
 
 # Request Logging Middleware
 @app.middleware("http")
@@ -118,6 +227,7 @@ async def log_requests(request: Request, call_next):
             "method": request.method,
             "path": request.url.path,
             "request_id": request_id,
+            "correlation_id": request.headers.get("x-correlation-id"),
             "client_host": request.client.host if request.client else None
         }
     )
@@ -134,7 +244,8 @@ async def log_requests(request: Request, call_next):
                 "path": request.url.path,
                 "status_code": response.status_code,
                 "duration_ms": process_time_ms,
-                "request_id": request_id
+                "request_id": request_id,
+                "correlation_id": request.headers.get("x-correlation-id"),
             }
         )
         return response
@@ -147,7 +258,8 @@ async def log_requests(request: Request, call_next):
                 "path": request.url.path,
                 "error": str(e),
                 "duration_ms": process_time_ms,
-                "request_id": request_id
+                "request_id": request_id,
+                "correlation_id": request.headers.get("x-correlation-id"),
             },
             exc_info=True
         )
@@ -182,6 +294,9 @@ class OcrResponse(BaseModel):
     success: bool
     processingTimeMs: int
     confidenceScore: float
+    processingJobId: Optional[str] = None
+    documentId: Optional[str] = None
+    fileHash: Optional[str] = None
     formType: Optional[str] = None
     extractedFields: ExtractedFields
     checkboxes: CheckboxFields
@@ -293,11 +408,17 @@ async def extract_facts(
     file: UploadFile = File(...),
     engagement_letter: Optional[UploadFile] = None,
     env_file: Optional[UploadFile] = None,
+    correlation_id: Optional[str] = Form(None),
+    batch_id: Optional[str] = Form(None),
+    batch_file_id: Optional[str] = Form(None),
+    qc_result_id: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
 ):
     """
     Pure Fact Extraction Endpoint - Python sees, Java thinks, Humans decide.
     """
     request_id = getattr(request.state, "request_id", None)
+    processing_job_id: Optional[str] = None
     
     # Validate file type
     # Validate file extension (basic check)
@@ -326,62 +447,120 @@ async def extract_facts(
         with tempfile.TemporaryDirectory() as temp_dir:
             # stream file to disk to avoid memory spike
             pdf_path = os.path.join(temp_dir, f"input_{uuid.uuid4()}.pdf")
-            with open(pdf_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            _copy_upload_limited(file, pdf_path, label="appraisal PDF")
             
-            # Security: Magic Byte Check
-            if not is_valid_pdf(pdf_path):
-                 logger.warning("Invalid PDF magic bytes", extra={"request_id": request_id})
-                 raise HTTPException(
-                    status_code=400,
-                    detail={"error": "INVALID_FILE_CONTENT", "message": "File does not appear to be a valid PDF"}
+            err = validate_upload(pdf_path, request_id)
+            if err:
+                raise HTTPException(status_code=400, detail={"error": "INVALID_FILE", "message": err})
+
+            file_hash = sha256_file(pdf_path)
+            effective_idempotency_key = idempotency_key or processing_lifecycle.make_idempotency_key(
+                batch_file_id=batch_file_id,
+                source_document_hash=file_hash,
+                model_provider="fact-extract",
+                model_name=None,
+                vision_model=None,
+            )
+            processing_job_id, job_status, reused = processing_lifecycle.create_or_get_job(
+                idempotency_key=effective_idempotency_key,
+                source_document_hash=file_hash,
+                original_filename=file.filename,
+                correlation_id=correlation_id or request.headers.get("x-correlation-id"),
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                qc_result_id=qc_result_id,
+                model_provider="fact-extract",
+                model_name=None,
+                vision_model=None,
+                traceparent=request.headers.get("traceparent"),
+                tracestate=request.headers.get("tracestate"),
+            )
+            processing_job_id = _require_durable_job(processing_job_id)
+            if reused and job_status == "completed":
+                existing = processing_lifecycle.get_job_status(processing_job_id)
+                if existing and existing.get("result_json"):
+                    payload = json.loads(existing["result_json"])
+                    payload["file_hash"] = file_hash
+                    payload["processing_job_id"] = processing_job_id
+                    return payload
+            if reused and job_status == "in_progress":
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "JOB_ALREADY_RUNNING", "job_id": processing_job_id},
+                )
+            if not processing_lifecycle.try_claim_job(processing_job_id, stage="fact_extract_start"):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "JOB_ALREADY_RUNNING", "job_id": processing_job_id},
                 )
 
-            # Process engagement letter if provided
-            engagement_text = None
-            if engagement_letter:
-                eng_path = os.path.join(temp_dir, f"eng_{uuid.uuid4()}")
-                # Copy engagement letter safely
-                with open(eng_path, "wb") as buffer:
-                    shutil.copyfileobj(engagement_letter.file, buffer)
+            with processing_lifecycle.processing_context(
+                processing_job_id,
+                correlation_id or request.headers.get("x-correlation-id"),
+                request.headers.get("traceparent"),
+            ):
+                # Process engagement letter if provided
+                engagement_text = None
+                if engagement_letter:
+                    with processing_lifecycle.stage("supporting_engagement_read"):
+                        eng_path = os.path.join(temp_dir, f"eng_{uuid.uuid4()}")
+                        _copy_upload_limited(
+                            engagement_letter,
+                            eng_path,
+                            max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                            label="engagement letter",
+                        )
+                        if engagement_letter.filename.lower().endswith('.pdf'):
+                            err = validate_upload(eng_path, request_id)
+                            if err:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail={"error": "INVALID_ENGAGEMENT_FILE", "message": err},
+                                )
+                            engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
+                        else:
+                            with open(eng_path, "rb") as f:
+                                engagement_text = f.read().decode('utf-8', errors='ignore')
                 
-                if engagement_letter.filename.lower().endswith('.pdf'):
-                     if is_valid_pdf(eng_path):
-                        # Run in threadpool to avoid blocking
-                        engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
-                     else:
-                        logger.warning("Invalid Engagement Letter PDF magic bytes") # Log but maybe don't fail hard?
-                else:
-                    # Assume text file
-                    with open(eng_path, "rb") as f:
-                        engagement_text = f.read().decode('utf-8', errors='ignore')
-            
-            # Read ENV file if provided
-            env_content = None
-            if env_file:
-                env_content = await env_file.read() # keeping as read() since these are usually small JSONs
-            
-            # Run extraction service in threadpool
-            service = get_extraction_service()
-            result = await run_in_threadpool(
-                service.extract_and_compare,
-                pdf_path=pdf_path,
-                engagement_letter_text=engagement_text,
-                env_content=env_content
-            )
+                # Read ENV file if provided
+                env_content = None
+                if env_file:
+                    with processing_lifecycle.stage("env_file_read"):
+                        env_content = await _read_upload_limited(
+                            env_file,
+                            max_bytes=_ENV_FILE_SIZE_BYTES,
+                            label="ENV file",
+                        )
+
+                # Run extraction service in threadpool
+                service = get_extraction_service()
+                with processing_lifecycle.stage("fact_extraction"):
+                    result = await run_in_threadpool(
+                        service.extract_and_compare,
+                        pdf_path=pdf_path,
+                        engagement_letter_text=engagement_text,
+                        env_content=env_content
+                    )
             
             logger.info("Extraction completed successfully", extra={"request_id": request_id})
-            return result.model_dump()
+            payload = result.model_dump()
+            payload["file_hash"] = file_hash
+            payload["processing_job_id"] = processing_job_id
+            processing_lifecycle.complete_job(processing_job_id, document_id=None, result_payload=payload)
+            return payload
             
-    except HTTPException:
+    except HTTPException as exc:
+        _fail_job_for_http_exception(processing_job_id, exc)
         raise
     except fitz.FileDataError:
+        processing_lifecycle.fail_job(processing_job_id, "PDF file is corrupted or encrypted", "input_validation")
         logger.error("Corrupted PDF", extra={"request_id": request_id})
         raise HTTPException(
             status_code=400,
             detail={"error": "CORRUPTED_PDF", "message": "PDF file is corrupted or encrypted"}
         )
     except Exception as e:
+        processing_lifecycle.fail_job(processing_job_id, str(e))
         logger.error("Extraction error", extra={"error": str(e), "request_id": request_id}, exc_info=True)
         raise HTTPException(
             status_code=500,
@@ -401,6 +580,11 @@ async def process_qc(
     text_model: Optional[str] = Form(None),
     vision_model: Optional[str] = Form(None),
     progress_token: Optional[str] = Form(None),
+    correlation_id: Optional[str] = Form(None),
+    batch_id: Optional[str] = Form(None),
+    batch_file_id: Optional[str] = Form(None),
+    qc_result_id: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
 ):
     """
     Full QC pipeline: OCR → Extract → Subject & Contract Rules → Results
@@ -411,6 +595,7 @@ async def process_qc(
       contract was analyzed, enables C-2/C-4/C-5 cross-checks)
     """
     request_id = getattr(request.state, "request_id", None)
+    processing_job_id: Optional[str] = None
 
     if not file.filename.lower().endswith('.pdf'):
         logger.warning(
@@ -447,30 +632,83 @@ async def process_qc(
         with tempfile.TemporaryDirectory() as temp_dir:
             # Stream appraisal PDF to disk
             pdf_path = os.path.join(temp_dir, f"qc_input_{uuid.uuid4()}.pdf")
-            with open(pdf_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            _copy_upload_limited(file, pdf_path, label="appraisal PDF")
 
             err = validate_upload(pdf_path, request_id)
             if err:
                 raise HTTPException(status_code=400, detail={"error": "INVALID_FILE", "message": err})
 
             file_hash = sha256_file(pdf_path)
+            effective_idempotency_key = idempotency_key or processing_lifecycle.make_idempotency_key(
+                batch_file_id=batch_file_id,
+                source_document_hash=file_hash,
+                model_provider=model_provider,
+                model_name=text_model,
+                vision_model=vision_model,
+            )
+            processing_job_id, job_status, reused = processing_lifecycle.create_or_get_job(
+                idempotency_key=effective_idempotency_key,
+                source_document_hash=file_hash,
+                original_filename=file.filename,
+                correlation_id=correlation_id or request.headers.get("x-correlation-id"),
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                qc_result_id=qc_result_id,
+                model_provider=model_provider,
+                model_name=text_model,
+                vision_model=vision_model,
+                traceparent=request.headers.get("traceparent"),
+                tracestate=request.headers.get("tracestate"),
+            )
+            processing_job_id = _require_durable_job(processing_job_id)
+            if reused and job_status == "completed":
+                existing = processing_lifecycle.get_job_status(processing_job_id)
+                if existing and existing.get("result_json"):
+                    payload = json.loads(existing["result_json"])
+                    payload["file_hash"] = file_hash
+                    payload["processing_job_id"] = processing_job_id
+                    return payload
+            elif reused and job_status == "in_progress":
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "JOB_ALREADY_RUNNING", "job_id": processing_job_id}
+                )
+            elif reused and job_status == "queued":
+                logger.info(
+                    "Taking over queued idempotent QC job via /qc/process",
+                    extra={"processing_job_id": processing_job_id, "request_id": request_id},
+                )
+
+            if not processing_lifecycle.try_claim_job(processing_job_id, stage="sync_start"):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "JOB_ALREADY_RUNNING", "job_id": processing_job_id},
+                )
 
             # Process engagement letter if provided
             engagement_text = None
             if engagement_letter:
                 _emit("ocr_engagement", "Reading engagement letter", 0.08)
                 eng_path = os.path.join(temp_dir, f"qc_eng_{uuid.uuid4()}")
-                with open(eng_path, "wb") as buffer:
-                    shutil.copyfileobj(engagement_letter.file, buffer)
+                _copy_upload_limited(
+                    engagement_letter,
+                    eng_path,
+                    max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                    label="engagement letter",
+                )
                 if engagement_letter.filename.lower().endswith(".pdf"):
-                    if is_valid_pdf(eng_path):
-                        engagement_text = await run_in_threadpool(
-                            extract_text_from_supporting_pdf,
-                            eng_path,
-                            "Engagement letter OCR",
-                            engagement_letter.filename,
+                    err = validate_upload(eng_path, request_id)
+                    if err:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={"error": "INVALID_ENGAGEMENT_FILE", "message": err},
                         )
+                    engagement_text = await run_in_threadpool(
+                        extract_text_from_supporting_pdf,
+                        eng_path,
+                        "Engagement letter OCR",
+                        engagement_letter.filename,
+                    )
                 else:
                     with open(eng_path, "rb") as f:
                         engagement_text = f.read().decode('utf-8', errors='ignore')
@@ -480,16 +718,25 @@ async def process_qc(
             if contract_file:
                 _emit("ocr_contract", "Reading purchase contract", 0.18)
                 con_path = os.path.join(temp_dir, f"qc_con_{uuid.uuid4()}")
-                with open(con_path, "wb") as buffer:
-                    shutil.copyfileobj(contract_file.file, buffer)
+                _copy_upload_limited(
+                    contract_file,
+                    con_path,
+                    max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                    label="contract file",
+                )
                 if contract_file.filename.lower().endswith(".pdf"):
-                    if is_valid_pdf(con_path):
-                        contract_text = await run_in_threadpool(
-                            extract_text_from_supporting_pdf,
-                            con_path,
-                            "Contract OCR",
-                            contract_file.filename,
+                    err = validate_upload(con_path, request_id)
+                    if err:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={"error": "INVALID_CONTRACT_FILE", "message": err},
                         )
+                    contract_text = await run_in_threadpool(
+                        extract_text_from_supporting_pdf,
+                        con_path,
+                        "Contract OCR",
+                        contract_file.filename,
+                    )
                 else:
                     with open(con_path, "rb") as f:
                         contract_text = f.read().decode('utf-8', errors='ignore')
@@ -519,6 +766,14 @@ async def process_qc(
                             model_name=text_model,
                             vision_model=vision_model,
                             report_progress=_emit,
+                            processing_job_id=processing_job_id,
+                            correlation_id=correlation_id or request.headers.get("x-correlation-id"),
+                            batch_id=batch_id,
+                            batch_file_id=batch_file_id,
+                            qc_result_id=qc_result_id,
+                            idempotency_key=effective_idempotency_key,
+                            traceparent=request.headers.get("traceparent"),
+                            tracestate=request.headers.get("tracestate"),
                         )
 
             results = await run_in_threadpool(_run_processor)
@@ -527,17 +782,22 @@ async def process_qc(
             logger.info("QC processing completed", extra={"request_id": request_id})
             payload = results.model_dump()
             payload["file_hash"] = file_hash
+            payload["processing_job_id"] = processing_job_id
+            processing_lifecycle.complete_job(processing_job_id, document_id=results.document_id, result_payload=payload)
             return payload
             
-    except HTTPException:
+    except HTTPException as exc:
+        _fail_job_for_http_exception(processing_job_id, exc)
         raise
     except fitz.FileDataError:
+        processing_lifecycle.fail_job(processing_job_id, "PDF file is corrupted or encrypted", "input_validation")
         logger.error("Corrupted PDF in process_qc", extra={"request_id": request_id})
         raise HTTPException(
             status_code=400,
             detail={"error": "CORRUPTED_PDF", "message": "PDF file is corrupted or encrypted"}
         )
     except Exception as e:
+        processing_lifecycle.fail_job(processing_job_id, str(e))
         logger.error("QC Processing error", extra={"error": str(e), "request_id": request_id}, exc_info=True)
         raise HTTPException(
             status_code=500,
@@ -551,6 +811,7 @@ _ASYNC_JOBS_DIR = os.getenv("ASYNC_JOBS_DIR", "/tmp/ocr_jobs")
 
 
 @app.post("/qc/submit", status_code=202)
+@_limiter.limit("20/minute")
 async def submit_qc_job(
     request: Request,
     _auth: None = Security(_require_api_key),
@@ -560,6 +821,11 @@ async def submit_qc_job(
     model_provider: str = Form("ollama"),
     text_model: Optional[str] = Form(None),
     vision_model: Optional[str] = Form(None),
+    correlation_id: Optional[str] = Form(None),
+    batch_id: Optional[str] = Form(None),
+    batch_file_id: Optional[str] = Form(None),
+    qc_result_id: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
 ):
     """
     Submit a QC job to the Celery async queue.
@@ -571,6 +837,7 @@ async def submit_qc_job(
         celery -A app.tasks.celery_app worker --loglevel=info --concurrency=1
     """
     request_id = getattr(request.state, "request_id", None)
+    processing_job_id: Optional[str] = None
 
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400,
@@ -583,8 +850,7 @@ async def submit_qc_job(
     try:
         # --- Save appraisal PDF ---
         pdf_path = os.path.join(job_dir, "appraisal.pdf")
-        with open(pdf_path, "wb") as buf:
-            shutil.copyfileobj(file.file, buf)
+        _copy_upload_limited(file, pdf_path, label="appraisal PDF")
 
         err = validate_upload(pdf_path, request_id)
         if err:
@@ -592,26 +858,72 @@ async def submit_qc_job(
             raise HTTPException(status_code=400, detail={"error": "INVALID_FILE", "message": err})
 
         file_hash = sha256_file(pdf_path)
+        effective_idempotency_key = idempotency_key or processing_lifecycle.make_idempotency_key(
+            batch_file_id=batch_file_id,
+            source_document_hash=file_hash,
+            model_provider=model_provider,
+            model_name=text_model,
+            vision_model=vision_model,
+        )
+        processing_job_id, job_status, reused = processing_lifecycle.create_or_get_job(
+            idempotency_key=effective_idempotency_key,
+            source_document_hash=file_hash,
+            original_filename=file.filename,
+            correlation_id=correlation_id or request.headers.get("x-correlation-id"),
+            batch_id=batch_id,
+            batch_file_id=batch_file_id,
+            qc_result_id=qc_result_id,
+            model_provider=model_provider,
+            model_name=text_model,
+            vision_model=vision_model,
+            traceparent=request.headers.get("traceparent"),
+            tracestate=request.headers.get("tracestate"),
+        )
+        processing_job_id = _require_durable_job(processing_job_id)
+        if reused:
+            if job_status == "completed":
+                shutil.rmtree(job_dir, ignore_errors=True)
+                return {"job_id": processing_job_id, "status": "SUCCESS", "file_hash": file_hash,
+                        "poll_url": f"/qc/job/{processing_job_id}", "reused": True}
+            if job_status in {"queued", "in_progress"}:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                return {"job_id": processing_job_id, "status": "QUEUED", "file_hash": file_hash,
+                        "poll_url": f"/qc/job/{processing_job_id}", "reused": True}
+        processing_lifecycle.mark_job_queued(processing_job_id, "queued")
 
         # --- Save optional supporting files ---
         engagement_path = None
         if engagement_letter:
             p = os.path.join(job_dir, "engagement.pdf")
-            with open(p, "wb") as buf:
-                shutil.copyfileobj(engagement_letter.file, buf)
+            _copy_upload_limited(
+                engagement_letter,
+                p,
+                max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                label="engagement letter",
+            )
+            err = validate_upload(p, request_id)
+            if err:
+                raise HTTPException(status_code=400, detail={"error": "INVALID_ENGAGEMENT_FILE", "message": err})
             engagement_path = p
 
         contract_path = None
         if contract_file:
             p = os.path.join(job_dir, "contract.pdf")
-            with open(p, "wb") as buf:
-                shutil.copyfileobj(contract_file.file, buf)
+            _copy_upload_limited(
+                contract_file,
+                p,
+                max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                label="contract file",
+            )
+            err = validate_upload(p, request_id)
+            if err:
+                raise HTTPException(status_code=400, detail={"error": "INVALID_CONTRACT_FILE", "message": err})
             contract_path = p
 
         # --- Enqueue Celery task ---
         from app.tasks.celery_app import process_document_async
         process_document_async.apply_async(
-            task_id=job_id,
+            task_id=processing_job_id or job_id,
             kwargs={
                 "pdf_path": pdf_path,
                 "file_hash": file_hash,
@@ -622,18 +934,29 @@ async def submit_qc_job(
                 "text_model": text_model,
                 "vision_model": vision_model,
                 "job_dir": job_dir,
+                "processing_job_id": processing_job_id,
+                "correlation_id": correlation_id or request.headers.get("x-correlation-id"),
+                "batch_id": batch_id,
+                "batch_file_id": batch_file_id,
+                "qc_result_id": qc_result_id,
+                "idempotency_key": effective_idempotency_key,
+                "traceparent": request.headers.get("traceparent"),
+                "tracestate": request.headers.get("tracestate"),
             },
         )
 
         logger.info("QC job queued", extra={"job_id": job_id, "file": file.filename,
                                              "request_id": request_id})
-        return {"job_id": job_id, "status": "QUEUED", "file_hash": file_hash,
-                "poll_url": f"/qc/job/{job_id}"}
+        return {"job_id": processing_job_id or job_id, "status": "QUEUED", "file_hash": file_hash,
+                "poll_url": f"/qc/job/{processing_job_id or job_id}"}
 
-    except HTTPException:
+    except HTTPException as exc:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        _fail_job_for_http_exception(processing_job_id, exc)
         raise
     except Exception as exc:
         shutil.rmtree(job_dir, ignore_errors=True)
+        processing_lifecycle.fail_job(processing_job_id, str(exc), "queue_submit")
         logger.error("Failed to queue QC job", extra={"error": str(exc), "request_id": request_id},
                      exc_info=True)
         raise HTTPException(status_code=500,
@@ -651,6 +974,16 @@ async def get_job_status(job_id: str, _auth: None = Security(_require_api_key)):
         error   Error message when status == FAILURE, else null
     """
     try:
+        tracked = processing_lifecycle.get_job_status(job_id)
+        if tracked and tracked.get("status") == "completed" and tracked.get("result_json"):
+            return {"job_id": job_id, "status": "SUCCESS", "result": json.loads(tracked["result_json"]), "error": None}
+        if tracked and tracked.get("status") == "failed":
+            return {"job_id": job_id, "status": "FAILURE", "result": None, "error": tracked.get("error")}
+        if tracked and tracked.get("status") in {"queued", "in_progress"}:
+            mapped = "STARTED" if tracked.get("status") == "in_progress" else "PENDING"
+            return {"job_id": job_id, "status": mapped, "result": None, "error": None,
+                    "meta": {"stage": tracked.get("stage"), "retry_count": tracked.get("retry_count", 0)}}
+
         from celery.result import AsyncResult
         from app.tasks.celery_app import celery_app as _celery
         ar = AsyncResult(job_id, app=_celery)
@@ -672,8 +1005,50 @@ async def get_job_status(job_id: str, _auth: None = Security(_require_api_key)):
                             detail={"error": "STATUS_ERROR", "message": str(exc)})
 
 
+@app.get("/qc/job/{job_id}/audit")
+async def get_job_audit(job_id: str, _auth: None = Security(_require_api_key)):
+    """
+    Python-side technical audit for one processing job.
+
+    This intentionally returns metadata, timings, hashes, and failure context,
+    not borrower/property text. It is the support bridge from Java's QC result
+    to Python's internal processing history.
+    """
+    audit = processing_lifecycle.get_job_audit(job_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail={"error": "JOB_NOT_FOUND", "job_id": job_id})
+    return audit
+
+
+@app.get("/qc/jobs")
+async def find_processing_jobs(
+    _auth: None = Security(_require_api_key),
+    correlation_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
+    batch_file_id: Optional[str] = None,
+    qc_result_id: Optional[str] = None,
+    source_document_hash: Optional[str] = None,
+    limit: int = 50,
+):
+    """Find Python processing jobs from Java correlation context."""
+    if not any([correlation_id, batch_id, batch_file_id, qc_result_id, source_document_hash]):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "MISSING_FILTER", "message": "Provide at least one correlation/job filter."},
+        )
+    jobs = processing_lifecycle.find_jobs(
+        correlation_id=correlation_id,
+        batch_id=batch_id,
+        batch_file_id=batch_file_id,
+        qc_result_id=qc_result_id,
+        source_document_hash=source_document_hash,
+        limit=limit,
+    )
+    return {"status": "ok", "count": len(jobs), "jobs": jobs}
+
+
 @app.get("/qc/progress/{progress_token}")
-async def get_qc_progress(progress_token: str):
+async def get_qc_progress(progress_token: str, _auth: None = Security(_require_api_key)):
     """Return the current sub-stage for an in-flight /qc/process call.
 
     The Java QC worker generates a token, sends it as `progress_token` in the
@@ -688,7 +1063,7 @@ async def get_qc_progress(progress_token: str):
 
 
 @app.get("/qc/rules")
-async def list_qc_rules():
+async def list_qc_rules(_auth: None = Security(_require_api_key)):
     """List all registered QC rules with DB configuration (Phase 3)."""
     from app.rule_engine.engine import engine
     from app.rule_engine.rules_db import load_rule_configs
@@ -771,7 +1146,7 @@ async def trigger_retraining(
 
 
 @app.patch("/admin/rules/{rule_id}")
-async def toggle_rule(rule_id: str, is_active: bool):
+async def toggle_rule(rule_id: str, is_active: bool, _auth: None = Security(_require_api_key)):
     """
     Toggle a rule on or off without restarting the server (Phase 3).
     Example: PATCH /admin/rules/S-5?is_active=false
@@ -792,13 +1167,24 @@ async def toggle_rule(rule_id: str, is_active: bool):
 
 
 @app.post("/ocr/appraisal", response_model=OcrResponse)
-async def process_appraisal(request: Request, file: UploadFile = File(...)):
+@_limiter.limit("20/minute")
+async def process_appraisal(
+    request: Request,
+    _auth: None = Security(_require_api_key),
+    file: UploadFile = File(...),
+    correlation_id: Optional[str] = Form(None),
+    batch_id: Optional[str] = Form(None),
+    batch_file_id: Optional[str] = Form(None),
+    qc_result_id: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
+):
     """
     Process an appraisal PDF and extract key fields.
     """
     start_time = time.time()
     warnings = []
     request_id = getattr(request.state, "request_id", None)
+    processing_job_id: Optional[str] = None
 
     # Validate file type
     # Validate file type
@@ -813,58 +1199,161 @@ async def process_appraisal(request: Request, file: UploadFile = File(...)):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Stream file to disk
             tmp_path = os.path.join(temp_dir, f"ocr_input_{uuid.uuid4()}.pdf")
-            with open(tmp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            _copy_upload_limited(file, tmp_path, label="appraisal PDF")
 
-            # Security: Magic Byte Check
-            if not is_valid_pdf(tmp_path):
-                 raise HTTPException(
-                    status_code=400,
-                    detail={"error": "INVALID_FILE_CONTENT", "message": "File does not appear to be a valid PDF"}
+            err = validate_upload(tmp_path, request_id)
+            if err:
+                raise HTTPException(status_code=400, detail={"error": "INVALID_FILE", "message": err})
+
+            file_hash = sha256_file(tmp_path)
+            effective_idempotency_key = idempotency_key or processing_lifecycle.make_idempotency_key(
+                batch_file_id=batch_file_id,
+                source_document_hash=file_hash,
+                model_provider="simple-ocr",
+                model_name=None,
+                vision_model=None,
+            )
+            processing_job_id, job_status, reused = processing_lifecycle.create_or_get_job(
+                idempotency_key=effective_idempotency_key,
+                source_document_hash=file_hash,
+                original_filename=file.filename,
+                correlation_id=correlation_id or request.headers.get("x-correlation-id"),
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                qc_result_id=qc_result_id,
+                model_provider="simple-ocr",
+                model_name=None,
+                vision_model=None,
+                traceparent=request.headers.get("traceparent"),
+                tracestate=request.headers.get("tracestate"),
+            )
+            processing_job_id = _require_durable_job(processing_job_id)
+            if reused and job_status == "completed":
+                existing = processing_lifecycle.get_job_status(processing_job_id)
+                if existing and existing.get("result_json"):
+                    cached_payload = json.loads(existing["result_json"])
+                    return OcrResponse(**cached_payload)
+            if reused and job_status == "in_progress":
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "JOB_ALREADY_RUNNING", "job_id": processing_job_id},
+                )
+            if not processing_lifecycle.try_claim_job(processing_job_id, stage="simple_ocr_start"):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "JOB_ALREADY_RUNNING", "job_id": processing_job_id},
                 )
 
             logger.info("Starting simple OCR", extra={"uploaded_filename": file.filename, "request_id": request_id})
-            
-            # Run CPU-bound extraction in threadpool
-            raw_text = await run_in_threadpool(extract_text_from_pdf, tmp_path)
-            
-            if not raw_text or len(raw_text.strip()) < 50:
-                msg = "Low text content extracted from PDF"
-                warnings.append(msg)
-                logger.warning(msg, extra={"request_id": request_id})
-            
-            # Run parsing logic in threadpool (it involves many regexes)
-            def process_text_logic(text):
-                extracted = extract_fields(text)
-                form_type = detect_form_type(text)
-                confidence = calculate_confidence(extracted, text)
-                checkboxes = extract_checkboxes(text)
-                return extracted, form_type, confidence, checkboxes
 
-            extracted, form_type, confidence, checkboxes = await run_in_threadpool(process_text_logic, raw_text)
+            def canonical_simple_extract(path: str):
+                pipeline = OCRPipeline(use_tesseract=True, force_image_ocr=False, use_preprocessing=True)
+                result = pipeline.extract_all_pages(path)
+                text = pipeline.get_full_text(result.page_index)
+                from app.services.phase2_extraction import phase2_engine
+                subject, meta = phase2_engine.extract_subject(
+                    text,
+                    result.page_index,
+                    page_images=result.page_images,
+                    word_index=result.word_index,
+                )
+                confidences = [
+                    m.effective_confidence for m in meta.values()
+                    if getattr(m, "value", None) not in (None, "")
+                ]
+                avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+                fields = {
+                    "borrowerName": subject.borrower_name,
+                    "coBorrowerName": subject.co_borrower_name,
+                    "propertyAddress": subject.property_address,
+                    "city": subject.city,
+                    "state": subject.state,
+                    "zipCode": subject.zip_code,
+                    "lenderName": subject.lender_name,
+                }
+                checkboxes = {
+                    "isInFloodZone": False,
+                    "isForSale": bool(subject.offered_for_sale_12mo),
+                    "hasPoolOrSpa": False,
+                    "isCondoOrPUD": bool(subject.is_pud_checked),
+                    "isPud": bool(subject.is_pud_checked),
+                    "isManufacturedHome": False,
+                    "didAnalyzeContract": False,
+                }
+                return result, text, fields, avg_conf, checkboxes
+
+            with processing_lifecycle.processing_context(
+                processing_job_id,
+                correlation_id or request.headers.get("x-correlation-id"),
+                request.headers.get("traceparent"),
+            ):
+                # Run CPU-bound extraction in threadpool
+                with processing_lifecycle.stage("simple_ocr_extract"):
+                    ocr_result, raw_text, extracted, confidence, checkboxes = await run_in_threadpool(
+                        canonical_simple_extract,
+                        tmp_path,
+                    )
+            
+                if not raw_text or len(raw_text.strip()) < 50:
+                    msg = "Low text content extracted from PDF"
+                    warnings.append(msg)
+                    logger.warning(msg, extra={"request_id": request_id})
+                form_type = detect_form_type(raw_text)
+
+                document_id = None
+                if ocr_result.page_details:
+                    with processing_lifecycle.stage("simple_ocr_persist"):
+                        from app.services.cache_service import save_extracted_fields, save_ocr_pages
+
+                        document_id = save_ocr_pages(
+                            file_hash=file_hash,
+                            filename=file.filename,
+                            pages=ocr_result.page_details,
+                        )
+                        if not document_id:
+                            raise RuntimeError("OCR cache persistence failed; durable document record is required")
+                        page_confidences = [page.confidence for page in ocr_result.page_details]
+                        save_extracted_fields(
+                            document_id,
+                            extracted,
+                            page_confidences,
+                            processing_job_id=processing_job_id,
+                        )
             
             processing_time_ms = int((time.time() - start_time) * 1000)
 
-            return OcrResponse(
+            response = OcrResponse(
                 success=True,
                 processingTimeMs=processing_time_ms,
                 confidenceScore=confidence,
+                processingJobId=processing_job_id,
+                documentId=document_id,
+                fileHash=file_hash,
                 formType=form_type,
                 extractedFields=ExtractedFields(**extracted),
                 checkboxes=CheckboxFields(**checkboxes),
                 rawText=raw_text[:5000] if raw_text else None,  # Limit raw text
                 warnings=warnings
             )
+            processing_lifecycle.complete_job(
+                processing_job_id,
+                document_id=document_id,
+                result_payload=response.model_dump(),
+            )
+            return response
 
-    except HTTPException:
+    except HTTPException as exc:
+        _fail_job_for_http_exception(processing_job_id, exc)
         raise
     except fitz.FileDataError:
+        processing_lifecycle.fail_job(processing_job_id, "PDF file is corrupted or encrypted", "input_validation")
         logger.error("Corrupted PDF", extra={"request_id": request_id})
         raise HTTPException(
             status_code=400,
             detail={"error": "CORRUPTED_PDF", "message": "PDF file is corrupted or encrypted"}
         )
     except Exception as e:
+        processing_lifecycle.fail_job(processing_job_id, str(e))
         logger.error("Processing error", extra={"error": str(e), "request_id": request_id}, exc_info=True)
         raise HTTPException(
             status_code=500,
@@ -1126,17 +1615,28 @@ def calculate_confidence(fields: Dict[str, Any], raw_text: str) -> float:
 # ── Feedback models ────────────────────────────────────────────────────────────
 
 class FeedbackRequest(BaseModel):
-    document_id: str
-    rule_id: Optional[str] = None
-    field_name: Optional[str] = None
-    original_value: Optional[str] = None
-    corrected_value: Optional[str] = None
-    feedback_type: str = "CORRECTION"   # CORRECT / OCR_ERROR / EXTRACTION_ERROR / RULE_ERROR
-    operator_comment: Optional[str] = None
+    document_id: str = PydanticField(max_length=64)
+    processing_job_id: Optional[str] = PydanticField(default=None, max_length=64)
+    correlation_id: Optional[str] = PydanticField(default=None, max_length=128)
+    rule_id: Optional[str] = PydanticField(default=None, max_length=20)
+    field_name: Optional[str] = PydanticField(default=None, max_length=100)
+    original_value: Optional[str] = PydanticField(default=None, max_length=4000)
+    corrected_value: Optional[str] = PydanticField(default=None, max_length=4000)
+    feedback_type: str = PydanticField(default="CORRECTION", max_length=50)
+    operator_comment: Optional[str] = PydanticField(default=None, max_length=2000)
+    reviewer_role: Optional[str] = PydanticField(default=None, max_length=50)
+    decision_latency_ms: Optional[int] = None
+    acknowledged: Optional[bool] = None
+    source_page: Optional[int] = None
+    bbox_x: Optional[float] = None
+    bbox_y: Optional[float] = None
+    bbox_w: Optional[float] = None
+    bbox_h: Optional[float] = None
+    confidence_score: Optional[float] = None
 
 
 @app.post("/qc/feedback")
-async def submit_feedback(payload: FeedbackRequest, request: Request):
+async def submit_feedback(payload: FeedbackRequest, request: Request, _auth: None = Security(_require_api_key)):
     """
     Phase 5: Store an operator correction for the learning loop.
 
@@ -1150,15 +1650,27 @@ async def submit_feedback(payload: FeedbackRequest, request: Request):
         from app.models.db_models import FeedbackEvent, TrainingExample
 
         doc_uuid = _uuid.UUID(payload.document_id)
+        job_uuid = _uuid.UUID(payload.processing_job_id) if payload.processing_job_id else None
 
         with get_db() as db:
             event = FeedbackEvent(
                 document_id=doc_uuid,
+                processing_job_id=job_uuid,
+                correlation_id=payload.correlation_id,
                 rule_id=payload.rule_id,
                 field_name=payload.field_name,
                 original_value=payload.original_value,
                 corrected_value=payload.corrected_value,
                 operator_comment=payload.operator_comment,
+                reviewer_role=payload.reviewer_role,
+                decision_latency_ms=payload.decision_latency_ms,
+                acknowledged=payload.acknowledged,
+                source_page=payload.source_page,
+                bbox_x=payload.bbox_x,
+                bbox_y=payload.bbox_y,
+                bbox_w=payload.bbox_w,
+                bbox_h=payload.bbox_h,
+                confidence_score=payload.confidence_score,
                 original_status=payload.feedback_type,
                 corrected_status=payload.feedback_type,
                 used_for_training=False,
@@ -1180,6 +1692,46 @@ async def submit_feedback(payload: FeedbackRequest, request: Request):
                     invalidate_learned_cache()
                 except Exception:
                     pass
+            elif (
+                payload.feedback_type in {"REVIEW_DECISION", "CORRECTION", "EXTRACTION_ERROR", "RULE_ERROR"}
+                and payload.field_name
+                and payload.corrected_value
+            ):
+                training_payload = {
+                    "document_id": payload.document_id,
+                    "processing_job_id": payload.processing_job_id,
+                    "correlation_id": payload.correlation_id,
+                    "rule_id": payload.rule_id,
+                    "field_name": payload.field_name,
+                    "original_value": payload.original_value,
+                    "confidence_score": payload.confidence_score,
+                    "source_page": payload.source_page,
+                    "bbox": {
+                        "x": payload.bbox_x,
+                        "y": payload.bbox_y,
+                        "w": payload.bbox_w,
+                        "h": payload.bbox_h,
+                    },
+                    "reviewer_role": payload.reviewer_role,
+                    "decision_latency_ms": payload.decision_latency_ms,
+                }
+                db.add(TrainingExample(
+                    feature_type="field_review_decision",
+                    input_text=json.dumps(training_payload, default=str),
+                    label=payload.corrected_value[:100],
+                    source_feedback_id=event.id,
+                ))
+
+        try:
+            from app.services.confidence_calibration import record_feedback_outcome
+            record_feedback_outcome(
+                document_id=payload.document_id,
+                field_name=payload.field_name,
+                corrected_value=payload.corrected_value,
+                feedback_type=payload.feedback_type,
+            )
+        except Exception:
+            pass
 
         logger.info(
             "Feedback stored",
@@ -1209,16 +1761,27 @@ async def qc_websocket(websocket: WebSocket):
     Result format:   {"event": "complete", "data": {...qc_results...}}
     Error format:    {"event": "error",    "message": "..."}
     """
+    if not _require_ws_api_key(websocket):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     request_id = str(__import__("uuid").uuid4())
+    processing_job_id: Optional[str] = None
 
     try:
-        import json as _json, base64, tempfile, shutil
+        import tempfile
 
         msg = await websocket.receive_json()
         appraisal_b64  = msg.get("appraisal_b64")
         engagement_b64 = msg.get("engagement_b64")
         contract_b64   = msg.get("contract_b64")
+        correlation_id = msg.get("correlation_id")
+        batch_id = msg.get("batch_id")
+        batch_file_id = msg.get("batch_file_id")
+        qc_result_id = msg.get("qc_result_id")
+        idempotency_key = msg.get("idempotency_key")
+        traceparent = msg.get("traceparent")
+        tracestate = msg.get("tracestate")
 
         if not appraisal_b64:
             await websocket.send_json({"event": "error", "message": "appraisal_b64 required"})
@@ -1231,7 +1794,7 @@ async def qc_websocket(websocket: WebSocket):
             # Write files
             pdf_path = f"{tmp}/appraisal.pdf"
             with open(pdf_path, "wb") as f:
-                f.write(base64.b64decode(appraisal_b64))
+                f.write(_decode_b64_document(appraisal_b64, label="appraisal_b64"))
 
             err = validate_upload(pdf_path, request_id)
             if err:
@@ -1239,22 +1802,93 @@ async def qc_websocket(websocket: WebSocket):
                 return
 
             file_hash = sha256_file(pdf_path)
+            effective_idempotency_key = idempotency_key or processing_lifecycle.make_idempotency_key(
+                batch_file_id=batch_file_id,
+                source_document_hash=file_hash,
+                model_provider="ollama",
+                model_name=None,
+                vision_model=None,
+            )
+            processing_job_id, job_status, reused = processing_lifecycle.create_or_get_job(
+                idempotency_key=effective_idempotency_key,
+                source_document_hash=file_hash,
+                original_filename="websocket-upload.pdf",
+                correlation_id=correlation_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                qc_result_id=qc_result_id,
+                model_provider="ollama",
+                model_name=None,
+                vision_model=None,
+                traceparent=traceparent,
+                tracestate=tracestate,
+            )
+            try:
+                processing_job_id = _require_durable_job(processing_job_id)
+            except HTTPException as exc:
+                await websocket.send_json({"event": "error", "message": exc.detail})
+                return
+            if reused and job_status == "completed":
+                existing = processing_lifecycle.get_job_status(processing_job_id)
+                if existing and existing.get("result_json"):
+                    payload = json.loads(existing["result_json"])
+                    payload["file_hash"] = file_hash
+                    payload["processing_job_id"] = processing_job_id
+                    await websocket.send_json({"event": "complete", "data": payload})
+                    return
+            if reused and job_status == "in_progress":
+                await websocket.send_json({
+                    "event": "error",
+                    "message": "Job is already running",
+                    "job_id": processing_job_id,
+                })
+                return
+            if not processing_lifecycle.try_claim_job(processing_job_id, stage="websocket_start"):
+                await websocket.send_json({
+                    "event": "error",
+                    "message": "Job is already running",
+                    "job_id": processing_job_id,
+                })
+                return
+
             await websocket.send_json({"event": "progress", "stage": "ocr",
-                                       "message": "Extracting text from PDF...", "hash": file_hash})
+                                       "message": "Extracting text from PDF...", "hash": file_hash,
+                                       "processing_job_id": processing_job_id})
 
-            engagement_text = None
-            if engagement_b64:
-                eng_path = f"{tmp}/engagement.pdf"
-                with open(eng_path, "wb") as f:
-                    f.write(base64.b64decode(engagement_b64))
-                engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
+            with processing_lifecycle.processing_context(processing_job_id, correlation_id, traceparent):
+                engagement_text = None
+                if engagement_b64:
+                    with processing_lifecycle.stage("supporting_ocr_engagement"):
+                        eng_path = f"{tmp}/engagement.pdf"
+                        with open(eng_path, "wb") as f:
+                            f.write(_decode_b64_document(
+                                engagement_b64,
+                                label="engagement_b64",
+                                max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                            ))
+                        err = validate_upload(eng_path, request_id)
+                        if err:
+                            await websocket.send_json({"event": "error", "message": err})
+                            processing_lifecycle.fail_job(processing_job_id, err, "supporting_ocr_engagement")
+                            return
+                        engagement_text = await run_in_threadpool(extract_text_from_pdf, eng_path)
 
-            contract_text = None
-            if contract_b64:
-                con_path = f"{tmp}/contract.pdf"
-                with open(con_path, "wb") as f:
-                    f.write(base64.b64decode(contract_b64))
-                contract_text = await run_in_threadpool(extract_text_from_pdf, con_path)
+                contract_text = None
+                if contract_b64:
+                    with processing_lifecycle.stage("supporting_ocr_contract"):
+                        con_path = f"{tmp}/contract.pdf"
+                        with open(con_path, "wb") as f:
+                            f.write(_decode_b64_document(
+                                contract_b64,
+                                label="contract_b64",
+                                max_bytes=_SUPPORTING_FILE_SIZE_BYTES,
+                            ))
+                        err = validate_upload(con_path, request_id)
+                        if err:
+                            await websocket.send_json({"event": "error", "message": err})
+                            processing_lifecycle.fail_job(processing_job_id, err, "supporting_ocr_contract")
+                            return
+                        contract_text = await run_in_threadpool(extract_text_from_pdf, con_path)
 
             await websocket.send_json({"event": "progress", "stage": "rules",
                                        "message": "Running compliance rules..."})
@@ -1267,15 +1901,25 @@ async def qc_websocket(websocket: WebSocket):
                 contract_text=contract_text,
                 file_hash=file_hash,
                 original_filename="upload.pdf",
+                processing_job_id=processing_job_id,
+                correlation_id=correlation_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                qc_result_id=qc_result_id,
+                idempotency_key=effective_idempotency_key,
+                traceparent=traceparent,
+                tracestate=tracestate,
             )
 
             payload = results.model_dump()
             payload["file_hash"] = file_hash
+            payload["processing_job_id"] = processing_job_id
             await websocket.send_json({"event": "complete", "data": payload})
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected", extra={"request_id": request_id})
     except Exception as e:
+        processing_lifecycle.fail_job(processing_job_id, str(e))
         logger.error("WebSocket error: %s", e, extra={"request_id": request_id})
         try:
             await websocket.send_json({"event": "error", "message": str(e)})
@@ -1337,11 +1981,6 @@ def is_valid_pdf(file_path: str) -> bool:
     except Exception:
         return False
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5001)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # ANALYTICS ENDPOINTS  — operator-safe, no ML/OCR jargon exposed
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1350,15 +1989,23 @@ from datetime import datetime, timedelta
 from typing import Optional
 import statistics
 
-_analytics_store: list[dict] = []   # in-process ring buffer (max 10000 entries)
-_MAX_STORE = 10_000
 
-def _record_metric(data: dict) -> None:
-    """Append a processing event to the in-memory analytics ring buffer."""
-    _analytics_store.append({**data, "ts": datetime.utcnow().isoformat()})
-    while len(_analytics_store) > _MAX_STORE:
-        _analytics_store.pop(0)
+def _job_result_payload(job) -> dict:
+    try:
+        return json.loads(job.result_json or "{}")
+    except Exception:
+        return {}
 
+
+def _job_result_bool(job, key: str) -> bool:
+    return bool(_job_result_payload(job).get(key))
+
+
+def _job_result_int(job, key: str, default: int = 0) -> int:
+    try:
+        return int(_job_result_payload(job).get(key, default) or default)
+    except Exception:
+        return default
 
 @app.get("/analytics/summary", tags=["analytics"])
 async def analytics_summary(
@@ -1366,33 +2013,34 @@ async def analytics_summary(
     _auth: None = Security(_require_api_key)
 ):
     """Overall processing health for the last N days (default 30)."""
+    from sqlalchemy import func
+    from app.database import get_db
+    from app.models.db_models import ProcessingJob, ExtractedFieldRecord
     cutoff = datetime.utcnow() - timedelta(days=days)
-    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
 
-    if not recent:
-        return {
-            "status": "ok",
-            "period_days": days,
-            "files_processed": 0,
-            "avg_accuracy_pct": None,
-            "avg_processing_seconds": None,
-            "cache_hit_rate_pct": None,
-            "message": "No data yet for this period."
-        }
+    with get_db() as db:
+        jobs = db.query(ProcessingJob).filter(ProcessingJob.started_at >= cutoff).all()
+        field_stats = db.query(
+            func.avg(ExtractedFieldRecord.confidence_score),
+            func.min(ExtractedFieldRecord.confidence_score),
+        ).filter(ExtractedFieldRecord.created_at >= cutoff).first()
 
-    confs   = [r["ocr_confidence"] for r in recent if r.get("ocr_confidence") is not None]
-    times   = [r["processing_ms"]  for r in recent if r.get("processing_ms")  is not None]
-    cached  = sum(1 for r in recent if r.get("cache_hit"))
-
+    durations = [
+        (j.completed_at - j.started_at).total_seconds() * 1000
+        for j in jobs if j.completed_at and j.started_at
+    ]
+    cache_hits = sum(1 for j in jobs if _job_result_bool(j, "cache_hit"))
+    avg_conf = float(field_stats[0]) if field_stats and field_stats[0] is not None else None
+    min_conf = float(field_stats[1]) if field_stats and field_stats[1] is not None else None
     return {
         "status": "ok",
         "period_days": days,
-        "files_processed": len(recent),
-        "avg_accuracy_pct": round(statistics.mean(confs), 1) if confs else None,
-        "avg_processing_seconds": round(statistics.mean(times) / 1000, 1) if times else None,
-        "cache_hit_rate_pct": round(cached / len(recent) * 100, 1),
-        "min_accuracy_pct": round(min(confs), 1) if confs else None,
-        "max_processing_seconds": round(max(times) / 1000, 1) if times else None,
+        "files_processed": len(jobs),
+        "avg_accuracy_pct": round(avg_conf * 100, 1) if avg_conf is not None and avg_conf <= 1 else round(avg_conf, 1) if avg_conf is not None else None,
+        "avg_processing_seconds": round(statistics.mean(durations) / 1000, 1) if durations else None,
+        "cache_hit_rate_pct": round(cache_hits / len(jobs) * 100, 1) if jobs else None,
+        "min_accuracy_pct": round(min_conf * 100, 1) if min_conf is not None and min_conf <= 1 else round(min_conf, 1) if min_conf is not None else None,
+        "max_processing_seconds": round(max(durations) / 1000, 1) if durations else None,
     }
 
 
@@ -1402,21 +2050,29 @@ async def analytics_rules(
     _auth: None = Security(_require_api_key)
 ):
     """Per-rule pass/fail counts to show which rules are most commonly triggered."""
+    from sqlalchemy import func
+    from app.database import get_db
+    from app.models.db_models import RuleResultRecord
     cutoff = datetime.utcnow() - timedelta(days=days)
-    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
-
+    with get_db() as db:
+        grouped = db.query(
+            RuleResultRecord.rule_id,
+            RuleResultRecord.rule_name,
+            RuleResultRecord.status,
+            func.count(RuleResultRecord.id),
+        ).filter(RuleResultRecord.created_at >= cutoff).group_by(
+            RuleResultRecord.rule_id, RuleResultRecord.rule_name, RuleResultRecord.status
+        ).all()
     rule_counts: dict[str, dict] = {}
-    for record in recent:
-        for rule in record.get("rule_results", []):
-            rid  = rule.get("rule_id", "unknown")
-            stat = rule.get("status", "unknown")
-            if rid not in rule_counts:
-                rule_counts[rid] = {"rule_id": rid, "rule_name": rule.get("rule_name",""), "pass": 0, "fail": 0, "verify": 0, "skip": 0}
-            if stat == "PASS":   rule_counts[rid]["pass"]   += 1
-            elif stat == "FAIL": rule_counts[rid]["fail"]   += 1
-            elif stat in ("VERIFY","WARNING"): rule_counts[rid]["verify"] += 1
-            else:                rule_counts[rid]["skip"]   += 1
-
+    for rid, name, status, count in grouped:
+        row = rule_counts.setdefault(rid or "unknown", {
+            "rule_id": rid or "unknown", "rule_name": name or "", "pass": 0, "fail": 0, "verify": 0, "skip": 0
+        })
+        stat = (status or "unknown").lower()
+        if stat == "pass": row["pass"] += count
+        elif stat == "fail": row["fail"] += count
+        elif stat == "verify": row["verify"] += count
+        else: row["skip"] += count
     rows = sorted(rule_counts.values(), key=lambda x: x["fail"] + x["verify"], reverse=True)
     return {"status": "ok", "period_days": days, "rules": rows}
 
@@ -1427,10 +2083,18 @@ async def model_health(
     _auth: None = Security(_require_api_key)
 ):
     """Model performance in plain language: how confident the system is, trend over time."""
+    from app.database import get_db
+    from app.models.db_models import ExtractedFieldRecord, ProcessingJob
     cutoff = datetime.utcnow() - timedelta(days=days)
-    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
-
-    confs = [r["ocr_confidence"] for r in recent if r.get("ocr_confidence") is not None]
+    with get_db() as db:
+        confs = [
+            float(v[0]) * 100 if v[0] is not None and float(v[0]) <= 1 else float(v[0])
+            for v in db.query(ExtractedFieldRecord.confidence_score)
+            .filter(ExtractedFieldRecord.created_at >= cutoff, ExtractedFieldRecord.confidence_score != None)
+            .order_by(ExtractedFieldRecord.created_at.asc(), ExtractedFieldRecord.id.asc())
+            .all()
+        ]
+        files_analysed = db.query(ProcessingJob).filter(ProcessingJob.started_at >= cutoff).count()
     avg   = round(statistics.mean(confs), 1) if confs else None
 
     # Simple trend: compare first half vs second half of the period
@@ -1456,7 +2120,7 @@ async def model_health(
         "avg_confidence_pct": avg,
         "confidence_level": confidence_label,
         "trend": trend,
-        "files_analysed": len(recent),
+        "files_analysed": files_analysed,
         "files_needing_attention": low_confidence_files,
         "guidance": (
             "System is working well — no action needed." if confidence_label == "high" else
@@ -1472,21 +2136,34 @@ async def operator_analytics(
     _auth: None = Security(_require_api_key)
 ):
     """Simple metrics an operator can understand: files done, time saved, issues found."""
+    from app.database import get_db
+    from app.models.db_models import ProcessingJob, RuleResultRecord
     cutoff = datetime.utcnow() - timedelta(days=days)
-    recent = [r for r in _analytics_store if r.get("ts","") >= cutoff.isoformat()]
-
-    issues_found  = sum(r.get("failed_rules", 0)  for r in recent)
-    needs_review  = sum(r.get("verify_rules", 0)  for r in recent)
-    auto_passed   = sum(1 for r in recent if r.get("decision") == "AUTO_PASS")
-    cache_hits    = sum(1 for r in recent if r.get("cache_hit"))
+    with get_db() as db:
+        jobs = db.query(ProcessingJob).filter(ProcessingJob.started_at >= cutoff).all()
+        issues_found = db.query(RuleResultRecord).filter(
+            RuleResultRecord.created_at >= cutoff,
+            RuleResultRecord.status == "fail",
+        ).count()
+        needs_review = db.query(RuleResultRecord).filter(
+            RuleResultRecord.created_at >= cutoff,
+            RuleResultRecord.status == "verify",
+        ).count()
+    auto_passed = sum(1 for j in jobs if _job_result_int(j, "failed") == 0 and _job_result_int(j, "verify") == 0)
+    cache_hits = sum(1 for j in jobs if _job_result_bool(j, "cache_hit"))
 
     return {
         "status": "ok",
         "period_days": days,
-        "files_checked": len(recent),
+        "files_checked": len(jobs),
         "issues_found": issues_found,
         "items_need_your_review": needs_review,
         "files_passed_automatically": auto_passed,
         "time_saved_by_cache_minutes": round(cache_hits * 0.25, 1),
-        "summary": f"{len(recent)} files checked, {issues_found} issues found, {needs_review} need your review."
+        "summary": f"{len(jobs)} files checked, {issues_found} issues found, {needs_review} need your review."
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5001)

@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -64,11 +65,9 @@ public class QCProcessingService {
      * Self-injection via @Lazy to break the circular proxy dependency.
      *
      * Spring's AOP proxies cannot intercept THIS.method() calls (self-calls).
-     * By injecting ourselves through the container, self.processFilePair(pair)
-     * goes through the CGLIB proxy, so @Transactional(REQUIRES_NEW) IS applied.
-     * Without this, processFilePair's @Transactional is bypassed —
-     * the BatchFile entity is detached in the EM session of qcResultRepository.save()
-     * and Hibernate Envers throws when trying to audit a detached relationship.
+     * By injecting ourselves through the container, calls such as
+     * self.persistPythonResult(...) go through the CGLIB proxy, so the short
+     * save transaction is applied after the long Python call has finished.
      */
     @Autowired @Lazy
     private QCProcessingService self;
@@ -216,6 +215,14 @@ public class QCProcessingService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markFileError(@NonNull Long batchFileId, String errorMessage) {
+        batchFileRepository.findById(batchFileId).ifPresent(file -> {
+            file.setStatus(FileStatus.ERROR);
+            file.setErrorMessage(errorMessage);
+        });
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveFinalBatchStatus(@NonNull Long batchId, @NonNull BatchStatus status, String errorMessage) {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
@@ -273,6 +280,7 @@ public class QCProcessingService {
         int toVerifyCount = 0;
         int autoFailCount = 0;
         int errorCount    = 0;
+        List<String> fileErrors = new ArrayList<>();
 
         for (int index = 0; index < pairs.size(); index++) {
             FilePair pair = pairs.get(index);
@@ -287,7 +295,7 @@ public class QCProcessingService {
                 }
 
                 updateProgress(batchId, "python", "Running OCR and QC rules for " + pair.getAppraisal().getFilename(), index, pairs.size(), true, safeModelConfig);
-                // Call via self (proxy) so @Transactional(REQUIRES_NEW) is applied
+                // processFilePair intentionally keeps the long Python call outside a DB transaction.
                 QCResult result = self.processFilePair(pair, safeModelConfig);
                 throwIfCancelled(batchId);
                 switch (result.getQcDecision()) {
@@ -306,12 +314,25 @@ public class QCProcessingService {
                 log.error("Error processing file pair: appraisal={}, error={}",
                         pair.getAppraisal().getFilename(), e.getMessage(), e);
                 errorCount++;
+                String fileError = pair.getAppraisal().getFilename() + ": " + e.getMessage();
+                fileErrors.add(fileError);
+                try {
+                    self.markFileError(pair.getAppraisal().getId(), fileError);
+                } catch (Exception saveEx) {
+                    log.warn("Failed to persist file error for {}: {}", pair.getAppraisal().getFilename(), saveEx.getMessage());
+                }
                 updateProgress(batchId, "error", "Error processing " + pair.getAppraisal().getFilename(), index + 1, pairs.size(), true, safeModelConfig);
             }
         }
 
         BatchStatus newStatus = determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
-        self.saveFinalBatchStatus(batchId, newStatus, newStatus == BatchStatus.ERROR ? "All appraisal files failed QC processing" : null);
+        String finalError = null;
+        if (newStatus == BatchStatus.ERROR) {
+            finalError = fileErrors.isEmpty()
+                    ? "All appraisal files failed QC processing"
+                    : "All appraisal files failed QC processing. First cause: " + fileErrors.get(0);
+        }
+        self.saveFinalBatchStatus(batchId, newStatus, finalError);
         businessEventService.record("BATCH_QC_COMPLETED", null, "java", newStatus.name(),
                 "Batch", batchId, batchId, null, null, null,
                 Map.of(
@@ -437,19 +458,17 @@ public class QCProcessingService {
      * 3. The long Python call (1-3 min) does NOT hold a DB connection open — only
      *    the DB save at the end (milliseconds) holds the transaction.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @SuppressWarnings("null")
     public @NonNull QCResult processFilePair(FilePair pair) {
         return processFilePair(pair, QCModelConfig.defaults());
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @SuppressWarnings("null")
     public @NonNull QCResult processFilePair(FilePair pair, QCModelConfig modelConfig) {
-        // Reload BatchFile in THIS transaction so it is a managed (not detached) entity.
-        // The `pair.getAppraisal()` object was loaded in a different transaction and is
-        // detached here — Hibernate Envers would throw when auditing a detached reference.
-        BatchFile appraisal = batchFileRepository.findById(pair.getAppraisal().getId())
+        // Keep the long Python/OCR call outside any Java DB transaction. Neon
+        // terminates idle transactions during multi-minute OCR jobs, and that
+        // rollback can mask the real Python result.
+        BatchFile appraisal = batchFileRepository.findWithBatchAndReviewerById(pair.getAppraisal().getId())
                 .orElseThrow(() -> new RuntimeException("BatchFile not found: " + pair.getAppraisal().getId()));
 
         log.debug("Processing pair: appraisal={}, engagement={}",
@@ -468,35 +487,45 @@ public class QCProcessingService {
         long queueWaitMs = queueWaitMs(progressBatchId, pythonStartedAt);
         int retryCount = 0;
 
+        if (!pythonClient.isCeleryWorkerRunning()) {
+            log.warn("Celery worker is not connected; using synchronous Python QC for batch {} file {}",
+                    progressBatchId, appraisal.getFilename());
+            updateSubProgress(progressBatchId, "python_sync",
+                    "Celery worker unavailable — running OCR directly for " + appraisal.getFilename(), 0.05, 0);
+            PythonQCResponse pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
+            retryCount = pythonClient.getLastRetryCount();
+            throwIfCancelled(progressBatchId);
+            return self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
+        }
+
         // --- Async queue path (Celery worker) ---
         // Submit the job and poll for completion so Python HTTP threads are never
         // held open for the full OCR+LLM duration (5-15 min on M1 8 GB).
         // On each poll we check for batch cancellation so Stop QC is still instant.
         PythonQCResponse pythonResponse;
+        PythonClientService.JobSubmitResponse job;
         try {
-            PythonClientService.JobSubmitResponse job = pythonClient.submitQCJob(
+            job = pythonClient.submitQCJob(
                     pair.getAppraisalPath(),
                     pair.getEngagementPath(),
                     pair.getContractPath(),
-                    modelConfig);
+                    modelConfig,
+                    progressBatchId,
+                    appraisal.getId(),
+                    null,
+                    appraisal.getContentHash());
 
             updateSubProgress(progressBatchId, "queued",
                     "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
 
-            Duration timeout = Duration.ofSeconds(Math.max(600, (long) pythonClient.getConfig().getTimeoutSeconds() * 2));
-            pythonResponse = pythonClient.waitForJobResult(
-                    job.jobId(),
-                    timeout,
-                    () -> isCancellationRequested(progressBatchId));
-            retryCount = pythonClient.getLastRetryCount();
-
         } catch (CancellationException ce) {
             throw ce;
-        } catch (Exception asyncEx) {
-            // If /qc/submit is not available (old Python build) or Celery worker is
-            // not running, fall back to the synchronous /qc/process call.
-            log.warn("Async queue unavailable for batch {} file {} ({}), falling back to sync call",
-                    progressBatchId, appraisal.getFilename(), asyncEx.getMessage());
+        } catch (Exception submitEx) {
+            // Fall back only if the job could not be queued at all. Once Python
+            // returns a durable job id, Java must poll that job instead of
+            // starting a duplicate sync request with the same idempotency key.
+            log.warn("Async submit unavailable for batch {} file {} ({}), falling back to sync call",
+                    progressBatchId, appraisal.getFilename(), submitEx.getMessage());
             updateSubProgress(progressBatchId, "python_sync",
                     "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
             pythonResponse = pythonClient.processQC(
@@ -510,10 +539,68 @@ public class QCProcessingService {
                                 : "Processing " + appraisal.getFilename();
                         updateSubProgress(progressBatchId, subStage, subMessage,
                                 snapshot.subPercent(), snapshot.elapsedMs());
-                    });
+                    },
+                    progressBatchId,
+                    appraisal.getId(),
+                    null,
+                    appraisal.getContentHash());
             retryCount = pythonClient.getLastRetryCount();
+            throwIfCancelled(progressBatchId);
+            return self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
         }
+
+        Duration timeout = Duration.ofSeconds(Math.max(900, (long) pythonClient.getConfig().getTimeoutSeconds() * 4));
+        try {
+            pythonResponse = pythonClient.waitForJobResult(
+                    job.jobId(),
+                    timeout,
+                    () -> isCancellationRequested(progressBatchId));
+        } catch (PythonClientService.CeleryWorkerUnavailableException workerEx) {
+            log.warn("Queued Python job {} was not picked up by Celery; taking it over synchronously",
+                    workerEx.jobId());
+            updateSubProgress(progressBatchId, "python_sync",
+                    "Celery worker did not pick up queued job — running OCR directly for " + appraisal.getFilename(),
+                    0.05, 0);
+            pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
+        }
+        retryCount = pythonClient.getLastRetryCount();
         throwIfCancelled(progressBatchId);
+
+        return self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
+    }
+
+    private PythonQCResponse runSyncPythonQc(
+            FilePair pair,
+            QCModelConfig modelConfig,
+            Long progressBatchId,
+            BatchFile appraisal) {
+        return pythonClient.processQC(
+                pair.getAppraisalPath(),
+                pair.getEngagementPath(),
+                pair.getContractPath(),
+                modelConfig,
+                snapshot -> {
+                    String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
+                    String subMessage = snapshot.message() != null ? snapshot.message()
+                            : "Processing " + appraisal.getFilename();
+                    updateSubProgress(progressBatchId, subStage, subMessage,
+                            snapshot.subPercent(), snapshot.elapsedMs());
+                },
+                progressBatchId,
+                appraisal.getId(),
+                null,
+                appraisal.getContentHash());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public @NonNull QCResult persistPythonResult(
+            Long appraisalId,
+            PythonQCResponse pythonResponse,
+            QCModelConfig modelConfig,
+            long queueWaitMs,
+            int retryCount) {
+        BatchFile appraisal = batchFileRepository.findWithBatchAndReviewerById(appraisalId)
+                .orElseThrow(() -> new RuntimeException("BatchFile not found: " + appraisalId));
 
         // A duplicate worker can pass the first exists check, spend time in Python,
         // and only then discover that another worker already saved the result.
@@ -542,6 +629,7 @@ public class QCProcessingService {
                 .processingTimeMs(pythonResponse.processingTimeMs())
                 .extractionMethod(pythonResponse.extractionMethod())
                 .pythonDocumentId(pythonResponse.documentId())
+                .pythonProcessingJobId(pythonResponse.processingJobId())
                 .cacheHit(pythonResponse.cacheHit())
                 .missingDocuments(missingDocumentsJson(pythonResponse))
                 .sourceDocumentHash(appraisal.getContentHash())
@@ -571,6 +659,7 @@ public class QCProcessingService {
                         .verifyQuestion(pr.verifyQuestion())
                         .rejectionText(pr.rejectionText())
                         .evidence(pr.evidence() != null ? toJson(pr.evidence()) : null)
+                        .targetField(pr.targetField())
                         .pdfPage(pr.sourcePage())
                         .bboxX(pr.bboxX())
                         .bboxY(pr.bboxY())

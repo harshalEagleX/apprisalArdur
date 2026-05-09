@@ -2,6 +2,7 @@ package com.apprisal.qc.service;
 
 import com.apprisal.qc.config.OcrServiceConfig;
 import com.apprisal.common.dto.python.PythonQCResponse;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Service for calling the Python OCR/QC service.
@@ -65,6 +68,12 @@ public class PythonClientService {
 
     public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath,
                                       QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback) {
+        return processQC(appraisalPath, engagementPath, contractPath, modelConfig, stageCallback, null, null, null, null);
+    }
+
+    public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath,
+                                      QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
+                                      Long batchId, Long batchFileId, Long qcResultId, String sourceHash) {
         String url = config.getUrl() + "/qc/process";
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         String progressToken = UUID.randomUUID().toString();
@@ -90,9 +99,11 @@ public class PythonClientService {
         body.add("text_model", safeModelConfig.textModel());
         body.add("vision_model", safeModelConfig.visionModel());
         body.add("progress_token", progressToken);
+        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.set("X-Correlation-ID", correlationId);
         // SECURITY: send API key to Python service
         if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
             headers.set("X-API-Key", config.getApiKey());
@@ -137,6 +148,18 @@ public class PythonClientService {
                 return result;
 
             } catch (org.springframework.web.client.HttpClientErrorException e) {
+                if (e.getStatusCode().value() == 409) {
+                    String runningJobId = extractJobId(e.getResponseBodyAsString());
+                    if (runningJobId != null && !runningJobId.isBlank()) {
+                        log.warn("Python QC request is already running as job {}; polling existing job instead of failing",
+                                runningJobId);
+                        lastRetryCount.set(Math.max(0, attempt - 1));
+                        return waitForJobResult(
+                                runningJobId,
+                                Duration.ofSeconds(Math.max(600, (long) config.getTimeoutSeconds() * 4)),
+                                null);
+                    }
+                }
                 // 4xx from Python — e.g. 422 invalid PDF, 400 bad request. Retrying will not fix bad input.
                 log.error("Python QC service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
                 throw new RuntimeException("Python QC service rejected the request: " +
@@ -241,6 +264,27 @@ public class PythonClientService {
         return v instanceof Number ? (Number) v : null;
     }
 
+    private static String extractJobId(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("\"job_id\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    public static class CeleryWorkerUnavailableException extends RuntimeException {
+        private final String jobId;
+
+        public CeleryWorkerUnavailableException(String jobId, String message) {
+            super(message);
+            this.jobId = jobId;
+        }
+
+        public String jobId() {
+            return jobId;
+        }
+    }
+
     public record PythonProgress(String stage, String message, double subPercent, long elapsedMs) { }
 
     // ── Async job queue (Celery) ───────────────────────────────────────────────
@@ -256,6 +300,12 @@ public class PythonClientService {
      */
     public JobSubmitResponse submitQCJob(Path appraisalPath, Path engagementPath,
                                          Path contractPath, QCModelConfig modelConfig) {
+        return submitQCJob(appraisalPath, engagementPath, contractPath, modelConfig, null, null, null, null);
+    }
+
+    public JobSubmitResponse submitQCJob(Path appraisalPath, Path engagementPath,
+                                         Path contractPath, QCModelConfig modelConfig,
+                                         Long batchId, Long batchFileId, Long qcResultId, String sourceHash) {
         String url = config.getUrl() + "/qc/submit";
         QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         lastRetryCount.set(0);
@@ -275,9 +325,11 @@ public class PythonClientService {
         body.add("model_provider", cfg.provider());
         body.add("text_model",     cfg.textModel());
         body.add("vision_model",   cfg.visionModel());
+        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, cfg);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.set("X-Correlation-ID", correlationId);
         if (config.getApiKey() != null && !config.getApiKey().isBlank())
             headers.set("X-API-Key", config.getApiKey());
 
@@ -316,10 +368,10 @@ public class PythonClientService {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         Instant deadline        = Instant.now().plus(timeout);
-        // If the job stays PENDING (never moves to STARTED) for 60 s the Celery
+        // If the job stays PENDING (never moves to STARTED) for 180 s the Celery
         // worker is probably not running — surface that early so the caller can
-        // fall back to sync mode without burning the full timeout.
-        Instant workerGraceEnd  = Instant.now().plusSeconds(60);
+        // fail clearly without starting a duplicate sync request for the same job.
+        Instant workerGraceEnd  = Instant.now().plusSeconds(180);
         int pollIntervalMs      = 6_000; // 6 s between polls — Ollama takes 30-120 s per job
         int attempt             = 0;
 
@@ -362,8 +414,8 @@ public class PythonClientService {
 
                 // Still PENDING after grace window → worker is not running, give up fast
                 if ("PENDING".equals(state) && Instant.now().isAfter(workerGraceEnd)) {
-                    throw new RuntimeException("Celery worker not running — job " + jobId
-                            + " stayed PENDING for >60 s");
+                    throw new CeleryWorkerUnavailableException(jobId, "Celery worker not running — job " + jobId
+                            + " stayed PENDING for >180 s");
                 }
                 // STARTED / QUEUED / PENDING within grace — keep polling
 
@@ -392,6 +444,68 @@ public class PythonClientService {
 
     public int getLastRetryCount() { return lastRetryCount.get(); }
 
+    public void submitFeedback(PythonFeedbackRequest feedback) {
+        if (feedback == null || feedback.documentId() == null || feedback.documentId().isBlank()) {
+            return;
+        }
+        try {
+            String url = config.getUrl() + "/qc/feedback";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+                headers.set("X-API-Key", config.getApiKey());
+            }
+            restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(feedback, headers), String.class);
+        } catch (Exception e) {
+            log.warn("Python feedback sync skipped for document {} rule {}: {}",
+                    feedback.documentId(), feedback.ruleId(), e.getMessage());
+        }
+    }
+
+    private String appendProcessingContext(MultiValueMap<String, Object> body,
+                                         Long batchId, Long batchFileId, Long qcResultId,
+                                         String sourceHash, QCModelConfig cfg) {
+        String correlationId = org.slf4j.MDC.get("correlationId");
+        if (correlationId == null || correlationId.isBlank()) {
+            correlationId = batchId != null ? "batch:" + batchId : UUID.randomUUID().toString();
+        }
+        body.add("correlation_id", correlationId);
+        if (batchId != null) body.add("batch_id", String.valueOf(batchId));
+        if (batchFileId != null) body.add("batch_file_id", String.valueOf(batchFileId));
+        if (qcResultId != null) body.add("qc_result_id", String.valueOf(qcResultId));
+        if (sourceHash != null && !sourceHash.isBlank() && batchFileId != null) {
+            body.add("idempotency_key", String.join("|",
+                    String.valueOf(batchFileId),
+                    sourceHash,
+                    cfg.provider(),
+                    cfg.textModel(),
+                    cfg.visionModel(),
+                    "rules:1.0"));
+        }
+        return correlationId;
+    }
+
+    public record PythonFeedbackRequest(
+            @JsonProperty("document_id") String documentId,
+            @JsonProperty("processing_job_id") String processingJobId,
+            @JsonProperty("correlation_id") String correlationId,
+            @JsonProperty("rule_id") String ruleId,
+            @JsonProperty("field_name") String fieldName,
+            @JsonProperty("original_value") String originalValue,
+            @JsonProperty("corrected_value") String correctedValue,
+            @JsonProperty("feedback_type") String feedbackType,
+            @JsonProperty("operator_comment") String operatorComment,
+            @JsonProperty("reviewer_role") String reviewerRole,
+            @JsonProperty("decision_latency_ms") Long decisionLatencyMs,
+            @JsonProperty("acknowledged") Boolean acknowledged,
+            @JsonProperty("source_page") Integer sourcePage,
+            @JsonProperty("bbox_x") Float bboxX,
+            @JsonProperty("bbox_y") Float bboxY,
+            @JsonProperty("bbox_w") Float bboxW,
+            @JsonProperty("bbox_h") Float bboxH,
+            @JsonProperty("confidence_score") Double confidenceScore
+    ) {}
+
     /**
      * Check if Python service is healthy.
      */
@@ -406,13 +520,33 @@ public class PythonClientService {
         }
     }
 
+    public boolean isCeleryWorkerRunning() {
+        try {
+            String url = config.getUrl() + "/health";
+            @SuppressWarnings("rawtypes")
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return false;
+            }
+            return Boolean.TRUE.equals(response.getBody().get("celery_worker_running"));
+        } catch (Exception e) {
+            log.warn("Python Celery health check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Get list of QC rules from Python service.
      */
     public String getRules() {
         try {
             String url = config.getUrl() + "/qc/rules";
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            HttpHeaders headers = new HttpHeaders();
+            if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+                headers.set("X-API-Key", config.getApiKey());
+            }
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
             return response.getBody();
         } catch (Exception e) {
             log.error("Failed to get QC rules: {}", e.getMessage());

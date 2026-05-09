@@ -71,6 +71,9 @@ public class QCResult {
     @Column(name = "python_document_id")
     private String pythonDocumentId;
 
+    @Column(name = "python_processing_job_id")
+    private String pythonProcessingJobId;
+
     @Column(name = "cache_hit")
     private Boolean cacheHit = false;
 
@@ -251,6 +254,9 @@ public class QCResult {
     public String getPythonDocumentId() { return pythonDocumentId; }
     public void setPythonDocumentId(String pythonDocumentId) { this.pythonDocumentId = pythonDocumentId; }
 
+    public String getPythonProcessingJobId() { return pythonProcessingJobId; }
+    public void setPythonProcessingJobId(String pythonProcessingJobId) { this.pythonProcessingJobId = pythonProcessingJobId; }
+
     public Boolean getCacheHit() { return cacheHit; }
     public void setCacheHit(Boolean cacheHit) { this.cacheHit = cacheHit; }
 
@@ -377,6 +383,7 @@ public class QCResult {
         private Integer processingTimeMs;
         private String  extractionMethod;
         private String  pythonDocumentId;      // IMPL FIX: was missing from builder
+        private String  pythonProcessingJobId;
         private Boolean cacheHit = false;      // IMPL FIX: was missing from builder
         private String missingDocuments;
         private String sourceDocumentHash;
@@ -434,6 +441,7 @@ public class QCResult {
 
         public QCResultBuilder extractionMethod(String v)   { this.extractionMethod = v; return this; }
         public QCResultBuilder pythonDocumentId(String v)   { this.pythonDocumentId = v; return this; }
+        public QCResultBuilder pythonProcessingJobId(String v) { this.pythonProcessingJobId = v; return this; }
         public QCResultBuilder cacheHit(Boolean v)          { this.cacheHit = v;          return this; }
         public QCResultBuilder missingDocuments(String v)   { this.missingDocuments = v; return this; }
         public QCResultBuilder sourceDocumentHash(String v) { this.sourceDocumentHash = v; return this; }
@@ -453,6 +461,7 @@ public class QCResult {
             result.processingTimeMs = this.processingTimeMs;
             result.extractionMethod = this.extractionMethod;
             result.pythonDocumentId = this.pythonDocumentId;
+            result.pythonProcessingJobId = this.pythonProcessingJobId;
             result.cacheHit         = this.cacheHit;
             result.missingDocuments = this.missingDocuments;
             result.sourceDocumentHash = this.sourceDocumentHash;

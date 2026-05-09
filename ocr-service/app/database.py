@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.schema import CreateColumn, CreateIndex
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 logger = logging.getLogger(__name__)
@@ -86,35 +87,72 @@ def create_all_tables():
 
 def ensure_schema_compatibility():
     """
-    Apply tiny, idempotent compatibility fixes for dev databases that were
-    created before newer cache columns existed. Alembic remains the source of
-    truth; this prevents stale local DBs from disabling OCR cache at runtime.
+    Reconcile the Python service schema from the SQLAlchemy models.
+
+    This service uses its ORM models as the runtime contract for local/product
+    deployments where a separate migration step may not run before startup.
+    The reconciliation is additive only: it creates missing tables and adds
+    missing columns, but never drops, renames, or rewrites existing data.
     """
     try:
-        inspector = inspect(engine)
-        table_names = set(inspector.get_table_names())
-        if "page_ocr_results" not in table_names:
-            return
+        from app.models.db_models import Base as DBBase
 
-        columns = {column["name"] for column in inspector.get_columns("page_ocr_results")}
-        statements = []
-        if "hocr_text" not in columns:
-            statements.append("ALTER TABLE page_ocr_results ADD COLUMN hocr_text TEXT")
-        if "word_json" not in columns:
-            statements.append("ALTER TABLE page_ocr_results ADD COLUMN word_json TEXT")
+        DBBase.metadata.create_all(bind=engine, checkfirst=True)
 
-        if "extracted_fields" in table_names:
-            field_columns = {column["name"] for column in inspector.get_columns("extracted_fields")}
-            for column_name in ("bbox_x", "bbox_y", "bbox_w", "bbox_h"):
-                if column_name not in field_columns:
-                    statements.append(f"ALTER TABLE extracted_fields ADD COLUMN {column_name} DOUBLE PRECISION")
-
+        statements = _missing_column_statements(DBBase)
         if not statements:
+            _create_missing_indexes(DBBase)
             return
 
         with engine.begin() as conn:
             for statement in statements:
                 conn.execute(text(statement))
-        logger.info("Applied OCR cache schema compatibility fixes: %s", ", ".join(statements))
+        _create_missing_indexes(DBBase)
+        logger.info("Applied OCR ORM schema reconciliation: %s", ", ".join(statements))
     except Exception as exc:
         logger.info("OCR schema compatibility check skipped: %s", exc)
+
+
+def _missing_column_statements(DBBase) -> list[str]:
+    """Build additive ALTER statements from declared SQLAlchemy table columns."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    preparer = engine.dialect.identifier_preparer
+    statements: list[str] = []
+
+    for table in DBBase.metadata.sorted_tables:
+        if table.name not in table_names:
+            continue
+        existing_columns = {column["name"] for column in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing_columns:
+                continue
+            if column.primary_key:
+                logger.warning("Skipping missing primary key column %s.%s", table.name, column.name)
+                continue
+            column_ddl = str(CreateColumn(column).compile(dialect=engine.dialect))
+            statements.append(
+                f"ALTER TABLE {preparer.format_table(table)} ADD COLUMN {column_ddl}"
+            )
+
+    return statements
+
+
+def _create_missing_indexes(DBBase) -> None:
+    """Create ORM-declared indexes that are missing on existing tables."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    for table in DBBase.metadata.sorted_tables:
+        if table.name not in table_names:
+            continue
+        existing_indexes = {index["name"] for index in inspector.get_indexes(table.name)}
+        for index in table.indexes:
+            if index.name in existing_indexes:
+                continue
+            try:
+                with engine.begin() as conn:
+                    conn.execute(CreateIndex(index))
+                logger.info("Created missing OCR index %s", index.name)
+            except Exception as exc:
+                logger.debug("Could not create OCR index %s: %s", index.name, exc)

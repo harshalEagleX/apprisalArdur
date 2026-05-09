@@ -43,6 +43,7 @@ from app.services.cache_service import (
     save_extracted_fields, save_rule_results,
     DB_AVAILABLE,
 )
+from app.services import processing_lifecycle
 
 DEFAULT_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
 DEFAULT_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
@@ -88,6 +89,7 @@ class QCResults(BaseModel):
     total_pages: int
     extraction_method: str
     document_id: Optional[str] = None     # DB record ID — None if DB unavailable
+    processing_job_id: Optional[str] = None
     cache_hit: bool = False               # True if OCR was served from cache
     model_provider: str = "ollama"
     model_name: str = DEFAULT_TEXT_MODEL
@@ -145,6 +147,14 @@ class SmartQCProcessor:
         model_name: Optional[str] = None,
         vision_model: Optional[str] = None,
         report_progress: Optional[ProgressReporter] = None,
+        processing_job_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        batch_id: Optional[str] = None,
+        batch_file_id: Optional[str] = None,
+        qc_result_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        traceparent: Optional[str] = None,
+        tracestate: Optional[str] = None,
     ) -> QCResults:
         """
         Process an appraisal PDF through the complete QC pipeline.
@@ -164,6 +174,24 @@ class SmartQCProcessor:
         model_provider = (model_provider or "ollama").strip().lower()
         model_name = (model_name or DEFAULT_TEXT_MODEL).strip()
         vision_model = (vision_model or DEFAULT_VISION_MODEL).strip()
+        if not processing_job_id:
+            created_job_id, _, _ = processing_lifecycle.create_or_get_job(
+                idempotency_key=idempotency_key,
+                source_document_hash=file_hash,
+                original_filename=original_filename,
+                correlation_id=correlation_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                qc_result_id=qc_result_id,
+                model_provider=model_provider,
+                model_name=model_name,
+                vision_model=vision_model,
+                traceparent=traceparent,
+                tracestate=tracestate,
+            )
+            processing_job_id = created_job_id
+        if not processing_job_id:
+            raise RuntimeError("Durable processing job is required before OCR processing can start")
 
         def _emit(stage: str, message: str, sub_percent: float) -> None:
             if report_progress is None:
@@ -173,214 +201,238 @@ class SmartQCProcessor:
             except Exception as cb_exc:  # callback must never break the pipeline
                 logger.debug("progress callback failed: %s", cb_exc)
 
-        # ── Step 1: Check OCR Cache ─────────────────────────────────────────
-        _emit("appraisal_ocr", "Checking OCR cache for appraisal", 0.30)
-        import fitz as _fitz
-        try:
-            _doc = _fitz.open(pdf_path)
-            total_pages = len(_doc)
-            _doc.close()
-        except Exception:
-            total_pages = 0
+        with processing_lifecycle.processing_context(processing_job_id, correlation_id, traceparent):
+            processing_lifecycle.mark_job_started(processing_job_id, "cache_check")
 
-        cache_hit = False
-        if file_hash and total_pages > 0:
-            cached_pages = get_cached_ocr(file_hash, total_pages)
-            if cached_pages:
-                logger.info("Cache HIT — skipping OCR for %s", file_hash[:12])
-                cache_hit = True
-                document_id = get_document_id(file_hash)
-                # Reconstruct ExtractionResult from cached pages
-                from app.ocr.ocr_pipeline import ExtractionResult
-                extraction_result = ExtractionResult()
-                extraction_result.total_pages = total_pages
-                for pt in cached_pages:
-                    extraction_result.page_index[pt.page_number] = pt.text
-                    extraction_result.page_details.append(pt)
-                    if getattr(pt, "words", None):
-                        extraction_result.word_index[pt.page_number] = pt.words
-                # Older or partially upgraded cache rows may not include word
-                # geometry for every page. Rebuild missing pages so reviewer
-                # highlights prefer real PDF/OCR coordinates over text-position
-                # approximation.
-                missing_word_pages = [
-                    page_num for page_num in range(1, total_pages + 1)
-                    if not extraction_result.word_index.get(page_num)
-                ]
-                if missing_word_pages:
-                    rebuilt_word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
-                    for page_num in missing_word_pages:
-                        words = rebuilt_word_index.get(page_num)
-                        if words:
-                            extraction_result.word_index[page_num] = words
-                    for pt in extraction_result.page_details:
-                        if not getattr(pt, "words", None):
-                            pt.words = extraction_result.word_index.get(pt.page_number, [])
-                    logger.info(
-                        "Rebuilt word geometry for %d cached page(s): %s",
-                        len(missing_word_pages),
-                        ",".join(str(p) for p in missing_word_pages[:20]),
-                    )
+            # ── Step 1: Check OCR Cache ─────────────────────────────────────
+            _emit("appraisal_ocr", "Checking OCR cache for appraisal", 0.30)
+            import fitz as _fitz
+            with processing_lifecycle.stage("pdf_open"):
+                try:
+                    _doc = _fitz.open(pdf_path)
+                    total_pages = len(_doc)
+                    _doc.close()
+                except Exception:
+                    total_pages = 0
 
-        # ── Step 2: OCR Extraction (if not cached) ──────────────────────────
-        if cache_hit:
-            _emit("appraisal_ocr", "Reusing cached OCR pages", 0.45)
-        else:
-            logger.info("Cache MISS — running OCR for %s", pdf_path)
-            _emit("appraisal_ocr", "Running OCR on appraisal PDF", 0.32)
-            extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
+            cache_hit = False
+            with processing_lifecycle.stage("cache_lookup", {"file_hash": file_hash, "total_pages": total_pages}):
+                if file_hash and total_pages > 0:
+                    cached_pages = get_cached_ocr(file_hash, total_pages)
+                    if cached_pages:
+                        logger.info("Cache HIT — skipping OCR for %s", file_hash[:12])
+                        cache_hit = True
+                        document_id = get_document_id(file_hash)
+                        if not document_id:
+                            raise RuntimeError("OCR cache hit has no durable document record")
+                        # Reconstruct ExtractionResult from cached pages
+                        from app.ocr.ocr_pipeline import ExtractionResult
+                        extraction_result = ExtractionResult()
+                        extraction_result.total_pages = total_pages
+                        for pt in cached_pages:
+                            extraction_result.page_index[pt.page_number] = pt.text
+                            extraction_result.page_details.append(pt)
+                            if getattr(pt, "words", None):
+                                extraction_result.word_index[pt.page_number] = pt.words
+                        missing_word_pages = [
+                            page_num for page_num in range(1, total_pages + 1)
+                            if not extraction_result.word_index.get(page_num)
+                        ]
+                        if missing_word_pages:
+                            with processing_lifecycle.stage("word_geometry_rebuild", {"missing_pages": len(missing_word_pages)}):
+                                rebuilt_word_index = self.ocr_pipeline.extract_word_geometry(pdf_path)
+                            for page_num in missing_word_pages:
+                                words = rebuilt_word_index.get(page_num)
+                                if words:
+                                    extraction_result.word_index[page_num] = words
+                            for pt in extraction_result.page_details:
+                                if not getattr(pt, "words", None):
+                                    pt.words = extraction_result.word_index.get(pt.page_number, [])
+                            logger.info(
+                                "Rebuilt word geometry for %d cached page(s): %s",
+                                len(missing_word_pages),
+                                ",".join(str(p) for p in missing_word_pages[:20]),
+                            )
 
-            # Save to cache for next time
-            if file_hash and extraction_result.page_details:
-                document_id = save_ocr_pages(
-                    file_hash=file_hash,
-                    filename=original_filename,
-                    pages=extraction_result.page_details,
+            # ── Step 2: OCR Extraction (if not cached) ──────────────────────
+            if cache_hit:
+                _emit("appraisal_ocr", "Reusing cached OCR pages", 0.45)
+            else:
+                logger.info("Cache MISS — running OCR for %s", pdf_path)
+                _emit("appraisal_ocr", "Running OCR on appraisal PDF", 0.32)
+                with processing_lifecycle.stage("ocr_extract", {"total_pages": total_pages}):
+                    extraction_result = self.ocr_pipeline.extract_all_pages(pdf_path)
+
+                # Save to cache for next time
+                if file_hash and extraction_result.page_details:
+                    with processing_lifecycle.stage("ocr_cache_save"):
+                        document_id = save_ocr_pages(
+                            file_hash=file_hash,
+                            filename=original_filename,
+                            pages=extraction_result.page_details,
+                        )
+                    if not document_id:
+                        raise RuntimeError("OCR cache persistence failed; durable document record is required")
+                elif not file_hash:
+                    raise RuntimeError("Source document hash is required for durable OCR processing")
+
+            if not extraction_result.page_index:
+                results = QCResults(
+                    success=False,
+                    processing_time_ms=int((time.time() - start_time) * 1000),
+                    total_pages=0,
+                    extraction_method="none",
+                    processing_job_id=processing_job_id,
+                    model_provider=model_provider,
+                    model_name=model_name,
+                    vision_model=vision_model,
+                    processing_notices=["Failed to extract any text from PDF"]
                 )
+                processing_lifecycle.fail_job(processing_job_id, "Failed to extract any text from PDF", "ocr_extract")
+                return results
 
-        if not extraction_result.page_index:
-            return QCResults(
-                success=False,
-                processing_time_ms=int((time.time() - start_time) * 1000),
-                total_pages=0,
-                extraction_method="none",
-                model_provider=model_provider,
-                model_name=model_name,
-                vision_model=vision_model,
-                processing_notices=["Failed to extract any text from PDF"]
-            )
+            # Raw OCR/native extraction output remains the default source of truth.
+            full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
 
-        # Raw OCR/native extraction output remains the default source of truth.
-        full_text = self.ocr_pipeline.get_full_text(extraction_result.page_index)
+            _emit("phase2_extraction", "Extracting structured fields", 0.55)
 
-        _emit("phase2_extraction", "Extracting structured fields", 0.55)
-
-        # Step 2: Phase 2 Multi-Layer Extraction
-        # Source A: Phase 2 engine — pass page_images for llava:13b checkbox fallback
-        s_extract, field_meta = phase2_engine.extract_subject(
-            full_text,
-            extraction_result.page_index,
-            page_images=extraction_result.page_images,
-            word_index=extraction_result.word_index,
-        )
-        # Contract: still uses original extraction service (not yet Phase 2)
-        c_extract = extraction_service.extract_contract_section(full_text)
+            # Step 2: Phase 2 Multi-Layer Extraction
+            with processing_lifecycle.stage("field_extraction_subject"):
+                s_extract, field_meta = phase2_engine.extract_subject(
+                    full_text,
+                    extraction_result.page_index,
+                    page_images=extraction_result.page_images,
+                    word_index=extraction_result.word_index,
+                )
+            # Contract: still uses original extraction service (not yet Phase 2)
+            with processing_lifecycle.stage("field_extraction_contract"):
+                c_extract = extraction_service.extract_contract_section(full_text)
         
         # Source B: Site/Improvement extractor (dimensions, zoning, year built, comp count)
-        from app.services.site_extractor import extract_advanced_fields
-        legacy_fields = extract_advanced_fields(full_text)
+            from app.services.site_extractor import extract_advanced_fields
+            with processing_lifecycle.stage("field_extraction_site_legacy"):
+                legacy_fields = extract_advanced_fields(full_text)
 
         # Step 3: Map to AppraisalReportDomain Model
-        report = self._map_extraction_to_report(s_extract, c_extract, legacy_fields)
-        self._apply_comparables_from_field_meta(report, field_meta)
+            report = self._map_extraction_to_report(s_extract, c_extract, legacy_fields)
+            self._apply_comparables_from_field_meta(report, field_meta)
         
-        # Step 4: Handle Engagement Letter
-        engagement_letter = None
-        supporting_document_missing = False
-        missing_supporting_documents: List[str] = []
-        if engagement_letter_text:
-            # Parse explicitly provided text
-            eng_extract = extraction_service.extract_engagement_letter(engagement_letter_text)
-            engagement_letter = self._map_engagement_letter(eng_extract)
-        else:
-            # Fallback remains available for assignment/loan-type context only.
-            # Cross-document rules must see the missing flag and avoid comparing
-            # the appraisal against a fabricated copy of itself.
-            logger.info("No Engagement Letter found. Creating tagged proxy from Report data for non-cross-reference context.")
-            supporting_document_missing = True
-            missing_supporting_documents.append("ENGAGEMENT")
-            engagement_letter = EngagementLetter(
-                borrower_name=report.subject.borrower,
-                property_address=report.subject.address,
-                city=report.subject.city,
-                state=report.subject.state,
-                zip_code=report.subject.zip_code,
-                county=report.subject.county,
-                lender_name=report.subject.lender_name,
-                lender_address=report.subject.lender_address,
-                assignment_type=report.contract.assignment_type or "Refinance"
+        with processing_lifecycle.processing_context(processing_job_id, correlation_id, traceparent):
+            # Step 4: Handle Engagement Letter
+            engagement_letter = None
+            supporting_document_missing = False
+            missing_supporting_documents: List[str] = []
+            with processing_lifecycle.stage("supporting_document_parse"):
+                if engagement_letter_text:
+                    eng_extract = extraction_service.extract_engagement_letter(engagement_letter_text)
+                    engagement_letter = self._map_engagement_letter(eng_extract)
+                else:
+                    logger.info("No Engagement Letter found. Creating tagged proxy from Report data for non-cross-reference context.")
+                    supporting_document_missing = True
+                    missing_supporting_documents.append("ENGAGEMENT")
+                    engagement_letter = EngagementLetter(
+                        borrower_name=report.subject.borrower,
+                        property_address=report.subject.address,
+                        city=report.subject.city,
+                        state=report.subject.state,
+                        zip_code=report.subject.zip_code,
+                        county=report.subject.county,
+                        lender_name=report.subject.lender_name,
+                        lender_address=report.subject.lender_address,
+                        assignment_type=report.contract.assignment_type or "Refinance"
+                    )
+
+            # Step 4b: Populate neighborhood/site commentary from Phase 2 extraction
+            with processing_lifecycle.stage("domain_mapping"):
+                nbr_desc = field_meta.get("neighborhood_description")
+                mkt_cmt  = field_meta.get("market_conditions_commentary")
+                if nbr_desc and nbr_desc.value:
+                    report.neighborhood.description_commentary = nbr_desc.value
+                if mkt_cmt and mkt_cmt.value:
+                    report.neighborhood.market_conditions_comment = mkt_cmt.value
+                self._apply_neighborhood_from_field_meta(report, field_meta)
+                self._apply_site_from_field_meta(report, field_meta)
+
+            # Step 5: Parse contract PDF if provided OR if appraisal says it was analyzed
+            purchase_agreement = None
+            with processing_lifecycle.stage("purchase_agreement_parse"):
+                if contract_text:
+                    pa_extract = extraction_service.extract_purchase_agreement(contract_text)
+                    purchase_agreement = pa_extract
+                elif report.contract.did_analyze_contract:
+                    logger.info("Appraisal indicates contract was analyzed but no contract PDF provided.")
+
+            vision_results = []
+            if (vision_model or "").lower().startswith("llava"):
+                _emit("vision", f"Running vision model {vision_model}", 0.65)
+                try:
+                    from app.services.vision_pipeline import analyze_pages_sync
+                    with processing_lifecycle.stage("vision_analysis"):
+                        vision_results = analyze_pages_sync(extraction_result.page_images)
+                except Exception as e:
+                    logger.info("llava:13b vision pipeline not run: %s", e)
+
+            # Step 6: Create ValidationContext (pass field_meta for source_page + confidence)
+            ctx = ValidationContext(
+                report=report,
+                engagement_letter=engagement_letter,
+                purchase_agreement=purchase_agreement,
+                field_meta=field_meta,
+                raw_text=full_text,
+                page_index=extraction_result.page_index,
+                vision_results=vision_results,
+                supporting_document_missing=supporting_document_missing,
+                missing_supporting_documents=missing_supporting_documents,
             )
 
-        # Step 4b: Populate neighborhood commentary from Phase 2 extraction
-        nbr_desc = field_meta.get("neighborhood_description")
-        mkt_cmt  = field_meta.get("market_conditions_commentary")
-        if nbr_desc and nbr_desc.value:
-            report.neighborhood.description_commentary = nbr_desc.value
-        if mkt_cmt and mkt_cmt.value:
-            report.neighborhood.market_conditions_comment = mkt_cmt.value
-        self._apply_neighborhood_from_field_meta(report, field_meta)
-        self._apply_site_from_field_meta(report, field_meta)
-
-        # Step 5: Parse contract PDF if provided OR if appraisal says it was analyzed
-        purchase_agreement = None
-        if contract_text:
-            pa_extract = extraction_service.extract_purchase_agreement(contract_text)
-            purchase_agreement = pa_extract
-        elif report.contract.did_analyze_contract:
-            logger.info("Appraisal indicates contract was analyzed but no contract PDF provided.")
-
-        vision_results = []
-        if (vision_model or "").lower().startswith("llava"):
-            _emit("vision", f"Running vision model {vision_model}", 0.65)
+            _emit("llm_enrichment", f"Enriching context with {model_name}", 0.70)
             try:
-                from app.services.vision_pipeline import analyze_pages_sync
-                vision_results = analyze_pages_sync(extraction_result.page_images)
+                from app.services.llm_enrichment import enrich_context_sync
+                with processing_lifecycle.stage("llm_enrichment"):
+                    enrich_context_sync(ctx)
             except Exception as e:
-                logger.info("llava:13b vision pipeline not run: %s", e)
+                logger.info("LLM enrichment not run before rules: %s", e)
 
-        # Step 6: Create ValidationContext (pass field_meta for source_page + confidence)
-        ctx = ValidationContext(
-            report=report,
-            engagement_letter=engagement_letter,
-            purchase_agreement=purchase_agreement,
-            field_meta=field_meta,
-            raw_text=full_text,
-            page_index=extraction_result.page_index,
-            vision_results=vision_results,
-            supporting_document_missing=supporting_document_missing,
-            missing_supporting_documents=missing_supporting_documents,
-        )
+            # Step 7: Execute rule engine
+            logger.info("Executing rule engine")
+            _emit("rules", "Executing QC rules", 0.90)
+            with processing_lifecycle.stage("rule_engine"):
+                rule_results = engine.execute(ctx)
+                from app.rule_engine.cross_field_validator import CrossFieldValidator
+                rule_results.extend(CrossFieldValidator().validate(ctx))
 
-        _emit("llm_enrichment", f"Enriching context with {model_name}", 0.70)
-        try:
-            from app.services.llm_enrichment import enrich_context_sync
-            enrich_context_sync(ctx)
-        except Exception as e:
-            logger.info("LLM enrichment not run before rules: %s", e)
+            _emit("persist", "Saving extracted fields and rule results", 0.96)
+            # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
+            if document_id:
+                page_confidences = [p.confidence for p in extraction_result.page_details]
+                with processing_lifecycle.stage("persist_results"):
+                    save_extracted_fields(document_id, field_meta, page_confidences, processing_job_id=processing_job_id)
+                    save_rule_results(document_id, rule_results, processing_job_id=processing_job_id)
 
-        # Step 7: Execute rule engine
-        logger.info("Executing rule engine")
-        _emit("rules", "Executing QC rules", 0.90)
-        rule_results = engine.execute(ctx)
-        from app.rule_engine.cross_field_validator import CrossFieldValidator
-        rule_results.extend(CrossFieldValidator().validate(ctx))
-
-        _emit("persist", "Saving extracted fields and rule results", 0.96)
-        # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
-        if document_id:
-            page_confidences = [p.confidence for p in extraction_result.page_details]
-            # Pass Phase 2 FieldMetaResult dict directly — richer than model_dump()
-            save_extracted_fields(document_id, field_meta, page_confidences)
-            save_rule_results(document_id, rule_results)
-
-        _emit("assemble", "Assembling QC results", 0.99)
-        # Step 9: Assemble results
-        results = self._assemble_results(
-            extraction_result=extraction_result,
-            s_extract=s_extract,
-            rule_results=rule_results,
-            start_time=start_time,
-            document_id=document_id,
-            cache_hit=cache_hit,
-            field_meta=field_meta,
-            model_provider=model_provider,
-            model_name=model_name,
-            vision_model=vision_model,
-            supporting_document_missing=supporting_document_missing,
-            missing_supporting_documents=missing_supporting_documents,
-        )
-
-        return results
+            _emit("assemble", "Assembling QC results", 0.99)
+            # Step 9: Assemble results
+            with processing_lifecycle.stage("assemble_response"):
+                results = self._assemble_results(
+                    extraction_result=extraction_result,
+                    s_extract=s_extract,
+                    rule_results=rule_results,
+                    start_time=start_time,
+                    document_id=document_id,
+                    processing_job_id=processing_job_id,
+                    cache_hit=cache_hit,
+                    field_meta=field_meta,
+                    model_provider=model_provider,
+                    model_name=model_name,
+                    vision_model=vision_model,
+                    supporting_document_missing=supporting_document_missing,
+                    missing_supporting_documents=missing_supporting_documents,
+                )
+            processing_lifecycle.complete_job(
+                processing_job_id,
+                document_id=document_id,
+                result_payload=results.model_dump(),
+            )
+            return results
     
     def _map_extraction_to_report(
         self,
@@ -600,6 +652,7 @@ class SmartQCProcessor:
         rule_results: List[RuleResult],
         start_time: float,
         document_id: Optional[str] = None,
+        processing_job_id: Optional[str] = None,
         cache_hit: bool = False,
         field_meta: Optional[Dict] = None,
         model_provider: str = "ollama",
@@ -680,6 +733,7 @@ class SmartQCProcessor:
             total_pages=extraction_result.total_pages,
             extraction_method=primary_method,
             document_id=document_id,
+            processing_job_id=processing_job_id,
             cache_hit=cache_hit,
             model_provider=model_provider,
             model_name=model_name,

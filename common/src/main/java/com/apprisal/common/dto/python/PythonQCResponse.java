@@ -23,6 +23,7 @@ public record PythonQCResponse(
         Integer failed,
         Integer verify,
         @JsonProperty("document_id")         String documentId,
+        @JsonProperty("processing_job_id")   String processingJobId,
         @JsonProperty("cache_hit")           Boolean cacheHit,
         @JsonProperty("file_hash")           String fileHash,
         @JsonProperty("model_provider")      String modelProvider,

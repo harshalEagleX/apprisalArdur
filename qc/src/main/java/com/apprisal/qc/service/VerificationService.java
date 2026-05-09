@@ -42,6 +42,7 @@ public class VerificationService {
     private final OperatorSessionRepository operatorSessionRepository;
     private final AuditLogService auditLogService;
     private final BusinessEventService businessEventService;
+    private final PythonClientService pythonClientService;
 
     public VerificationService(QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
@@ -49,7 +50,8 @@ public class VerificationService {
             ProcessingMetricsRepository processingMetricsRepository,
             OperatorSessionRepository operatorSessionRepository,
             AuditLogService auditLogService,
-            BusinessEventService businessEventService) {
+            BusinessEventService businessEventService,
+            PythonClientService pythonClientService) {
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.batchRepository = batchRepository;
@@ -57,6 +59,7 @@ public class VerificationService {
         this.operatorSessionRepository = operatorSessionRepository;
         this.auditLogService = auditLogService;
         this.businessEventService = businessEventService;
+        this.pythonClientService = pythonClientService;
     }
 
     @Transactional
@@ -533,6 +536,7 @@ public class VerificationService {
                 "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
                 qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
         recordReviewerDecisionActivity(reviewer, originalStatus, ruleResult.getStatus());
+        syncReviewerDecisionToPython(ruleResult, reviewer, decision, decisionLatencyMs, acknowledged, batchId);
 
         if ("fail".equals(originalStatus) && "PASS".equalsIgnoreCase(decision)) {
             String eventType = wasOverridePending ? "OVERRIDE_APPROVED" : "OVERRIDE_REQUESTED";
@@ -544,6 +548,43 @@ public class VerificationService {
             businessEventService.record("OVERRIDE_REJECTED", reviewer, "java", "REJECTED",
                     "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
                     qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
+        }
+    }
+
+    private void syncReviewerDecisionToPython(QCRuleResult ruleResult, User reviewer, String decision,
+            Long decisionLatencyMs, Boolean acknowledged, Long batchId) {
+        try {
+            QCResult qcResult = ruleResult.getQcResult();
+            if (qcResult == null || qcResult.getPythonDocumentId() == null || qcResult.getPythonDocumentId().isBlank()) {
+                return;
+            }
+            String reviewerRole = reviewer != null && reviewer.getRole() != null ? reviewer.getRole().name() : null;
+            String correlationId = batchId != null ? "batch:" + batchId : null;
+            PythonClientService.PythonFeedbackRequest feedback = new PythonClientService.PythonFeedbackRequest(
+                    qcResult.getPythonDocumentId(),
+                    qcResult.getPythonProcessingJobId(),
+                    correlationId,
+                    ruleResult.getRuleId(),
+                    ruleResult.getTargetField() != null && !ruleResult.getTargetField().isBlank()
+                            ? ruleResult.getTargetField()
+                            : ruleResult.getRuleName(),
+                    ruleResult.getExtractedValue() != null ? ruleResult.getExtractedValue() : ruleResult.getAppraisalValue(),
+                    decision,
+                    "REVIEW_DECISION",
+                    ruleResult.getReviewerComment(),
+                    reviewerRole,
+                    decisionLatencyMs,
+                    Boolean.TRUE.equals(acknowledged),
+                    ruleResult.getPdfPage(),
+                    ruleResult.getBboxX(),
+                    ruleResult.getBboxY(),
+                    ruleResult.getBboxW(),
+                    ruleResult.getBboxH(),
+                    ruleResult.getConfidenceScore()
+            );
+            java.util.concurrent.CompletableFuture.runAsync(() -> pythonClientService.submitFeedback(feedback));
+        } catch (Exception e) {
+            log.warn("Could not sync reviewer decision to Python feedback: {}", e.getMessage());
         }
     }
 

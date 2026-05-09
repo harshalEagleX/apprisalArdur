@@ -15,12 +15,15 @@ spring:
       minimum-idle: 2
       connection-timeout: 30000
       idle-timeout: 600000
+      keepalive-time: 300000
       max-lifetime: 1800000
       connection-init-sql: SET TIME ZONE 'Asia/Kolkata'
 
   jpa:
     hibernate:
-      ddl-auto: update   # 🔥 IMPORTANT: Hibernate will manage schema
+      # Product safety: schema changes must come from migrations, not app startup.
+      # Use JPA_DDL_AUTO=update only for a disposable local database.
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -79,7 +82,7 @@ app:
 ocr:
   service:
     url: ${OCR_SERVICE_URL:http://127.0.0.1:5001}
-    timeout-seconds: ${OCR_TIMEOUT:180}
+    timeout-seconds: ${OCR_TIMEOUT:900}
     retry-attempts: ${OCR_RETRIES:2}
     # FIX: was missing — OcrServiceConfig binds to ocr.service.api-key (not app.api-key.python-service)
     # Default matches Python's .env so dev works without setting the env var explicitly

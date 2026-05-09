@@ -75,7 +75,7 @@ def validate_obsolescence_photos(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     # C1/C2 condition = new/nearly new property — no external obsolescence by definition.
     # Only flag if the condition is C3+ AND obsolescence language is found.
-    condition = (ctx.report.subject.condition or "") if hasattr(ctx.report, "subject") else ""
+    condition = getattr(getattr(ctx.report, "improvements", None), "condition_rating", "") or ""
     is_new = re.match(r"C[12]", condition)
     if is_new:
         return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS,

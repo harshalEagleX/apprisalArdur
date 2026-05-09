@@ -130,6 +130,9 @@ public class QCRuleResult {
     @Column(name = "severity")
     private String severity = "STANDARD"; // BLOCKING | STANDARD | ADVISORY
 
+    @Column(name = "target_field")
+    private String targetField;
+
     @Column(name = "pdf_page")
     private Integer pdfPage;
 
@@ -414,6 +417,14 @@ public class QCRuleResult {
         this.severity = severity;
     }
 
+    public String getTargetField() {
+        return targetField;
+    }
+
+    public void setTargetField(String targetField) {
+        this.targetField = targetField;
+    }
+
     public Integer getPdfPage() {
         return pdfPage;
     }
@@ -478,6 +489,7 @@ public class QCRuleResult {
         private String evidence;
         private Boolean reviewRequired = false;
         private String severity = "STANDARD";
+        private String targetField;
         private Integer pdfPage;
         private Float bboxX;
         private Float bboxY;
@@ -574,6 +586,11 @@ public class QCRuleResult {
             return this;
         }
 
+        public QCRuleResultBuilder targetField(String targetField) {
+            this.targetField = targetField;
+            return this;
+        }
+
         public QCRuleResultBuilder pdfPage(Integer pdfPage) {
             this.pdfPage = pdfPage;
             return this;
@@ -619,6 +636,7 @@ public class QCRuleResult {
             result.evidence = this.evidence;
             result.reviewRequired = this.reviewRequired;
             result.severity = this.severity;
+            result.targetField = this.targetField;
             result.pdfPage = this.pdfPage;
             result.bboxX = this.bboxX;
             result.bboxY = this.bboxY;

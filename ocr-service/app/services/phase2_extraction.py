@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 from app.models.difference_report import SubjectSectionExtract, ContractSectionExtract
 from app.models.field_meta import FieldMetaResult
+from app.services.field_registry import field_registry
 from app.services.ocr_correction import apply_ocr_correction
 
 logger = logging.getLogger(__name__)
@@ -461,6 +462,7 @@ class Phase2ExtractionEngine:
 
         # ── Map meta → SubjectSectionExtract (backward-compat) ────────────────
         subject = self._to_subject_extract(meta)
+        field_registry.validate_meta("phase2_subject", meta.keys())
 
         return subject, meta
 

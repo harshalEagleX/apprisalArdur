@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import logging.handlers
+import re
 from datetime import datetime
 from typing import Any, Dict
 
@@ -26,7 +27,7 @@ class JsonFormatter(logging.Formatter):
         super().__init__(fmt=None, datefmt=datefmt)
 
     def format(self, record: logging.LogRecord) -> str:
-        record.message = record.getMessage()
+        record.message = _redact_pii(record.getMessage())
         
         # Prepare the dictionary
         log_record = {}
@@ -43,7 +44,7 @@ class JsonFormatter(logging.Formatter):
         
         # Add exception info if present
         if record.exc_info:
-            log_record["exception"] = self.formatException(record.exc_info)
+            log_record["exception"] = _redact_pii(self.formatException(record.exc_info))
         
         # Add stack trace if present
         if record.stack_info:
@@ -55,9 +56,29 @@ class JsonFormatter(logging.Formatter):
                           "funcName", "levelname", "levelno", "lineno", "module",
                           "msecs", "message", "msg", "name", "pathname", "process",
                           "processName", "relativeCreated", "stack_info", "thread", "threadName"]:
-                log_record[key] = value
+                log_record[key] = _redact_pii(value) if isinstance(value, str) else value
+
+        try:
+            from app.services.processing_lifecycle import current_correlation_id, current_job_id, current_stage
+            if current_correlation_id() and "correlation_id" not in log_record:
+                log_record["correlation_id"] = current_correlation_id()
+            if current_job_id() and "processing_job_id" not in log_record:
+                log_record["processing_job_id"] = current_job_id()
+            if current_stage() and "processing_stage" not in log_record:
+                log_record["processing_stage"] = current_stage()
+        except Exception:
+            pass
 
         return json.dumps(log_record)
+
+
+def _redact_pii(value: str) -> str:
+    if not value:
+        return value
+    redacted = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]", value)
+    redacted = re.sub(r"\$?\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b", "[REDACTED_AMOUNT]", redacted)
+    redacted = re.sub(r"\b\d{1,6}\s+[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:St|Street|Rd|Road|Ave|Avenue|Dr|Drive|Ln|Lane|Ct|Court|Way|Blvd|Boulevard)\b\.?", "[REDACTED_ADDRESS]", redacted, flags=re.IGNORECASE)
+    return redacted
 
 def setup_logging(
     service_name: str = "appraisal_ocr",

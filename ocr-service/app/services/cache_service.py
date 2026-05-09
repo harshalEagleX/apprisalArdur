@@ -51,7 +51,7 @@ def _db_ok() -> bool:
 def get_document_id(file_hash: str) -> Optional[str]:
     """Return the document_id (UUID str) for a known file_hash, or None."""
     if not _db_ok():
-        return None
+        raise RuntimeError("database unavailable while persisting OCR cache")
     try:
         with get_db() as db:
             doc = db.query(Document).filter(Document.file_hash == file_hash).first()
@@ -73,7 +73,7 @@ def get_cached_ocr(file_hash: str, expected_pages: int):
         List[PageText] if cache hit, None if cache miss or DB unavailable
     """
     if not _db_ok():
-        return None
+        raise RuntimeError("database unavailable while persisting OCR cache")
 
     try:
         from app.ocr.ocr_pipeline import PageText, ExtractionMethod, OcrWord
@@ -188,21 +188,23 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
         return str(doc_id)
 
     except Exception as e:
-        logger.info("Cache save failed: %s", e)
-        return None
+        logger.error("CRITICAL — OCR cache save failed for %s: %s", file_hash[:12], e)
+        raise RuntimeError(f"OCR cache persistence failed: {e}") from e
 
 
 # ── Field confidence save ──────────────────────────────────────────────────────
 
-def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confidences: List[float]):
+def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confidences: List[float], processing_job_id: str = None):
     """
     Persist extracted field values with confidence scores.
     Accepts either:
       - Dict[str, Any]             (legacy Phase 1: field_name → value)
       - Dict[str, FieldMetaResult] (Phase 2: field_name → FieldMetaResult)
     """
-    if not _db_ok() or not document_id:
-        return
+    if not document_id:
+        raise RuntimeError("document_id is required to persist extracted fields")
+    if not _db_ok():
+        raise RuntimeError("database unavailable while persisting extracted fields")
 
     avg_conf = sum(page_confidences) / len(page_confidences) if page_confidences else 0.7
     HIGH_CONF = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
@@ -211,14 +213,34 @@ def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confide
     try:
         from app.models.field_meta import FieldMetaResult as FMR
         doc_uuid = uuid.UUID(document_id)
+        job_uuid = uuid.UUID(processing_job_id) if processing_job_id else None
 
         with get_db() as db:
+            existing_query = db.query(ExtractedFieldRecord).filter(
+                ExtractedFieldRecord.document_id == doc_uuid
+            )
+            if job_uuid:
+                existing_query = existing_query.filter(ExtractedFieldRecord.processing_job_id == job_uuid)
+            else:
+                existing_query = existing_query.filter(ExtractedFieldRecord.processing_job_id == None)
+            existing_query.delete(synchronize_session=False)
+
             for field_name, value in fields.items():
                 if isinstance(value, FMR):
                     # Phase 2 path — rich metadata available
                     db_dict = value.to_db_dict()
+                    try:
+                        from app.services.confidence_calibration import calibrated_confidence
+                        db_dict["confidence_score"] = calibrated_confidence(
+                            db_dict["field_name"],
+                            db_dict["extraction_method"],
+                            db_dict["confidence_score"],
+                        )
+                    except Exception:
+                        pass
                     record = ExtractedFieldRecord(
                         document_id=doc_uuid,
+                        processing_job_id=job_uuid,
                         field_name=db_dict["field_name"],
                         field_value=db_dict["field_value"],
                         confidence_score=db_dict["confidence_score"],
@@ -243,6 +265,7 @@ def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confide
                         conf = round(avg_conf, 3)
                     record = ExtractedFieldRecord(
                         document_id=doc_uuid,
+                        processing_job_id=job_uuid,
                         field_name=field_name,
                         field_value=str(value) if value is not None else None,
                         confidence_score=conf,
@@ -251,38 +274,49 @@ def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confide
                 db.add(record)
 
     except Exception as e:
-        logger.info("Field save failed: %s", e)
+        logger.error("CRITICAL — extracted field save failed for document %s: %s", document_id, e)
+        raise RuntimeError(f"Extracted field persistence failed: {e}") from e
 
 
 # ── Rule results save ──────────────────────────────────────────────────────────
 
-def save_rule_results(document_id: str, rule_results: list):
+def save_rule_results(document_id: str, rule_results: list, processing_job_id: str = None):
     """Persist rule results for a document."""
-    if not _db_ok() or not document_id:
-        return
+    if not document_id:
+        raise RuntimeError("document_id is required to persist rule results")
+    if not _db_ok():
+        raise RuntimeError("database unavailable while persisting rule results")
 
     try:
         doc_uuid = uuid.UUID(document_id)
+        job_uuid = uuid.UUID(processing_job_id) if processing_job_id else None
         with get_db() as db:
-            existing_count = db.query(RuleResultRecord.id).filter(
-                RuleResultRecord.document_id == doc_uuid
-            ).count()
+            existing_query = db.query(RuleResultRecord).filter(RuleResultRecord.document_id == doc_uuid)
+            if job_uuid:
+                existing_query = existing_query.filter(RuleResultRecord.processing_job_id == job_uuid)
+            else:
+                existing_query = existing_query.filter(RuleResultRecord.processing_job_id == None)
+
+            existing_count = existing_query.count()
             expected_count = len(rule_results or [])
             if existing_count == expected_count and expected_count > 0:
-                logger.info("Rule results already exist for document %s; skipping duplicate save", document_id)
+                logger.info(
+                    "Rule results already exist for document %s job %s; skipping duplicate save",
+                    document_id,
+                    processing_job_id or "legacy",
+                )
                 return
             if existing_count:
                 logger.warning(
-                    "Replacing incomplete/duplicate rule results for document %s: existing=%s expected=%s",
-                    document_id, existing_count, expected_count
+                    "Replacing incomplete/duplicate rule results for document %s job %s: existing=%s expected=%s",
+                    document_id, processing_job_id or "legacy", existing_count, expected_count
                 )
-                db.query(RuleResultRecord).filter(
-                    RuleResultRecord.document_id == doc_uuid
-                ).delete(synchronize_session=False)
+                existing_query.delete(synchronize_session=False)
 
             for r in rule_results or []:
                 record = RuleResultRecord(
                     document_id=doc_uuid,
+                    processing_job_id=job_uuid,
                     rule_id=r.rule_id,
                     rule_name=r.rule_name,
                     status=r.status.value if hasattr(r.status, "value") else str(r.status),
@@ -290,6 +324,12 @@ def save_rule_results(document_id: str, rule_results: list):
                     action_item=r.action_item,
                     appraisal_value=r.appraisal_value,
                     engagement_value=r.engagement_value,
+                    extracted_value=getattr(r, "extracted_value", None),
+                    expected_value=getattr(r, "expected_value", None),
+                    confidence_score=getattr(r, "confidence", None),
+                    target_field=getattr(r, "target_field", None),
+                    rule_version=getattr(r, "rule_version", None),
+                    severity=r.severity.value if hasattr(r.severity, "value") else str(r.severity),
                     review_required=r.review_required,
                     source_page=getattr(r, "source_page", None),
                     bbox_x=getattr(r, "bbox_x", None),

@@ -1,6 +1,8 @@
 import re
 from typing import Dict, Any, Optional
 
+from app.services.field_registry import field_registry
+
 def extract_advanced_fields(text: str) -> Dict[str, Any]:
     """
     Extracts detailed appraisal fields using robust regex patterns 
@@ -95,4 +97,5 @@ def extract_advanced_fields(text: str) -> Dict[str, Any]:
         # Check if there is text following it
         pass
 
+    field_registry.validate_meta("site_legacy", data.keys())
     return data

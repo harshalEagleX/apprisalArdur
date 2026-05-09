@@ -146,6 +146,7 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
             "top_k": 1,
         },
     }
+    started_at = __import__("time").time()
     try:
         r = httpx.post(
             f"{OLLAMA_BASE_URL}/api/generate",
@@ -153,16 +154,24 @@ def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[
             timeout=OLLAMA_TIMEOUT,
         )
         r.raise_for_status()
-        return r.json().get("response", "").strip()
+        response = r.json().get("response", "").strip()
+        _log_llm(prompt, payload["model"], "text_generate", started_at, response=response, status="completed")
+        return response
     except httpx.TimeoutException:
         logger.info("Ollama request timed out (model=%s)", get_active_text_model())
         _disable_ollama_for_request("text timeout", model=get_active_text_model())
+        _log_llm(prompt, payload["model"], "text_generate", started_at, status="timeout",
+                 timed_out=True, fallback_path="deterministic_fallback", error_message="timeout")
         return None
     except httpx.HTTPStatusError as e:
         logger.info("Ollama HTTP error: %s", e)
+        _log_llm(prompt, payload["model"], "text_generate", started_at, status="http_error",
+                 fallback_path="deterministic_fallback", error_message=str(e))
         return None
     except Exception as e:
         logger.info("Ollama call failed: %s", e)
+        _log_llm(prompt, payload["model"], "text_generate", started_at, status="error",
+                 fallback_path="deterministic_fallback", error_message=str(e))
         return None
 
 
@@ -343,9 +352,11 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
             },
         }
 
+        started_at = __import__("time").time()
         r = httpx.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=min(OLLAMA_TIMEOUT, 15.0))
         r.raise_for_status()
         response = r.json().get("response", "").strip().upper()
+        _log_llm(prompt, payload["model"], "checkbox_vision", started_at, response=response, status="completed")
 
         if "YES" in response:
             return True
@@ -356,9 +367,28 @@ def detect_checkbox_vision(page_image, label_text: str) -> Optional[bool]:
     except httpx.TimeoutException:
         logger.info("Ollama checkbox vision request timed out (model=%s)", get_active_vision_model())
         _disable_ollama_for_request("vision timeout", model=get_active_vision_model())
+        _log_llm(
+            locals().get("prompt", f"checkbox:{label_text}"),
+            get_active_vision_model(),
+            "checkbox_vision",
+            locals().get("started_at", __import__("time").time()),
+            status="timeout",
+            timed_out=True,
+            fallback_path="opencv_or_unknown",
+            error_message="timeout",
+        )
         return None
     except Exception as e:
         logger.debug("llava:13b checkbox detection failed for '%s': %s", label_text, e)
+        _log_llm(
+            locals().get("prompt", f"checkbox:{label_text}"),
+            get_active_vision_model(),
+            "checkbox_vision",
+            locals().get("started_at", __import__("time").time()),
+            status="error",
+            fallback_path="opencv_or_unknown",
+            error_message=str(e),
+        )
         return None
 
 
@@ -399,19 +429,48 @@ async def generate_async(prompt: str, system: str = "", max_tokens: int = 256) -
             "top_k": 1,
         },
     }
+    started_at = __import__("time").time()
     try:
         async with _ollama_semaphore():
             async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
                 response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
                 response.raise_for_status()
-                return response.json().get("response", "").strip()
+                text = response.json().get("response", "").strip()
+                _log_llm(prompt, payload["model"], "async_text_generate", started_at, response=text, status="completed")
+                return text
     except httpx.TimeoutException:
         logger.info("Async Ollama request timed out (model=%s)", get_active_text_model())
         _disable_ollama_for_request("async text timeout", model=get_active_text_model())
+        _log_llm(prompt, payload["model"], "async_text_generate", started_at, status="timeout",
+                 timed_out=True, fallback_path="deterministic_fallback", error_message="timeout")
         return None
     except Exception as exc:
         logger.info("Async Ollama call failed: %s: %s", exc.__class__.__name__, exc)
+        _log_llm(prompt, payload["model"], "async_text_generate", started_at, status="error",
+                 fallback_path="deterministic_fallback", error_message=str(exc))
         return None
+
+
+def _log_llm(prompt: str, model_name: str, task_name: str, started_at: float,
+             response: Optional[str] = None, status: str = "completed",
+             timed_out: bool = False, fallback_path: Optional[str] = None,
+             confidence_label: Optional[str] = None, error_message: Optional[str] = None) -> None:
+    try:
+        from app.services.processing_lifecycle import log_llm_call
+        log_llm_call(
+            prompt=prompt,
+            model_name=model_name,
+            task_name=task_name,
+            started_at=started_at,
+            response=response,
+            status=status,
+            timed_out=timed_out,
+            fallback_path=fallback_path,
+            confidence_label=confidence_label,
+            error_message=error_message,
+        )
+    except Exception:
+        pass
 
 
 async def gather_text_prompts(prompts: list[tuple[str, str, int]]) -> list[Optional[str]]:
@@ -440,15 +499,37 @@ async def analyze_photo_llava(page_image, prompt: str) -> Optional[str]:
         }
         async with _ollama_semaphore():
             async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+                started_at = __import__("time").time()
                 response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
                 response.raise_for_status()
-                return response.json().get("response", "").strip()
+                text = response.json().get("response", "").strip()
+                _log_llm(prompt, payload["model"], "photo_vision", started_at, response=text, status="completed")
+                return text
     except httpx.TimeoutException:
         logger.info("Ollama photo analysis timed out (model=%s)", get_active_vision_model())
         _disable_ollama_for_request("photo vision timeout", model=get_active_vision_model())
+        _log_llm(
+            prompt,
+            get_active_vision_model(),
+            "photo_vision",
+            locals().get("started_at", __import__("time").time()),
+            status="timeout",
+            timed_out=True,
+            fallback_path="skip",
+            error_message="timeout",
+        )
         return None
     except Exception as exc:
         logger.debug("llava:13b photo analysis failed: %s", exc)
+        _log_llm(
+            prompt,
+            get_active_vision_model(),
+            "photo_vision",
+            locals().get("started_at", __import__("time").time()),
+            status="error",
+            fallback_path="skip",
+            error_message=str(exc),
+        )
         return None
 
 

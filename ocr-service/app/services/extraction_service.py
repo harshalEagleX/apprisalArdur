@@ -23,6 +23,7 @@ from app.models.difference_report import (
     SubjectSectionExtract, ContractSectionExtract, EngagementLetterExtract
 )
 from app.ocr.ocr_pipeline import OCRPipeline
+from app.services.field_registry import field_registry
 
 logger = logging.getLogger(__name__)
 
@@ -63,22 +64,25 @@ class ExtractionService:
         start_time = time.time()
         
         report = DifferenceReport()
+        page_index = {}
         
         # Step 1: Determine extraction method
         if env_content:
             report.env_file_present = True
             try:
                 extracted_text = self._parse_env(env_content)
+                page_index = {1: extracted_text}
                 report.env_file_readable = True
                 report.extraction_method = "env"
             except Exception as e:
-                logger.notice(f"ENV parsing failed: {e}")
+                logger.info(f"ENV parsing failed: {e}")
                 report.env_file_readable = False
                 report.add_notice(f"ENV file present but unreadable: {str(e)}")
-                extracted_text = self._extract_from_pdf(pdf_path)
+                extracted_text, total_pages, page_index = self._extract_from_pdf_with_index(pdf_path)
+                report.total_pages = total_pages
                 report.extraction_method = "pymupdf"
         else:
-            extracted_text, total_pages = self._extract_from_pdf(pdf_path)
+            extracted_text, total_pages, page_index = self._extract_from_pdf_with_index(pdf_path)
             report.total_pages = total_pages
             report.extraction_method = "pymupdf"
         
@@ -90,7 +94,12 @@ class ExtractionService:
             return report
         
         # Step 2: Extract Subject Section (S-1 to S-12)
-        report.subject_section = self._extract_subject_section(extracted_text)
+        try:
+            from app.services.phase2_extraction import phase2_engine
+            report.subject_section, _ = phase2_engine.extract_subject(extracted_text, page_index or {1: extracted_text})
+        except Exception as exc:
+            logger.info("Canonical Phase 2 subject extraction failed, using legacy subject extractor: %s", exc)
+            report.subject_section = self._extract_subject_section(extracted_text)
         
         # Step 3: Extract Contract Section (C-1 to C-5)
         report.contract_section = self._extract_contract_section(extracted_text)
@@ -108,22 +117,46 @@ class ExtractionService:
     
     def _extract_from_pdf(self, pdf_path: str) -> Tuple[str, int]:
         """Extract text from PDF using PyMuPDF with optional preprocessing."""
-        text_parts = []
-        total_pages = 0
-        
+        text, total_pages, _ = self._extract_from_pdf_with_index(pdf_path)
+        return text, total_pages
+
+    def _extract_from_pdf_with_index(self, pdf_path: str) -> Tuple[str, int, Dict[int, str]]:
+        """Extract text plus page index through the canonical OCR pipeline."""
         try:
             # Use preprocessing pipeline if available for better quality
             result = self.ocr_pipeline.extract_with_preprocessing(pdf_path) if hasattr(self.ocr_pipeline, 'extract_with_preprocessing') else self.ocr_pipeline.extract_all_pages(pdf_path)
             # Combine text
-            return self.ocr_pipeline.get_full_text(result.page_index), result.total_pages
+            return self.ocr_pipeline.get_full_text(result.page_index), result.total_pages, result.page_index
         except Exception as e:
             logger.error(f"PDF extraction failed: {e}")
             raise
     
     def _parse_env(self, env_content: bytes) -> str:
-        """Parse ENV file to extract text. Placeholder for future implementation."""
-        # TODO: Implement ENV (XML) parsing
-        raise NotImplementedError("ENV parsing not yet implemented")
+        """Parse MISMO/ENV-style XML into stable label/value text for extraction."""
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(env_content)
+        lines: list[str] = []
+
+        def clean_tag(tag: str) -> str:
+            return tag.split("}", 1)[-1].replace("_", " ")
+
+        def walk(node, path: list[str]) -> None:
+            label = clean_tag(node.tag)
+            current_path = [*path, label]
+            text = (node.text or "").strip()
+            if text:
+                lines.append(f"{' / '.join(current_path)}: {text}")
+            for key, value in sorted(node.attrib.items()):
+                if value:
+                    lines.append(f"{' / '.join(current_path)} / {clean_tag(key)}: {value}")
+            for child in list(node):
+                walk(child, current_path)
+
+        walk(root, [])
+        if not lines:
+            raise ValueError("ENV/XML file did not contain readable text values")
+        return "\n".join(lines)
     
     # =========================================================================
     # Subject Section Extraction (S-1 to S-12)
@@ -573,6 +606,7 @@ class ExtractionService:
                 item for item in items if not self._is_personal_property_boilerplate(item)
             ]
         
+        field_registry.validate_meta("contract", contract.model_dump().keys())
         return contract
     
     # =========================================================================
@@ -721,6 +755,7 @@ class ExtractionService:
         if conc_str:
             letter.concessions_amount = self._parse_money(conc_str)
         
+        field_registry.validate_meta("engagement", letter.model_dump().keys())
         return letter
     
     # =========================================================================
