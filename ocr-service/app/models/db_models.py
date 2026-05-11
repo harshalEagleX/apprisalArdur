@@ -365,3 +365,58 @@ class TrainingExample(Base):
         Index("ix_training_feature_type", "feature_type"),
         Index("ix_training_label", "label"),
     )
+
+
+# ── Auto-pass calibration examples (P3.5) ─────────────────────────────────────
+
+class AutoPassExample(Base):
+    """
+    One labelled example for the auto-pass calibration ML model.
+
+    Each row captures the structured features of a rule result plus the
+    reviewer's actual decision (accepted / rejected).  The trainer reads these
+    rows to build the feature matrix for LogisticRegression / RandomForest.
+
+    Recording:
+        - Called from the feedback endpoint when a reviewer confirms or overrides
+          a rule result.
+        - Also called retroactively for PASS rules that required no reviewer
+          action (implicit acceptance signal).
+
+    The table is intentionally denormalised so the trainer can work without
+    joining to other tables.
+    """
+    __tablename__ = "auto_pass_examples"
+
+    id                  = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Rule identity
+    rule_id             = Column(String(20), nullable=False)
+    rule_family         = Column(String(10), nullable=False)   # "S", "N", "ST", etc.
+
+    # Extraction metadata at the time of the rule evaluation
+    extraction_method   = Column(String(50))        # "spatial_anchor", "regex_primary", etc.
+    confidence          = Column(Float)             # 0.0 – 1.0
+    has_source_page     = Column(Boolean, default=False)
+    has_bbox            = Column(Boolean, default=False)
+    has_compared_values = Column(Boolean, default=False)
+    has_extracted_value = Column(Boolean, default=False)
+    loan_type           = Column(String(20))        # "CONVENTIONAL", "FHA", etc.
+    is_presence_rule    = Column(Boolean, default=False)
+    is_extraction_rule  = Column(Boolean, default=False)
+
+    # Label: True = reviewer accepted, False = reviewer overrode
+    reviewer_accepted   = Column(Boolean, nullable=False)
+
+    # Audit / traceability
+    document_id         = Column(String(100))
+    reviewer_comment    = Column(Text)
+    used_in_training    = Column(Boolean, default=False)
+    training_version    = Column(Integer, default=0)
+    created_at          = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_auto_pass_rule_id", "rule_id"),
+        Index("ix_auto_pass_not_trained", "used_in_training"),
+        Index("ix_auto_pass_family_method", "rule_family", "extraction_method"),
+    )

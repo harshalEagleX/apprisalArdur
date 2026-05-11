@@ -647,23 +647,35 @@ class ExtractionService:
         
         letter.county = self._extract_field(text, [r"County[:\s]+([^\n]+)"])
         
-        # Borrower - Find "Borrower Name:" and capture names
-        # May span multiple lines, stop at:
-        # 1. Any field label with colon (Phone:, Cell Phone:, Work Phone:, etc.)
-        # 2. "Equity Solutions" section
-        # Format examples:
-        #   "Borrower Name: Name1; Name2\n\nName3; Name4\n\nEquity Solutions..."
-        #   "Borrower Name: Name1\nPhone: ..."
-        # Capture only the first non-empty line after "Borrower Name:" — the
-        # multi-line lookahead approach over-captures when page breaks or
-        # sections appear before the Equity Solutions stop-word.
+        # Borrower — extract from engagement letter / AMC order form.
+        #
+        # Equity Solutions order forms and ValueLink assignments show the name in
+        # two different layouts depending on the AMC platform:
+        #
+        #   Layout A (value on same line):
+        #     "Borrower Name:  Hung La"
+        #
+        #   Layout B (value on next line, common in PDF table exports):
+        #     "Borrower Name:\n\nHung La\nPhone: ..."
+        #
+        # Pattern 1 handles Layout A; pattern 2 handles Layout B.
+        # Both stop at the next form-field label (colon-terminated word) or newline.
         borrower_match = re.search(
-            r"Borrower\s+Name[:\s]*\n+\s*([^\n;]{2,120}?)(?:\s*;[^\n]*)?(?:\n|$)",
+            r"Borrower\s+Name[:\s]+(?!\s*\n)([^\n;:\r]{2,120}?)(?:\s*;[^\n]*)?(?:\n|$)",
             text,
             re.IGNORECASE,
         )
+        if not borrower_match:
+            # Layout B: label and value on separate lines
+            borrower_match = re.search(
+                r"Borrower\s+Name[:\s]*\n+\s*([^\n;]{2,120}?)(?:\s*;[^\n]*)?(?:\n|$)",
+                text,
+                re.IGNORECASE,
+            )
         if borrower_match:
             raw = borrower_match.group(1).strip()
+            # Strip trailing noise that can appear after a semicolon or colon
+            raw = re.split(r"\s*[:;]\s*\S+", raw)[0].strip()
             names = [n.strip() for n in raw.split(";") if n.strip()]
             letter.borrower_name = "; ".join(names) if names else raw
         

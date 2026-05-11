@@ -29,7 +29,11 @@ def validate_subject_photos(ctx: ValidationContext) -> RuleResult:
     missing = _missing([r"Subject\s+Front|Front\s+Exterior", r"Subject\s+Rear|Rear\s+Exterior", r"Subject\s+Street|Street\s+Scene"], text)
     if missing:
         return _verify("PH-1", "Required Subject Photos", "Required subject photo labels not detected. Verify front, rear, and street scene photos.")
-    return RuleResult(rule_id="PH-1", rule_name="Required Subject Photos", status=RuleStatus.PASS, message="Required subject photo labels detected.")
+    # presence_validated signals to the rule engine that text-presence evidence
+    # is the only available proof type for this rule — no reference document exists.
+    return RuleResult(rule_id="PH-1", rule_name="Required Subject Photos", status=RuleStatus.PASS,
+                      message="Required subject photo labels detected.",
+                      details={"presence_validated": True})
 
 
 @rule(id="PH-2", name="Interior Photos")
@@ -38,7 +42,9 @@ def validate_interior_photos(ctx: ValidationContext) -> RuleResult:
     missing = _missing(required, _text(ctx))
     if missing:
         return _verify("PH-2", "Interior Photos", "Core interior photo labels not fully detected. Verify kitchen, living areas, bedrooms, and bathrooms are photographed.")
-    return RuleResult(rule_id="PH-2", rule_name="Interior Photos", status=RuleStatus.PASS, message="Core interior photo labels detected.")
+    return RuleResult(rule_id="PH-2", rule_name="Interior Photos", status=RuleStatus.PASS,
+                      message="Core interior photo labels detected.",
+                      details={"presence_validated": True})
 
 
 @rule(id="PH-3", name="Additional Subject Photos")
@@ -53,7 +59,8 @@ def validate_fha_photos(ctx: ValidationContext) -> RuleResult:
     missing = _missing([r"Left\s+Side|Subject\s+Side", r"Right\s+Side|Subject\s+Side", r"Attic", r"Crawl"], _text(ctx))
     if missing:
         return _verify("PH-4", "FHA Specific Photo Requirements", f"FHA photo labels not detected: {', '.join(missing)}. Verify FHA side, attic, and crawl-space requirements.")
-    return RuleResult(rule_id="PH-4", rule_name="FHA Specific Photo Requirements", status=RuleStatus.PASS, message="FHA-specific photo labels detected.")
+    return RuleResult(rule_id="PH-4", rule_name="FHA Specific Photo Requirements", status=RuleStatus.PASS,
+                      message="FHA-specific photo labels detected.", details={"presence_validated": True})
 
 
 @rule(id="PH-5", name="Comparable Photos")

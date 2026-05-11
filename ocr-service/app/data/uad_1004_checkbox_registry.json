@@ -1,0 +1,94 @@
+{
+  "_comment": "UAD 1004 checkbox positions for OpenCV pixel-based detection.",
+  "_format": "All coordinates are normalized 0.0–1.0 relative to page dimensions.",
+  "_page_note": "form_page is 1-indexed from the first UAD form page.",
+  "_detection": "A checkbox region is cropped from the rendered page image at (x_min, y_min, x_max, y_max). Dark pixel ratio > 0.40 → CHECKED. < 0.15 → UNCHECKED. 0.15–0.40 → AMBIGUOUS (fall through to llava:13b).",
+  "_source": "Positions derived from FNMA Form 1004 (UAD version) layout analysis.",
+
+  "checkboxes": {
+    "Owner": {
+      "form_page": 1,
+      "x_min": 0.182, "x_max": 0.210, "y_min": 0.119, "y_max": 0.133,
+      "group": "occupant_status",
+      "label_text": "Owner"
+    },
+    "Tenant": {
+      "form_page": 1,
+      "x_min": 0.250, "x_max": 0.278, "y_min": 0.119, "y_max": 0.133,
+      "group": "occupant_status",
+      "label_text": "Tenant"
+    },
+    "Vacant": {
+      "form_page": 1,
+      "x_min": 0.320, "x_max": 0.348, "y_min": 0.119, "y_max": 0.133,
+      "group": "occupant_status",
+      "label_text": "Vacant"
+    },
+    "PUD": {
+      "form_page": 1,
+      "x_min": 0.645, "x_max": 0.665, "y_min": 0.119, "y_max": 0.133,
+      "group": "pud",
+      "label_text": "PUD"
+    },
+    "Fee Simple": {
+      "form_page": 1,
+      "x_min": 0.440, "x_max": 0.465, "y_min": 0.132, "y_max": 0.146,
+      "group": "property_rights",
+      "label_text": "Fee Simple"
+    },
+    "Leasehold": {
+      "form_page": 1,
+      "x_min": 0.542, "x_max": 0.567, "y_min": 0.132, "y_max": 0.146,
+      "group": "property_rights",
+      "label_text": "Leasehold"
+    },
+    "De Minimis PUD": {
+      "form_page": 1,
+      "x_min": 0.634, "x_max": 0.659, "y_min": 0.132, "y_max": 0.146,
+      "group": "property_rights",
+      "label_text": "De Minimis PUD"
+    },
+    "Yes (contract_analyzed)": {
+      "form_page": 1,
+      "x_min": 0.380, "x_max": 0.400, "y_min": 0.198, "y_max": 0.212,
+      "group": "contract_analyzed",
+      "label_text": "Yes"
+    },
+    "No (contract_analyzed)": {
+      "form_page": 1,
+      "x_min": 0.420, "x_max": 0.440, "y_min": 0.198, "y_max": 0.212,
+      "group": "contract_analyzed",
+      "label_text": "No"
+    },
+    "Yes (seller_owner)": {
+      "form_page": 1,
+      "x_min": 0.590, "x_max": 0.608, "y_min": 0.212, "y_max": 0.226,
+      "group": "seller_owner",
+      "label_text": "Yes"
+    },
+    "No (seller_owner)": {
+      "form_page": 1,
+      "x_min": 0.630, "x_max": 0.648, "y_min": 0.212, "y_max": 0.226,
+      "group": "seller_owner",
+      "label_text": "No"
+    },
+    "Legal (zoning)": {
+      "form_page": 1,
+      "x_min": 0.334, "x_max": 0.352, "y_min": 0.568, "y_max": 0.582,
+      "group": "zoning_compliance",
+      "label_text": "Legal"
+    },
+    "Legal Nonconforming": {
+      "form_page": 1,
+      "x_min": 0.380, "x_max": 0.398, "y_min": 0.568, "y_max": 0.582,
+      "group": "zoning_compliance",
+      "label_text": "Legal Nonconforming"
+    },
+    "Illegal": {
+      "form_page": 1,
+      "x_min": 0.510, "x_max": 0.528, "y_min": 0.568, "y_max": 0.582,
+      "group": "zoning_compliance",
+      "label_text": "Illegal"
+    }
+  }
+}

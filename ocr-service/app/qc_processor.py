@@ -319,6 +319,10 @@ class SmartQCProcessor:
 
             # Step 2: Phase 2 Multi-Layer Extraction
             with processing_lifecycle.stage("field_extraction_subject"):
+                # Pass the PDF path so the Camelot comparable grid extractor can
+                # access the file directly (Camelot requires the file path, not
+                # the text stream).
+                phase2_engine._pdf_path = pdf_path
                 s_extract, field_meta = phase2_engine.extract_subject(
                     full_text,
                     extraction_result.page_index,
@@ -407,6 +411,9 @@ class SmartQCProcessor:
                 vision_results=vision_results,
                 supporting_document_missing=supporting_document_missing,
                 missing_supporting_documents=missing_supporting_documents,
+                # Cross-page section map: rules can query section page locations
+                # via ctx.doc_section_map.locate("neighborhood") etc.
+                doc_section_map=getattr(phase2_engine, "_doc_section_map", None),
             )
 
             _emit("llm_enrichment", f"Enriching context with {model_name}", 0.70)
@@ -424,6 +431,30 @@ class SmartQCProcessor:
                 rule_results = engine.execute(ctx)
                 from app.rule_engine.cross_field_validator import CrossFieldValidator
                 rule_results.extend(CrossFieldValidator().validate(ctx))
+
+                # P2.8 — Mark field_meta entries as cross_validated when a rule
+                # PASS result includes compared_values.  This is the signal for the
+                # ML training loop that a field's extracted value was confirmed
+                # against an external document (engagement letter, contract, etc.).
+                if field_meta:
+                    _CROSS_VALIDATED_RULE_FIELDS = {
+                        "S-1":  ["property_address", "city", "state", "zip_code", "county"],
+                        "S-2":  ["borrower_name"],
+                        "S-3":  ["owner_of_public_record"],
+                        "S-10": ["lender_name", "lender_address"],
+                        "C-2":  ["contract_price", "contract_date"],
+                        "XF-4": ["property_address"],
+                    }
+                    for r in rule_results:
+                        if (getattr(r, "status", None) == RuleStatus.PASS
+                                and getattr(r, "compared_values", None)):
+                            for field_name in _CROSS_VALIDATED_RULE_FIELDS.get(
+                                getattr(r, "rule_id", ""), []
+                            ):
+                                fm = field_meta.get(field_name)
+                                if fm is not None and hasattr(fm, "cross_validated"):
+                                    fm.cross_validated = True
+                                    fm.cross_validated_source = "engagement_letter"
 
             _emit("persist", "Saving extracted fields and rule results", 0.96)
             # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)

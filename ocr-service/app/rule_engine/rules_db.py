@@ -103,8 +103,13 @@ RULE_DEFAULTS = [
     # ── Reconciliation + Cost + Income ────────────────────────────────────────
     ("R-1",    "Reconciliation", "STANDARD", 900, "ALL"),
     ("R-2",    "Reconciliation", "STANDARD", 910, "ALL"),
-    ("CA-1",   "CostApproach",   "STANDARD", 950, "USDA"),
-    ("CA-2",   "CostApproach",   "STANDARD", 960, "USDA"),
+    # Cost approach rules: "ALL" because the cost approach section is present
+    # in UAD 1004 reports for Conventional loans (voluntary but must be valid when filled).
+    # The rules themselves gate on whether the section is populated.
+    # Previously "USDA" here caused CA-1/CA-2 to be NOT_APPLICABLE for Conventional
+    # loans even when the cost approach data clearly existed in the report.
+    ("CA-1",   "CostApproach",   "STANDARD", 950, "ALL"),
+    ("CA-2",   "CostApproach",   "STANDARD", 960, "ALL"),
     ("IA-1",   "IncomeApproach", "STANDARD", 970, "ALL"),
     ("IA-2",   "IncomeApproach", "STANDARD", 980, "ALL"),
     # ── Addendum + Documentation ──────────────────────────────────────────────
@@ -161,8 +166,12 @@ RULE_DEFAULTS = [
     ("MF-1",   "MultiFamily",    "STANDARD",1810, "ALL"),
     ("MF-2",   "MultiFamily",    "STANDARD",1820, "ALL"),
     # ── Commentary / LLM — run LAST ───────────────────────────────────────────
+    # COM-1 and COM-2: commentary quality is genuinely deficient when they fail
+    # (canned text, no market data), but severity is ADVISORY because the appraiser
+    # can revise the narrative without re-doing the analysis.  BLOCKING is reserved
+    # for factual errors (wrong address, missing comparables).
     ("COM-1",  "Commentary",     "ADVISORY",2100, "ALL"),
-    ("COM-2",  "Commentary",     "STANDARD",2110, "ALL"),
+    ("COM-2",  "Commentary",     "ADVISORY",2110, "ALL"),
     ("COM-3",  "Commentary",     "ADVISORY",2120, "ALL"),
     ("COM-4",  "Commentary",     "ADVISORY",2130, "ALL"),
     ("COM-5",  "Commentary",     "STANDARD",2140, "ALL"),

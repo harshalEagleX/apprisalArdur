@@ -246,6 +246,11 @@ class CrossFieldValidator:
     def _pud_vs_hoa(self, context: ValidationContext) -> Optional[RuleResult]:
         dues = context.report.subject.hoa_dues or 0
         is_pud_raw = context.report.subject.is_pud
+
+        # The Phase 2 extractor stores PUD state as a string ("True"/"False") or a
+        # Python bool.  Using bool(is_pud_raw) directly is wrong because
+        # bool("False") == True (non-empty strings are truthy).
+        # Resolve to a proper Python bool before applying business logic.
         if is_pud_raw is None:
             return RuleResult(
                 rule_id="XF-5",
@@ -257,7 +262,13 @@ class CrossFieldValidator:
                 target_field="is_pud_checked",
                 decision_path=["pud_checkbox_missing", "extraction_failed"],
             )
-        is_pud = bool(is_pud_raw)
+
+        if isinstance(is_pud_raw, bool):
+            is_pud = is_pud_raw
+        elif str(is_pud_raw).strip().lower() in ("true", "1", "yes"):
+            is_pud = True
+        else:
+            is_pud = False
         if dues > 0 and not is_pud:
             return RuleResult(
                 rule_id="XF-5",

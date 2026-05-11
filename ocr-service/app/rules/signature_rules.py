@@ -16,7 +16,8 @@ def validate_signatures(ctx: ValidationContext) -> RuleResult:
         return _verify("SIG-1", "Signature Requirements", "Appraiser signature evidence not detected. Verify signature and report date.")
     if not re.search(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", text):
         return RuleResult(rule_id="SIG-1", rule_name="Signature Requirements", status=RuleStatus.VERIFY, message="Signature evidence found, but date pattern was not detected.")
-    return RuleResult(rule_id="SIG-1", rule_name="Signature Requirements", status=RuleStatus.PASS, message="Signature/date evidence detected.")
+    return RuleResult(rule_id="SIG-1", rule_name="Signature Requirements", status=RuleStatus.PASS,
+                      message="Signature/date evidence detected.", details={"presence_validated": True})
 
 
 @rule(id="SIG-2", name="Appraiser Information")
@@ -38,7 +39,8 @@ def validate_appraiser_info(ctx: ValidationContext) -> RuleResult:
     if missing:
         return _verify("SIG-2", "Appraiser Information", f"Appraiser information incomplete or not extracted: {', '.join(missing)}. Verify all signature page fields are complete.")
     return RuleResult(rule_id="SIG-2", rule_name="Appraiser Information", status=RuleStatus.PASS,
-                      message="Appraiser name, company, and certification/license detected.")
+                      message="Appraiser name, company, and certification/license detected.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SIG-3", name="Supervisory Appraiser")
@@ -69,5 +71,6 @@ def validate_supervisory_appraiser(ctx: ValidationContext) -> RuleResult:
 @rule(id="SIG-4", name="Email Address")
 def validate_email_address(ctx: ValidationContext) -> RuleResult:
     if re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", _text(ctx), re.I):
-        return RuleResult(rule_id="SIG-4", rule_name="Email Address", status=RuleStatus.PASS, message="Email address detected.")
+        return RuleResult(rule_id="SIG-4", rule_name="Email Address", status=RuleStatus.PASS,
+                          message="Email address detected.", details={"presence_validated": True})
     return _verify("SIG-4", "Email Address", "Appraiser email address not detected.")

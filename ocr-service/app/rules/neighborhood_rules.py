@@ -49,6 +49,7 @@ def validate_neighborhood_characteristics(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message=f"{nbr.location} / {nbr.built_up} / {nbr.growth_rate}.",
         severity=RuleSeverity.STANDARD,
+    details={"extraction_based_validation": True}
     )
 
 
@@ -76,6 +77,7 @@ def validate_housing_trends(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message=f"Values={nbr.property_values}, Supply={nbr.demand_supply}, Marketing={nbr.marketing_time}.",
         severity=RuleSeverity.STANDARD,
+    details={"extraction_based_validation": True}
     )
 
 
@@ -154,6 +156,7 @@ def validate_housing_price_range(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message=f"Price range ${nbr.price_low:,.0f}–${nbr.price_high:,.0f}.",
         severity=RuleSeverity.ADVISORY,
+    details={"extraction_based_validation": True}
     )
 
 
@@ -194,6 +197,7 @@ def validate_present_land_use(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message=f"Land use totals {nbr.land_use_total:.0f}%.",
         severity=RuleSeverity.ADVISORY,
+    details={"extraction_based_validation": True}
     )
 
 
@@ -228,6 +232,7 @@ def validate_neighborhood_boundaries(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message="All four neighborhood boundaries are described.",
         severity=RuleSeverity.STANDARD,
+    details={"extraction_based_validation": True}
     )
 
 
@@ -250,6 +255,7 @@ def validate_neighborhood_description_present(ctx: ValidationContext) -> RuleRes
         status=RuleStatus.PASS,
         message="Neighborhood description is present.",
         severity=RuleSeverity.STANDARD,
+    details={"extraction_based_validation": True}
     )
 
 
@@ -279,4 +285,5 @@ def validate_market_conditions_present(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message="Market conditions commentary is present.",
         severity=RuleSeverity.STANDARD,
+    details={"extraction_based_validation": True}
     )

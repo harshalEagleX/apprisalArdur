@@ -20,7 +20,8 @@ def validate_commentary_standards(ctx: ValidationContext) -> RuleResult:
         return _verify("ADD-1", "Commentary Standards", "Addendum/commentary text not extracted. Verify headers and report-specific commentary.")
     if re.search(r"typical for the area|no adverse conditions were noted|see attached addendum", text, re.I):
         return RuleResult(rule_id="ADD-1", rule_name="Commentary Standards", status=RuleStatus.VERIFY, message="Potential canned/generic commentary detected. Verify addendum is specific to this report.")
-    return RuleResult(rule_id="ADD-1", rule_name="Commentary Standards", status=RuleStatus.PASS, message="Addendum/commentary evidence found.")
+    return RuleResult(rule_id="ADD-1", rule_name="Commentary Standards", status=RuleStatus.PASS,
+                      message="Addendum/commentary evidence found.", details={"presence_validated": True})
 
 
 @rule(id="ADD-2", name="Comparable Selection Commentary")
@@ -28,7 +29,8 @@ def validate_comp_selection_commentary(ctx: ValidationContext) -> RuleResult:
     commentary = ctx.report.sales_comparison.summary_commentary or _text(ctx)
     if not re.search(r"selected because|selected based on|most similar|proximity|bracket", commentary, re.I):
         return _verify("ADD-2", "Comparable Selection Commentary", "Comparable selection reasoning was not detected. Verify the appraiser explains why comps were chosen.")
-    return RuleResult(rule_id="ADD-2", rule_name="Comparable Selection Commentary", status=RuleStatus.PASS, message="Comparable selection rationale evidence found.")
+    return RuleResult(rule_id="ADD-2", rule_name="Comparable Selection Commentary", status=RuleStatus.PASS,
+                      message="Comparable selection rationale evidence found.", details={"presence_validated": True})
 
 
 @rule(id="ADD-3", name="Dated Sales Commentary")
@@ -43,7 +45,8 @@ def validate_dated_sales_commentary(ctx: ValidationContext) -> RuleResult:
 def validate_1004mc_req(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"1004MC|Market Conditions Addendum", text, re.I):
-        return RuleResult(rule_id="ADD-4", rule_name="Market Conditions Addendum (1004MC)", status=RuleStatus.PASS, message="1004MC / Market Conditions Addendum evidence found.")
+        return RuleResult(rule_id="ADD-4", rule_name="Market Conditions Addendum (1004MC)", status=RuleStatus.PASS, message="1004MC / Market Conditions Addendum evidence found.",
+                      details={"presence_validated": True})
     return _verify("ADD-4", "Market Conditions Addendum (1004MC)", "1004MC not extracted. Verify it is included for FHA/USDA or client-required assignments.")
 
 

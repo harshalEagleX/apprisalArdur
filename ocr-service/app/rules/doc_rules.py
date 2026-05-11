@@ -31,7 +31,9 @@ def validate_appraiser_license(ctx: ValidationContext) -> RuleResult:
                     exp_date = None
                 if exp_date and exp_date > datetime.now():
                     return RuleResult(rule_id="DOC-1", rule_name="Appraiser License", status=RuleStatus.PASS,
-                                      message=f"Appraiser certification found and valid through {exp_str}.")
+                                      message=f"Appraiser certification found and valid through {exp_str}.",
+                                      details={"presence_validated": True, "structured_validation": True,
+                                               "expiration_date": exp_str})
             except Exception:
                 pass
         return RuleResult(rule_id="DOC-1", rule_name="Appraiser License", status=RuleStatus.VERIFY,
@@ -54,7 +56,8 @@ def validate_eo_insurance(ctx: ValidationContext) -> RuleResult:
 @rule(id="DOC-3", name="UAD Data Set")
 def validate_uad_data_set(ctx: ValidationContext) -> RuleResult:
     if re.search(r"\bUAD\b|Uniform Appraisal Dataset", _text(ctx), re.I):
-        return RuleResult(rule_id="DOC-3", rule_name="UAD Data Set", status=RuleStatus.PASS, message="UAD evidence detected.")
+        return RuleResult(rule_id="DOC-3", rule_name="UAD Data Set", status=RuleStatus.PASS,
+                      message="UAD evidence detected.", details={"presence_validated": True})
     return _verify("DOC-3", "UAD Data Set", "UAD data evidence not detected. Verify client delivery requirements.")
 
 

@@ -109,7 +109,8 @@ def validate_addresses(ctx: ValidationContext) -> RuleResult:
         if re.search(r"COMPARABLE\s+SALE\s+#\s*1.*Address", text, re.I | re.S) or len(re.findall(r"\b\d{2,5}\s+[A-Z][A-Za-z]+\s+", text)) >= 3:
             return RuleResult(rule_id="SCA-3", rule_name="Address (Subject and Comparables)", status=RuleStatus.VERIFY, message="Comparable address evidence found in OCR text. Verify exact UAD/USPS formatting.")
         return _verify("SCA-3", "Address (Subject and Comparables)", f"Comparable addresses missing/not extracted: {', '.join(missing) if missing else 'all'}")
-    return RuleResult(rule_id="SCA-3", rule_name="Address (Subject and Comparables)", status=RuleStatus.PASS, message="Subject and comparable addresses are present.")
+    return RuleResult(rule_id="SCA-3", rule_name="Address (Subject and Comparables)", status=RuleStatus.PASS, message="Subject and comparable addresses are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-4", name="Proximity to Subject")
@@ -117,12 +118,14 @@ def validate_proximity(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "proximity", ("SCA-4", "Proximity to Subject"))
     if res:
         if re.search(r"\b\d+(?:\.\d+)?\s*(?:miles?|mi)\s*(?:N|S|E|W|NE|NW|SE|SW)\b", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-4", rule_name="Proximity to Subject", status=RuleStatus.PASS, message="Comparable proximity evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-4", rule_name="Proximity to Subject", status=RuleStatus.PASS, message="Comparable proximity evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
     bad = [c.proximity for c in _comps(ctx) if not re.search(r"\b\d+(?:\.\d+)?\s*(?:mi|miles?)\s*(?:N|S|E|W|NE|NW|SE|SW)\b", c.proximity or "", re.I)]
     if bad:
         return RuleResult(rule_id="SCA-4", rule_name="Proximity to Subject", status=RuleStatus.FAIL, message="Comparable proximity must include distance and direction with minimum 0.01 miles.", details={"invalid": bad})
-    return RuleResult(rule_id="SCA-4", rule_name="Proximity to Subject", status=RuleStatus.PASS, message="Comparable proximity fields include distance and direction.")
+    return RuleResult(rule_id="SCA-4", rule_name="Proximity to Subject", status=RuleStatus.PASS, message="Comparable proximity fields include distance and direction.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-5", name="Data Sources")
@@ -130,12 +133,14 @@ def validate_data_sources(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "data_source", ("SCA-5", "Data Sources"))
     if res:
         if re.search(r"MLS#?\s*\d+.*DOM\s*\d+|DOM\s*\d+", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.PASS, message="MLS/DOM data-source evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.PASS, message="MLS/DOM data-source evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
     missing_dom = [str(i) for i, c in enumerate(_comps(ctx), 1) if "DOM" not in (c.data_source or "").upper()]
     if missing_dom:
         return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.VERIFY, message=f"DOM not found in data source for comp(s): {', '.join(missing_dom)}.")
-    return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.PASS, message="Comparable data sources include DOM evidence.")
+    return RuleResult(rule_id="SCA-5", rule_name="Data Sources", status=RuleStatus.PASS, message="Comparable data sources include DOM evidence.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-6", name="Verification Sources")
@@ -143,9 +148,11 @@ def validate_verification_sources(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "verification_source", ("SCA-6", "Verification Sources"))
     if res:
         if re.search(r"Verification\s+Source\(s\)|Tax\s+Records?|Previous\s+Appraisal|Tax\s+Cards", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-6", rule_name="Verification Sources", status=RuleStatus.PASS, message="Verification source evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-6", rule_name="Verification Sources", status=RuleStatus.PASS, message="Verification source evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
-    return RuleResult(rule_id="SCA-6", rule_name="Verification Sources", status=RuleStatus.PASS, message="Verification sources are present.")
+    return RuleResult(rule_id="SCA-6", rule_name="Verification Sources", status=RuleStatus.PASS, message="Verification sources are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-7", name="Sale or Financing Concessions")
@@ -162,7 +169,8 @@ def validate_sale_date(ctx: ValidationContext) -> RuleResult:
         if re.search(r"\b(?:s|c)\d{2}/\d{2};c\d{2}/\d{2}|Date\s+of\s+Sale/Time", _text(ctx), re.I):
             return RuleResult(rule_id="SCA-8", rule_name="Date of Sale/Time Adjustment", status=RuleStatus.VERIFY, message="Sale/time evidence found. Verify sale date, contract date, and market-condition adjustments.")
         return res
-    return RuleResult(rule_id="SCA-8", rule_name="Date of Sale/Time Adjustment", status=RuleStatus.PASS, message="Comparable sale dates are present.")
+    return RuleResult(rule_id="SCA-8", rule_name="Date of Sale/Time Adjustment", status=RuleStatus.PASS, message="Comparable sale dates are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-9", name="Location Rating")
@@ -170,18 +178,21 @@ def validate_location_rating(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "location_rating", ("SCA-9", "Location Rating"))
     if res:
         if re.search(r"\bN;Res;|\bB;|\bA;|\bAdj", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-9", rule_name="Location Rating", status=RuleStatus.PASS, message="UAD location-rating evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-9", rule_name="Location Rating", status=RuleStatus.PASS, message="UAD location-rating evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
     bad = [c.location_rating for c in _comps(ctx) if ";" not in (c.location_rating or "")]
     if bad:
         return RuleResult(rule_id="SCA-9", rule_name="Location Rating", status=RuleStatus.FAIL, message="Location rating must be UAD-style Rating;Type;Other as applicable.", details={"invalid": bad})
-    return RuleResult(rule_id="SCA-9", rule_name="Location Rating", status=RuleStatus.PASS, message="Location ratings appear UAD formatted.")
+    return RuleResult(rule_id="SCA-9", rule_name="Location Rating", status=RuleStatus.PASS, message="Location ratings appear UAD formatted.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-10", name="Leasehold/Fee Simple")
 def validate_leasehold_fee_simple(ctx: ValidationContext) -> RuleResult:
     if re.search(r"Leasehold/Fee\s+Simple.*Fee\s+Simple|Fee\s+Simple", _text(ctx), re.I | re.S):
-        return RuleResult(rule_id="SCA-10", rule_name="Leasehold/Fee Simple", status=RuleStatus.PASS, message="Fee Simple/Leasehold evidence found.")
+        return RuleResult(rule_id="SCA-10", rule_name="Leasehold/Fee Simple", status=RuleStatus.PASS, message="Fee Simple/Leasehold evidence found.",
+                      details={"presence_validated": True})
     return _verify("SCA-10", "Leasehold/Fee Simple", "Comparable property-rights grid fields are not extracted. Verify Leasehold/Fee Simple is provided for subject and comps.")
 
 
@@ -190,9 +201,11 @@ def validate_site_size(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "site_size", ("SCA-11", "Site"))
     if res:
         if re.search(r"\b\d[\d,]*\s*sf\b|\b\d+(?:\.\d+)?\s*ac\b", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-11", rule_name="Site", status=RuleStatus.PASS, message="Comparable site-size evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-11", rule_name="Site", status=RuleStatus.PASS, message="Comparable site-size evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
-    return RuleResult(rule_id="SCA-11", rule_name="Site", status=RuleStatus.PASS, message="Comparable site sizes are present.")
+    return RuleResult(rule_id="SCA-11", rule_name="Site", status=RuleStatus.PASS, message="Comparable site sizes are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-12", name="View")
@@ -205,7 +218,8 @@ def validate_sca_view(ctx: ValidationContext) -> RuleResult:
 @rule(id="SCA-13", name="Design (Style)")
 def validate_design_style(ctx: ValidationContext) -> RuleResult:
     if re.search(r"DT1;Traditional|Design\s*\(Style\)", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-13", rule_name="Design (Style)", status=RuleStatus.PASS, message="Design/style evidence found in OCR text.")
+        return RuleResult(rule_id="SCA-13", rule_name="Design (Style)", status=RuleStatus.PASS, message="Design/style evidence found in OCR text.",
+                      details={"presence_validated": True})
     return _verify("SCA-13", "Design (Style)", "Comparable design/style grid fields are not extracted. Verify attachment type, stories, and style.")
 
 
@@ -214,12 +228,14 @@ def validate_quality_rating(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "quality_rating", ("SCA-14", "Quality of Construction"))
     if res:
         if re.search(r"\bQ[1-6]\b", _text(ctx)):
-            return RuleResult(rule_id="SCA-14", rule_name="Quality of Construction", status=RuleStatus.PASS, message="UAD quality rating evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-14", rule_name="Quality of Construction", status=RuleStatus.PASS, message="UAD quality rating evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
     invalid = [c.quality_rating for c in _comps(ctx) if (c.quality_rating or "").upper() not in {"Q1", "Q2", "Q3", "Q4", "Q5", "Q6"}]
     if invalid:
         return RuleResult(rule_id="SCA-14", rule_name="Quality of Construction", status=RuleStatus.FAIL, message="Quality ratings must be Q1-Q6.", details={"invalid": invalid})
-    return RuleResult(rule_id="SCA-14", rule_name="Quality of Construction", status=RuleStatus.PASS, message="Quality ratings are UAD compliant.")
+    return RuleResult(rule_id="SCA-14", rule_name="Quality of Construction", status=RuleStatus.PASS, message="Quality ratings are UAD compliant.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-15", name="Actual Age")
@@ -227,9 +243,11 @@ def validate_actual_age(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "actual_age", ("SCA-15", "Actual Age"))
     if res:
         if re.search(r"Actual\s+Age\s+\d+|\bAge\s+\d+", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-15", rule_name="Actual Age", status=RuleStatus.PASS, message="Actual-age evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-15", rule_name="Actual Age", status=RuleStatus.PASS, message="Actual-age evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
-    return RuleResult(rule_id="SCA-15", rule_name="Actual Age", status=RuleStatus.PASS, message="Actual ages are present.")
+    return RuleResult(rule_id="SCA-15", rule_name="Actual Age", status=RuleStatus.PASS, message="Actual ages are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-16", name="Condition")
@@ -237,12 +255,14 @@ def validate_sca_condition(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "condition_rating", ("SCA-16", "Condition"))
     if res:
         if re.search(r"\bC[1-6]\b", _text(ctx)):
-            return RuleResult(rule_id="SCA-16", rule_name="Condition", status=RuleStatus.PASS, message="UAD condition rating evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-16", rule_name="Condition", status=RuleStatus.PASS, message="UAD condition rating evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
     invalid = [c.condition_rating for c in _comps(ctx) if (c.condition_rating or "").upper() not in {"C1", "C2", "C3", "C4", "C5", "C6"}]
     if invalid:
         return RuleResult(rule_id="SCA-16", rule_name="Condition", status=RuleStatus.FAIL, message="Condition ratings must be C1-C6.", details={"invalid": invalid})
-    return RuleResult(rule_id="SCA-16", rule_name="Condition", status=RuleStatus.PASS, message="Condition ratings are UAD compliant.")
+    return RuleResult(rule_id="SCA-16", rule_name="Condition", status=RuleStatus.PASS, message="Condition ratings are UAD compliant.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-17", name="Above Grade Room Count and GLA")
@@ -255,7 +275,8 @@ def validate_sca_room_count(ctx: ValidationContext) -> RuleResult:
         if re.search(r"Room\s+Count|Gross\s+Living\s+Area|GLA|\b\d+\s+\d+\s+2\.0\b", _text(ctx), re.I):
             return RuleResult(rule_id="SCA-17", rule_name="Above Grade Room Count and GLA", status=RuleStatus.VERIFY, message="Room-count/GLA evidence found. Verify values match sketch and Page 1.")
         return _verify("SCA-17", "Above Grade Room Count and GLA", f"Room count/GLA missing for comp(s): {', '.join(missing)}.")
-    return RuleResult(rule_id="SCA-17", rule_name="Above Grade Room Count and GLA", status=RuleStatus.PASS, message="Room count and GLA are present for comparables.")
+    return RuleResult(rule_id="SCA-17", rule_name="Above Grade Room Count and GLA", status=RuleStatus.PASS, message="Room count and GLA are present for comparables.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-18", name="Basement & Finished Rooms Below Grade")
@@ -268,14 +289,16 @@ def validate_basement(ctx: ValidationContext) -> RuleResult:
 @rule(id="SCA-19", name="Functional Utility")
 def validate_functional_utility(ctx: ValidationContext) -> RuleResult:
     if re.search(r"Functional\s+Utility|Average", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-19", rule_name="Functional Utility", status=RuleStatus.PASS, message="Functional utility evidence found.")
+        return RuleResult(rule_id="SCA-19", rule_name="Functional Utility", status=RuleStatus.PASS, message="Functional utility evidence found.",
+                      details={"presence_validated": True})
     return _verify("SCA-19", "Functional Utility", "Functional utility grid fields are not extracted. Verify values and zero adjustments where no difference exists.")
 
 
 @rule(id="SCA-20", name="Heating/Cooling")
 def validate_heating_cooling(ctx: ValidationContext) -> RuleResult:
     if re.search(r"Heating/Cooling|FWA/CAC|Central\s+Air", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-20", rule_name="Heating/Cooling", status=RuleStatus.PASS, message="Heating/cooling evidence found.")
+        return RuleResult(rule_id="SCA-20", rule_name="Heating/Cooling", status=RuleStatus.PASS, message="Heating/cooling evidence found.",
+                      details={"presence_validated": True})
     return _verify("SCA-20", "Heating/Cooling", "Heating/cooling grid fields are not extracted. Verify consistency with Page 1.")
 
 
@@ -284,15 +307,18 @@ def validate_garage(ctx: ValidationContext) -> RuleResult:
     res = _missing_for_all(ctx, "garage_carport", ("SCA-21", "Garage/Carport"))
     if res:
         if re.search(r"Garage/Carport|2ga2dw|garage", _text(ctx), re.I):
-            return RuleResult(rule_id="SCA-21", rule_name="Garage/Carport", status=RuleStatus.PASS, message="Garage/carport evidence found in OCR text.")
+            return RuleResult(rule_id="SCA-21", rule_name="Garage/Carport", status=RuleStatus.PASS, message="Garage/carport evidence found in OCR text.",
+                      details={"presence_validated": True})
         return res
-    return RuleResult(rule_id="SCA-21", rule_name="Garage/Carport", status=RuleStatus.PASS, message="Garage/carport fields are present.")
+    return RuleResult(rule_id="SCA-21", rule_name="Garage/Carport", status=RuleStatus.PASS, message="Garage/carport fields are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="SCA-22", name="Porch/Patio/Deck")
 def validate_porch_patio(ctx: ValidationContext) -> RuleResult:
     if re.search(r"Porch/Patio/Deck|CFP|CBP|Patio|Porch|Deck", _text(ctx), re.I):
-        return RuleResult(rule_id="SCA-22", rule_name="Porch/Patio/Deck", status=RuleStatus.PASS, message="Porch/patio/deck evidence found.")
+        return RuleResult(rule_id="SCA-22", rule_name="Porch/Patio/Deck", status=RuleStatus.PASS, message="Porch/patio/deck evidence found.",
+                      details={"presence_validated": True})
     return _verify("SCA-22", "Porch/Patio/Deck", "Porch/patio/deck grid fields are not extracted. Verify they match Page 1 or state None.")
 
 

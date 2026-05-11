@@ -55,7 +55,7 @@ def validate_site_dimensions(ctx: ValidationContext) -> RuleResult:
                               review_required=True, severity=RuleSeverity.STANDARD)
     return RuleResult(rule_id="ST-1", rule_name="Site Dimensions",
                       status=RuleStatus.PASS, message=f"Dimensions: {dimensions}",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-2", name="Site Area")
@@ -99,7 +99,7 @@ def validate_site_area(ctx: ValidationContext) -> RuleResult:
     return RuleResult(rule_id="ST-2", rule_name="Site Area",
                       status=RuleStatus.PASS,
                       message=f"Site area: {area} {unit or ''}".strip(),
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-3", name="Site Shape")
@@ -116,7 +116,7 @@ def validate_site_shape(ctx: ValidationContext) -> RuleResult:
                           review_required=True, severity=RuleSeverity.STANDARD)
     return RuleResult(rule_id="ST-3", rule_name="Site Shape",
                       status=RuleStatus.PASS, message=f"Shape: {shape}",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-4", name="View")
@@ -133,7 +133,7 @@ def validate_site_view(ctx: ValidationContext) -> RuleResult:
                           review_required=True, severity=RuleSeverity.ADVISORY)
     return RuleResult(rule_id="ST-4", rule_name="View",
                       status=RuleStatus.PASS, message=f"View: {view}",
-                      severity=RuleSeverity.ADVISORY)
+                      severity=RuleSeverity.ADVISORY, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-5", name="Zoning Classification and Compliance")
@@ -176,7 +176,7 @@ def validate_zoning_compliance(ctx: ValidationContext) -> RuleResult:
 
     return RuleResult(rule_id="ST-5", rule_name="Zoning Classification and Compliance",
                       status=RuleStatus.PASS, message=f"Zoning compliance: {comp}",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-6", name="Highest and Best Use")
@@ -204,7 +204,7 @@ def validate_highest_best_use(ctx: ValidationContext) -> RuleResult:
 
     return RuleResult(rule_id="ST-6", rule_name="Highest and Best Use",
                       status=RuleStatus.PASS, message="Highest and Best Use: Yes.",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-7", name="Utilities and Off-Site Improvements")
@@ -244,7 +244,7 @@ def validate_utilities(ctx: ValidationContext) -> RuleResult:
     return RuleResult(rule_id="ST-7", rule_name="Utilities and Off-Site Improvements",
                       status=RuleStatus.PASS,
                       message="Utilities are documented.",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-8", name="FEMA Flood Hazard Area")
@@ -286,7 +286,7 @@ def validate_flood_hazard(ctx: ValidationContext) -> RuleResult:
     return RuleResult(rule_id="ST-8", rule_name="FEMA Flood Hazard Area",
                       status=RuleStatus.PASS,
                       message="FEMA flood hazard evidence indicates no special flood hazard area.",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 @rule(id="ST-9", name="Utilities Typical for Market")
@@ -296,7 +296,7 @@ def validate_utilities_typical(ctx: ValidationContext) -> RuleResult:
         return RuleResult(rule_id="ST-9", rule_name="Utilities Typical for Market",
                           status=RuleStatus.PASS,
                           message="Utilities typical-for-market evidence found.",
-                          severity=RuleSeverity.STANDARD)
+                          severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
     if re.search(r"utilities.*typical.*\bNo\b", text, re.I | re.S):
         return RuleResult(rule_id="ST-9", rule_name="Utilities Typical for Market",
                           status=RuleStatus.VERIFY,
@@ -335,7 +335,7 @@ def validate_adverse_site_conditions(ctx: ValidationContext) -> RuleResult:
     return RuleResult(rule_id="ST-10", rule_name="Adverse Site Conditions",
                       status=RuleStatus.PASS,
                       message="Adverse site condition field evidence found with no issue indicated.",
-                      severity=RuleSeverity.STANDARD)
+                      severity=RuleSeverity.STANDARD, details={"extraction_based_validation": True})
 
 
 def re_search_adverse(text: str) -> bool:

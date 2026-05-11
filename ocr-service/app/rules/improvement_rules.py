@@ -48,7 +48,8 @@ def validate_general_description(ctx: ValidationContext) -> RuleResult:
         missing.append("Effective Age")
     if missing:
         return _verify("I-1", "General Description", f"Improvement general description is incomplete or not extracted: {', '.join(missing)}.")
-    return RuleResult(rule_id="I-1", rule_name="General Description", status=RuleStatus.PASS, message="Improvement general description fields are present.")
+    return RuleResult(rule_id="I-1", rule_name="General Description", status=RuleStatus.PASS, message="Improvement general description fields are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-2", name="Foundation")
@@ -57,7 +58,8 @@ def validate_foundation(ctx: ValidationContext) -> RuleResult:
     text = _raw(ctx)
     if not imp.foundation_type and not re.search(r"Concrete\s+Slab|Crawl\s+Space|Basement|Foundation", text, re.I):
         return _verify("I-2", "Foundation", "Foundation type/details not extracted. Verify slab, crawl space, basement, sump pump, and moisture/settlement fields as applicable.")
-    return RuleResult(rule_id="I-2", rule_name="Foundation", status=RuleStatus.PASS, message=f"Foundation evidence found: {imp.foundation_type or 'OCR text'}.")
+    return RuleResult(rule_id="I-2", rule_name="Foundation", status=RuleStatus.PASS, message=f"Foundation evidence found: {imp.foundation_type or 'OCR text'}.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-3", name="Exterior Description")
@@ -71,7 +73,8 @@ def validate_exterior_description(ctx: ValidationContext) -> RuleResult:
         missing.append("Roof Surface")
     if missing:
         return _verify("I-3", "Exterior Description", f"Exterior description fields not extracted: {', '.join(missing)}.")
-    return RuleResult(rule_id="I-3", rule_name="Exterior Description", status=RuleStatus.PASS, message="Exterior walls and roof surface are documented.")
+    return RuleResult(rule_id="I-3", rule_name="Exterior Description", status=RuleStatus.PASS, message="Exterior walls and roof surface are documented.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-4", name="Interior Description")
@@ -79,14 +82,16 @@ def validate_interior_description(ctx: ValidationContext) -> RuleResult:
     text = _raw(ctx)
     if not re.search(r"\b(Floors?|Walls?|Trim/Finish|Bath\s+Floor|Bath\s+Wainscot|Interior)\b", text, re.I):
         return _verify("I-4", "Interior Description", "Interior finish fields were not extracted. Verify floors, walls, trim/finish, bath floor, and bath wainscot are completed.")
-    return RuleResult(rule_id="I-4", rule_name="Interior Description", status=RuleStatus.PASS, message="Interior description evidence found in OCR text.")
+    return RuleResult(rule_id="I-4", rule_name="Interior Description", status=RuleStatus.PASS, message="Interior description evidence found in OCR text.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-5", name="Utilities")
 def validate_improvement_utilities(ctx: ValidationContext) -> RuleResult:
     if ctx.report.subject.utilities_on is None and not re.search(r"utilities?\s+(?:and appliances\s+)?(?:were\s+)?(?:on|off)|all utilities.*were on", _raw(ctx), re.I):
         return RuleResult(rule_id="I-5", rule_name="Utilities", status=RuleStatus.FAIL, message="Must state if utilities were ON at time of inspection.")
-    return RuleResult(rule_id="I-5", rule_name="Utilities", status=RuleStatus.PASS, message="Utilities status is documented or indicated.")
+    return RuleResult(rule_id="I-5", rule_name="Utilities", status=RuleStatus.PASS, message="Utilities status is documented or indicated.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-6", name="Appliances")
@@ -94,7 +99,8 @@ def validate_appliances(ctx: ValidationContext) -> RuleResult:
     text = _raw(ctx)
     if not re.search(r"\b(appliance|dishwasher|range|oven|microwave|disposal|refrigerator)\b", text, re.I):
         return _verify("I-6", "Appliances", "Built-in appliances and operational statement were not extracted. Verify built-in items only and FHA operation statement if applicable.")
-    return RuleResult(rule_id="I-6", rule_name="Appliances", status=RuleStatus.PASS, message="Appliance evidence found in OCR text.")
+    return RuleResult(rule_id="I-6", rule_name="Appliances", status=RuleStatus.PASS, message="Appliance evidence found in OCR text.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-7", name="Above Grade Room Count")
@@ -111,14 +117,16 @@ def validate_room_count(ctx: ValidationContext) -> RuleResult:
         missing.append("GLA")
     if missing:
         return _verify("I-7", "Above Grade Room Count", f"Above-grade room count/GLA not fully extracted: {', '.join(missing)}.")
-    return RuleResult(rule_id="I-7", rule_name="Above Grade Room Count", status=RuleStatus.PASS, message="Above-grade rooms, baths, bedrooms, and GLA are present.")
+    return RuleResult(rule_id="I-7", rule_name="Above Grade Room Count", status=RuleStatus.PASS, message="Above-grade rooms, baths, bedrooms, and GLA are present.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-8", name="Additional Features")
 def validate_additional_features(ctx: ValidationContext) -> RuleResult:
     if not re.search(r"\bAdditional\s+Features\b|\bStandard insulation\b|\benergy efficient\b|\bnone\b", _raw(ctx), re.I):
         return _verify("I-8", "Additional Features", "Additional features section not extracted. Verify energy-efficient items are listed or 'NONE' is stated.")
-    return RuleResult(rule_id="I-8", rule_name="Additional Features", status=RuleStatus.PASS, message="Additional-features evidence found.")
+    return RuleResult(rule_id="I-8", rule_name="Additional Features", status=RuleStatus.PASS, message="Additional-features evidence found.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-9", name="Property Condition Rating")
@@ -133,7 +141,8 @@ def validate_condition_rating(ctx: ValidationContext) -> RuleResult:
         return RuleResult(rule_id="I-9", rule_name="Property Condition Rating", status=RuleStatus.FAIL, message="Condition of the Property must be UAD Compliant (C1-C6).")
     if rating not in {"C1", "C2", "C3", "C4", "C5", "C6"}:
         return RuleResult(rule_id="I-9", rule_name="Property Condition Rating", status=RuleStatus.FAIL, message=f"Invalid condition rating: {rating}. Must be C1-C6.")
-    return RuleResult(rule_id="I-9", rule_name="Property Condition Rating", status=RuleStatus.PASS, message=f"Valid condition rating {rating}.")
+    return RuleResult(rule_id="I-9", rule_name="Property Condition Rating", status=RuleStatus.PASS, message=f"Valid condition rating {rating}.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-10", name="Adverse Conditions Affecting Livability")
@@ -158,7 +167,8 @@ def validate_neighborhood_conformity(ctx: ValidationContext) -> RuleResult:
         return RuleResult(rule_id="I-11", rule_name="Neighborhood Conformity", status=RuleStatus.VERIFY, message="Property does not conform to neighborhood. Extensive commentary is required.")
     if imp.conforms_to_neighborhood is None and not re.search(r"conform to the neighborhood.*(?:Yes|No)|property generally conform", text, re.I | re.S):
         return _verify("I-11", "Neighborhood Conformity", "Neighborhood conformity Yes/No field not extracted.")
-    return RuleResult(rule_id="I-11", rule_name="Neighborhood Conformity", status=RuleStatus.PASS, message="Property conforms to neighborhood.")
+    return RuleResult(rule_id="I-11", rule_name="Neighborhood Conformity", status=RuleStatus.PASS, message="Property conforms to neighborhood.",
+                      details={"presence_validated": True})
 
 
 @rule(id="I-12", name="Additions to Subject")

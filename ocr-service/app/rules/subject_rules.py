@@ -193,7 +193,19 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
         mismatches.append(f"Zip mismatch: '{rpt_zip}' vs '{eng_zip_clean}'")
         mismatch_fields.append("zip_code")
 
-    # County: Exact Match (normalized)
+    # County: robust match that survives extraction pollution.
+    #
+    # UAD form rows are sometimes OCR-flattened into a single line, causing the
+    # county extractor to return a concatenated string such as:
+    #   "Hung LaPrecision Builders and Developers LLCColquitt"
+    # instead of the clean value "Colquitt".
+    #
+    # Strategy (in order of specificity):
+    #   1. Exact normalized match (clean extraction — ideal case).
+    #   2. The extracted string *contains* the expected county name as a whole word
+    #      (pollution case — correct data is present, just surrounded by garbage).
+    #   3. The expected county name *contains* the extracted string (abbreviation).
+    # Only emit a hard mismatch when none of the three conditions are met.
     rpt_county = normalize_string(subj.county)
     eng_county = normalize_string(eng.county)
     if eng_county:
@@ -201,8 +213,15 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
             mismatches.append("County missing in Report")
             mismatch_fields.append("county")
         elif rpt_county != eng_county:
-            mismatches.append(f"County mismatch: '{subj.county}' vs '{eng.county}'")
-            mismatch_fields.append("county")
+            # Check containment in both directions before flagging as mismatch
+            county_match = (
+                eng_county in rpt_county          # eng county present inside polluted string
+                or rpt_county in eng_county        # extracted value is abbreviated
+                or difflib.SequenceMatcher(None, rpt_county, eng_county).ratio() >= 0.85
+            )
+            if not county_match:
+                mismatches.append(f"County mismatch: '{subj.county}' vs '{eng.county}'")
+                mismatch_fields.append("county")
 
     usps_result = None
     try:

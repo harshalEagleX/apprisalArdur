@@ -106,8 +106,10 @@ public class QCRuleResult {
     @Column(name = "engagement_value", columnDefinition = "TEXT")
     private String engagementValue;
 
-    @Column(name = "confidence_score")
-    private Double confidenceScore;
+    // confidence_score is always populated — 0.0 means "not computed", not null.
+    // columnDefinition ensures the DB column has a default so legacy rows survive.
+    @Column(name = "confidence_score", nullable = false, columnDefinition = "DOUBLE PRECISION DEFAULT 0.0")
+    private Double confidenceScore = 0.0d;
 
     @Column(name = "extracted_value", columnDefinition = "TEXT")
     private String extractedValue;
@@ -133,20 +135,23 @@ public class QCRuleResult {
     @Column(name = "target_field")
     private String targetField;
 
-    @Column(name = "pdf_page")
-    private Integer pdfPage;
+    // Location fields: always populated via fillProcessingDefaults().
+    // Reviewer auto-scroll depends on pdfPage > 0; bbox fields default to 0.0
+    // to indicate "page is known but exact field box is unavailable".
+    @Column(name = "pdf_page", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private Integer pdfPage = 0;
 
-    @Column(name = "bbox_x")
-    private Float bboxX;
+    @Column(name = "bbox_x", nullable = false, columnDefinition = "REAL DEFAULT 0.0")
+    private Float bboxX = 0.0f;
 
-    @Column(name = "bbox_y")
-    private Float bboxY;
+    @Column(name = "bbox_y", nullable = false, columnDefinition = "REAL DEFAULT 0.0")
+    private Float bboxY = 0.0f;
 
-    @Column(name = "bbox_w")
-    private Float bboxW;
+    @Column(name = "bbox_w", nullable = false, columnDefinition = "REAL DEFAULT 0.0")
+    private Float bboxW = 0.0f;
 
-    @Column(name = "bbox_h")
-    private Float bboxH;
+    @Column(name = "bbox_h", nullable = false, columnDefinition = "REAL DEFAULT 0.0")
+    private Float bboxH = 0.0f;
 
     public QCRuleResult() {
     }

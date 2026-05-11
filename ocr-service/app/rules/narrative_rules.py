@@ -213,6 +213,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
                 status=RuleStatus.PASS,
                 message="Neighborhood description is specific to the subject area.",
                 severity=RuleSeverity.ADVISORY,
+            details={"presence_validated": True}
             )
         else:
             return RuleResult(
@@ -240,6 +241,7 @@ def validate_neighborhood_description(ctx: ValidationContext) -> RuleResult:
         message="Neighborhood description appears specific.",
         field_confidence=conf,
         severity=RuleSeverity.ADVISORY,
+    details={"presence_validated": True}
     )
 
 
@@ -298,6 +300,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
                 status=RuleStatus.PASS,
                 message="Market conditions commentary contains actual analysis.",
                 severity=RuleSeverity.STANDARD,
+            details={"presence_validated": True}
             )
 
     # Tier 2: fallback
@@ -318,6 +321,7 @@ def validate_market_conditions(ctx: ValidationContext) -> RuleResult:
                 else "Market conditions commentary lacks specific market data.",
         action_item=None if has_analysis else "Add market data such as price trends, absorption, inventory, DOM, or supply/demand support.",
         severity=RuleSeverity.STANDARD,
+    details={"presence_validated": True}
     )
 
 
@@ -363,6 +367,7 @@ def validate_comparable_selection(ctx: ValidationContext) -> RuleResult:
             status=RuleStatus.PASS,
             message="Comparable selection rationale is provided.",
             severity=RuleSeverity.ADVISORY,
+        details={"presence_validated": True}
         )
 
     return RuleResult(
@@ -417,6 +422,7 @@ def validate_adjustments_explanation(ctx: ValidationContext) -> RuleResult:
         action_item=None if has_explanation
                     else "Add commentary explaining the basis for each adjustment.",
         severity=RuleSeverity.ADVISORY,
+    details={"presence_validated": True}
     )
 
 
@@ -473,6 +479,7 @@ def validate_reconciliation(ctx: ValidationContext) -> RuleResult:
             status=RuleStatus.PASS,
             message="Reconciliation commentary explains the basis for the final value.",
             severity=RuleSeverity.STANDARD,
+        details={"presence_validated": True}
         )
 
     return RuleResult(
@@ -557,6 +564,7 @@ def validate_addenda_consistency(ctx: ValidationContext) -> RuleResult:
         message="Automated addenda consistency check found no obvious conflicts with main report fields.",
         review_required=False,
         severity=RuleSeverity.ADVISORY,
+    details={"presence_validated": True}
     )
 
 
@@ -617,4 +625,5 @@ def validate_prior_sales(ctx: ValidationContext) -> RuleResult:
         status=RuleStatus.PASS,
         message="Prior listing/sale history is disclosed.",
         severity=RuleSeverity.STANDARD,
+    details={"presence_validated": True}
     )

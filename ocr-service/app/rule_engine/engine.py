@@ -152,9 +152,25 @@ class RuleEngine:
         return results
 
     def _complete_rule_outcome(self, result: RuleResult):
-        """Populate strict RuleOutcome fields for legacy rules."""
+        """
+        Populate derived fields on a RuleResult before it is stored.
+
+        Confidence propagation order (first non-None value wins):
+          result.confidence  →  already set by the rule itself
+          result.field_confidence  →  set by _attach_location_meta from field_meta
+        Storing 0.0 is valid (genuinely unknown).  The important fix is that
+        field_confidence is never left as None when it can be derived, because
+        a None confidence on the Java side surfaces as 0 in the metrics, which
+        incorrectly inflates the low-confidence field count.
+        """
         if result.confidence is None and result.field_confidence is not None:
             result.confidence = result.field_confidence
+        # Ensure confidence is always a float so Java does not receive null
+        if result.confidence is None:
+            result.confidence = 0.0
+        if result.field_confidence is None:
+            result.field_confidence = result.confidence or 0.0
+
         if result.extracted_value is None and result.appraisal_value is not None:
             result.extracted_value = result.appraisal_value
         if result.expected_value is None and result.engagement_value is not None:
@@ -227,11 +243,41 @@ class RuleEngine:
                 return
 
         confidence = result.confidence if result.confidence is not None else field_conf
-        if confidence is not None and confidence < 0.85:
+
+        # Tiered confidence threshold based on how the value was extracted.
+        # Spatial anchoring (word-level bounding boxes) is the most reliable method,
+        # so it gets a lower threshold.  Fallback regex methods need a higher bar
+        # because they are more susceptible to OCR noise and row-flattening artifacts.
+        #
+        # Threshold table (same scale as Python confidence: 0.0–1.0):
+        #   spatial_anchor  → 0.75  (bbox-verified hit on a known word position)
+        #   regex_primary   → 0.80  (first-choice pattern with a strong label anchor)
+        #   regex_fallback  → 0.85  (secondary pattern — stricter gate)
+        #   context_fallback / anything else → 0.87  (weakest extraction method)
+        #
+        # If no extraction method is recorded (field_meta absent), default to 0.85.
+        _extraction_method = None
+        if field_meta is not None:
+            _extraction_method = getattr(field_meta, "extraction_method", None)
+
+        _thresholds = {
+            "spatial_anchor":   0.75,
+            "regex_primary":    0.80,
+            "regex_fallback":   0.85,
+            "context_fallback": 0.87,
+            "total_value_stream": 0.82,
+        }
+        _pass_threshold = _thresholds.get(str(_extraction_method or ""), 0.85)
+
+        if confidence is not None and confidence < _pass_threshold:
             self._downgrade_pass(
                 result,
                 RuleStatus.OCR_LOW_CONFIDENCE,
-                f"Rule returned PASS with confidence {confidence:.2f}, below the 0.85 production threshold.",
+                (
+                    f"Rule returned PASS with confidence {confidence:.2f}, below the "
+                    f"{_pass_threshold:.2f} threshold for extraction method "
+                    f"'{_extraction_method or 'unknown'}'."
+                ),
                 "Review the source evidence because confidence is below the PASS threshold.",
             )
             return
@@ -254,7 +300,40 @@ class RuleEngine:
             )
             return
 
+        # P3.5 — Auto-pass calibration model check.
+        # Before downgrading to REVIEW, consult the trained model.  If the model
+        # is confident this rule can auto-pass (P(accepted) >= 0.80) AND the rule
+        # does not have a high historical rejection rate, allow the PASS through.
+        # On cold start (no model), predict_auto_pass returns None and we fall
+        # through to the structured-pass gate unchanged.
         if self._requires_structured_pass(rule_id) and not self._has_structured_pass(result):
+            loan_type = None
+            try:
+                from app.services.auto_pass_calibration import predict_auto_pass
+                ctx_engagement = getattr(context, "engagement_letter", None)
+                loan_type = getattr(ctx_engagement, "loan_type", None) if ctx_engagement else None
+                ml_decision = predict_auto_pass(
+                    rule_id=rule_id,
+                    extraction_method=getattr(field_meta, "extraction_method", None) if field_meta is not None else None,
+                    confidence=result.confidence,
+                    source_page=result.source_page,
+                    bbox_x=result.bbox_x,
+                    has_compared_values=bool(result.compared_values),
+                    has_extracted_value=result.extracted_value is not None,
+                    loan_type=loan_type,
+                    details=result.details,
+                )
+            except Exception:
+                ml_decision = None
+
+            if ml_decision is True:
+                result.decision_path.append("auto_pass_model_accepted")
+                result.decision_path.append("pass_evidence_contract_satisfied")
+                return
+            elif ml_decision is False:
+                result.decision_path.append("auto_pass_model_rejected")
+
+            # Fall through to standard structured-pass gate (ml_decision is None or False)
             self._downgrade_pass(
                 result,
                 RuleStatus.REVIEW,
@@ -305,6 +384,8 @@ class RuleEngine:
 
     def _has_structured_pass(self, result: RuleResult) -> bool:
         details = result.details or {}
+
+        # Level 1: full structured validation (cross-document comparison, field extraction)
         if details.get("structured_validation") is True:
             return True
         if details.get("extraction_based_validation") is True:
@@ -313,6 +394,20 @@ class RuleEngine:
             return True
         if result.extracted_value is not None and result.expected_value is not None:
             return True
+
+        # Level 2: presence validation.
+        # Rules that check WHETHER something exists in the PDF (photos present,
+        # sketch page present, signature detected, maps section found, addenda
+        # present) are PRESENCE rules.  They cannot produce "compared values"
+        # because there is no reference document to compare against — the
+        # question is binary (found / not found).
+        # Rules signal this by setting details["presence_validated"] = True in
+        # their PASS return.  This exempts them from the structured-evidence
+        # requirement while still requiring an explicit evidence flag rather than
+        # allowing a bare PASS with no details at all.
+        if details.get("presence_validated") is True:
+            return True
+
         return False
 
     def _assignment(self, context: ValidationContext) -> str:
@@ -503,20 +598,76 @@ class RuleEngine:
 
         return bool(tokens & active)
 
-    def _infer_source_page(self, context: ValidationContext, rule_id: str, result: RuleResult):
-        """Best-effort page fallback for rules that do not map to a single extracted field."""
-        page_index = context.page_index or {}
-        if not page_index:
-            return None
+    # UAD 1004 form has a predictable page layout.  When OCR search fails to locate
+    # a specific term, fall back to the section's canonical page range so the reviewer
+    # is navigated to approximately the right area instead of page 0 (top of document).
+    # These are first-page estimates; multi-page sections land on the starting page.
+    _SECTION_DEFAULT_PAGES: Dict[str, int] = {
+        "S":    1,   # Subject section — always starts on page 1
+        "C":    1,   # Contract section — page 1 (lower half of UAD form page 1)
+        "N":    1,   # Neighborhood section — page 1 (right column of UAD form)
+        "ST":   1,   # Site section — page 1 (bottom portion)
+        "I":    2,   # Improvements section — page 2 or 3 depending on form length
+        "SCA":  3,   # Sales Comparison Approach — pages 3-5
+        "R":    4,   # Reconciliation — page 4 (bottom of SCA page)
+        "CA":   4,   # Cost Approach — page 4 (right half)
+        "IA":   4,   # Income Approach — page 4 (right half, below Cost)
+        "ADD":  5,   # Addendum starts on page 5+
+        "COM":  2,   # Commentary in Neighborhood/Addendum area
+        "PH":   7,   # Photographs section
+        "SK":   9,   # Sketch / floor plan
+        "M":    10,  # Maps section
+        "DOC":  6,   # Documentation / certification page
+        "SIG":  6,   # Signature page — UAD certification
+        "MF":   1,   # Multi-family — same first page
+        "FHA":  1,   # FHA requirements — start on page 1
+        "USDA": 1,
+        "XF":   1,   # Cross-field rules map to their primary field's page
+    }
 
-        for term in self._rule_search_terms(rule_id, result):
-            term_l = term.lower().strip()
-            if not term_l:
-                continue
-            for page_num in sorted(page_index.keys()):
-                if term_l in (page_index.get(page_num) or "").lower():
-                    return page_num
-        return None
+    def _infer_source_page(self, context: ValidationContext, rule_id: str, result: RuleResult):
+        """
+        Best-effort page fallback for rules whose primary field has no extracted page.
+
+        Resolution order (most → least precise):
+          1. Search page_index for rule-specific anchor terms.
+          2. DocumentSectionMap (doc_section_map) — actual section page from the document.
+          3. Static section default table (_SECTION_DEFAULT_PAGES) — canonical UAD pages.
+        """
+        page_index = context.page_index or {}
+
+        # Step 1: anchor term text search
+        if page_index:
+            for term in self._rule_search_terms(rule_id, result):
+                term_l = term.lower().strip()
+                if not term_l:
+                    continue
+                for page_num in sorted(page_index.keys()):
+                    if term_l in (page_index.get(page_num) or "").lower():
+                        return page_num
+
+        # Step 2: DocumentSectionMap — per-document section location
+        # Map rule_id prefix to section key names used by DocumentSectionMap
+        PREFIX_TO_SECTION = {
+            "S":   "subject",    "C":   "contract",   "N":   "neighborhood",
+            "ST":  "site",       "I":   "improvements","SCA": "sales_comparison",
+            "R":   "reconciliation","CA":"cost_approach","IA": "income_approach",
+            "ADD": "addendum",   "COM": "addendum",    "SIG": "signature",
+            "PH":  "photos",     "SK":  "sketch",      "M":   "maps",
+            "DOC": "signature",  "MF":  "subject",     "XF":  "subject",
+            "FHA": "subject",    "USDA":"subject",
+        }
+        section_prefix = (rule_id or "").split("-", 1)[0].upper()
+        doc_map = getattr(context, "doc_section_map", None)
+        if doc_map:
+            section_key = PREFIX_TO_SECTION.get(section_prefix)
+            if section_key:
+                location = doc_map.locate(section_key)
+                if location:
+                    return location[0]   # pdf_page from the document's actual structure
+
+        # Step 3: static fallback — canonical UAD page numbers
+        return self._SECTION_DEFAULT_PAGES.get(section_prefix, 1)
 
     def _rule_search_terms(self, rule_id: str, result: RuleResult) -> List[str]:
         terms = []

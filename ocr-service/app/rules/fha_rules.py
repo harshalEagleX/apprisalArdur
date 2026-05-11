@@ -39,7 +39,8 @@ def validate_fha_mpr(ctx):
 def validate_fha_case_number(ctx):
     if not _is_fha(ctx): return _skip_non_fha("FHA-2", "FHA Case Number")
     if re.search(r"\bFHA Case (?:No\.?|Number)\b.*\d{3}-\d{7}", _text(ctx), re.I):
-        return RuleResult(rule_id="FHA-2", rule_name="FHA Case Number", status=RuleStatus.PASS, message="FHA case number evidence detected.")
+        return RuleResult(rule_id="FHA-2", rule_name="FHA Case Number", status=RuleStatus.PASS,
+                          message="FHA case number evidence detected.", details={"presence_validated": True})
     return RuleResult(rule_id="FHA-2", rule_name="FHA Case Number", status=RuleStatus.FAIL, message="FHA case number not detected in expected format.")
 
 @rule(id="FHA-3", name="FHA Intended Use and Intended User")

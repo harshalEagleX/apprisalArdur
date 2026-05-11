@@ -225,4 +225,10 @@ class ValidationContext(BaseModel):
     supporting_document_missing: bool = False
     missing_supporting_documents: List[str] = Field(default_factory=list)
 
+    # Cross-page section map — built during extraction and carried into the rule
+    # engine so rules can query "which page is the Neighborhood section on?" or
+    # "give me the text for the Sales Comparison section" without re-scanning.
+    # Type is Any to avoid a circular import from appraisal.py → phase2_extraction.py.
+    doc_section_map: Optional[Any] = None
+
     model_config = {"arbitrary_types_allowed": True}

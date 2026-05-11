@@ -811,8 +811,12 @@ public class QCProcessingService {
             int passed = Objects.requireNonNullElse(r.passed(), 0);
             double passRate = total > 0 ? (passed * 100.0 / total) : 0.0;
 
-            // Derive OCR confidence from field_confidence map
-            double avgConf = 0.0, minConf = 100.0;
+            // Derive OCR confidence from field_confidence map.
+            // Python extraction produces confidence as a decimal fraction in [0.0, 1.0]
+            // (e.g. 0.88 = 88%). The threshold below must match that scale.
+            // BUG FIX: was "v < 70.0" which compared 0.88 against 70, classifying
+            // every field as low-confidence and inflating fields_low_confidence to 100%.
+            double avgConf = 0.0, minConf = 1.0;
             int lowConfCount = 0;
             if (r.fieldConfidence() != null && !r.fieldConfidence().isEmpty()) {
                 var values = r.fieldConfidence().values().stream()
@@ -820,7 +824,8 @@ public class QCProcessingService {
                 if (values.length > 0) {
                     avgConf = java.util.Arrays.stream(values).average().orElse(0);
                     minConf = java.util.Arrays.stream(values).min().orElse(0);
-                    lowConfCount = (int) java.util.Arrays.stream(values).filter(v -> v < 70.0).count();
+                    // 0.70 = 70% confidence threshold (decimal scale, not percentage scale)
+                    lowConfCount = (int) java.util.Arrays.stream(values).filter(v -> v < 0.70).count();
                 }
             }
 

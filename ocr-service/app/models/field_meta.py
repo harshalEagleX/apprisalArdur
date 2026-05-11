@@ -69,6 +69,14 @@ class FieldMetaResult:
     sanity_check_failed: bool = False
     sanity_check_reason: Optional[str] = None
 
+    # Cross-document validation (P2.8): True when this field's value has been
+    # compared against an external document (engagement letter, public record)
+    # and the values matched.  Used as a training signal for the learning loop —
+    # a field that matched cross-document evidence is more reliable than one that
+    # was only found in the appraisal text.
+    cross_validated: bool = False
+    cross_validated_source: Optional[str] = None   # e.g. "engagement_letter"
+
     extraction_status: ExtractionStatus | str | None = None
     source_document: Optional[str] = None
     parser: Optional[str] = None
@@ -129,4 +137,10 @@ class FieldMetaResult:
             "normalization_steps": json.dumps(self.normalization_steps or []),
             "failure_reason": self.failure_reason,
             "correction_applied": self.correction_applied,
+            # P2.8: cross-document validation signal for the ML training loop.
+            # A field confirmed against an external source is a high-quality
+            # training example — both the extracted value and the confidence
+            # calibration can be used as positive labels.
+            "cross_validated": self.cross_validated,
+            "cross_validated_source": self.cross_validated_source,
         }

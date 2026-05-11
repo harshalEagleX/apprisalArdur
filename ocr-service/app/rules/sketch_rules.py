@@ -16,7 +16,8 @@ def _verify(rule_id, name, message):
 @rule(id="SK-1", name="Sketch Location")
 def validate_sketch_location(ctx: ValidationContext) -> RuleResult:
     if re.search(r"floor plan|sketch|building sketch|ANSI standards|measured per ANSI", _text(ctx), re.I):
-        return RuleResult(rule_id="SK-1", rule_name="Sketch Location", status=RuleStatus.PASS, message="Sketch/floor-plan evidence detected.")
+        return RuleResult(rule_id="SK-1", rule_name="Sketch Location", status=RuleStatus.PASS,
+                          message="Sketch/floor-plan evidence detected.", details={"presence_validated": True})
     return _verify("SK-1", "Sketch Location", "Sketch/floor-plan page not detected. Verify sketch is on the appraisal software sketch page.")
 
 
@@ -31,7 +32,8 @@ def validate_floor_coverage(ctx: ValidationContext) -> RuleResult:
 def validate_sketch_dimensions(ctx: ValidationContext) -> RuleResult:
     if not re.search(r"\d+(?:\.\d+)?\s*[xX]\s*\d+(?:\.\d+)?|\d+'\s*-\s*\d+\"|measured per ANSI|ANSI standards", _text(ctx), re.I):
         return _verify("SK-3", "Dimensions", "Exterior sketch dimensions not detected. Verify all exterior dimensions and room labels.")
-    return RuleResult(rule_id="SK-3", rule_name="Dimensions", status=RuleStatus.PASS, message="Dimension-like sketch evidence detected.")
+    return RuleResult(rule_id="SK-3", rule_name="Dimensions", status=RuleStatus.PASS,
+                      message="Dimension-like sketch evidence detected.", details={"presence_validated": True})
 
 
 @rule(id="SK-4", name="Outbuildings and Structures")

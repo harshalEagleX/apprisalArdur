@@ -1138,11 +1138,82 @@ async def trigger_retraining(
             logger.info("Generated %d synthetic examples", n, extra={"request_id": request_id})
 
         result = await run_in_threadpool(run_retraining)
+
+        # P3.5 — Also retrain the auto-pass calibration model in the same request.
+        try:
+            from app.services.auto_pass_calibration import train as train_auto_pass
+            auto_pass_result = await run_in_threadpool(train_auto_pass)
+            result["auto_pass_calibration"] = auto_pass_result
+        except Exception as exc:
+            result["auto_pass_calibration"] = {"trained": False, "reason": str(exc)}
+
         return result
 
     except Exception as e:
         logger.error("Retraining failed: %s", e, extra={"request_id": request_id}, exc_info=True)
         raise HTTPException(status_code=500, detail={"error": "RETRAIN_FAILED", "message": str(e)})
+
+
+@app.get("/admin/auto-pass-calibration")
+async def auto_pass_calibration_status(_auth: None = Security(_require_api_key)):
+    """
+    P3.5 — Return current auto-pass calibration model status.
+
+    Reports:
+      - Whether the model has been trained
+      - How many examples are available
+      - Model accuracy (cross-validated)
+      - Training date and model type
+
+    When the model is not yet trained, the response explains how many more
+    reviewer decisions are needed before the first training run.
+    """
+    try:
+        from app.services.auto_pass_calibration import (
+            get_model_metadata, MIN_EXAMPLES_TO_TRAIN
+        )
+        from app.database import get_db
+        from app.models.db_models import AutoPassExample
+
+        meta = get_model_metadata()
+
+        with get_db() as db:
+            total_examples = db.query(AutoPassExample).count()
+            accepted = db.query(AutoPassExample).filter(
+                AutoPassExample.reviewer_accepted.is_(True)
+            ).count()
+            rejected = db.query(AutoPassExample).filter(
+                AutoPassExample.reviewer_accepted.is_(False)
+            ).count()
+
+        meta["examples_available"] = total_examples
+        meta["examples_accepted"] = accepted
+        meta["examples_rejected"] = rejected
+        meta["examples_until_training"] = max(0, MIN_EXAMPLES_TO_TRAIN - total_examples)
+        return meta
+
+    except Exception as exc:
+        return {
+            "trained": False,
+            "message": f"Status check failed: {exc}",
+            "examples_available": 0,
+            "examples_until_training": MIN_EXAMPLES_TO_TRAIN,
+        }
+
+
+@app.post("/admin/auto-pass-calibration/train")
+async def trigger_auto_pass_training(force: bool = False, _auth: None = Security(_require_api_key)):
+    """
+    P3.5 — Manually trigger auto-pass calibration model training.
+
+    Use ?force=true to train even when fewer than MIN_EXAMPLES_TO_TRAIN examples exist.
+    """
+    try:
+        from app.services.auto_pass_calibration import train as train_auto_pass
+        result = await run_in_threadpool(lambda: train_auto_pass(force=force))
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": "TRAINING_FAILED", "message": str(exc)})
 
 
 @app.patch("/admin/rules/{rule_id}")
@@ -1730,6 +1801,43 @@ async def submit_feedback(payload: FeedbackRequest, request: Request, _auth: Non
                 corrected_value=payload.corrected_value,
                 feedback_type=payload.feedback_type,
             )
+        except Exception:
+            pass
+
+        # P3.5 — Record rule-level outcome for auto-pass calibration.
+        # REVIEW_DECISION with corrected_status PASS/FAIL is the primary signal.
+        # Only record when we have a rule_id and a clear decision.
+        try:
+            if payload.rule_id and payload.feedback_type:
+                ft = payload.feedback_type.strip().upper()
+                cv = (payload.corrected_value or "").strip().upper()
+                if ft == "REVIEW_DECISION" and cv in {"PASS", "FAIL"}:
+                    reviewer_accepted = cv == "PASS"
+                elif ft in {"PASS", "CORRECT", "ACCEPTED"}:
+                    reviewer_accepted = True
+                elif ft in {"FAIL", "RULE_ERROR", "EXTRACTION_ERROR"}:
+                    reviewer_accepted = False
+                else:
+                    reviewer_accepted = None
+
+                if reviewer_accepted is not None:
+                    from app.services.auto_pass_calibration import record_example
+                    rule_family = (payload.rule_id or "").split("-", 1)[0].upper()
+                    record_example(
+                        rule_id=payload.rule_id,
+                        rule_family=rule_family,
+                        extraction_method=None,
+                        confidence=payload.confidence_score,
+                        source_page=payload.source_page,
+                        bbox_x=payload.bbox_x,
+                        has_compared_values=False,
+                        has_extracted_value=bool(payload.original_value),
+                        loan_type=None,
+                        details=None,
+                        reviewer_accepted=reviewer_accepted,
+                        document_id=str(payload.document_id),
+                        reviewer_comment=payload.operator_comment,
+                    )
         except Exception:
             pass
 

@@ -20,14 +20,16 @@ def validate_value_reconciliation(ctx: ValidationContext) -> RuleResult:
         return _verify("R-1", "Value Reconciliation", "Reconciliation section was not extracted. Verify all used approaches are reconciled.")
     if not re.search(r"weight|weighted|most reliable|best indicator|given.*consideration|supportive and reasonable conclusion|opinion of market value", text, re.I):
         return RuleResult(rule_id="R-1", rule_name="Value Reconciliation", status=RuleStatus.VERIFY, message="Reconciliation text found, but weighting/rationale language was not detected.")
-    return RuleResult(rule_id="R-1", rule_name="Value Reconciliation", status=RuleStatus.PASS, message="Reconciliation rationale evidence found.")
+    return RuleResult(rule_id="R-1", rule_name="Value Reconciliation", status=RuleStatus.PASS, message="Reconciliation rationale evidence found.",
+                      details={"presence_validated": True})
 
 
 @rule(id="R-2", name="Final Opinion of Value")
 def validate_final_value(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"(?:final opinion of value|appraised value|opinion of value|Indicated Value by Sales Comparison Approach|APPRAISED VALUE OF SUBJECT PROPERTY)\s*[:$]?\s*\$?\d[\d,]+", text, re.I):
-        return RuleResult(rule_id="R-2", rule_name="Final Opinion of Value", status=RuleStatus.PASS, message="Final opinion of value evidence found.")
+        return RuleResult(rule_id="R-2", rule_name="Final Opinion of Value", status=RuleStatus.PASS, message="Final opinion of value evidence found.",
+                      details={"presence_validated": True})
     return _verify("R-2", "Final Opinion of Value", "Final opinion of value was not extracted. Verify it is clearly stated.")
 
 
@@ -47,7 +49,8 @@ def validate_cost_approach_completion(ctx: ValidationContext) -> RuleResult:
     missing = [label for label in ["opinion of site value|site value", "cost new|replacement cost new", "depreciation", "indicated value"] if not re.search(label, text, re.I)]
     if missing:
         return RuleResult(rule_id="CA-2", rule_name="Cost Approach Completion", status=RuleStatus.VERIFY, message=f"Cost Approach found, but these fields were not detected: {', '.join(missing)}.")
-    return RuleResult(rule_id="CA-2", rule_name="Cost Approach Completion", status=RuleStatus.PASS, message="Cost Approach completion evidence found.")
+    return RuleResult(rule_id="CA-2", rule_name="Cost Approach Completion", status=RuleStatus.PASS, message="Cost Approach completion evidence found.",
+                      details={"presence_validated": True})
 
 
 @rule(id="IA-1", name="Subject Rent Matching")
