@@ -64,11 +64,12 @@ export interface TrendPoint {
 export interface MlInsights {
   avgRulePassRate: number;
   decisionBreakdown: {
-    autoPassCount: number;
+    // Java returns autoPass / toVerify / autoFail (counts) + *Pct fields
+    autoPass: number;
     autoPassPct: number;
-    toVerifyCount: number;
+    toVerify: number;
     needsReviewPct: number;
-    autoFailCount: number;
+    autoFail: number;
     autoFailPct: number;
   };
 }

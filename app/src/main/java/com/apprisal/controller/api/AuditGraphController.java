@@ -231,20 +231,30 @@ public class AuditGraphController {
                 try { if (batch.getStatus() != BatchStatus.valueOf(status.toUpperCase())) continue; }
                 catch (IllegalArgumentException ignored) { continue; }
             }
+            // Load files early so we can match on filename / orderId even when
+            // the batch-level fields don't contain the search term.
+            List<BatchFile> files        = batchFileRepository.findByBatchId(batch.getId());
+            List<QCResult>  qcrs         = qcResultRepository.findByBatchId(batch.getId());
+            Map<Long, QCResult> qcByFileId = buildQcByFileId(qcrs);
+
             if (qLow != null) {
-                boolean hit =
+                // Batch-level match: parentBatchId, client name, reviewer username
+                boolean batchHit =
                     (batch.getParentBatchId() != null && batch.getParentBatchId().toLowerCase().contains(qLow)) ||
                     (batch.getClient() != null && batch.getClient().getName() != null && batch.getClient().getName().toLowerCase().contains(qLow)) ||
                     (batch.getAssignedReviewer() != null && batch.getAssignedReviewer().getUsername() != null && batch.getAssignedReviewer().getUsername().toLowerCase().contains(qLow));
-                if (!hit) continue;
+
+                // File-level match: filename, orderId — include the batch if ANY file matches
+                boolean fileHit = files.stream().anyMatch(f ->
+                    (f.getFilename() != null && f.getFilename().toLowerCase().contains(qLow)) ||
+                    (f.getOrderId()  != null && f.getOrderId().toLowerCase().contains(qLow))
+                );
+
+                if (!batchHit && !fileHit) continue;
             }
 
             String batchNodeId = "batch_" + batch.getId();
             if (seen.add(batchNodeId)) nodes.add(batchNode(batch));
-
-            List<BatchFile> files = batchFileRepository.findByBatchId(batch.getId());
-            List<QCResult>  qcrs  = qcResultRepository.findByBatchId(batch.getId());
-            Map<Long, QCResult> qcByFileId = buildQcByFileId(qcrs);
 
             for (BatchFile file : files) {
                 String fileNodeId = "file_" + file.getId();
