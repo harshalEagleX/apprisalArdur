@@ -22,14 +22,21 @@ def validate_signatures(ctx: ValidationContext) -> RuleResult:
 @rule(id="SIG-2", name="Appraiser Information")
 def validate_appraiser_info(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
-    required = [
-        r"Name\s+[A-Z][A-Za-z]+|Appraiser\s+Name",
-        r"Company\s+Name|Company\s+Address",
-        r"State\s+Certification\s*#|State\s+License\s*#|Cert(?:ification)?\s*#?\s*[A-Z]{1,3}\d{4,}",
+    required = {
+        "Appraiser Name": r"Name\s+[A-Z][A-Za-z]+|Appraiser\s+Name",
+        "Company Name/Address": r"Company\s+Name|Company\s+Address",
+        "Certification/License Number": r"State\s+Certification\s*#|State\s+License\s*#|Cert(?:ification)?\s*#?\s*[A-Z]{1,3}\d{4,}",
+        "Phone": r"\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}|Telephone|Phone",
+        "Email": r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}",
+        "Expiration Date": r"Expiration\s+Date.*?(\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2})",
+        "State": r"\bState\b|\b[A-Z]{2}\s+(?:Certification|License)\b",
+    }
+    missing = [
+        label for label, pattern in required.items()
+        if not re.search(pattern, text, re.I | re.S)
     ]
-    if not all(re.search(pattern, text, re.I) for pattern in required):
-        return _verify("SIG-2", "Appraiser Information", "Appraiser/company/license information not detected. Verify all signature page fields are complete.")
-    # All required fields detected — return PASS (not VERIFY)
+    if missing:
+        return _verify("SIG-2", "Appraiser Information", f"Appraiser information incomplete or not extracted: {', '.join(missing)}. Verify all signature page fields are complete.")
     return RuleResult(rule_id="SIG-2", rule_name="Appraiser Information", status=RuleStatus.PASS,
                       message="Appraiser name, company, and certification/license detected.")
 
@@ -45,10 +52,18 @@ def validate_supervisory_appraiser(ctx: ValidationContext) -> RuleResult:
         text, re.I,
     )
     if supervisor_name:
+        supervisor_context = text[supervisor_name.start():supervisor_name.start() + 1200]
+        if not re.search(r"Did\s+Inspect|Did\s+Not\s+Inspect|inspect(?:ed)?\s+property", supervisor_context, re.I):
+            return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.VERIFY,
+                              message=f"Supervisory appraiser '{supervisor_name.group(1)}' found. Verify signature, certification, and Did/Did Not Inspect Property checkbox.")
         return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.VERIFY,
                           message=f"Supervisory appraiser '{supervisor_name.group(1)}' found. Verify signature and certification requirements.")
-    return RuleResult(rule_id="SIG-3", rule_name="Supervisory Appraiser", status=RuleStatus.PASS,
-                      message="No supervisory appraiser involvement — section is blank (certified appraiser, no trainee).")
+    return RuleResult(
+        rule_id="SIG-3",
+        rule_name="Supervisory Appraiser",
+        status=RuleStatus.NOT_APPLICABLE,
+        message="No supervisory appraiser involvement detected; supervisory signature rule does not count as PASS.",
+    )
 
 
 @rule(id="SIG-4", name="Email Address")

@@ -67,10 +67,19 @@ export function EvidenceCompare({ rule, status }: EvidenceCompareProps) {
     typeof rule.pdfPage === "number" && rule.pdfPage > 0
       ? `Page ${rule.pdfPage}`
       : "Page not located";
+  const reviewLike = [
+    "verify",
+    "review",
+    "extraction_failed",
+    "ocr_low_confidence",
+    "source_missing",
+    "system_error",
+    "cross_doc_mismatch",
+  ].includes(status);
   const why =
     status === "fail"
       ? rule.rejectionText || rule.message || "The extracted report value does not satisfy this rule."
-      : status === "verify"
+      : reviewLike
         ? rule.verifyQuestion || rule.message || "This rule needs a reviewer decision."
         : rule.message || "The rule evidence is shown for traceability.";
 

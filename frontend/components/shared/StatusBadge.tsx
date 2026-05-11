@@ -15,6 +15,14 @@ const CONFIG: Record<string, { label: string; dot: string; text: string; bg: str
   pass:        { label: "Pass",   dot: "bg-green-400", text: "text-green-200", bg: "bg-green-950/40", border: "border-green-500/25" },
   fail:        { label: "Fail",   dot: "bg-red-400",   text: "text-red-200",   bg: "bg-red-950/40", border: "border-red-500/25" },
   verify:      { label: "Review", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
+  review:      { label: "Review", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
+  extraction_failed: { label: "Extraction Failed", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
+  ocr_low_confidence: { label: "Low OCR Confidence", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
+  system_error: { label: "System Error", dot: "bg-red-400", text: "text-red-200", bg: "bg-red-950/40", border: "border-red-500/25" },
+  source_missing: { label: "Source Missing", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
+  cross_doc_mismatch: { label: "Cross-Doc Mismatch", dot: "bg-red-400", text: "text-red-200", bg: "bg-red-950/40", border: "border-red-500/25" },
+  not_executed: { label: "Not Executed", dot: "bg-slate-400", text: "text-slate-300", bg: "bg-[#161B22]", border: "border-white/10" },
+  not_applicable: { label: "Not Applicable", dot: "bg-slate-400", text: "text-slate-300", bg: "bg-[#161B22]", border: "border-white/10" },
   MANUAL_PASS: { label: "Passed", dot: "bg-green-400", text: "text-green-200", bg: "bg-green-950/40", border: "border-green-500/25" },
 };
 

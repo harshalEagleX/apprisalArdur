@@ -71,7 +71,7 @@ class SubjectSection(BaseModel):
     # S-9: PUD and HOA
     hoa_dues: Optional[float] = 0.0
     hoa_period: Optional[str] = None  # Per Year, Per Month
-    is_pud: bool = False
+    is_pud: Optional[bool] = None
     
     # S-10: Lender/Client Information
     lender_name: Optional[str] = None

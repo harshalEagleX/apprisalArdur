@@ -3,7 +3,7 @@ Rule Engine — Phase 3 upgrade.
 
 Improvements over previous version:
   - Rules execute in DB-configured order (structural → logic → commentary)
-  - Inactive/non-applicable rules are returned as PASS (toggle via DB, no code restart)
+  - Inactive/non-applicable rules are explicit non-scoring outcomes, never PASS
   - Severity (BLOCKING / STANDARD / ADVISORY) attached to every result
   - source_page and field_confidence passed from Phase 2 field_meta
   - Single rule crash never stops other rules
@@ -11,6 +11,7 @@ Improvements over previous version:
 
 import logging
 import re
+import traceback
 from typing import List, Callable, Dict, Optional
 
 from app.models.appraisal import ValidationContext
@@ -19,6 +20,11 @@ from app.rule_engine.smart_identifier import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _engagement_missing(context: ValidationContext) -> bool:
+    missing = {str(v).upper() for v in (context.missing_supporting_documents or [])}
+    return bool(context.supporting_document_missing or "ENGAGEMENT" in missing or context.engagement_letter is None)
 
 
 class RuleEngine:
@@ -61,25 +67,29 @@ class RuleEngine:
             rule_func = self._rules[rule_id]
             cfg = configs.get(rule_id)
 
-            # Disabled rules are closed as PASS so public output remains PASS / VERIFY / FAIL only.
             if cfg and not cfg.is_active:
-                results.append(RuleResult(
+                res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.PASS,
-                    message="Rule disabled via configuration.",
+                    status=RuleStatus.NOT_EXECUTED,
+                    message="Rule disabled via configuration; it was not executed and does not count as PASS.",
                     severity=RuleSeverity(cfg.severity) if cfg else RuleSeverity.STANDARD,
-                ))
+                    review_required=False,
+                    decision_path=["rule_config_loaded", "rule_inactive", "not_counted_as_pass"],
+                )
+                results.append(res)
+                self.logger.log_result(res)
                 continue
 
-            # Non-applicable rules are closed as PASS so no fourth status leaks downstream.
             if cfg and not self._is_applicable(context, cfg.applicable_loan_types):
                 res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.PASS,
-                    message=f"Rule not applicable for this assignment/loan type ({cfg.applicable_loan_types}).",
+                    status=RuleStatus.NOT_APPLICABLE,
+                    message=f"Rule not applicable for this assignment/loan type ({cfg.applicable_loan_types}); it was not counted as PASS.",
                     severity=RuleSeverity(cfg.severity),
+                    review_required=False,
+                    decision_path=["rule_config_loaded", "applicability_check_false", "not_counted_as_pass"],
                 )
                 results.append(res)
                 self.logger.log_result(res)
@@ -93,6 +103,7 @@ class RuleEngine:
                     if result.severity == RuleSeverity.STANDARD:
                         result.severity = RuleSeverity(cfg.severity)
                 self._attach_location_meta(context, rule_id, result)
+                self._enforce_pass_evidence_contract(context, rule_id, result)
                 self._complete_rule_outcome(result)
 
                 results.append(result)
@@ -102,12 +113,15 @@ class RuleEngine:
                 res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.VERIFY,
-                    message=str(e),
+                    status=RuleStatus.EXTRACTION_FAILED,
+                    message=f"Required evidence missing: {e.field_name}.",
                     details={"field": e.field_name},
-                    action_item=f"Manually verify field '{e.field_name}' in the document.",
+                    action_item=f"Review required: extract or confirm field '{e.field_name}' before this rule can pass.",
                     review_required=True,
                     severity=RuleSeverity(cfg.severity) if cfg else RuleSeverity.STANDARD,
+                    decision_path=["rule_started", "required_field_missing", "escalated_to_review"],
+                    stage="rule_engine",
+                    retry_eligible=True,
                 )
                 res.target_field = self._normalize_field_name(e.field_name)
                 self._attach_location_meta(context, rule_id, res, field_hint=e.field_name)
@@ -120,10 +134,15 @@ class RuleEngine:
                 res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
-                    status=RuleStatus.VERIFY,
+                    status=RuleStatus.SYSTEM_ERROR,
                     message=f"Runtime error: {str(e)}",
                     action_item="Report this to the development team.",
                     review_required=True,
+                    exception_type=e.__class__.__name__,
+                    exception_trace=traceback.format_exc(),
+                    stage="rule_engine",
+                    retry_eligible=True,
+                    decision_path=["rule_started", "exception_raised", "system_error_escalated_to_review"],
                 )
                 self._attach_location_meta(context, rule_id, res)
                 self._complete_rule_outcome(res)
@@ -146,13 +165,163 @@ class RuleEngine:
             evidence = [f"Appraisal page {result.source_page}"]
         result.evidence = evidence
 
-        if result.status == RuleStatus.VERIFY and not result.verify_question:
+        if result.status == RuleStatus.REVIEW and not result.verify_question:
             result.verify_question = self._generate_verify_question(result)
             result.action_item = result.verify_question or result.action_item
             result.review_required = True
         if result.status == RuleStatus.FAIL and not result.rejection_text:
             result.rejection_text = result.message
             result.review_required = True
+        if result.status in {
+            RuleStatus.EXTRACTION_FAILED,
+            RuleStatus.OCR_LOW_CONFIDENCE,
+            RuleStatus.SYSTEM_ERROR,
+            RuleStatus.SOURCE_MISSING,
+            RuleStatus.CROSS_DOC_MISMATCH,
+        }:
+            result.review_required = True
+            if not result.verify_question:
+                result.verify_question = result.action_item or result.message
+
+    def _enforce_pass_evidence_contract(
+        self,
+        context: ValidationContext,
+        rule_id: str,
+        result: RuleResult,
+    ) -> None:
+        """A PASS must prove execution, source evidence, and sufficient confidence."""
+        if result.status != RuleStatus.PASS:
+            return
+
+        result.decision_path.append("rule_returned_pass")
+
+        if self._requires_engagement(rule_id) and _engagement_missing(context):
+            self._downgrade_pass(
+                result,
+                RuleStatus.SOURCE_MISSING,
+                "Required engagement/order evidence is missing; rule cannot PASS.",
+                "Upload the engagement/order document and rerun QC.",
+            )
+            return
+
+        if self._requires_purchase_agreement(rule_id, context) and context.purchase_agreement is None:
+            self._downgrade_pass(
+                result,
+                RuleStatus.SOURCE_MISSING,
+                "Purchase agreement evidence is missing or unreadable; rule cannot PASS.",
+                "Upload a readable purchase agreement and rerun QC.",
+            )
+            return
+
+        field_conf, _, field_meta = self._extract_meta(context, rule_id, result)
+        if field_meta is not None:
+            raw_status = getattr(field_meta, "extraction_status", "") or ""
+            status = str(getattr(raw_status, "value", raw_status) or "").upper()
+            if status and status != "FOUND":
+                self._downgrade_pass(
+                    result,
+                    RuleStatus.EXTRACTION_FAILED,
+                    f"Rule consumed field '{getattr(field_meta, 'field_name', result.target_field)}' with extraction status {status}; PASS is not allowed.",
+                    "Review the extracted field and source snippet before accepting this rule.",
+                )
+                return
+
+        confidence = result.confidence if result.confidence is not None else field_conf
+        if confidence is not None and confidence < 0.85:
+            self._downgrade_pass(
+                result,
+                RuleStatus.OCR_LOW_CONFIDENCE,
+                f"Rule returned PASS with confidence {confidence:.2f}, below the 0.85 production threshold.",
+                "Review the source evidence because confidence is below the PASS threshold.",
+            )
+            return
+
+        has_comparison = (
+            result.compared_values is not None
+            or result.extracted_value is not None
+            or result.expected_value is not None
+            or result.appraisal_value is not None
+            or result.engagement_value is not None
+            or bool(result.compared_fields)
+        )
+        has_evidence = bool(result.evidence or result.source_page or result.source_documents)
+        if not has_evidence and not has_comparison:
+            self._downgrade_pass(
+                result,
+                RuleStatus.REVIEW,
+                "Rule returned PASS without source evidence or compared values.",
+                "Review required because the PASS outcome is not evidence-backed.",
+            )
+            return
+
+        if self._requires_structured_pass(rule_id) and not self._has_structured_pass(result):
+            self._downgrade_pass(
+                result,
+                RuleStatus.REVIEW,
+                "Rule returned PASS from weak text/image evidence only; structured validation evidence is required before PASS.",
+                "Reviewer confirmation required until this rule produces structured fields, compared values, or explicit validation lineage.",
+            )
+            return
+
+        result.decision_path.append("pass_evidence_contract_satisfied")
+
+    def _downgrade_pass(
+        self,
+        result: RuleResult,
+        status: RuleStatus,
+        message: str,
+        action_item: str,
+    ) -> None:
+        result.details = {
+            **(result.details or {}),
+            "original_status": "pass",
+            "pass_blocked_reason": message,
+        }
+        result.status = status
+        result.message = message
+        result.action_item = action_item
+        result.review_required = status != RuleStatus.NOT_APPLICABLE
+        result.decision_path.append(f"pass_blocked:{status.value}")
+
+    def _requires_engagement(self, rule_id: str) -> bool:
+        return rule_id in {"S-1", "S-2", "S-10", "XF-4"}
+
+    def _requires_purchase_agreement(self, rule_id: str, context: ValidationContext) -> bool:
+        if rule_id not in {"C-2", "C-4", "C-5"}:
+            return False
+        return self._assignment(context) == "PURCHASE"
+
+    def _requires_structured_pass(self, rule_id: str) -> bool:
+        """Rule families where raw text/page presence is reviewer-assist only."""
+        family = (rule_id or "").split("-", 1)[0].upper()
+        return family in {
+            "N", "ST", "I",
+            "SCA", "R", "CA", "IA",
+            "ADD", "COM",
+            "PH", "M", "SK",
+            "DOC", "SIG",
+            "FHA", "USDA", "MF",
+        }
+
+    def _has_structured_pass(self, result: RuleResult) -> bool:
+        details = result.details or {}
+        if details.get("structured_validation") is True:
+            return True
+        if details.get("extraction_based_validation") is True:
+            return True
+        if result.compared_values is not None or result.compared_fields:
+            return True
+        if result.extracted_value is not None and result.expected_value is not None:
+            return True
+        return False
+
+    def _assignment(self, context: ValidationContext) -> str:
+        engagement = context.engagement_letter
+        return (
+            getattr(engagement, "assignment_type", None)
+            or getattr(context.report.contract, "assignment_type", None)
+            or ""
+        ).strip().upper()
 
     def _generate_verify_question(self, result: RuleResult) -> str:
         fallback = result.action_item or result.message

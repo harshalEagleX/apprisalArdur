@@ -643,6 +643,18 @@ def validate_pud_hoa(ctx: ValidationContext) -> RuleResult:
     subject = ctx.report.subject
     hoa_dues = subject.hoa_dues or 0.0
     is_pud = subject.is_pud
+
+    if is_pud is None:
+        return RuleResult(
+            rule_id="S-9",
+            rule_name="PUD and HOA",
+            status=RuleStatus.EXTRACTION_FAILED,
+            message="PUD checkbox was not extracted; HOA/PUD consistency cannot PASS.",
+            action_item="Review the subject PUD checkbox and HOA dues before accepting this rule.",
+            review_required=True,
+            target_field="is_pud_checked",
+            decision_path=["pud_checkbox_missing", "extraction_failed"],
+        )
     
     if hoa_dues > 0 and not is_pud:
         period = subject.hoa_period or "year"
@@ -689,6 +701,20 @@ def validate_lender_client(ctx: ValidationContext) -> RuleResult:
     eng_address = ctx.engagement_letter.lender_address
     rpt_lender = ctx.report.subject.lender_name
     rpt_address = ctx.report.subject.lender_address
+
+    if not eng_lender or not eng_address:
+        return RuleResult(
+            rule_id="S-10",
+            rule_name="Lender/Client Information",
+            status=RuleStatus.EXTRACTION_FAILED,
+            message="Engagement lender name/address was not fully extracted; lender validation cannot PASS.",
+            action_item="Review the engagement/order lender fields and rerun extraction.",
+            review_required=True,
+            evidence=["Engagement/order lender fields"],
+            source_documents=["engagement"],
+            compared_fields=["lender_name", "lender_address"],
+            decision_path=["engagement_lender_evidence_missing", "extraction_failed"],
+        )
     
     # Check lender name
     if eng_lender and rpt_lender:

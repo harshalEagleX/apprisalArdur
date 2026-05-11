@@ -553,7 +553,14 @@ public class ReviewerApiController {
 
     private boolean needsReviewerAction(String status) {
         String normalized = normalizeStatus(status);
-        return "verify".equals(normalized) || "fail".equals(normalized);
+        return "fail".equals(normalized)
+                || "verify".equals(normalized)
+                || "review".equals(normalized)
+                || "extraction_failed".equals(normalized)
+                || "ocr_low_confidence".equals(normalized)
+                || "system_error".equals(normalized)
+                || "source_missing".equals(normalized)
+                || "cross_doc_mismatch".equals(normalized);
     }
 
     private Map<String, Object> errorBody(String code, String message) {

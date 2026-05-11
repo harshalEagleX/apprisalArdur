@@ -104,12 +104,13 @@ def validate_contract_analysis(ctx: ValidationContext) -> RuleResult:
                 message="Assignment is meant for a refinance transaction; per UAD requirements, the contract section should be left blank."
             )
         
-        # Skip remaining checks for refinance - PASS
+        # Skip remaining purchase-contract checks for refinance. This is
+        # non-applicability, not a satisfied purchase-contract validation.
         return RuleResult(
             rule_id="C-1",
             rule_name="Contract Analysis Requirement",
-            status=RuleStatus.PASS,
-            message="Refinance: Contract section correctly blank."
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Refinance: Contract section purchase-analysis rule is not applicable; it does not count as PASS."
         )
     
     # For Purchase transactions
@@ -175,8 +176,8 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-2",
             rule_name="Contract Price and Date",
-            status=RuleStatus.PASS,
-            message="Refinance: Contract validation not applicable."
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Refinance: Contract price/date rule is not applicable; it does not count as PASS."
         )
     
     rpt_contract = ctx.report.contract
@@ -190,6 +191,50 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
             message="Contract Price not extracted from report. Please verify manually."
         )
     
+    # Purchase assignments require a readable purchase agreement. A report-only
+    # contract price is not evidence enough for PASS.
+    if ctx.purchase_agreement is None:
+        return RuleResult(
+            rule_id="C-2",
+            rule_name="Contract Price and Date",
+            status=RuleStatus.SOURCE_MISSING,
+            message="Purchase agreement was not provided or could not be parsed; contract price/date cannot pass on appraisal-only evidence.",
+            action_item="Upload a readable purchase agreement and rerun QC before accepting the contract price/date.",
+            review_required=True,
+            evidence=["Appraisal contract section"],
+            source_documents=["appraisal"],
+            compared_fields=["contract_price", "date_of_contract"],
+            decision_path=["report_contract_price_found", "purchase_agreement_missing", "source_missing"],
+        )
+
+    if ctx.purchase_agreement.contract_price is None:
+        return RuleResult(
+            rule_id="C-2",
+            rule_name="Contract Price and Date",
+            status=RuleStatus.EXTRACTION_FAILED,
+            message="Purchase agreement was present but contract price was not extracted; rule cannot PASS.",
+            action_item="Review the purchase agreement and confirm the contract price.",
+            review_required=True,
+            evidence=["Purchase agreement"],
+            source_documents=["purchase_agreement"],
+            compared_fields=["contract_price"],
+            decision_path=["purchase_agreement_present", "contract_price_not_extracted", "extraction_failed"],
+        )
+
+    if ctx.purchase_agreement.contract_date is None:
+        return RuleResult(
+            rule_id="C-2",
+            rule_name="Contract Price and Date",
+            status=RuleStatus.EXTRACTION_FAILED,
+            message="Purchase agreement was present but fully executed contract date was not extracted; rule cannot PASS.",
+            action_item="Review the purchase agreement signatures and confirm the fully executed date.",
+            review_required=True,
+            evidence=["Purchase agreement signatures/date fields"],
+            source_documents=["purchase_agreement"],
+            compared_fields=["date_of_contract"],
+            decision_path=["purchase_agreement_present", "contract_date_not_extracted", "extraction_failed"],
+        )
+
     # If Purchase Agreement is available, compare
     if ctx.purchase_agreement and ctx.purchase_agreement.contract_price is not None:
         if rpt_contract.contract_price != ctx.purchase_agreement.contract_price:
@@ -204,8 +249,8 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
                 }
             )
         
-        # Validate Contract Date if both available
-        if rpt_contract.date_of_contract and ctx.purchase_agreement.contract_date:
+        # Validate Contract Date. Both sides are mandatory for PASS.
+        if rpt_contract.date_of_contract:
             report_date = _normalize_date(rpt_contract.date_of_contract)
             pa_date = _normalize_date(ctx.purchase_agreement.contract_date)
             if report_date != pa_date:
@@ -230,6 +275,19 @@ def validate_contract_price_date(ctx: ValidationContext) -> RuleResult:
                         "pa_date": pa_date
                     }
                 )
+        elif not rpt_contract.date_of_contract:
+            return RuleResult(
+                rule_id="C-2",
+                rule_name="Contract Price and Date",
+                status=RuleStatus.EXTRACTION_FAILED,
+                message="Appraisal contract date was not extracted; rule cannot PASS.",
+                action_item="Review the appraisal contract section and confirm Date of Contract.",
+                review_required=True,
+                evidence=["Appraisal contract section"],
+                source_documents=["appraisal"],
+                compared_fields=["date_of_contract"],
+                decision_path=["purchase_agreement_date_found", "report_contract_date_missing", "extraction_failed"],
+            )
     
     # If engagement letter has contract price, compare (check attribute exists)
     elif ctx.engagement_letter and hasattr(ctx.engagement_letter, 'contract_price') and ctx.engagement_letter.contract_price is not None:
@@ -270,8 +328,8 @@ def validate_owner_record_source(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-3",
             rule_name="Owner of Record Data Source",
-            status=RuleStatus.PASS,
-            message="Refinance: Owner record validation not applicable."
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Refinance: Owner record purchase-contract rule is not applicable; it does not count as PASS."
         )
     
     c = ctx.report.contract
@@ -326,8 +384,8 @@ def validate_financial_assistance(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-4",
             rule_name="Financial Assistance",
-            status=RuleStatus.PASS,
-            message="Refinance: Financial assistance validation not applicable."
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Refinance: Financial assistance purchase-contract rule is not applicable; it does not count as PASS."
         )
     
     c = ctx.report.contract
@@ -430,8 +488,8 @@ def validate_personal_property(ctx: ValidationContext) -> RuleResult:
         return RuleResult(
             rule_id="C-5",
             rule_name="Personal Property Analysis",
-            status=RuleStatus.PASS,
-            message="Refinance: Personal property validation not applicable."
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Refinance: Personal property purchase-contract rule is not applicable; it does not count as PASS."
         )
     
     # Check if Purchase Agreement indicates personal property

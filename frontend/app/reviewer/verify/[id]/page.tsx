@@ -45,6 +45,18 @@ function ruleStatus(status: string) {
   return n === "manual_pass" ? "MANUAL_PASS" : n;
 }
 
+function isReviewLikeStatus(status: string) {
+  return [
+    "verify",
+    "review",
+    "extraction_failed",
+    "ocr_low_confidence",
+    "source_missing",
+    "system_error",
+    "cross_doc_mismatch",
+  ].includes(ruleStatus(status));
+}
+
 function focusForRule(rule: QCRuleResult): RuleFocus {
   const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
   const hasBox = [rule.bboxX, rule.bboxY, rule.bboxW, rule.bboxH].every(v => typeof v === "number");
@@ -267,11 +279,11 @@ export default function VerifyFilePage() {
     total:  rules.length,
     pass:   rules.filter(r => r.status === "pass" || r.status === "MANUAL_PASS").length,
     fail:   rules.filter(r => r.status === "fail").length,
-    review: rules.filter(r => r.status === "verify").length,
+    review: rules.filter(r => isReviewLikeStatus(r.status)).length,
   };
   const filtered = rules.filter(r => {
     if (filter === "fail")   return r.status === "fail";
-    if (filter === "verify") return r.status === "verify";
+    if (filter === "verify") return isReviewLikeStatus(r.status);
     if (filter === "pass")   return r.status === "pass" || r.status === "MANUAL_PASS";
     return true;
   }).filter(r => {
@@ -345,8 +357,8 @@ export default function VerifyFilePage() {
     if (offline) return "You're offline. Decisions cannot be saved until your connection is restored.";
     if (saving === rule.id) return "This decision is already saving.";
     if (s === "fail" && decision === "PASS" && (comments[rule.id] ?? "").trim().length < 20) return "Add a specific override reason of at least 20 characters before saving Override to Pass.";
-    if (s !== "verify" && s !== "fail" && decision === "FAIL") return "Only Needs Review and Fail rules can be decided.";
-    if (s === "verify" && rule.severity === "BLOCKING" && !acknowledged[rule.id]) return "Acknowledge the referenced document sections before saving this blocking rule.";
+    if (!isReviewLikeStatus(s) && s !== "fail" && decision === "FAIL") return "Only Needs Review and Fail rules can be decided.";
+    if (isReviewLikeStatus(s) && rule.severity === "BLOCKING" && !acknowledged[rule.id]) return "Acknowledge the referenced document sections before saving this blocking rule.";
     return null;
   }
 

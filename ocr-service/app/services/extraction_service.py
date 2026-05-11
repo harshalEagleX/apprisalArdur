@@ -997,8 +997,17 @@ class ExtractionService:
         Returns a PurchaseAgreement domain object.
         """
         from app.models.appraisal import PurchaseAgreement
+        from app.services.contract_extraction import hybrid_contract_extractor
 
-        pa = PurchaseAgreement()
+        hybrid = hybrid_contract_extractor.extract(text)
+        pa = hybrid.agreement
+
+        if hybrid.quality.status != "READABLE":
+            logger.info("Purchase agreement extraction escalated by document quality: %s", hybrid.quality.reasons)
+            return pa
+
+        if pa.contract_price or pa.contract_date or pa.personal_property_items:
+            return pa
 
         # Contract price
         price_str = self._extract_field(text, [
@@ -1008,25 +1017,13 @@ class ExtractionService:
         if price_str:
             pa.contract_price = self._parse_money(price_str)
 
-        # Contract date — prefer "fully executed" / "acceptance" date,
-        # otherwise pick the latest date found in the document.
+        # Legacy fallback: explicit dates only. Do not pick the latest date in
+        # the document because that commonly captures closing/addendum dates.
         date_str = self._extract_field(text, [
             r"Binding\s+Agreement\s+Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
             r"(?:Fully\s+Executed|Final|Acceptance|Accepted|Effective)\s+Date[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
             r"Date\s+of\s+Last\s+Signature[:\s]+(\d{1,2}/\d{1,2}/\d{2,4})",
         ])
-        if not date_str:
-            all_dates = re.findall(r"\b(\d{1,2}/\d{1,2}/\d{4})\b", text)
-            if all_dates:
-                # Normalise to YYYY-MM-DD for sorting then pick the latest
-                def _to_sortable(d):
-                    try:
-                        parts = d.split("/")
-                        return f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
-                    except Exception:
-                        return d
-                sorted_dates = sorted(all_dates, key=_to_sortable)
-                date_str = sorted_dates[-1]
         pa.contract_date = date_str
 
         # Seller name

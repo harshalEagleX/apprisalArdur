@@ -437,6 +437,14 @@ export interface QCRuleResult {
   verifyQuestion?: string | null;
   rejectionText?: string | null;
   evidence?: string | null;
+  sourceDocuments?: string[] | null;
+  comparedFields?: string[] | null;
+  comparedValues?: Record<string, unknown> | null;
+  comparisonMethod?: string | null;
+  decisionPath?: string[] | null;
+  exceptionType?: string | null;
+  stage?: string | null;
+  retryEligible?: boolean;
   help?: RuleHelp | null;
   reviewRequired: boolean;
   reviewerVerified?: boolean;

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import re
 import logging
+import traceback
 from datetime import datetime
 from typing import List, Optional
 
 from app.models.appraisal import ValidationContext
-from app.rule_engine.outcome import evaluate_rule
 from app.rule_engine.smart_identifier import RuleResult, RuleSeverity, RuleStatus
+from app.services.entity_resolution import match_addresses
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,20 @@ class CrossFieldValidator:
             try:
                 result = check(context)
             except Exception as exc:
-                logger.info("Cross-field check %s skipped after error: %s", check.__name__, exc)
+                logger.exception("Cross-field check %s failed: %s", check.__name__, exc)
+                results.append(RuleResult(
+                    rule_id=f"XF-SYS-{check.__name__.lstrip('_')}",
+                    rule_name=f"Cross-field system error: {check.__name__}",
+                    status=RuleStatus.SYSTEM_ERROR,
+                    message=f"Cross-field validator failed during {check.__name__}: {exc}",
+                    action_item="Review required because a cross-document control did not execute.",
+                    review_required=True,
+                    exception_type=exc.__class__.__name__,
+                    exception_trace=traceback.format_exc(),
+                    stage="cross_field_validator",
+                    retry_eligible=True,
+                    decision_path=["cross_field_check_started", "exception_raised", "system_error_escalated_to_review"],
+                ))
                 continue
             if result:
                 results.append(result)
@@ -153,7 +167,7 @@ class CrossFieldValidator:
             return RuleResult(
                 rule_id="XF-4",
                 rule_name="Subject Address Across Sources",
-                status=RuleStatus.VERIFY,
+                status=RuleStatus.SOURCE_MISSING,
                 message=MISSING_ENGAGEMENT_MESSAGE,
                 verify_question="Upload the engagement letter and reprocess before relying on cross-source address validation.",
                 review_required=True,
@@ -168,26 +182,82 @@ class CrossFieldValidator:
             grid = comps[0].address if (comps[0].address or "").lower().startswith("subject") else None
         if not subject or not engagement:
             return None
-        outcome = evaluate_rule(
-            rule_id="XF-4",
-            rule_name="Subject Address Across Sources",
-            extracted=subject,
-            expected=engagement,
-            extraction_confidence=0.99,
-            match_type="fuzzy",
-            field_name="Subject address",
-            evidence=["Page 1 subject address", "Engagement letter property address"],
-            fail_message=f"Subject address '{subject}' does not match engagement letter address '{engagement}'.",
-            severity=RuleSeverity.BLOCKING,
-        )
-        result = outcome.to_rule_result()
+        match = match_addresses(subject, engagement)
+        if match.status == "MATCH":
+            result = RuleResult(
+                rule_id="XF-4",
+                rule_name="Subject Address Across Sources",
+                status=RuleStatus.PASS,
+                message="Subject address matched across available sources.",
+                confidence=match.confidence,
+                field_confidence=match.confidence,
+                extracted_value=subject,
+                expected_value=engagement,
+                evidence=["Page 1 subject address", "Engagement letter property address"],
+                source_documents=["appraisal", "engagement"],
+                compared_fields=["subject.address", "engagement.property_address"],
+                compared_values={"appraisal": subject, "engagement": engagement},
+                comparison_method="address_entity",
+                decision_path=["address_entities_built", *match.reasons, "match"],
+            )
+        elif match.status == "REVIEW":
+            result = RuleResult(
+                rule_id="XF-4",
+                rule_name="Subject Address Across Sources",
+                status=RuleStatus.REVIEW,
+                message=f"Subject address appears to be a probable match but needs review: {subject} vs {engagement}.",
+                action_item="Confirm directional/order/address normalization before accepting this match.",
+                review_required=True,
+                confidence=match.confidence,
+                field_confidence=match.confidence,
+                extracted_value=subject,
+                expected_value=engagement,
+                evidence=["Page 1 subject address", "Engagement letter property address"],
+                source_documents=["appraisal", "engagement"],
+                compared_fields=["subject.address", "engagement.property_address"],
+                compared_values={"appraisal": subject, "engagement": engagement},
+                comparison_method="address_entity",
+                decision_path=["address_entities_built", *match.reasons, "review"],
+            )
+        else:
+            result = RuleResult(
+                rule_id="XF-4",
+                rule_name="Subject Address Across Sources",
+                status=RuleStatus.CROSS_DOC_MISMATCH,
+                message=f"Subject address '{subject}' does not match engagement letter address '{engagement}'.",
+                action_item="Review the appraisal and engagement/order address fields.",
+                review_required=True,
+                severity=RuleSeverity.BLOCKING,
+                confidence=match.confidence,
+                field_confidence=match.confidence,
+                extracted_value=subject,
+                expected_value=engagement,
+                evidence=["Page 1 subject address", "Engagement letter property address"],
+                source_documents=["appraisal", "engagement"],
+                compared_fields=["subject.address", "engagement.property_address"],
+                compared_values={"appraisal": subject, "engagement": engagement},
+                comparison_method="address_entity",
+                decision_path=["address_entities_built", *match.reasons, "mismatch"],
+            )
         if result.status == RuleStatus.PASS and grid:
             result.message = "Subject address matched across available sources."
         return result if result.status != RuleStatus.PASS else None
 
     def _pud_vs_hoa(self, context: ValidationContext) -> Optional[RuleResult]:
         dues = context.report.subject.hoa_dues or 0
-        is_pud = bool(context.report.subject.is_pud)
+        is_pud_raw = context.report.subject.is_pud
+        if is_pud_raw is None:
+            return RuleResult(
+                rule_id="XF-5",
+                rule_name="PUD Checkbox vs HOA Dues",
+                status=RuleStatus.EXTRACTION_FAILED,
+                message="PUD checkbox was not extracted; cross-field HOA/PUD validation cannot execute.",
+                action_item="Review the subject PUD checkbox and HOA dues.",
+                review_required=True,
+                target_field="is_pud_checked",
+                decision_path=["pud_checkbox_missing", "extraction_failed"],
+            )
+        is_pud = bool(is_pud_raw)
         if dues > 0 and not is_pud:
             return RuleResult(
                 rule_id="XF-5",

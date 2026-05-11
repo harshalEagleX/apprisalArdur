@@ -62,8 +62,8 @@ def validate_comparable_photos(ctx: ValidationContext) -> RuleResult:
     # For conventional loans: MLS photos with drive-by commentary are acceptable.
     # Only FHA requires actual drive-by photos.
     if "FHA" not in lt:
-        return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.PASS,
-                          message="MLS photos are acceptable for conventional loans when drive-by commentary is provided.")
+        return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.NOT_APPLICABLE,
+                          message="FHA drive-by comparable-photo rule is not applicable to this non-FHA loan type.")
     if not re.search(r"comparable photo|comp(?:arable)?\s+\d|MLS photo|drive-?by|Comparable\s+Sale\s+#", _text(ctx), re.I):
         return _verify("PH-5", "Comparable Photos", "Comparable photo evidence not detected. FHA requires drive-by photos for all comparables.")
     return RuleResult(rule_id="PH-5", rule_name="Comparable Photos", status=RuleStatus.VERIFY,
@@ -79,10 +79,17 @@ def validate_obsolescence_photos(ctx: ValidationContext) -> RuleResult:
     is_new = re.match(r"C[12]", condition)
     if is_new:
         return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS,
-                          message=f"C1/C2 condition — no obsolescence expected for new construction.")
+                          message=f"C1/C2 condition — no obsolescence expected for new construction.",
+                          details={"structured_validation": True},
+                          compared_fields=["condition_rating"],
+                          compared_values={"condition_rating": condition},
+                          comparison_method="condition_rating_trigger_check")
     # For older properties, check for obsolescence language that requires photos
     if re.search(r"external obsolescence|adverse.*external|deferred maintenance.*signif|damage.*structure", text, re.I):
         return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.VERIFY,
                           message="Obsolescence/condition issue language found. Verify sufficient photos and commentary.")
-    return RuleResult(rule_id="PH-6", rule_name="Obsolescence Photo Requirements", status=RuleStatus.PASS,
-                      message="No significant obsolescence trigger language detected.")
+    return _verify(
+        "PH-6",
+        "Obsolescence Photo Requirements",
+        "No significant obsolescence trigger language was detected, but adverse/obsolescence photo applicability is not structurally validated. Verify if additional photos are required.",
+    )

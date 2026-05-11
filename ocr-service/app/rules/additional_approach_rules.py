@@ -53,14 +53,15 @@ def validate_cost_approach_completion(ctx: ValidationContext) -> RuleResult:
 @rule(id="IA-1", name="Subject Rent Matching")
 def validate_income_rent_matching(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
-    # If the appraiser explicitly states the income approach was not used, PASS.
+    # If the appraiser explicitly states the income approach was not used, this
+    # rule is not applicable; it must not count as PASS.
     if re.search(
         r"income approach was not expanded|income approach.*not.*(?:required|applicable|necessary|appropriate)|"
         r"not.*income approach|income approach.*not.*used",
         text, re.I | re.S,
     ):
-        return RuleResult(rule_id="IA-1", rule_name="Subject Rent Matching", status=RuleStatus.PASS,
-                          message="Income approach confirmed not applicable for this property type.")
+        return RuleResult(rule_id="IA-1", rule_name="Subject Rent Matching", status=RuleStatus.NOT_APPLICABLE,
+                          message="Income approach confirmed not applicable for this property type; this does not count as PASS.")
     if not re.search(r"gross monthly rent|subject rent schedule|form\s*1007", text, re.I):
         return _verify("IA-1", "Subject Rent Matching", "Income/rent schedule fields not extracted. Verify rent matching if income approach is used.")
     return RuleResult(rule_id="IA-1", rule_name="Subject Rent Matching", status=RuleStatus.VERIFY, message="Rent schedule evidence found. Verify income approach rent matches Form 1007.")
@@ -70,9 +71,9 @@ def validate_income_rent_matching(ctx: ValidationContext) -> RuleResult:
 def validate_form_216(ctx: ValidationContext) -> RuleResult:
     text = _text(ctx)
     if re.search(r"form\s*216|operating income statement", text, re.I):
-        return RuleResult(rule_id="IA-2", rule_name="Operating Income Statement", status=RuleStatus.PASS, message="Form 216 / operating income evidence found.")
+        return RuleResult(rule_id="IA-2", rule_name="Operating Income Statement", status=RuleStatus.VERIFY, message="Form 216 / operating income evidence found. Verify calculations and consistency.")
     # Income approach not applicable for single-family residential when explicitly stated
     if re.search(r"income approach was not expanded|income approach.*not.*(?:required|applicable|necessary)", text, re.I | re.S):
-        return RuleResult(rule_id="IA-2", rule_name="Operating Income Statement", status=RuleStatus.PASS,
-                          message="Income approach not applicable; Form 216 not required.")
+        return RuleResult(rule_id="IA-2", rule_name="Operating Income Statement", status=RuleStatus.NOT_APPLICABLE,
+                          message="Income approach not applicable; Form 216 not required and does not count as PASS.")
     return _verify("IA-2", "Operating Income Statement", "Form 216 not extracted. Verify it is completed when income approach is used.")

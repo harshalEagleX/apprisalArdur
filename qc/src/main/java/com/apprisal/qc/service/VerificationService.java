@@ -693,7 +693,7 @@ public class VerificationService {
 
     private void validateEngagement(QCRuleResult ruleResult, Long decisionLatencyMs, Boolean acknowledged) {
         String status = normalizedStatus(ruleResult.getStatus());
-        if ("verify".equals(status)) {
+        if (isReviewLikeStatus(status)) {
             long clientLatency = decisionLatencyMs == null ? 0L : decisionLatencyMs;
             long serverLatency = ruleResult.getFirstPresentedAt() == null
                     ? 0L
@@ -785,6 +785,16 @@ public class VerificationService {
             return "verify";
         }
         return status.trim().toLowerCase();
+    }
+
+    private boolean isReviewLikeStatus(String status) {
+        return "verify".equals(status)
+                || "review".equals(status)
+                || "extraction_failed".equals(status)
+                || "ocr_low_confidence".equals(status)
+                || "system_error".equals(status)
+                || "source_missing".equals(status)
+                || "cross_doc_mismatch".equals(status);
     }
 
     private String displayName(User user) {

@@ -73,6 +73,29 @@ def validate_site_area(ctx: ValidationContext) -> RuleResult:
                           status=RuleStatus.VERIFY,
                           message="Site area not extracted. Verify area is provided with unit (sf or ac).",
                           review_required=True, severity=RuleSeverity.STANDARD)
+    if not unit:
+        return RuleResult(rule_id="ST-2", rule_name="Site Area",
+                          status=RuleStatus.VERIFY,
+                          message="Site area was extracted without a unit. Verify area is stated in sf for <1 acre or ac for acreage.",
+                          review_required=True, severity=RuleSeverity.STANDARD)
+    try:
+        area_value = float(str(area).replace(",", ""))
+        unit_l = str(unit).lower()
+        if area_value < 1 and unit_l in {"sf", "sqft", "sq ft", "square feet"}:
+            return RuleResult(rule_id="ST-2", rule_name="Site Area",
+                              status=RuleStatus.VERIFY,
+                              message="Site area is below 1 but is labeled as square feet. Verify the extracted value/unit.",
+                              review_required=True, severity=RuleSeverity.STANDARD)
+        if area_value >= 43560 and unit_l in {"ac", "acre", "acres"}:
+            return RuleResult(rule_id="ST-2", rule_name="Site Area",
+                              status=RuleStatus.VERIFY,
+                              message="Site area appears to be square-foot magnitude but is labeled as acres. Verify the extracted value/unit.",
+                              review_required=True, severity=RuleSeverity.STANDARD)
+    except (TypeError, ValueError):
+        return RuleResult(rule_id="ST-2", rule_name="Site Area",
+                          status=RuleStatus.VERIFY,
+                          message="Site area value could not be parsed numerically. Verify area and unit.",
+                          review_required=True, severity=RuleSeverity.STANDARD)
     return RuleResult(rule_id="ST-2", rule_name="Site Area",
                       status=RuleStatus.PASS,
                       message=f"Site area: {area} {unit or ''}".strip(),
@@ -210,6 +233,14 @@ def validate_utilities(ctx: ValidationContext) -> RuleResult:
                           message="Utilities not extracted. Verify electricity, gas, water, sewer are documented.",
                           review_required=True, severity=RuleSeverity.STANDARD)
 
+    if re.search(r"\b(private\s+well|septic|private\s+street|private\s+road)\b", text, re.I):
+        required = r"typical|marketability|public\s+(?:water|sewer)|hook\s*up|maintenance|maintained|responsib"
+        if not re.search(required, text, re.I):
+            return RuleResult(rule_id="ST-7", rule_name="Utilities and Off-Site Improvements",
+                              status=RuleStatus.VERIFY,
+                              message="Private well/septic/street evidence found. Verify commentary addresses typicality, public access, marketability, condition, and maintenance responsibility as applicable.",
+                              review_required=True, severity=RuleSeverity.STANDARD)
+
     return RuleResult(rule_id="ST-7", rule_name="Utilities and Off-Site Improvements",
                       status=RuleStatus.PASS,
                       message="Utilities are documented.",
@@ -231,6 +262,13 @@ def validate_flood_hazard(ctx: ValidationContext) -> RuleResult:
         flood_zone = match.group(1) if match else None
 
     if in_flood:
+        if not flood_zone or not getattr(site, 'fema_map_date', None):
+            return RuleResult(rule_id="ST-8", rule_name="FEMA Flood Hazard Area",
+                              status=RuleStatus.VERIFY,
+                              appraisal_value=flood_zone or "Yes",
+                              message="Property is marked in a FEMA flood zone, but flood zone/map date details are incomplete. Verify FEMA zone, map number, map date, flood map page, and marketability commentary.",
+                              review_required=True,
+                              severity=RuleSeverity.STANDARD)
         return RuleResult(rule_id="ST-8", rule_name="FEMA Flood Hazard Area",
                           status=RuleStatus.VERIFY,
                           appraisal_value=flood_zone or "Yes",

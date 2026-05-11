@@ -18,6 +18,14 @@ const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }>
   pass:        { border: "border-green-500/25",  bg: "bg-green-950/18",  text: "text-green-200" },
   fail:        { border: "border-red-500/25",    bg: "bg-red-950/18",    text: "text-red-200" },
   verify:      { border: "border-amber-500/25",  bg: "bg-amber-950/18",  text: "text-amber-200" },
+  review:      { border: "border-amber-500/25",  bg: "bg-amber-950/18",  text: "text-amber-200" },
+  extraction_failed: { border: "border-amber-500/25", bg: "bg-amber-950/18", text: "text-amber-200" },
+  ocr_low_confidence: { border: "border-amber-500/25", bg: "bg-amber-950/18", text: "text-amber-200" },
+  source_missing: { border: "border-amber-500/25", bg: "bg-amber-950/18", text: "text-amber-200" },
+  system_error: { border: "border-red-500/25", bg: "bg-red-950/18", text: "text-red-200" },
+  cross_doc_mismatch: { border: "border-red-500/25", bg: "bg-red-950/18", text: "text-red-200" },
+  not_executed: { border: "border-white/10", bg: "bg-[#161B22]", text: "text-slate-400" },
+  not_applicable: { border: "border-white/10", bg: "bg-[#161B22]", text: "text-slate-400" },
   MANUAL_PASS: { border: "border-green-500/25",  bg: "bg-green-950/18",  text: "text-green-200" },
 };
 
@@ -30,6 +38,18 @@ const SEV_STYLE: Record<string, string> = {
 function ruleStatus(status: string): string {
   const normalized = status.toLowerCase();
   return normalized === "manual_pass" ? "MANUAL_PASS" : normalized;
+}
+
+function isReviewLikeStatus(status: string): boolean {
+  return [
+    "verify",
+    "review",
+    "extraction_failed",
+    "ocr_low_confidence",
+    "source_missing",
+    "system_error",
+    "cross_doc_mismatch",
+  ].includes(status);
 }
 
 export interface RuleCardProps {
@@ -68,13 +88,13 @@ export const RuleCard = memo(function RuleCard({
 }: RuleCardProps) {
   const normalizedStatus = ruleStatus(rule.status);
   const [expanded, setExpanded] = useState(
-    normalizedStatus === "fail" || normalizedStatus === "verify"
+    normalizedStatus === "fail" || isReviewLikeStatus(normalizedStatus)
   );
   const [now, setNow] = useState(0);
 
   const s = STATUS_STYLE[normalizedStatus] ?? STATUS_STYLE["verify"];
   const sev = rule.severity ?? "STANDARD";
-  const isVerify = normalizedStatus === "verify";
+  const isVerify = isReviewLikeStatus(normalizedStatus);
   const isFail = normalizedStatus === "fail";
   const isBlockingVerify = isVerify && sev === "BLOCKING";
 
@@ -189,7 +209,7 @@ export const RuleCard = memo(function RuleCard({
               )}
             </div>
             <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>
-              {normalizedStatus === "verify" && rule.verifyQuestion
+              {isVerify && rule.verifyQuestion
                 ? rule.verifyQuestion
                 : normalizedStatus === "fail" && rule.rejectionText
                   ? rule.rejectionText

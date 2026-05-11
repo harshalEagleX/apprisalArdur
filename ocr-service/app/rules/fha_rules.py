@@ -17,13 +17,22 @@ def _is_fha(ctx: ValidationContext) -> bool:
     return bool(re.search(r"\bFHA\s+Case\s+(?:No\.?|Number|#)\b|\bCase\s+Number[:\s]+\d{3}-\d{7}\b", _text(ctx), re.I))
 
 def _skip_non_fha(rule_id: str, name: str) -> RuleResult:
-    return RuleResult(rule_id=rule_id, rule_name=name, status=RuleStatus.PASS,
-                      message="Rule not applicable for this assignment/loan type (FHA).")
+    return RuleResult(rule_id=rule_id, rule_name=name, status=RuleStatus.NOT_APPLICABLE,
+                      message="Rule not applicable for this assignment/loan type (FHA); it does not count as PASS.")
 
 
 @rule(id="FHA-1", name="HUD Minimum Property Requirements")
 def validate_fha_mpr(ctx):
     if not _is_fha(ctx): return _skip_non_fha("FHA-1", "HUD Minimum Property Requirements")
+    text = _text(ctx)
+    if re.search(r"site\s+condo|site\s+condominium|form\s*1073|(?:property|subject)\s+type\s*[:\s]+condo", text, re.I):
+        if getattr(ctx.report, "form_type", "") != "1073":
+            return RuleResult(
+                rule_id="FHA-1",
+                rule_name="HUD Minimum Property Requirements",
+                status=RuleStatus.FAIL,
+                message="FHA site-condo/condominium evidence found, but report form is not 1073. Verify HUD form requirement.",
+            )
     return _verify("FHA-1", "HUD Minimum Property Requirements", "Verify property meets HUD MPR/MPS or is made Subject To required repairs.")
 
 @rule(id="FHA-2", name="FHA Case Number")
@@ -59,15 +68,17 @@ def validate_fha_repairs(ctx):
 
 @rule(id="FHA-7", name="Space Heater as Primary Heat")
 def validate_fha_space_heater(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-7", "Space Heater as Primary Heat")
     if re.search(r"space heater", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-7", rule_name="Space Heater as Primary Heat", status=RuleStatus.VERIFY, message="Space heater language found. Verify FHA acceptability as primary heat.")
-    return RuleResult(rule_id="FHA-7", rule_name="Space Heater as Primary Heat", status=RuleStatus.PASS, message="No space-heater trigger language detected.")
+    return _verify("FHA-7", "Space Heater as Primary Heat", "No space-heater trigger language detected, but heating source is not structurally validated. Verify primary heat source.")
 
 @rule(id="FHA-8", name="Security Bars on Windows")
 def validate_fha_security_bars(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-8", "Security Bars on Windows")
     if re.search(r"security bars?|release latch", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-8", rule_name="Security Bars on Windows", status=RuleStatus.VERIFY, message="Security bar language found. Verify quick-release/code compliance.")
-    return RuleResult(rule_id="FHA-8", rule_name="Security Bars on Windows", status=RuleStatus.PASS, message="No security-bar trigger language detected.")
+    return _verify("FHA-8", "Security Bars on Windows", "No security-bar trigger language detected, but window security-bar status is not structurally validated.")
 
 @rule(id="FHA-9", name="FHA Photo Requirements")
 def validate_fha_photos(ctx):
@@ -76,8 +87,9 @@ def validate_fha_photos(ctx):
 
 @rule(id="FHA-10", name="Estimated Remaining Economic Life")
 def validate_fha_economic_life(ctx):
+    if not _is_fha(ctx): return _skip_non_fha("FHA-10", "Estimated Remaining Economic Life")
     if re.search(r"remaining economic life.*(?:\d+)", _text(ctx), re.I):
-        return RuleResult(rule_id="FHA-10", rule_name="Estimated Remaining Economic Life", status=RuleStatus.PASS, message="Remaining economic life evidence detected.")
+        return _verify("FHA-10", "Estimated Remaining Economic Life", "Remaining economic life evidence detected. Verify value and explanation if below 30 years.")
     return _verify("FHA-10", "Estimated Remaining Economic Life", "Remaining economic life not detected. Verify FHA requirement.")
 
 @rule(id="FHA-11", name="Attic/Crawl Space Inspection")
@@ -92,7 +104,7 @@ def validate_fha_well_septic(ctx):
     if not _is_fha(ctx): return _skip_non_fha("FHA-12", "Well and Septic (FHA)")
     if re.search(r"well|septic", _text(ctx), re.I):
         return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.VERIFY, message="Well/septic language found. Verify FHA distance, hookup, and marketability requirements.")
-    return RuleResult(rule_id="FHA-12", rule_name="Well and Septic (FHA)", status=RuleStatus.PASS, message="No well/septic evidence detected.")
+    return _verify("FHA-12", "Well and Septic (FHA)", "Well/septic evidence not detected. Verify public utility connection or FHA well/septic requirements.")
 
 @rule(id="FHA-13", name="FHA Appliances")
 def validate_fha_appliances(ctx):

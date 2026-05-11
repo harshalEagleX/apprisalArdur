@@ -13,8 +13,21 @@ Every field extracted in Phase 2 produces a FieldMetaResult that records:
 This data flows into the extracted_fields DB table and drives the learning loop.
 """
 
+import json
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional
+
+
+class ExtractionStatus(str, Enum):
+    FOUND = "FOUND"
+    NOT_FOUND = "NOT_FOUND"
+    LOW_CONFIDENCE = "LOW_CONFIDENCE"
+    OCR_FAILED = "OCR_FAILED"
+    PARSER_FAILED = "PARSER_FAILED"
+    MULTIPLE_CANDIDATES = "MULTIPLE_CANDIDATES"
+    AMBIGUOUS = "AMBIGUOUS"
+    PARTIAL_MATCH = "PARTIAL_MATCH"
 
 
 @dataclass
@@ -56,6 +69,35 @@ class FieldMetaResult:
     sanity_check_failed: bool = False
     sanity_check_reason: Optional[str] = None
 
+    extraction_status: ExtractionStatus | str | None = None
+    source_document: Optional[str] = None
+    parser: Optional[str] = None
+    normalization_steps: list[str] = field(default_factory=list)
+    failure_reason: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.extraction_status is None:
+            if self.value is None:
+                self.extraction_status = ExtractionStatus.NOT_FOUND
+            elif self.effective_confidence < 0.50:
+                self.extraction_status = ExtractionStatus.LOW_CONFIDENCE
+            else:
+                self.extraction_status = ExtractionStatus.FOUND
+        elif isinstance(self.extraction_status, str):
+            normalized = self.extraction_status.upper()
+            if normalized == "NOT_FOUND":
+                self.extraction_status = ExtractionStatus.NOT_FOUND
+            elif normalized == "LOW_CONFIDENCE":
+                self.extraction_status = ExtractionStatus.LOW_CONFIDENCE
+            else:
+                self.extraction_status = ExtractionStatus(normalized)
+
+        if self.parser is None:
+            self.parser = self.extraction_method
+
+        if self.value is None and not self.failure_reason:
+            self.failure_reason = "Field was not found by the configured extraction strategies."
+
     @property
     def value(self) -> Optional[str]:
         """The best available value (corrected if available, else raw)."""
@@ -73,13 +115,18 @@ class FieldMetaResult:
         return {
             "field_name": self.field_name,
             "field_value": self.value,
+            "extraction_status": self.extraction_status.value if isinstance(self.extraction_status, ExtractionStatus) else self.extraction_status,
             "confidence_score": round(self.effective_confidence, 3),
+            "source_document": self.source_document,
             "source_page": self.source_page,
             "bbox_x": self.bbox_x,
             "bbox_y": self.bbox_y,
             "bbox_w": self.bbox_w,
             "bbox_h": self.bbox_h,
+            "parser": self.parser,
             "extraction_method": self.extraction_method,
             "raw_ocr_text": self.raw_value,
+            "normalization_steps": json.dumps(self.normalization_steps or []),
+            "failure_reason": self.failure_reason,
             "correction_applied": self.correction_applied,
         }

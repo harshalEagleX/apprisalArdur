@@ -86,7 +86,7 @@ def validate_1004mc_condo(ctx: ValidationContext) -> RuleResult:
     )
     if affirmative_condo:
         return _verify("ADD-8", "1004MC Condo/Co-Op", "Condo/Co-op language detected. Verify all condo/co-op 1004MC shaded areas are completed.")
-    return RuleResult(rule_id="ADD-8", rule_name="1004MC Condo/Co-Op", status=RuleStatus.PASS, message="Not a condo/co-op report based on extracted evidence.")
+    return RuleResult(rule_id="ADD-8", rule_name="1004MC Condo/Co-Op", status=RuleStatus.NOT_APPLICABLE, message="Not a condo/co-op report based on extracted evidence; this does not count as PASS.")
 
 
 @rule(id="ADD-9", name="USPAP 2014 Addendum")
@@ -101,4 +101,18 @@ def validate_uspap_addendum(ctx: ValidationContext) -> RuleResult:
         missing.append("reasonable exposure time")
     if missing:
         return _verify("ADD-9", "USPAP 2014 Addendum", f"USPAP addendum found but missing/unclear: {', '.join(missing)}.")
+    prior_service = re.search(
+        r"I\s+HAVE\s+performed\s+services|performed\s+services.*(?:within|prior)\s+(?:the\s+)?(?:three|3)\s+years",
+        text,
+        re.I | re.S,
+    )
+    no_prior_service = re.search(r"I\s+HAVE\s+NOT\s+performed\s+services", text, re.I | re.S)
+    if prior_service and not no_prior_service:
+        prior_context = text[prior_service.start():prior_service.start() + 800]
+        if not re.search(r"(?:prior|previous)\s+services?|apprais(?:al|ed)|consult(?:ing|ation)|valuation|date\s+of\s+service", prior_context, re.I):
+            return _verify(
+                "ADD-9",
+                "USPAP 2014 Addendum",
+                "USPAP prior-service certification appears affirmative. Verify commentary describes the prior services performed.",
+            )
     return RuleResult(rule_id="ADD-9", rule_name="USPAP 2014 Addendum", status=RuleStatus.VERIFY, message="USPAP addendum evidence found. Verify checked option and certifications are complete.")

@@ -143,7 +143,11 @@ def validate_adverse_livability(ctx: ValidationContext) -> RuleResult:
         return RuleResult(rule_id="I-10", rule_name="Adverse Conditions Affecting Livability", status=RuleStatus.VERIFY, message="Adverse conditions affecting livability are indicated. Verify supporting commentary.")
     if not re.search(r"adverse conditions.*(?:Yes|No)|livability|soundness|structural integrity", _raw(ctx), re.I | re.S):
         return _verify("I-10", "Adverse Conditions Affecting Livability", "Adverse livability Yes/No field not extracted. Verify manually.")
-    return RuleResult(rule_id="I-10", rule_name="Adverse Conditions Affecting Livability", status=RuleStatus.PASS, message="No adverse livability issue indicated.")
+    return _verify(
+        "I-10",
+        "Adverse Conditions Affecting Livability",
+        "Adverse livability field evidence was found, but the explicit Yes/No value is not structurally extracted. Verify no adverse livability issue is indicated.",
+    )
 
 
 @rule(id="I-11", name="Neighborhood Conformity")
@@ -178,4 +182,8 @@ def validate_additions(ctx: ValidationContext) -> RuleResult:
 def validate_security_bars(ctx: ValidationContext) -> RuleResult:
     if re.search(r"security bars?|window bars?|release latch", _raw(ctx), re.I):
         return RuleResult(rule_id="I-13", rule_name="Security Bars", status=RuleStatus.VERIFY, message="Security bar language found. Verify release latches and local code compliance.")
-    return RuleResult(rule_id="I-13", rule_name="Security Bars", status=RuleStatus.PASS, message="No security bar language detected in OCR text.")
+    return _verify(
+        "I-13",
+        "Security Bars",
+        "No security-bar trigger language was detected, but security-bar status is not structurally extracted. Verify manually.",
+    )

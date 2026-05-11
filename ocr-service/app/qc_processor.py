@@ -42,6 +42,8 @@ from app.services.cache_service import (
     get_cached_ocr, get_document_id, save_ocr_pages,
     save_extracted_fields, save_rule_results,
     DB_AVAILABLE,
+    NULL_TEXT_SENTINEL, NOT_FOUND_SENTINEL, NO_PAGE_SENTINEL, NO_BBOX_SENTINEL,
+    _clean_text, _clean_json, _clean_page, _clean_float, _rule_target_field,
 )
 from app.services import processing_lifecycle
 
@@ -69,6 +71,15 @@ class QCResultItem(BaseModel):
     rejection_text: Optional[str] = None
     evidence: List[str] = PydanticField(default_factory=list)
     review_required: bool = False
+    source_documents: List[str] = PydanticField(default_factory=list)
+    compared_fields: List[str] = PydanticField(default_factory=list)
+    compared_values: Optional[Dict[str, Any]] = None
+    comparison_method: Optional[str] = None
+    decision_path: List[str] = PydanticField(default_factory=list)
+    exception_type: Optional[str] = None
+    exception_trace: Optional[str] = None
+    stage: Optional[str] = None
+    retry_eligible: bool = False
     # Phase 3 additions
     severity: str = "STANDARD"
     source_page: Optional[int] = None
@@ -97,13 +108,23 @@ class QCResults(BaseModel):
     
     # Extracted fields summary
     extracted_fields: Dict[str, Any] = {}
+    extracted_field_details: Dict[str, Any] = {}
     field_confidence: Dict[str, float] = {}
     
     # Rule results
     total_rules: int = 0
     passed: int = 0
     failed: int = 0
-    verify: int = 0         # VERIFY status — needs human review (uncertain extraction)
+    verify: int = 0         # Legacy alias for review count
+    review: int = 0
+    not_executed: int = 0
+    not_applicable: int = 0
+    extraction_failed: int = 0
+    ocr_low_confidence: int = 0
+    system_error: int = 0
+    source_missing: int = 0
+    cross_doc_mismatch: int = 0
+    status_counts: Dict[str, int] = {}
     
     rule_results: List[QCResultItem] = []
     
@@ -316,6 +337,7 @@ class SmartQCProcessor:
         # Step 3: Map to AppraisalReportDomain Model
             report = self._map_extraction_to_report(s_extract, c_extract, legacy_fields)
             self._apply_comparables_from_field_meta(report, field_meta)
+            self._apply_comparables_from_text(report, full_text)
         
         with processing_lifecycle.processing_context(processing_job_id, correlation_id, traceparent):
             # Step 4: Handle Engagement Letter
@@ -361,6 +383,8 @@ class SmartQCProcessor:
                     purchase_agreement = pa_extract
                 elif report.contract.did_analyze_contract:
                     logger.info("Appraisal indicates contract was analyzed but no contract PDF provided.")
+                    supporting_document_missing = True
+                    missing_supporting_documents.append("CONTRACT")
 
             vision_results = []
             if (vision_model or "").lower().startswith("llava"):
@@ -466,7 +490,7 @@ class SmartQCProcessor:
             special_assessments_comment=s.special_assessments_comment,
             hoa_dues=s.hoa_dues,
             hoa_period=s.hoa_period,
-            is_pud=s.is_pud_checked or False,
+            is_pud=s.is_pud_checked,
             lender_name=s.lender_name,
             lender_address=s.lender_address,
             property_rights=s.property_rights,
@@ -630,6 +654,26 @@ class SmartQCProcessor:
             report.sales_comparison.comparables = comparables
             report.sales_comparison.comparables_count_sales = len(comparables)
 
+    def _apply_comparables_from_text(self, report: AppraisalReport, full_text: str) -> None:
+        """Fallback comparable parser for sales-grid rows when Phase 2 row parsing is weak."""
+        existing = report.sales_comparison.comparables or []
+        existing_prices = [comp.sale_price for comp in existing if comp.sale_price]
+        if len(existing_prices) >= 3:
+            return
+
+        try:
+            from app.services.comparable_extraction import comparable_grid_extractor
+            extracted = comparable_grid_extractor.extract(full_text)
+        except Exception as exc:
+            logger.info("Comparable grid fallback not applied: %s", exc)
+            return
+
+        if not extracted.comparables:
+            return
+
+        report.sales_comparison.comparables = extracted.comparables
+        report.sales_comparison.comparables_count_sales = len(extracted.comparables)
+
     def _map_engagement_letter(self, eng_extract) -> EngagementLetter:
         """Map EngagementLetterExtract to EngagementLetter model."""
         return EngagementLetter(
@@ -667,7 +711,7 @@ class SmartQCProcessor:
         vision_model = (vision_model or DEFAULT_VISION_MODEL).strip()
         
         # Count strict output statuses.
-        status_counts = {"pass": 0, "fail": 0, "verify": 0}
+        status_counts: Dict[str, int] = {}
         
         qc_items = []
         action_items = []
@@ -675,38 +719,58 @@ class SmartQCProcessor:
         for result in rule_results:
             external_status = self._public_status(result.status)
             status_counts[external_status] = status_counts.get(external_status, 0) + 1
-            review_required = result.review_required or external_status in ["verify", "fail"]
+            review_required = result.review_required or external_status in [
+                "review",
+                "fail",
+                "extraction_failed",
+                "ocr_low_confidence",
+                "system_error",
+                "source_missing",
+                "cross_doc_mismatch",
+            ]
             
             qc_items.append(QCResultItem(
-                rule_id=result.rule_id,
-                rule_name=result.rule_name,
+                rule_id=_clean_text(result.rule_id, default="UNKNOWN_RULE"),
+                rule_name=_clean_text(result.rule_name, default=result.rule_id or "UNKNOWN_RULE"),
                 status=external_status,
-                message=result.message,
-                action_item=result.action_item,
-                details=result.details,
-                appraisal_value=result.appraisal_value,
-                engagement_value=result.engagement_value,
-                confidence=getattr(result, "confidence", None),
-                extracted_value=getattr(result, "extracted_value", None),
-                expected_value=getattr(result, "expected_value", None),
-                verify_question=getattr(result, "verify_question", None),
-                rejection_text=getattr(result, "rejection_text", None),
+                message=_clean_text(result.message, default="No rule message provided."),
+                action_item=_clean_text(
+                    result.action_item,
+                    default=getattr(result, "verify_question", None) or getattr(result, "rejection_text", None) or result.message or "No reviewer action required.",
+                ),
+                details=result.details or {},
+                appraisal_value=_clean_text(result.appraisal_value, default="__NO_APPRAISAL_VALUE__"),
+                engagement_value=_clean_text(result.engagement_value, default="__NO_ENGAGEMENT_VALUE__"),
+                confidence=getattr(result, "confidence", None) if getattr(result, "confidence", None) is not None else 0.0,
+                extracted_value=_clean_text(getattr(result, "extracted_value", None), default="__NO_EXTRACTED_VALUE__"),
+                expected_value=_clean_text(getattr(result, "expected_value", None), default="__NO_EXPECTED_VALUE__"),
+                verify_question=_clean_text(getattr(result, "verify_question", None), default=""),
+                rejection_text=_clean_text(getattr(result, "rejection_text", None), default=""),
                 evidence=getattr(result, "evidence", []),
                 review_required=review_required,
+                source_documents=getattr(result, "source_documents", []) or [],
+                compared_fields=getattr(result, "compared_fields", []) or [],
+                compared_values=getattr(result, "compared_values", None) or {},
+                comparison_method=_clean_text(getattr(result, "comparison_method", None), default="not_comparison_based"),
+                decision_path=getattr(result, "decision_path", []) or [],
+                exception_type=_clean_text(getattr(result, "exception_type", None), default="none"),
+                exception_trace=_clean_text(getattr(result, "exception_trace", None), default=""),
+                stage=_clean_text(getattr(result, "stage", None), default="rule_engine"),
+                retry_eligible=getattr(result, "retry_eligible", False),
                 severity=result.severity.value if hasattr(result.severity, "value") else str(result.severity),
-                source_page=result.source_page,
-                bbox_x=getattr(result, "bbox_x", None),
-                bbox_y=getattr(result, "bbox_y", None),
-                bbox_w=getattr(result, "bbox_w", None),
-                bbox_h=getattr(result, "bbox_h", None),
-                target_field=getattr(result, "target_field", None),
-                field_confidence=result.field_confidence,
+                source_page=_clean_page(result.source_page),
+                bbox_x=_clean_float(getattr(result, "bbox_x", None)),
+                bbox_y=_clean_float(getattr(result, "bbox_y", None)),
+                bbox_w=_clean_float(getattr(result, "bbox_w", None)),
+                bbox_h=_clean_float(getattr(result, "bbox_h", None)),
+                target_field=getattr(result, "target_field", None) or _rule_target_field(result.rule_id),
+                field_confidence=result.field_confidence if result.field_confidence is not None else 0.0,
                 auto_correctable=result.auto_correctable,
                 rule_version=result.rule_version,
             ))
             
             # Collect action items from rules that need reviewer action.
-            if result.action_item and external_status in ["fail", "verify"]:
+            if result.action_item and review_required:
                 action_items.append(f"[{result.rule_id}] {result.action_item}")
         
         # Get improvement suggestions
@@ -718,14 +782,32 @@ class SmartQCProcessor:
 
         # Per-field confidence: use Phase 2 FieldMetaResult scores when available
         field_confidence: Dict[str, float] = {}
+        extracted_field_details: Dict[str, Any] = {}
         for field_name, value in s_extract.model_dump().items():
             meta_entry = (field_meta or {}).get(field_name)
             if meta_entry is not None and hasattr(meta_entry, "effective_confidence"):
                 field_confidence[field_name] = round(meta_entry.effective_confidence, 3)
+                extracted_field_details[field_name] = meta_entry.to_db_dict() if hasattr(meta_entry, "to_db_dict") else {}
             elif value is None:
                 field_confidence[field_name] = 0.0
+                extracted_field_details[field_name] = {
+                    "field_name": field_name,
+                    "field_value": NOT_FOUND_SENTINEL,
+                    "extraction_status": "NOT_FOUND",
+                    "confidence": 0.0,
+                    "failure_reason": "No structured metadata was produced for this field.",
+                }
             else:
                 field_confidence[field_name] = 0.7
+                extracted_field_details[field_name] = {
+                    "field_name": field_name,
+                    "field_value": value,
+                    "extraction_status": "FOUND",
+                    "confidence": 0.7,
+                    "failure_reason": "no_failure",
+                }
+
+        review_count = sum(1 for item in qc_items if item.review_required)
 
         return QCResults(
             success=True,
@@ -739,11 +821,21 @@ class SmartQCProcessor:
             model_name=model_name,
             vision_model=vision_model,
             extracted_fields=s_extract.model_dump(),
+            extracted_field_details=extracted_field_details,
             field_confidence=field_confidence,
             total_rules=len(rule_results),
-            passed=status_counts["pass"],
-            failed=status_counts["fail"],
-            verify=status_counts["verify"],
+            passed=status_counts.get("pass", 0),
+            failed=status_counts.get("fail", 0),
+            verify=review_count,
+            review=review_count,
+            not_executed=status_counts.get("not_executed", 0),
+            not_applicable=status_counts.get("not_applicable", 0),
+            extraction_failed=status_counts.get("extraction_failed", 0),
+            ocr_low_confidence=status_counts.get("ocr_low_confidence", 0),
+            system_error=status_counts.get("system_error", 0),
+            source_missing=status_counts.get("source_missing", 0),
+            cross_doc_mismatch=status_counts.get("cross_doc_mismatch", 0),
+            status_counts=status_counts,
             rule_results=qc_items,
             action_items=action_items,
             suggestions=suggestions,
@@ -753,11 +845,9 @@ class SmartQCProcessor:
         )
 
     def _public_status(self, status: RuleStatus) -> str:
-        if status == RuleStatus.FAIL:
-            return "fail"
-        if status == RuleStatus.VERIFY:
-            return "verify"
-        return "pass"
+        if isinstance(status, RuleStatus):
+            return status.value
+        return str(status)
 
 
 # Create global processor instance

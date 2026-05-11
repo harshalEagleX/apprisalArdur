@@ -2066,14 +2066,21 @@ async def analytics_rules(
     rule_counts: dict[str, dict] = {}
     for rid, name, status, count in grouped:
         row = rule_counts.setdefault(rid or "unknown", {
-            "rule_id": rid or "unknown", "rule_name": name or "", "pass": 0, "fail": 0, "verify": 0, "skip": 0
+            "rule_id": rid or "unknown", "rule_name": name or "", "pass": 0, "fail": 0, "review": 0, "not_executed": 0, "not_applicable": 0
         })
         stat = (status or "unknown").lower()
         if stat == "pass": row["pass"] += count
         elif stat == "fail": row["fail"] += count
-        elif stat == "verify": row["verify"] += count
-        else: row["skip"] += count
-    rows = sorted(rule_counts.values(), key=lambda x: x["fail"] + x["verify"], reverse=True)
+        elif stat in {"review", "verify", "extraction_failed", "ocr_low_confidence", "system_error", "source_missing", "cross_doc_mismatch"}:
+            row["review"] += count
+            row[stat] = row.get(stat, 0) + count
+        elif stat == "not_executed":
+            row["not_executed"] += count
+        elif stat == "not_applicable":
+            row["not_applicable"] += count
+        else:
+            row[stat] = row.get(stat, 0) + count
+    rows = sorted(rule_counts.values(), key=lambda x: x["fail"] + x["review"], reverse=True)
     return {"status": "ok", "period_days": days, "rules": rows}
 
 
@@ -2147,7 +2154,15 @@ async def operator_analytics(
         ).count()
         needs_review = db.query(RuleResultRecord).filter(
             RuleResultRecord.created_at >= cutoff,
-            RuleResultRecord.status == "verify",
+            RuleResultRecord.status.in_((
+                "review",
+                "verify",
+                "extraction_failed",
+                "ocr_low_confidence",
+                "system_error",
+                "source_missing",
+                "cross_doc_mismatch",
+            )),
         ).count()
     auto_passed = sum(1 for j in jobs if _job_result_int(j, "failed") == 0 and _job_result_int(j, "verify") == 0)
     cache_hits = sum(1 for j in jobs if _job_result_bool(j, "cache_hit"))

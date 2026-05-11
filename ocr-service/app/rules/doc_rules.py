@@ -44,10 +44,11 @@ def validate_appraiser_license(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="DOC-2", name="E&O Insurance")
 def validate_eo_insurance(ctx: ValidationContext) -> RuleResult:
-    # Per QC checklist: E&O insurance is NOT required. Rule auto-passes regardless.
+    # Per QC checklist: E&O insurance is NOT required. This is not applicable,
+    # not a satisfied validation.
     # "E & O Insurance" appears as a form LABEL on URAR photo pages — not documentation.
-    return RuleResult(rule_id="DOC-2", rule_name="E&O Insurance", status=RuleStatus.PASS,
-                      message="E&O insurance is not a required deliverable per QC checklist.")
+    return RuleResult(rule_id="DOC-2", rule_name="E&O Insurance", status=RuleStatus.NOT_APPLICABLE,
+                      message="E&O insurance is not a required deliverable per QC checklist; this does not count as PASS.")
 
 
 @rule(id="DOC-3", name="UAD Data Set")
@@ -66,5 +67,5 @@ def validate_trainee_signatures(ctx: ValidationContext) -> RuleResult:
     if re.search(r"\btrainee\b", text, re.I):
         return RuleResult(rule_id="DOC-4", rule_name="Trainee Signatures", status=RuleStatus.VERIFY,
                           message="Trainee appraiser language found. Verify supervisory appraiser signature and role requirements.")
-    return RuleResult(rule_id="DOC-4", rule_name="Trainee Signatures", status=RuleStatus.PASS,
-                      message="No trainee appraiser involvement detected.")
+    return RuleResult(rule_id="DOC-4", rule_name="Trainee Signatures", status=RuleStatus.NOT_APPLICABLE,
+                      message="No trainee appraiser involvement detected; trainee signature rule does not count as PASS.")

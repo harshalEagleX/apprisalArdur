@@ -13,9 +13,17 @@ logging.basicConfig(
 logger = logging.getLogger("SmartIdentifier")
 
 class RuleStatus(str, Enum):
-    PASS         = "pass"
-    FAIL         = "fail"
-    VERIFY       = "verify"        # field missing or too low confidence — human must check
+    PASS = "pass"
+    FAIL = "fail"
+    REVIEW = "review"
+    VERIFY = "review"  # Backward-compatible alias for legacy rules.
+    NOT_EXECUTED = "not_executed"
+    NOT_APPLICABLE = "not_applicable"
+    EXTRACTION_FAILED = "extraction_failed"
+    OCR_LOW_CONFIDENCE = "ocr_low_confidence"
+    SYSTEM_ERROR = "system_error"
+    SOURCE_MISSING = "source_missing"
+    CROSS_DOC_MISMATCH = "cross_doc_mismatch"
 
 
 class RuleSeverity(str, Enum):
@@ -41,6 +49,15 @@ class RuleResult(BaseModel):
     rejection_text: Optional[str] = None
     evidence: List[str] = Field(default_factory=list)
     review_required: bool = False
+    source_documents: List[str] = Field(default_factory=list)
+    compared_fields: List[str] = Field(default_factory=list)
+    compared_values: Optional[Dict[str, Any]] = None
+    comparison_method: Optional[str] = None
+    decision_path: List[str] = Field(default_factory=list)
+    exception_type: Optional[str] = None
+    exception_trace: Optional[str] = None
+    stage: Optional[str] = None
+    retry_eligible: bool = False
     # Phase 3 additions
     severity: RuleSeverity = RuleSeverity.STANDARD
     source_page: Optional[int] = None          # PDF page where the triggering field was found
@@ -66,8 +83,15 @@ class SmartLogger:
     def log_result(self, result: RuleResult):
         self.results.append(result)
         
-        if result.status == RuleStatus.VERIFY:
-            logger.info(f"Rule {result.rule_id} VERIFY: {result.message}")
+        if result.status in {
+            RuleStatus.REVIEW,
+            RuleStatus.EXTRACTION_FAILED,
+            RuleStatus.OCR_LOW_CONFIDENCE,
+            RuleStatus.SYSTEM_ERROR,
+            RuleStatus.SOURCE_MISSING,
+            RuleStatus.CROSS_DOC_MISMATCH,
+        }:
+            logger.info(f"Rule {result.rule_id} {result.status.value.upper()}: {result.message}")
             # Track missing fields for improvement suggestions
             if result.details and "field" in result.details:
                 field = result.details["field"]
@@ -80,7 +104,11 @@ class SmartLogger:
             "total_rules": len(self.results),
             "passed": len([r for r in self.results if r.status == RuleStatus.PASS]),
             "failed": len([r for r in self.results if r.status == RuleStatus.FAIL]),
-            "verify": len([r for r in self.results if r.status == RuleStatus.VERIFY]),
+            "review": len([r for r in self.results if r.review_required]),
+            "not_executed": len([r for r in self.results if r.status == RuleStatus.NOT_EXECUTED]),
+            "not_applicable": len([r for r in self.results if r.status == RuleStatus.NOT_APPLICABLE]),
+            "extraction_failed": len([r for r in self.results if r.status == RuleStatus.EXTRACTION_FAILED]),
+            "system_error": len([r for r in self.results if r.status == RuleStatus.SYSTEM_ERROR]),
             "missing_data_hotspots": self.missing_data_log
         }
         return params

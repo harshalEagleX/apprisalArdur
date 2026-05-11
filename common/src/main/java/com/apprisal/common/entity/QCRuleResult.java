@@ -154,6 +154,43 @@ public class QCRuleResult {
     @PrePersist
     protected void onCreate() {
         createdAt = AppTime.now();
+        fillProcessingDefaults();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        fillProcessingDefaults();
+    }
+
+    private void fillProcessingDefaults() {
+        ruleName = textOr(ruleName, textOr(ruleId, "UNKNOWN_RULE"));
+        status = textOr(status, "SYSTEM_ERROR");
+        message = textOr(message, "No rule message provided.");
+        details = textOr(details, "{}");
+        actionItem = textOr(actionItem, "No reviewer action required.");
+        appraisalValue = textOr(appraisalValue, "__NO_APPRAISAL_VALUE__");
+        engagementValue = textOr(engagementValue, "__NO_ENGAGEMENT_VALUE__");
+        confidenceScore = confidenceScore != null ? confidenceScore : 0.0d;
+        extractedValue = textOr(extractedValue, "__NO_EXTRACTED_VALUE__");
+        expectedValue = textOr(expectedValue, "__NO_EXPECTED_VALUE__");
+        verifyQuestion = textOr(verifyQuestion, "");
+        rejectionText = textOr(rejectionText, "");
+        evidence = textOr(evidence, "[]");
+        reviewRequired = reviewRequired != null ? reviewRequired : false;
+        severity = textOr(severity, "STANDARD");
+        targetField = textOr(targetField, "checklist_rule");
+        pdfPage = pdfPage != null ? pdfPage : 0;
+        bboxX = bboxX != null ? bboxX : 0.0f;
+        bboxY = bboxY != null ? bboxY : 0.0f;
+        bboxW = bboxW != null ? bboxW : 0.0f;
+        bboxH = bboxH != null ? bboxH : 0.0f;
+    }
+
+    private String textOr(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
     }
 
     // Getters and Setters

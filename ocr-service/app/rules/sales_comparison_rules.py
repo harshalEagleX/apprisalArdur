@@ -54,7 +54,16 @@ def validate_comparable_summary(ctx: ValidationContext) -> RuleResult:
         listings = int(match.group(1)) if match else None
     if sales is None or listings is None:
         return _verify("SCA-1", "Comparable Market Summary", "Comparable market summary not fully extracted. Verify # currently offered and # sold within 12 months.")
-    return RuleResult(rule_id="SCA-1", rule_name="Comparable Market Summary", status=RuleStatus.PASS, message=f"Market summary extracted: {sales} sales, {listings} listings.")
+    return RuleResult(
+        rule_id="SCA-1",
+        rule_name="Comparable Market Summary",
+        status=RuleStatus.PASS,
+        message=f"Market summary extracted: {sales} sales, {listings} listings.",
+        details={"structured_validation": True},
+        compared_fields=["comparables_count_sales", "comparables_count_listings"],
+        compared_values={"sales": sales, "listings": listings},
+        comparison_method="structured_count_extraction",
+    )
 
 
 @rule(id="SCA-2", name="Comparables Required")
@@ -77,7 +86,16 @@ def validate_comparables_required(ctx: ValidationContext) -> RuleResult:
         return _verify("SCA-2", "Comparables Required", "Comparable listing count not extracted. Verify minimum 2 listings unless exception applies.")
     if listings < 2:
         return RuleResult(rule_id="SCA-2", rule_name="Comparables Required", status=RuleStatus.FAIL, message=f"Only {listings} listing comparable(s) found. Minimum 2 required.")
-    return RuleResult(rule_id="SCA-2", rule_name="Comparables Required", status=RuleStatus.PASS, message=f"{sales} sales and {listings} listings provided.")
+    return RuleResult(
+        rule_id="SCA-2",
+        rule_name="Comparables Required",
+        status=RuleStatus.PASS,
+        message=f"{sales} sales and {listings} listings provided.",
+        details={"structured_validation": True, "minimum_sales": 3, "minimum_listings": 2},
+        compared_fields=["comparables_count_sales", "comparables_count_listings"],
+        compared_values={"sales": sales, "listings": listings, "minimum_sales": 3, "minimum_listings": 2},
+        comparison_method="minimum_comparable_count_check",
+    )
 
 
 @rule(id="SCA-3", name="Address (Subject and Comparables)")
@@ -302,26 +320,43 @@ def validate_unique_design(ctx: ValidationContext) -> RuleResult:
     if any(re.search(p, text, re.I) for p in unique_triggers):
         return RuleResult(rule_id="SCA-24", rule_name="Unique Design Properties", status=RuleStatus.VERIFY,
                           message="Unique design property detected. Verify similar comparables or provide explanation.", review_required=True)
-    return RuleResult(rule_id="SCA-24", rule_name="Unique Design Properties", status=RuleStatus.PASS,
-                      message="No unique-design property indicators detected.")
+    return _verify(
+        "SCA-24",
+        "Unique Design Properties",
+        "No unique-design trigger language was detected, but subject design uniqueness is not structurally extracted. Verify whether similar comparables or explanation are required.",
+    )
 
 
 @rule(id="SCA-25", name="New Construction")
 def validate_new_construction(ctx: ValidationContext) -> RuleResult:
     text = ctx.raw_text or ""
-    subj = ctx.report.subject
+    improvements = getattr(ctx.report, "improvements", None)
     # Check effective age = 0 OR Year Built in last 2 years as new-construction signals
     import re as _re
     from datetime import datetime
-    year_built = getattr(subj, "year_built", None) or ""
+    year_built = getattr(improvements, "year_built", None) or ""
     is_new_by_year = bool(year_built and str(year_built).isdigit() and int(year_built) >= datetime.now().year - 1)
-    cond = getattr(subj, "condition", "") or ""
+    cond = getattr(improvements, "condition_rating", "") or ""
     is_new_by_cond = bool(_re.match(r"C[12]", cond))
     if is_new_by_year or is_new_by_cond or _re.search(r"new construction|proposed construction|under construction", text, _re.I):
         return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.VERIFY,
                           message="New construction detected (Year Built recent / C1-C2 condition). Verify at least one comparable from competing development or provide explanation.")
-    return RuleResult(rule_id="SCA-25", rule_name="New Construction", status=RuleStatus.PASS,
-                      message="No new-construction trigger language detected.")
+    if year_built and str(year_built).isdigit() and cond:
+        return RuleResult(
+            rule_id="SCA-25",
+            rule_name="New Construction",
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Structured year-built and condition evidence do not indicate new construction; this does not count as PASS.",
+            details={"structured_validation": True},
+            compared_fields=["year_built", "condition_rating"],
+            compared_values={"year_built": int(year_built), "condition_rating": cond},
+            comparison_method="new_construction_applicability_check",
+        )
+    return _verify(
+        "SCA-25",
+        "New Construction",
+        "No new-construction trigger language was detected, but year-built/condition evidence is incomplete. Verify whether new-construction comparable requirements apply.",
+    )
 
 
 @rule(id="SCA-26", name="Square Footage")
@@ -331,14 +366,16 @@ def validate_square_footage(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="SCA-27", name="Comparable Photos")
 def validate_comparable_photos(ctx: ValidationContext) -> RuleResult:
-    # Conventional: MLS photos acceptable → auto-PASS
-    # FHA: drive-by photos required → VERIFY
+    # Conventional: MLS photos may be acceptable, but photo presence still needs
+    # evidence/reviewer confirmation. FHA requires drive-by photos.
     lt = ""
     if ctx.engagement_letter:
         lt = (ctx.engagement_letter.loan_type or "Conventional").upper()
     if "FHA" not in lt:
-        return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.PASS,
-                          message="MLS photos are acceptable for comparable sales on conventional loans.")
+        if re.search(r"comp(?:arable)?\s+photo|MLS photo|Comparable\s+Sale\s+#", _text(ctx), re.I):
+            return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.VERIFY,
+                              message="Comparable photo evidence found. Verify MLS/photo-page support is acceptable for this conventional assignment.")
+        return _verify("SCA-27", "Comparable Photos", "Comparable photo evidence not detected. Verify each comparable has acceptable photo support.")
     if re.search(r"comp(?:arable)?\s+photo|drive-?by", _text(ctx), re.I):
         return RuleResult(rule_id="SCA-27", rule_name="Comparable Photos", status=RuleStatus.VERIFY,
                           message="Comparable photo evidence found. Verify drive-by photos meet FHA requirements.")

@@ -81,15 +81,28 @@ def validate_housing_trends(ctx: ValidationContext) -> RuleResult:
 
 @rule(id="N-3", name="One-Unit Housing Price Range")
 def validate_housing_price_range(ctx: ValidationContext) -> RuleResult:
-    """N-3: Price Low/High must be provided and Low ≤ High."""
+    """N-3: Price/age ranges must be provided and Low ≤ High."""
     nbr = getattr(ctx.report, "neighborhood", None)
     if not nbr: raise DataMissingException("Neighborhood Section")
 
-    if nbr.price_low is None or nbr.price_high is None:
+    missing = []
+    if nbr.price_low is None:
+        missing.append("Price Low")
+    if nbr.price_high is None:
+        missing.append("Price High")
+    if nbr.predominant_price is None:
+        missing.append("Predominant Price")
+    if nbr.age_low is None:
+        missing.append("Age Low")
+    if nbr.age_high is None:
+        missing.append("Age High")
+    if nbr.predominant_age is None:
+        missing.append("Predominant Age")
+    if missing:
         return RuleResult(
             rule_id="N-3", rule_name="One-Unit Housing Price Range",
             status=RuleStatus.VERIFY,
-            message="Housing price range (Low/High) not extracted. Verify price range is provided.",
+            message=f"Neighborhood price/age range not fully extracted: {', '.join(missing)}. Verify Low/High/Predominant values are provided.",
             review_required=True, severity=RuleSeverity.ADVISORY,
         )
     if nbr.price_low > nbr.price_high:
@@ -100,16 +113,40 @@ def validate_housing_price_range(ctx: ValidationContext) -> RuleResult:
             appraisal_value=f"Low=${nbr.price_low:,.0f}, High=${nbr.price_high:,.0f}",
             severity=RuleSeverity.STANDARD,
         )
+    if nbr.age_low > nbr.age_high:
+        return RuleResult(
+            rule_id="N-3", rule_name="One-Unit Housing Price Range",
+            status=RuleStatus.FAIL,
+            message=f"Age Low ({nbr.age_low}) exceeds Age High ({nbr.age_high}).",
+            appraisal_value=f"Age Low={nbr.age_low}, Age High={nbr.age_high}",
+            severity=RuleSeverity.STANDARD,
+        )
+    if not (nbr.price_low <= nbr.predominant_price <= nbr.price_high):
+        return RuleResult(
+            rule_id="N-3", rule_name="One-Unit Housing Price Range",
+            status=RuleStatus.VERIFY,
+            message="Predominant price is outside the extracted neighborhood price range. Verify commentary supports this.",
+            appraisal_value=f"Low=${nbr.price_low:,.0f}, Predominant=${nbr.predominant_price:,.0f}, High=${nbr.price_high:,.0f}",
+            review_required=True, severity=RuleSeverity.ADVISORY,
+        )
+    if not (nbr.age_low <= nbr.predominant_age <= nbr.age_high):
+        return RuleResult(
+            rule_id="N-3", rule_name="One-Unit Housing Price Range",
+            status=RuleStatus.VERIFY,
+            message="Predominant age is outside the extracted neighborhood age range. Verify commentary supports this.",
+            appraisal_value=f"Age Low={nbr.age_low}, Predominant={nbr.predominant_age}, Age High={nbr.age_high}",
+            review_required=True, severity=RuleSeverity.ADVISORY,
+        )
     comps = getattr(getattr(ctx.report, "sales_comparison", None), "comparables", None) or []
     if not any(getattr(comp, "sale_price", None) for comp in comps):
         return RuleResult(
             rule_id="N-3", rule_name="One-Unit Housing Price Range",
             status=RuleStatus.VERIFY,
             message=(
-                f"Price range ${nbr.price_low:,.0f}-${nbr.price_high:,.0f} is extracted and internally valid. "
+                f"Price/age ranges are extracted and internally valid. "
                 "Verify comparable sale prices fall within this neighborhood range."
             ),
-            appraisal_value=f"Low=${nbr.price_low:,.0f}, High=${nbr.price_high:,.0f}",
+            appraisal_value=f"Price ${nbr.price_low:,.0f}-${nbr.price_high:,.0f}; Age {nbr.age_low}-{nbr.age_high}",
             review_required=True, severity=RuleSeverity.ADVISORY,
         )
     return RuleResult(

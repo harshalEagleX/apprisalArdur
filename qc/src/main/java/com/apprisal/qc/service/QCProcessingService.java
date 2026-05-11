@@ -45,6 +45,11 @@ import org.springframework.lang.NonNull;
 public class QCProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(QCProcessingService.class);
+    private static final String NOT_PROVIDED = "__NOT_PROVIDED__";
+    private static final String NO_APPRAISAL_VALUE = "__NO_APPRAISAL_VALUE__";
+    private static final String NO_ENGAGEMENT_VALUE = "__NO_ENGAGEMENT_VALUE__";
+    private static final String NO_EXTRACTED_VALUE = "__NO_EXTRACTED_VALUE__";
+    private static final String NO_EXPECTED_VALUE = "__NO_EXPECTED_VALUE__";
 
     private final PythonClientService pythonClient;
     private final FileMatchingService fileMatchingService;
@@ -642,29 +647,29 @@ public class QCProcessingService {
                 String normalizedStatus = normalizePythonStatus(pr.status());
                 boolean needsReview = pr.reviewRequired() || needsVerification(normalizedStatus);
                 QCRuleResult ruleResult = QCRuleResult.builder()
-                        .ruleId(pr.ruleId())
-                        .ruleName(pr.ruleName())
+                        .ruleId(textOr(pr.ruleId(), "UNKNOWN_RULE"))
+                        .ruleName(textOr(pr.ruleName(), textOr(pr.ruleId(), "UNKNOWN_RULE")))
                         .status(normalizedStatus)
-                        .message(pr.message())
+                        .message(textOr(pr.message(), "No rule message provided."))
                         .severity(pr.severity() != null ? pr.severity() : "STANDARD")
-                        .details(toJson(pr.details()))
-                        .actionItem(pr.actionItem())
+                        .details(pr.details() != null ? toJson(pr.details()) : "{}")
+                        .actionItem(textOr(pr.actionItem(), textOr(pr.verifyQuestion(), textOr(pr.rejectionText(), "No reviewer action required."))))
                         .needsVerification(needsReview)
                         .reviewRequired(needsReview)
-                        .appraisalValue(pr.appraisalValue())
-                        .engagementValue(pr.engagementValue())
-                        .confidenceScore(pr.confidence())
-                        .extractedValue(pr.extractedValue() != null ? String.valueOf(pr.extractedValue()) : null)
-                        .expectedValue(pr.expectedValue() != null ? String.valueOf(pr.expectedValue()) : null)
-                        .verifyQuestion(pr.verifyQuestion())
-                        .rejectionText(pr.rejectionText())
-                        .evidence(pr.evidence() != null ? toJson(pr.evidence()) : null)
-                        .targetField(pr.targetField())
-                        .pdfPage(pr.sourcePage())
-                        .bboxX(pr.bboxX())
-                        .bboxY(pr.bboxY())
-                        .bboxW(pr.bboxW())
-                        .bboxH(pr.bboxH())
+                        .appraisalValue(textOr(pr.appraisalValue(), NO_APPRAISAL_VALUE))
+                        .engagementValue(textOr(pr.engagementValue(), NO_ENGAGEMENT_VALUE))
+                        .confidenceScore(pr.confidence() != null ? pr.confidence() : 0.0d)
+                        .extractedValue(pr.extractedValue() != null ? String.valueOf(pr.extractedValue()) : NO_EXTRACTED_VALUE)
+                        .expectedValue(pr.expectedValue() != null ? String.valueOf(pr.expectedValue()) : NO_EXPECTED_VALUE)
+                        .verifyQuestion(textOr(pr.verifyQuestion(), ""))
+                        .rejectionText(textOr(pr.rejectionText(), ""))
+                        .evidence(pr.evidence() != null ? toJson(pr.evidence()) : "[]")
+                        .targetField(textOr(pr.targetField(), targetFieldFor(pr.ruleId())))
+                        .pdfPage(pr.sourcePage() != null ? pr.sourcePage() : 0)
+                        .bboxX(pr.bboxX() != null ? pr.bboxX() : 0.0f)
+                        .bboxY(pr.bboxY() != null ? pr.bboxY() : 0.0f)
+                        .bboxW(pr.bboxW() != null ? pr.bboxW() : 0.0f)
+                        .bboxH(pr.bboxH() != null ? pr.bboxH() : 0.0f)
                         .build();
                 qcResult.addRuleResult(ruleResult);
             }
@@ -760,7 +765,13 @@ public class QCProcessingService {
 
     private boolean needsVerification(String normalizedStatus) {
         return "fail".equals(normalizedStatus)
-                || "verify".equals(normalizedStatus);
+                || "verify".equals(normalizedStatus)
+                || "review".equals(normalizedStatus)
+                || "extraction_failed".equals(normalizedStatus)
+                || "ocr_low_confidence".equals(normalizedStatus)
+                || "system_error".equals(normalizedStatus)
+                || "source_missing".equals(normalizedStatus)
+                || "cross_doc_mismatch".equals(normalizedStatus);
     }
 
     /**
@@ -853,13 +864,80 @@ public class QCProcessingService {
 
     private String toJson(Object obj) {
         if (obj == null)
-            return null;
+            return "{}";
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (JacksonException e) {
             log.warn("Failed to serialize to JSON: {}", e.getMessage());
-            return null;
+            return "{}";
         }
+    }
+
+    private String textOr(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback != null ? fallback : NOT_PROVIDED;
+        }
+        return value;
+    }
+
+    private String targetFieldFor(String ruleId) {
+        String id = textOr(ruleId, "UNKNOWN_RULE").trim().toUpperCase();
+        return switch (id) {
+            case "S-1" -> "property_address";
+            case "S-2" -> "borrower_name";
+            case "S-3", "C-3" -> "owner_of_public_record";
+            case "S-4" -> "legal_description";
+            case "S-5" -> "neighborhood_name";
+            case "S-6" -> "census_tract";
+            case "S-7" -> "occupant_status";
+            case "S-8" -> "special_assessments";
+            case "S-9" -> "hoa_dues";
+            case "S-10" -> "lender_name";
+            case "S-11", "SCA-10" -> "property_rights";
+            case "S-12" -> "offered_for_sale_12mo";
+            case "C-1" -> "contract_analyzed";
+            case "C-2" -> "contract_price";
+            case "C-4" -> "financial_assistance";
+            case "C-5" -> "personal_property";
+            case "N-1", "N-6", "COM-1" -> "neighborhood_description";
+            case "N-2", "N-7", "COM-2" -> "market_conditions_commentary";
+            case "N-3" -> "one_unit_housing_price_age";
+            case "N-4" -> "present_land_use_total";
+            case "N-5" -> "neighborhood_boundaries";
+            case "ST-1" -> "site_dimensions";
+            case "ST-2" -> "site_area";
+            case "ST-3" -> "site_shape";
+            case "ST-4", "SCA-12" -> "view";
+            case "ST-5" -> "zoning_classification";
+            case "ST-6" -> "highest_best_use";
+            case "ST-7", "I-5", "ST-9" -> "utilities";
+            case "ST-8", "M-4" -> "flood_hazard";
+            case "I-7", "SCA-17" -> "gla";
+            case "I-9", "SCA-16", "PH-6" -> "condition_rating";
+            case "SCA-1" -> "comparable_market_summary";
+            case "SCA-2" -> "comparable_count";
+            case "SCA-5" -> "comparable_data_sources";
+            case "R-1" -> "value_reconciliation";
+            case "R-2" -> "final_opinion_value";
+            case "CA-1", "CA-2", "USDA-1" -> "cost_approach";
+            case "IA-1", "MF-1" -> "rent_schedule";
+            case "IA-2", "MF-2" -> "operating_income_statement";
+            case "PH-1" -> "subject_photos";
+            case "PH-2" -> "interior_photos";
+            case "PH-5", "SCA-27" -> "comparable_photos";
+            case "SK-1" -> "sketch_floor_plan";
+            case "M-1" -> "location_map";
+            case "M-2" -> "aerial_map";
+            case "M-3" -> "plat_map";
+            case "DOC-1" -> "appraiser_license";
+            case "SIG-1" -> "signature_date";
+            case "SIG-2" -> "appraiser_information";
+            case "SIG-3" -> "supervisory_appraiser";
+            case "SIG-4" -> "email_address";
+            case "FHA-2" -> "fha_case_number";
+            case "FHA-10" -> "remaining_economic_life";
+            default -> id.toLowerCase().replace("-", "_") + "_evidence";
+        };
     }
 
     /**

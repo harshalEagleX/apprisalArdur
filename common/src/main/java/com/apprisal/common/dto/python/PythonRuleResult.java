@@ -39,6 +39,16 @@ public record PythonRuleResult(
         String normalizedStatus = status == null ? "" : status.trim().toLowerCase();
         return reviewRequired
                 || "fail".equals(normalizedStatus)
-                || "verify".equals(normalizedStatus);
+                || isReviewStatus(normalizedStatus);
+    }
+
+    private boolean isReviewStatus(String normalizedStatus) {
+        return "verify".equals(normalizedStatus)
+                || "review".equals(normalizedStatus)
+                || "extraction_failed".equals(normalizedStatus)
+                || "ocr_low_confidence".equals(normalizedStatus)
+                || "system_error".equals(normalizedStatus)
+                || "source_missing".equals(normalizedStatus)
+                || "cross_doc_mismatch".equals(normalizedStatus);
     }
 }
