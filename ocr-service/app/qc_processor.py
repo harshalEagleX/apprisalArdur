@@ -40,7 +40,7 @@ from app.services.extraction_service import extraction_service
 from app.models.difference_report import SubjectSectionExtract, ContractSectionExtract
 from app.services.cache_service import (
     get_cached_ocr, get_document_id, save_ocr_pages,
-    save_extracted_fields, save_rule_results,
+    save_extracted_fields, save_rule_results, save_fields_and_rules_atomically,
     DB_AVAILABLE,
     NULL_TEXT_SENTINEL, NOT_FOUND_SENTINEL, NO_PAGE_SENTINEL, NO_BBOX_SENTINEL,
     _clean_text, _clean_json, _clean_page, _clean_float, _rule_target_field,
@@ -457,12 +457,15 @@ class SmartQCProcessor:
                                     fm.cross_validated_source = "engagement_letter"
 
             _emit("persist", "Saving extracted fields and rule results", 0.96)
-            # Step 8: Persist fields + rule results to DB (non-blocking — failures logged only)
+            # Step 8: Persist fields + rule results atomically so a partial
+            # write (fields saved, rules not, or vice-versa) never reaches the DB.
             if document_id:
                 page_confidences = [p.confidence for p in extraction_result.page_details]
                 with processing_lifecycle.stage("persist_results"):
-                    save_extracted_fields(document_id, field_meta, page_confidences, processing_job_id=processing_job_id)
-                    save_rule_results(document_id, rule_results, processing_job_id=processing_job_id)
+                    save_fields_and_rules_atomically(
+                        document_id, field_meta, page_confidences, rule_results,
+                        processing_job_id=processing_job_id
+                    )
 
             _emit("assemble", "Assembling QC results", 0.99)
             # Step 9: Assemble results

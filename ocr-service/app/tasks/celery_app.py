@@ -1,7 +1,7 @@
 """
 Celery application for async document processing.
 
-Broker + result backend: Redis (Homebrew on Mac)
+Broker + result backend: Redis (password-protected — see REDIS_URL in .env)
 
 Start the worker (separate terminal, --concurrency=1 is intentional on M1 8 GB
 because Ollama/llava:7b occupies the full unified memory during inference):
@@ -17,6 +17,7 @@ Java uses PythonClientService.submitQCJob() + waitForJobResult().
 import logging
 import os
 import shutil
+import tempfile
 import time
 
 from celery import Celery
@@ -28,6 +29,35 @@ if hasattr(time, "tzset"):
 logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# ── Safe job-directory root ────────────────────────────────────────────────────
+# All job directories MUST reside inside this root. Any caller-supplied
+# job_dir that resolves outside this boundary is rejected to prevent path
+# traversal / directory-deletion attacks (the job_dir comes from /qc/submit).
+_JOB_DIR_ROOT = os.path.realpath(
+    os.getenv("JOB_DIR_ROOT", os.path.join(tempfile.gettempdir(), "apprisal_jobs"))
+)
+os.makedirs(_JOB_DIR_ROOT, exist_ok=True, mode=0o700)
+
+
+def _validate_job_dir(job_dir: str | None) -> str | None:
+    """
+    Validate that job_dir is an absolute path inside _JOB_DIR_ROOT.
+    Returns the real path on success, raises ValueError on violation.
+    """
+    if not job_dir:
+        return None
+    resolved = os.path.realpath(job_dir)
+    root = _JOB_DIR_ROOT
+    # os.path.commonpath raises ValueError on mixed drive letters (Windows) —
+    # on POSIX this is a clean prefix check.
+    if not (resolved == root or resolved.startswith(root + os.sep)):
+        raise ValueError(
+            f"Unsafe job_dir rejected: {job_dir!r} resolves to {resolved!r} "
+            f"which is outside the allowed root {root!r}"
+        )
+    return resolved
+
 
 celery_app = Celery(
     "appraisal_qc",
@@ -83,20 +113,46 @@ def process_document_async(
     Saves results to the database and returns the full QC payload as the
     Celery task result (readable via GET /qc/job/{task_id}).
 
-    Cleans up job_dir on completion or failure.
+    Cleanup strategy:
+      - SUCCESS or FINAL FAILURE: job_dir removed in finally block.
+      - RETRY (intermediate): job_dir preserved so the retry can re-read the
+        PDF files. Celery calls this function again on retry from the top.
     """
     from app.qc_processor import qc_processor
     from app.services import processing_lifecycle
 
-    cleanup_job_dir = False
+    # ── Security: validate job_dir before any filesystem use ──────────────────
+    # job_dir comes from the /qc/submit request body. Reject any path that
+    # escapes the designated root to prevent directory-deletion attacks.
+    try:
+        safe_job_dir = _validate_job_dir(job_dir)
+    except ValueError as path_exc:
+        logger.error("Rejected unsafe job_dir for job %s: %s", processing_job_id, path_exc)
+        if processing_job_id:
+            processing_lifecycle.fail_job(processing_job_id, str(path_exc), "input_validation")
+        raise RuntimeError(str(path_exc)) from path_exc
+
+    # Normalise paths to their validated counterparts.
+    if safe_job_dir and engagement_path:
+        engagement_path = os.path.join(safe_job_dir, os.path.basename(engagement_path))
+    if safe_job_dir and contract_path:
+        contract_path   = os.path.join(safe_job_dir, os.path.basename(contract_path))
+    if safe_job_dir and pdf_path and not os.path.isabs(pdf_path):
+        pdf_path = os.path.join(safe_job_dir, os.path.basename(pdf_path))
+
+    max_retries = 3
+    is_final = self.request.retries >= max_retries  # True on the last allowed attempt
+
     tracked = processing_lifecycle.get_job_status(processing_job_id) if processing_job_id else None
     if tracked and tracked.get("status") == "completed" and tracked.get("result_json"):
         import json
         logger.info("Async QC task reused completed processing job: %s", processing_job_id)
-        _cleanup_job_dir(job_dir)
+        _cleanup_job_dir(safe_job_dir)
         return json.loads(tracked["result_json"])
+
     if not processing_job_id:
         raise RuntimeError("Durable processing job is required for async QC")
+
     if not processing_lifecycle.try_claim_job(processing_job_id, stage="worker_started"):
         logger.info(
             "Async QC task backing off because processing job %s is not claimable at stage %s",
@@ -105,7 +161,7 @@ def process_document_async(
         )
         raise self.retry(
             exc=RuntimeError("Processing job already in progress"),
-            max_retries=3,
+            max_retries=max_retries,
             countdown=min(300, 30 * (self.request.retries + 1)),
         )
 
@@ -114,20 +170,19 @@ def process_document_async(
     processing_lifecycle.mark_job_started(processing_job_id, "worker_started")
 
     try:
-        # --- Resolve engagement text ---
+        # ── Resolve supporting-document text ──────────────────────────────────
         with processing_lifecycle.processing_context(processing_job_id, correlation_id, traceparent):
             if engagement_text is None and engagement_path and os.path.exists(engagement_path):
                 with processing_lifecycle.stage("supporting_ocr_engagement"):
                     engagement_text = _extract_supporting_text(
                         engagement_path, "Engagement letter", os.path.basename(engagement_path))
 
-            # --- Resolve contract text ---
             if contract_text is None and contract_path and os.path.exists(contract_path):
                 with processing_lifecycle.stage("supporting_ocr_contract"):
                     contract_text = _extract_supporting_text(
                         contract_path, "Contract", os.path.basename(contract_path))
 
-        # --- Run QC pipeline ---
+        # ── Run QC pipeline ───────────────────────────────────────────────────
         from app.services.ollama_service import ollama_request_guard, use_model_selection
         executable_text_model = text_model if (model_provider or "ollama").lower() == "ollama" else None
 
@@ -156,30 +211,33 @@ def process_document_async(
         payload["file_hash"] = file_hash
         payload["processing_job_id"] = processing_job_id
         processing_lifecycle.complete_job(processing_job_id, document_id=results.document_id, result_payload=payload)
-
         logger.info("Async QC task complete: file=%s hash=%s", original_filename, file_hash[:12])
-        cleanup_job_dir = True
+        # ── SUCCESS: clean up temp files ──────────────────────────────────────
+        _cleanup_job_dir(safe_job_dir)
         return payload
 
     except Exception as exc:
         logger.error("Async QC task failed for %s: %s", file_hash[:12], exc, exc_info=True)
         processing_lifecycle.increment_retry(processing_job_id)
-        max_retries = 3
-        if self.request.retries >= max_retries:
+
+        if is_final:
+            # ── FINAL FAILURE: persist failure, clean up temp files ───────────
             processing_lifecycle.fail_job(processing_job_id, str(exc))
-            cleanup_job_dir = True
+            _cleanup_job_dir(safe_job_dir)
             raise
+
+        # ── INTERMEDIATE RETRY: keep temp files so the retry can re-read them ─
         processing_lifecycle.update_job(
             processing_job_id,
             status="queued",
             current_stage="retry_wait",
             failure_reason=str(exc)[:4000],
         )
-        raise self.retry(exc=exc, max_retries=max_retries, countdown=min(300, 30 * (self.request.retries + 1)))
-
-    finally:
-        if cleanup_job_dir:
-            _cleanup_job_dir(job_dir)
+        raise self.retry(
+            exc=exc,
+            max_retries=max_retries,
+            countdown=min(300, 30 * (self.request.retries + 1)),
+        )
 
 
 def _extract_supporting_text(path: str, label: str, filename: str) -> str:
@@ -197,9 +255,18 @@ def _extract_supporting_text(path: str, label: str, filename: str) -> str:
 
 
 def _cleanup_job_dir(job_dir: str | None) -> None:
-    if job_dir and os.path.exists(job_dir):
+    """Remove job_dir from disk. The path MUST already be validated/normalised."""
+    if not job_dir:
+        return
+    # Double-check: never delete anything outside the safe root.
+    resolved = os.path.realpath(job_dir)
+    root = _JOB_DIR_ROOT
+    if not (resolved == root or resolved.startswith(root + os.sep)):
+        logger.error("Cleanup refused for path outside job root: %s", job_dir)
+        return
+    if os.path.exists(resolved):
         try:
-            shutil.rmtree(job_dir)
-            logger.debug("Cleaned up job dir: %s", job_dir)
+            shutil.rmtree(resolved)
+            logger.debug("Cleaned up job dir: %s", resolved)
         except Exception as exc:
-            logger.warning("Could not clean up job dir %s: %s", job_dir, exc)
+            logger.warning("Could not clean up job dir %s: %s", resolved, exc)

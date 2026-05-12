@@ -1,5 +1,6 @@
 package com.apprisal.config;
 
+import com.apprisal.user.security.JwtAuthenticationFilter;
 import com.apprisal.user.util.JwtUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,11 +15,21 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 
+/**
+ * Authenticates incoming WebSocket upgrade requests.
+ *
+ * Resolution order:
+ *   1. Existing authenticated Spring Security session principal (form-login path)
+ *   2. HttpOnly "jwt" cookie in the Upgrade request headers  (primary API path)
+ *
+ * The old ?access_token= URL-param strategy has been removed because tokens
+ * in query strings are logged by every HTTP proxy, server, and browser history.
+ */
 @Component
 public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
 
@@ -37,14 +48,18 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
             WebSocketHandler wsHandler, Map<String, Object> attributes) {
+
+        // 1. Honour an already-authenticated Spring Security session (form-login).
         Authentication existing = authenticatedPrincipal(request.getPrincipal());
         if (existing != null) {
             attributes.put(AUTHENTICATION_ATTRIBUTE, existing);
             return true;
         }
 
-        String token = websocketToken(request);
+        // 2. Read JWT from the HttpOnly cookie present in the Upgrade headers.
+        String token = jwtFromCookieHeader(request);
         if (token == null || token.isBlank()) {
+            log.warn("WebSocket handshake rejected — no jwt cookie and no active session");
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
@@ -55,19 +70,17 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return false;
             }
-
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
             if (!jwtUtils.isTokenValid(token, userDetails)) {
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return false;
             }
-
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                     userDetails, null, userDetails.getAuthorities());
-            attributes.put(AUTHENTICATION_ATTRIBUTE, authentication);
+            attributes.put(AUTHENTICATION_ATTRIBUTE, auth);
             return true;
         } catch (Exception e) {
-            log.warn("Rejected websocket handshake with invalid token: {}", e.getMessage());
+            log.warn("WebSocket handshake rejected — invalid jwt cookie: {}", e.getMessage());
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
@@ -80,21 +93,30 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
     }
 
     private Authentication authenticatedPrincipal(Principal principal) {
-        if (principal instanceof Authentication authentication
-                && authentication.isAuthenticated()
-                && !(authentication instanceof AnonymousAuthenticationToken)) {
-            return authentication;
+        if (principal instanceof Authentication auth
+                && auth.isAuthenticated()
+                && !(auth instanceof AnonymousAuthenticationToken)) {
+            return auth;
         }
         return null;
     }
 
-    private String websocketToken(ServerHttpRequest request) {
-        if (request.getURI() == null) {
-            return null;
+    /**
+     * Parse the "Cookie" header(s) on the HTTP Upgrade request and return the
+     * value of the jwt cookie, or null if it is absent.
+     */
+    private String jwtFromCookieHeader(ServerHttpRequest request) {
+        List<String> cookieHeaders = request.getHeaders().get("Cookie");
+        if (cookieHeaders == null) return null;
+        for (String header : cookieHeaders) {
+            for (String pair : header.split(";")) {
+                String trimmed = pair.trim();
+                if (trimmed.startsWith(JwtAuthenticationFilter.JWT_COOKIE_NAME + "=")) {
+                    String value = trimmed.substring(JwtAuthenticationFilter.JWT_COOKIE_NAME.length() + 1).trim();
+                    return value.isBlank() ? null : value;
+                }
+            }
         }
-        return UriComponentsBuilder.fromUri(request.getURI())
-                .build()
-                .getQueryParams()
-                .getFirst("access_token");
+        return null;
     }
 }

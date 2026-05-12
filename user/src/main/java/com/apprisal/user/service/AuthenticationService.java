@@ -1,7 +1,6 @@
 package com.apprisal.user.service;
 
 import com.apprisal.common.dto.AuthenticationRequest;
-import com.apprisal.common.dto.AuthenticationResponse;
 import com.apprisal.common.dto.RegisterRequest;
 import com.apprisal.common.entity.User;
 import com.apprisal.common.exception.ValidationException;
@@ -14,6 +13,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import java.util.Objects;
 
+/**
+ * Validates credentials and issues a signed JWT.
+ * The controller is responsible for placing the token into an HttpOnly cookie —
+ * this service is intentionally cookie-unaware.
+ */
 @Service
 public class AuthenticationService {
 
@@ -32,7 +36,7 @@ public class AuthenticationService {
                 this.authenticationManager = authenticationManager;
         }
 
-        public AuthenticationResponse register(RegisterRequest request) {
+        public String register(RegisterRequest request) {
                 if (request.password() == null || request.password().length() < UserService.PASSWORD_MIN_LENGTH) {
                         throw new ValidationException("password", "Password must be at least " + UserService.PASSWORD_MIN_LENGTH + " characters");
                 }
@@ -42,20 +46,15 @@ public class AuthenticationService {
                                 .role(request.role())
                                 .build();
                 repository.save(Objects.requireNonNull(user));
-                UserPrincipal userPrincipal = new UserPrincipal(Objects.requireNonNull(user));
-                String jwtToken = jwtUtils.generateToken(userPrincipal);
-                return new AuthenticationResponse(jwtToken);
+                return jwtUtils.generateToken(new UserPrincipal(Objects.requireNonNull(user)));
         }
 
-        public AuthenticationResponse authenticate(AuthenticationRequest request) {
+        public String authenticate(AuthenticationRequest request) {
                 authenticationManager.authenticate(
                                 new UsernamePasswordAuthenticationToken(
                                                 request.username(),
                                                 request.password()));
-                User user = repository.findByUsername(request.username())
-                                .orElseThrow();
-                UserPrincipal userPrincipal = new UserPrincipal(Objects.requireNonNull(user));
-                String jwtToken = jwtUtils.generateToken(userPrincipal);
-                return new AuthenticationResponse(jwtToken);
+                User user = repository.findByUsername(request.username()).orElseThrow();
+                return jwtUtils.generateToken(new UserPrincipal(Objects.requireNonNull(user)));
         }
 }

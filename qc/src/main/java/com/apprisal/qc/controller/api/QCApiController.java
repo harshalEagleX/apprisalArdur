@@ -93,13 +93,9 @@ public class QCApiController {
             ));
         }
 
-        if (batch.getStatus() == BatchStatus.COMPLETED) {
-            return ResponseEntity.ok(Map.of(
-                "message", "Batch already completed — delete and re-upload to reprocess",
-                "batchId", batchId,
-                "status", "COMPLETED"
-            ));
-        }
+        // COMPLETED / REVIEW_PENDING / IN_REVIEW batches can be re-processed.
+        // The previous QCResults are superseded (not deleted) so history is preserved.
+        // Only block if QC is already actively running for this batch.
 
         if (!qcProcessingService.claimBatchForProcessing(batchId, modelConfig)) {
             var latestStatus = batchRepository.findById(batchId)
@@ -346,5 +342,42 @@ public class QCApiController {
                 ? "No stuck batches found"
                 : report.retried() + " retried, " + report.abandoned() + " abandoned"
         ));
+    }
+
+    // ── QC history / versioning ───────────────────────────────────────────────
+
+    /**
+     * QC version history for a batch file — active result first, all superseded
+     * historical results after, ordered newest to oldest.
+     *
+     * Used by the frontend "QC History" panel to show what changed across reruns.
+     */
+    @GetMapping("/history/file/{batchFileId}")
+    @PreAuthorize("hasAnyRole('ADMIN','REVIEWER')")
+    public ResponseEntity<List<Map<String, Object>>> getQCHistoryForFile(
+            @PathVariable @NonNull Long batchFileId) {
+        List<com.apprisal.common.entity.QCResult> history =
+                qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(batchFileId);
+        if (history.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<Map<String, Object>> body = history.stream().map(r -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id",            r.getId());
+            m.put("qcDecision",    r.getQcDecision() != null ? r.getQcDecision().name() : null);
+            m.put("finalDecision", r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
+            m.put("totalRules",    r.getTotalRules());
+            m.put("passedCount",   r.getPassedCount());
+            m.put("failedCount",   r.getFailedCount());
+            m.put("verifyCount",   r.getVerifyCount());
+            m.put("processedAt",   r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
+            m.put("supersededAt",  r.getSupersededAt() != null ? r.getSupersededAt().toString() : null);
+            m.put("isActive",      !r.isSuperseded());
+            m.put("rerunOfId",     r.getRerunOf() != null ? r.getRerunOf().getId() : null);
+            m.put("cacheHit",      r.getCacheHit());
+            m.put("extractionMethod", r.getExtractionMethod());
+            return m;
+        }).toList();
+        return ResponseEntity.ok(body);
     }
 }

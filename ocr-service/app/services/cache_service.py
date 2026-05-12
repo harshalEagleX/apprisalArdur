@@ -302,115 +302,101 @@ def save_ocr_pages(file_hash: str, filename: str, pages) -> Optional[str]:
 
 # ── Field confidence save ──────────────────────────────────────────────────────
 
-def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confidences: List[float], processing_job_id: str = None):
+def _insert_extracted_fields_in_session(db, document_id: str, fields: Dict[str, Any],
+                                        page_confidences: List[float], processing_job_id: str = None):
     """
-    Persist extracted field values with confidence scores.
-    Accepts either:
-      - Dict[str, Any]             (legacy Phase 1: field_name → value)
-      - Dict[str, FieldMetaResult] (Phase 2: field_name → FieldMetaResult)
+    Core INSERT logic for extracted fields — runs inside a caller-managed session.
+    Separated so save_extracted_fields and save_fields_and_rules_atomically can
+    share the same implementation without duplicating code.
+    """
+    from app.models.field_meta import FieldMetaResult as FMR
+    doc_uuid = uuid.UUID(document_id)
+    job_uuid = uuid.UUID(processing_job_id) if processing_job_id else None
+    avg_conf = sum(page_confidences) / len(page_confidences) if page_confidences else 0.7
+    HIGH_CONF = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
+    LOW_CONF  = {"neighborhood_name", "legal_description", "owner_of_public_record"}
+
+    existing_query = db.query(ExtractedFieldRecord).filter(ExtractedFieldRecord.document_id == doc_uuid)
+    if job_uuid:
+        existing_query = existing_query.filter(ExtractedFieldRecord.processing_job_id == job_uuid)
+    else:
+        existing_query = existing_query.filter(ExtractedFieldRecord.processing_job_id == None)
+    existing_query.delete(synchronize_session=False)
+
+    for field_name, value in fields.items():
+        if isinstance(value, FMR):
+            db_dict = value.to_db_dict()
+            try:
+                from app.services.confidence_calibration import calibrated_confidence
+                db_dict["confidence_score"] = calibrated_confidence(
+                    db_dict["field_name"], db_dict["extraction_method"], db_dict["confidence_score"])
+            except Exception:
+                pass
+            record = ExtractedFieldRecord(
+                document_id=doc_uuid,
+                processing_job_id=job_uuid,
+                field_name=db_dict["field_name"],
+                field_value=_clean_text(
+                    db_dict.get("field_value"),
+                    default=NOT_FOUND_SENTINEL if (db_dict.get("extraction_status") or "").upper() != "FOUND" else NULL_TEXT_SENTINEL,
+                ),
+                extraction_status=db_dict.get("extraction_status") or ("FOUND" if db_dict.get("field_value") is not None else "NOT_FOUND"),
+                confidence_score=db_dict["confidence_score"],
+                source_document=db_dict.get("source_document") or "appraisal",
+                source_page=_clean_page(db_dict.get("source_page")),
+                bbox_x=_clean_float(db_dict.get("bbox_x")),
+                bbox_y=_clean_float(db_dict.get("bbox_y")),
+                bbox_w=_clean_float(db_dict.get("bbox_w")),
+                bbox_h=_clean_float(db_dict.get("bbox_h")),
+                parser=_clean_text(db_dict.get("parser"), default="unknown_parser"),
+                extraction_method=_clean_text(db_dict.get("extraction_method"), default="not_found"),
+                raw_ocr_text=_clean_text(db_dict.get("raw_ocr_text"), default=NOT_FOUND_SENTINEL),
+                normalization_steps=db_dict.get("normalization_steps") or "[]",
+                failure_reason=_clean_text(
+                    db_dict.get("failure_reason"),
+                    default="no_failure" if (db_dict.get("extraction_status") or "").upper() == "FOUND" else "not_found",
+                ),
+                correction_applied=db_dict["correction_applied"],
+            )
+        else:
+            if value is None:
+                conf, extraction_status, failure_reason = 0.0, "NOT_FOUND", "Legacy extractor returned None."
+            elif field_name in HIGH_CONF:
+                conf, extraction_status, failure_reason = round(min(1.0, avg_conf + 0.10), 3), "FOUND", None
+            elif field_name in LOW_CONF:
+                conf, extraction_status, failure_reason = round(max(0.0, avg_conf - 0.10), 3), "FOUND", None
+            else:
+                conf, extraction_status, failure_reason = round(avg_conf, 3), "FOUND", None
+            record = ExtractedFieldRecord(
+                document_id=doc_uuid, processing_job_id=job_uuid,
+                field_name=field_name,
+                field_value=str(value) if value is not None else NOT_FOUND_SENTINEL,
+                extraction_status=extraction_status, confidence_score=conf,
+                source_document="appraisal", source_page=NO_PAGE_SENTINEL,
+                bbox_x=NO_BBOX_SENTINEL, bbox_y=NO_BBOX_SENTINEL,
+                bbox_w=NO_BBOX_SENTINEL, bbox_h=NO_BBOX_SENTINEL,
+                parser="legacy", extraction_method="regex",
+                raw_ocr_text=str(value) if value is not None else NOT_FOUND_SENTINEL,
+                normalization_steps="[]", failure_reason=failure_reason or "no_failure",
+            )
+        db.add(record)
+
+
+def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confidences: List[float],
+                          processing_job_id: str = None):
+    """
+    Persist extracted field values with confidence scores (own transaction).
+
+    For atomic persistence with rule results in the same transaction use
+    save_fields_and_rules_atomically() instead.
     """
     if not document_id:
         raise RuntimeError("document_id is required to persist extracted fields")
     if not _db_ok():
         raise RuntimeError("database unavailable while persisting extracted fields")
-
-    avg_conf = sum(page_confidences) / len(page_confidences) if page_confidences else 0.7
-    HIGH_CONF = {"zip_code", "census_tract", "assessors_parcel_number", "tax_year"}
-    LOW_CONF  = {"neighborhood_name", "legal_description", "owner_of_public_record"}
-
     try:
-        from app.models.field_meta import FieldMetaResult as FMR
-        doc_uuid = uuid.UUID(document_id)
-        job_uuid = uuid.UUID(processing_job_id) if processing_job_id else None
-
         with get_db() as db:
-            existing_query = db.query(ExtractedFieldRecord).filter(
-                ExtractedFieldRecord.document_id == doc_uuid
-            )
-            if job_uuid:
-                existing_query = existing_query.filter(ExtractedFieldRecord.processing_job_id == job_uuid)
-            else:
-                existing_query = existing_query.filter(ExtractedFieldRecord.processing_job_id == None)
-            existing_query.delete(synchronize_session=False)
-
-            for field_name, value in fields.items():
-                if isinstance(value, FMR):
-                    # Phase 2 path — rich metadata available
-                    db_dict = value.to_db_dict()
-                    try:
-                        from app.services.confidence_calibration import calibrated_confidence
-                        db_dict["confidence_score"] = calibrated_confidence(
-                            db_dict["field_name"],
-                            db_dict["extraction_method"],
-                            db_dict["confidence_score"],
-                        )
-                    except Exception:
-                        pass
-                    record = ExtractedFieldRecord(
-                        document_id=doc_uuid,
-                        processing_job_id=job_uuid,
-                        field_name=db_dict["field_name"],
-                        field_value=_clean_text(
-                            db_dict.get("field_value"),
-                            default=NOT_FOUND_SENTINEL if (db_dict.get("extraction_status") or "").upper() != "FOUND" else NULL_TEXT_SENTINEL,
-                        ),
-                        extraction_status=db_dict.get("extraction_status") or ("FOUND" if db_dict.get("field_value") is not None else "NOT_FOUND"),
-                        confidence_score=db_dict["confidence_score"],
-                        source_document=db_dict.get("source_document") or "appraisal",
-                        source_page=_clean_page(db_dict.get("source_page")),
-                        bbox_x=_clean_float(db_dict.get("bbox_x")),
-                        bbox_y=_clean_float(db_dict.get("bbox_y")),
-                        bbox_w=_clean_float(db_dict.get("bbox_w")),
-                        bbox_h=_clean_float(db_dict.get("bbox_h")),
-                        parser=_clean_text(db_dict.get("parser"), default="unknown_parser"),
-                        extraction_method=_clean_text(db_dict.get("extraction_method"), default="not_found"),
-                        raw_ocr_text=_clean_text(db_dict.get("raw_ocr_text"), default=NOT_FOUND_SENTINEL),
-                        normalization_steps=db_dict.get("normalization_steps") or "[]",
-                        failure_reason=_clean_text(
-                            db_dict.get("failure_reason"),
-                            default="no_failure" if (db_dict.get("extraction_status") or "").upper() == "FOUND" else "not_found",
-                        ),
-                        correction_applied=db_dict["correction_applied"],
-                    )
-                else:
-                    # Phase 1 legacy path — plain value
-                    if value is None:
-                        conf = 0.0
-                        extraction_status = "NOT_FOUND"
-                        failure_reason = "Legacy extractor returned None without structured metadata."
-                    elif field_name in HIGH_CONF:
-                        conf = round(min(1.0, avg_conf + 0.10), 3)
-                        extraction_status = "FOUND"
-                        failure_reason = None
-                    elif field_name in LOW_CONF:
-                        conf = round(max(0.0, avg_conf - 0.10), 3)
-                        extraction_status = "FOUND"
-                        failure_reason = None
-                    else:
-                        conf = round(avg_conf, 3)
-                        extraction_status = "FOUND"
-                        failure_reason = None
-                    record = ExtractedFieldRecord(
-                        document_id=doc_uuid,
-                        processing_job_id=job_uuid,
-                        field_name=field_name,
-                        field_value=str(value) if value is not None else NOT_FOUND_SENTINEL,
-                        extraction_status=extraction_status,
-                        confidence_score=conf,
-                        source_document="appraisal",
-                        source_page=NO_PAGE_SENTINEL,
-                        bbox_x=NO_BBOX_SENTINEL,
-                        bbox_y=NO_BBOX_SENTINEL,
-                        bbox_w=NO_BBOX_SENTINEL,
-                        bbox_h=NO_BBOX_SENTINEL,
-                        parser="legacy",
-                        extraction_method="regex",
-                        raw_ocr_text=str(value) if value is not None else NOT_FOUND_SENTINEL,
-                        normalization_steps="[]",
-                        failure_reason=failure_reason or "no_failure",
-                    )
-                db.add(record)
-
+            _insert_extracted_fields_in_session(db, document_id, fields, page_confidences, processing_job_id)
     except Exception as e:
         logger.error("CRITICAL — extracted field save failed for document %s: %s", document_id, e)
         raise RuntimeError(f"Extracted field persistence failed: {e}") from e
@@ -418,8 +404,83 @@ def save_extracted_fields(document_id: str, fields: Dict[str, Any], page_confide
 
 # ── Rule results save ──────────────────────────────────────────────────────────
 
+def _insert_rule_results_in_session(db, document_id: str, rule_results: list, processing_job_id: str = None):
+    """
+    Core INSERT logic for rule results — runs inside a caller-managed session.
+    See save_rule_results for the standalone version.
+    """
+    doc_uuid = uuid.UUID(document_id)
+    job_uuid = uuid.UUID(processing_job_id) if processing_job_id else None
+
+    existing_query = db.query(RuleResultRecord).filter(RuleResultRecord.document_id == doc_uuid)
+    if job_uuid:
+        existing_query = existing_query.filter(RuleResultRecord.processing_job_id == job_uuid)
+    else:
+        existing_query = existing_query.filter(RuleResultRecord.processing_job_id == None)
+
+    existing_count = existing_query.count()
+    expected_count = len(rule_results or [])
+    if existing_count == expected_count and expected_count > 0:
+        logger.info("Rule results already exist for document %s job %s; skipping duplicate save",
+                    document_id, processing_job_id or "legacy")
+        return
+    if existing_count:
+        logger.warning("Replacing incomplete/duplicate rule results for document %s job %s: existing=%s expected=%s",
+                       document_id, processing_job_id or "legacy", existing_count, expected_count)
+        existing_query.delete(synchronize_session=False)
+
+    for r in rule_results or []:
+        confidence = getattr(r, "confidence", None) or getattr(r, "field_confidence", None) or 0.0
+        rule_id = _clean_text(getattr(r, "rule_id", None), default="UNKNOWN_RULE")
+        status = getattr(r, "status", None)
+        status_value = status.value if hasattr(status, "value") else str(status or "system_error")
+        severity = getattr(r, "severity", None)
+        severity_value = severity.value if hasattr(severity, "value") else str(severity or "STANDARD")
+        target_field = getattr(r, "target_field", None) or _rule_target_field(rule_id)
+        record = RuleResultRecord(
+            document_id=doc_uuid,
+            processing_job_id=job_uuid,
+            rule_id=rule_id,
+            rule_name=_clean_text(getattr(r, "rule_name", None), default=rule_id),
+            status=status_value,
+            message=_clean_text(getattr(r, "message", None), default="No rule message provided."),
+            action_item=_clean_text(
+                getattr(r, "action_item", None),
+                default=getattr(r, "verify_question", None) or getattr(r, "rejection_text", None) or getattr(r, "message", None) or "No reviewer action required.",
+            ),
+            appraisal_value=_clean_text(getattr(r, "appraisal_value", None), default="__NO_APPRAISAL_VALUE__"),
+            engagement_value=_clean_text(getattr(r, "engagement_value", None), default="__NO_ENGAGEMENT_VALUE__"),
+            extracted_value=_clean_text(getattr(r, "extracted_value", None), default="__NO_EXTRACTED_VALUE__"),
+            expected_value=_clean_text(getattr(r, "expected_value", None), default="__NO_EXPECTED_VALUE__"),
+            confidence_score=confidence,
+            target_field=target_field,
+            rule_version=_clean_text(getattr(r, "rule_version", None), default="1.0"),
+            severity=severity_value,
+            review_required=bool(getattr(r, "review_required", False)),
+            source_documents=_clean_json(getattr(r, "source_documents", None), empty=[]),
+            compared_fields=_clean_json(getattr(r, "compared_fields", None), empty=[]),
+            compared_values=_clean_json(getattr(r, "compared_values", None), empty={}),
+            comparison_method=_clean_text(getattr(r, "comparison_method", None), default="not_comparison_based"),
+            decision_path=_clean_json(getattr(r, "decision_path", None), empty=[]),
+            exception_type=_clean_text(getattr(r, "exception_type", None), default="none"),
+            exception_trace=_clean_text(getattr(r, "exception_trace", None), default=""),
+            stage=_clean_text(getattr(r, "stage", None), default="rule_engine"),
+            retry_eligible=getattr(r, "retry_eligible", False),
+            source_page=_clean_page(getattr(r, "source_page", None)),
+            bbox_x=_clean_float(getattr(r, "bbox_x", None)),
+            bbox_y=_clean_float(getattr(r, "bbox_y", None)),
+            bbox_w=_clean_float(getattr(r, "bbox_w", None)),
+            bbox_h=_clean_float(getattr(r, "bbox_h", None)),
+        )
+        db.add(record)
+
+
 def save_rule_results(document_id: str, rule_results: list, processing_job_id: str = None):
-    """Persist rule results for a document."""
+    """Persist rule results for a document (own transaction).
+
+    For atomic persistence with extracted fields in the same transaction use
+    save_fields_and_rules_atomically() instead.
+    """
     if not document_id:
         raise RuntimeError("document_id is required to persist rule results")
     if not _db_ok():
@@ -429,81 +490,36 @@ def save_rule_results(document_id: str, rule_results: list, processing_job_id: s
         doc_uuid = uuid.UUID(document_id)
         job_uuid = uuid.UUID(processing_job_id) if processing_job_id else None
         with get_db() as db:
-            existing_query = db.query(RuleResultRecord).filter(RuleResultRecord.document_id == doc_uuid)
-            if job_uuid:
-                existing_query = existing_query.filter(RuleResultRecord.processing_job_id == job_uuid)
-            else:
-                existing_query = existing_query.filter(RuleResultRecord.processing_job_id == None)
-
-            existing_count = existing_query.count()
-            expected_count = len(rule_results or [])
-            if existing_count == expected_count and expected_count > 0:
-                logger.info(
-                    "Rule results already exist for document %s job %s; skipping duplicate save",
-                    document_id,
-                    processing_job_id or "legacy",
-                )
-                return
-            if existing_count:
-                logger.warning(
-                    "Replacing incomplete/duplicate rule results for document %s job %s: existing=%s expected=%s",
-                    document_id, processing_job_id or "legacy", existing_count, expected_count
-                )
-                existing_query.delete(synchronize_session=False)
-
-            for r in rule_results or []:
-                confidence = getattr(r, "confidence", None)
-                if confidence is None:
-                    confidence = getattr(r, "field_confidence", None)
-                if confidence is None:
-                    confidence = 0.0
-                rule_id = _clean_text(getattr(r, "rule_id", None), default="UNKNOWN_RULE")
-                status = getattr(r, "status", None)
-                status_value = status.value if hasattr(status, "value") else str(status or "system_error")
-                severity = getattr(r, "severity", None)
-                severity_value = severity.value if hasattr(severity, "value") else str(severity or "STANDARD")
-                target_field = getattr(r, "target_field", None) or _rule_target_field(rule_id)
-                source_page = _clean_page(getattr(r, "source_page", None))
-                bbox_x = _clean_float(getattr(r, "bbox_x", None))
-                bbox_y = _clean_float(getattr(r, "bbox_y", None))
-                bbox_w = _clean_float(getattr(r, "bbox_w", None))
-                bbox_h = _clean_float(getattr(r, "bbox_h", None))
-                record = RuleResultRecord(
-                    document_id=doc_uuid,
-                    processing_job_id=job_uuid,
-                    rule_id=rule_id,
-                    rule_name=_clean_text(getattr(r, "rule_name", None), default=rule_id),
-                    status=status_value,
-                    message=_clean_text(getattr(r, "message", None), default="No rule message provided."),
-                    action_item=_clean_text(
-                        getattr(r, "action_item", None),
-                        default=getattr(r, "verify_question", None) or getattr(r, "rejection_text", None) or getattr(r, "message", None) or "No reviewer action required.",
-                    ),
-                    appraisal_value=_clean_text(getattr(r, "appraisal_value", None), default="__NO_APPRAISAL_VALUE__"),
-                    engagement_value=_clean_text(getattr(r, "engagement_value", None), default="__NO_ENGAGEMENT_VALUE__"),
-                    extracted_value=_clean_text(getattr(r, "extracted_value", None), default="__NO_EXTRACTED_VALUE__"),
-                    expected_value=_clean_text(getattr(r, "expected_value", None), default="__NO_EXPECTED_VALUE__"),
-                    confidence_score=confidence,
-                    target_field=target_field,
-                    rule_version=_clean_text(getattr(r, "rule_version", None), default="1.0"),
-                    severity=severity_value,
-                    review_required=bool(getattr(r, "review_required", False)),
-                    source_documents=_clean_json(getattr(r, "source_documents", None), empty=[]),
-                    compared_fields=_clean_json(getattr(r, "compared_fields", None), empty=[]),
-                    compared_values=_clean_json(getattr(r, "compared_values", None), empty={}),
-                    comparison_method=_clean_text(getattr(r, "comparison_method", None), default="not_comparison_based"),
-                    decision_path=_clean_json(getattr(r, "decision_path", None), empty=[]),
-                    exception_type=_clean_text(getattr(r, "exception_type", None), default="none"),
-                    exception_trace=_clean_text(getattr(r, "exception_trace", None), default=""),
-                    stage=_clean_text(getattr(r, "stage", None), default="rule_engine"),
-                    retry_eligible=getattr(r, "retry_eligible", False),
-                    source_page=source_page,
-                    bbox_x=bbox_x,
-                    bbox_y=bbox_y,
-                    bbox_w=bbox_w,
-                    bbox_h=bbox_h,
-                )
-                db.add(record)
+            _insert_rule_results_in_session(db, document_id, rule_results, processing_job_id)
     except Exception as e:
         logger.error("CRITICAL — rule_results save failed for document %s: %s", document_id, e)
         raise RuntimeError(f"Rule result persistence failed: {e}") from e
+
+
+def save_fields_and_rules_atomically(
+    document_id: str,
+    fields: Dict[str, Any],
+    page_confidences: List[float],
+    rule_results: list,
+    processing_job_id: str = None,
+) -> None:
+    """
+    Persist both extracted fields AND rule results inside a single DB transaction.
+
+    If field saving succeeds but rule saving fails (or vice versa) the entire
+    operation is rolled back — neither partial write reaches the database.
+    Call this instead of calling save_extracted_fields + save_rule_results
+    sequentially whenever both must succeed together.
+    """
+    if not document_id:
+        raise RuntimeError("document_id is required for atomic field+rule persistence")
+    if not _db_ok():
+        raise RuntimeError("database unavailable for atomic field+rule persistence")
+    try:
+        with get_db() as db:
+            _insert_extracted_fields_in_session(db, document_id, fields, page_confidences, processing_job_id)
+            _insert_rule_results_in_session(db, document_id, rule_results, processing_job_id)
+        logger.info("Atomic field+rule save committed for document %s", document_id)
+    except Exception as e:
+        logger.error("CRITICAL — atomic field+rule save failed for document %s: %s", document_id, e)
+        raise RuntimeError(f"Atomic persistence failed: {e}") from e

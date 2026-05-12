@@ -2,11 +2,15 @@ package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.QCDecision;
 import com.apprisal.common.entity.QCResult;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.QueryHint;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +25,20 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
      * Find QC result for a specific batch file.
      */
     Optional<QCResult> findByBatchFileId(Long batchFileId);
+
+    /**
+     * Acquire an exclusive row-level lock on a QCResult before mutating its
+     * review-session state. Use this instead of {@link #findById} whenever the
+     * caller is about to grant or check a review lock, to prevent two concurrent
+     * requests from both passing the "no active lock" check (TOCTOU race).
+     *
+     * Must be called inside a @Transactional method — the lock is released when
+     * the surrounding transaction commits or rolls back.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({ @QueryHint(name = "jakarta.persistence.lock.timeout", value = "5000") })
+    @Query("SELECT qr FROM QCResult qr WHERE qr.id = :qcResultId")
+    Optional<QCResult> findByIdForUpdate(@Param("qcResultId") Long qcResultId);
 
     @Query("""
         SELECT qr FROM QCResult qr
@@ -51,10 +69,55 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     long countByQcDecision(QCDecision qcDecision);
 
     /**
-     * Find all reviewer-routed results that haven't been reviewed (ADMIN: all).
+     * Paginated pending queue — ADMIN view (all clients).
      *
-     * AUTO_FAIL batches are still routed to reviewer sign-off, so the open
-     * review queue cannot be limited to TO_VERIFY only.
+     * AUTO_FAIL batches are routed to reviewer sign-off, so the queue is not
+     * limited to TO_VERIFY only. Count query avoids the JOIN FETCH so Spring
+     * Data can compute the total correctly.
+     */
+    @Query(value = """
+        SELECT DISTINCT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN FETCH bf.batch b
+        LEFT JOIN FETCH b.assignedReviewer
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+        ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
+        """,
+        countQuery = """
+        SELECT COUNT(DISTINCT qr) FROM QCResult qr
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+        """)
+    org.springframework.data.domain.Page<QCResult> findPendingVerificationPaged(
+            org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Paginated pending queue — REVIEWER view (only their assigned batches).
+     */
+    @Query(value = """
+        SELECT DISTINCT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN FETCH bf.batch b
+        JOIN FETCH b.assignedReviewer reviewer
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+          AND reviewer.id = :reviewerId
+        ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
+        """,
+        countQuery = """
+        SELECT COUNT(DISTINCT qr) FROM QCResult qr
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+        """)
+    org.springframework.data.domain.Page<QCResult> findPendingVerificationForReviewerPaged(
+            @Param("reviewerId") Long reviewerId,
+            org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Non-paginated variants retained for internal callers that need the full list
+     * (e.g., the stuck-batch reconciler). Prefer the paged variants in API handlers.
      */
     @Query("""
         SELECT DISTINCT qr FROM QCResult qr
@@ -143,6 +206,41 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
      * Check if a batch file already has a QC result.
      */
     boolean existsByBatchFileId(Long batchFileId);
+
+    /**
+     * Find the active (non-superseded) QC result for a batch file.
+     * There is at most one active result per file at any time.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        WHERE qr.batchFile.id = :batchFileId
+          AND qr.supersededAt IS NULL
+        """)
+    Optional<QCResult> findActiveByBatchFileId(@Param("batchFileId") Long batchFileId);
+
+    /**
+     * All QC results for a batch file — active + all historical reruns —
+     * ordered newest first. Used for the QC history panel.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        WHERE qr.batchFile.id = :batchFileId
+        ORDER BY qr.processedAt DESC
+        """)
+    List<QCResult> findAllByBatchFileIdOrderByProcessedAtDesc(@Param("batchFileId") Long batchFileId);
+
+    /**
+     * Full rerun chain for a given QCResult — walks the rerunOf linked list.
+     * Includes the provided result ID and all its ancestors, newest first.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        WHERE qr.batchFile.id = (
+            SELECT r.batchFile.id FROM QCResult r WHERE r.id = :qcResultId
+        )
+        ORDER BY qr.processedAt DESC
+        """)
+    List<QCResult> findVersionHistoryByQcResultId(@Param("qcResultId") Long qcResultId);
 
     /**
      * Single-statement counter refresh used after every reviewer decision.

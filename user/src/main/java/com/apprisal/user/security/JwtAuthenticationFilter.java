@@ -3,6 +3,7 @@ package com.apprisal.user.security;
 import com.apprisal.user.util.JwtUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.lang.NonNull;
@@ -17,8 +18,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Resolves a JWT from either:
+ *   1. HttpOnly "jwt" cookie  (primary path — XSS-safe)
+ *   2. Authorization: Bearer … header  (retained for CLI / integration clients)
+ *
+ * Cookie-first ensures the browser never exposes the token to JavaScript.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    public static final String JWT_COOKIE_NAME = "jwt";
 
     private final JwtUtils jwtUtils;
     private final UserDetailsService userDetailsService;
@@ -34,29 +44,55 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
+        String jwt = extractFromCookie(request);
+        if (jwt == null) {
+            jwt = extractFromHeader(request);
+        }
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        if (jwt == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        final String jwt = authHeader.substring(7);
-        final String userEmail = jwtUtils.extractUsername(jwt);
+        try {
+            final String username = jwtUtils.extractUsername(jwt);
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                if (jwtUtils.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContext context = SecurityContextHolder.createEmptyContext();
+                    context.setAuthentication(authToken);
+                    SecurityContextHolder.setContext(context);
+                }
+            }
+        } catch (Exception ignored) {
+            // Invalid/expired token — let the request proceed unauthenticated;
+            // Spring Security will return 401 if the endpoint requires auth.
+        }
 
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
-            if (jwtUtils.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        filterChain.doFilter(request, response);
+    }
 
-                // Spring Security 7: always set a fresh context rather than mutating the existing one
-                SecurityContext context = SecurityContextHolder.createEmptyContext();
-                context.setAuthentication(authToken);
-                SecurityContextHolder.setContext(context);
+    private String extractFromCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) return null;
+        for (Cookie cookie : cookies) {
+            if (JWT_COOKIE_NAME.equals(cookie.getName())) {
+                String value = cookie.getValue();
+                return (value != null && !value.isBlank()) ? value : null;
             }
         }
-        filterChain.doFilter(request, response);
+        return null;
+    }
+
+    private String extractFromHeader(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            String value = header.substring(7);
+            return value.isBlank() ? null : value;
+        }
+        return null;
     }
 }

@@ -35,6 +35,26 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
     @EntityGraph(attributePaths = {"overrideRequestedBy", "overrideApprovedBy"})
     List<QCRuleResult> findByQcResultId(Long qcResultId);
 
+    /**
+     * All rule results awaiting admin override approval (across all batches).
+     * Used by the admin override queue.
+     */
+    @Query("""
+        SELECT rr FROM QCRuleResult rr
+        JOIN FETCH rr.qcResult qr
+        JOIN FETCH qr.batchFile bf
+        JOIN FETCH bf.batch b
+        WHERE rr.overridePending = true
+        ORDER BY rr.overrideRequestedAt ASC
+        """)
+    List<QCRuleResult> findAllPendingOverrides();
+
+    /**
+     * Count pending overrides globally — used by admin dashboard badge.
+     */
+    @Query("SELECT COUNT(rr) FROM QCRuleResult rr WHERE rr.overridePending = true")
+    long countPendingOverrides();
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         DELETE FROM QCRuleResult rr

@@ -395,18 +395,44 @@ def increment_retry(job_id: Optional[str]) -> None:
 
 
 def complete_job(job_id: Optional[str], *, document_id: Optional[str], result_payload: Optional[dict[str, Any]]) -> None:
-    values: dict[str, Any] = {
-        "status": "completed",
-        "current_stage": "completed",
-        "completed_at": datetime.utcnow(),
-        "failed_at": None,
-        "failure_reason": None,
-    }
-    if document_id:
-        values["document_id"] = uuid.UUID(str(document_id))
-    if result_payload is not None:
-        values["result_json"] = json.dumps(result_payload, default=str)
-    update_job(job_id, **values)
+    """
+    Mark a processing job as completed and persist the result payload.
+
+    Unlike update_job (which silently ignores DB errors), this function RAISES
+    on failure. The result_json column is the durable store — if this write
+    fails, the Celery task must fail too so Java never reads a null result from
+    a "completed" job after the Redis TTL has expired.
+    """
+    if not job_id:
+        return
+    try:
+        from app.database import get_db
+        from app.models.db_models import ProcessingJob
+        now = datetime.utcnow()
+        result_json = json.dumps(result_payload, default=str) if result_payload is not None else None
+        doc_uuid = uuid.UUID(str(document_id)) if document_id else None
+        with get_db() as db:
+            job = db.query(ProcessingJob).filter(ProcessingJob.id == uuid.UUID(str(job_id))).first()
+            if not job:
+                logger.warning("complete_job: job %s not found in DB — result not persisted", job_id)
+                return
+            job.status = "completed"
+            job.current_stage = "completed"
+            job.completed_at = now
+            job.failed_at = None
+            job.failure_reason = None
+            job.updated_at = now
+            if doc_uuid:
+                job.document_id = doc_uuid
+            if result_json is not None:
+                job.result_json = result_json
+        logger.info("Job %s completed — result_json written to DB (%d chars)",
+                    job_id, len(result_json) if result_json else 0)
+    except Exception as exc:
+        # Do NOT swallow this — the caller (Celery task) must fail so Java
+        # can retry instead of reading an empty result after Redis TTL expires.
+        logger.error("CRITICAL — complete_job DB write failed for job %s: %s", job_id, exc)
+        raise RuntimeError(f"Failed to persist completed job {job_id}: {exc}") from exc
 
 
 def fail_job(job_id: Optional[str], reason: str, stage: Optional[str] = None) -> None:

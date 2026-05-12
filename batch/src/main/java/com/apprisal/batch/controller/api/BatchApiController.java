@@ -5,6 +5,7 @@ import com.apprisal.batch.service.BatchService;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.security.UserPrincipal;
 import com.apprisal.common.repository.BatchFileRepository;
+import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.ClientRepository;
 import com.apprisal.common.repository.QCResultRepository;
 import org.springframework.data.domain.Page;
@@ -20,6 +21,7 @@ import org.springframework.lang.NonNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * REST API for batch operations — ADMIN only.
@@ -34,17 +36,43 @@ public class BatchApiController {
     private final ClientRepository clientRepository;
     private final BatchFileRepository batchFileRepository;
     private final QCResultRepository qcResultRepository;
+    private final BatchRepository batchRepository;
 
     public BatchApiController(BatchService batchService,
                               AuditLogService auditLogService,
                               ClientRepository clientRepository,
                               BatchFileRepository batchFileRepository,
-                              QCResultRepository qcResultRepository) {
+                              QCResultRepository qcResultRepository,
+                              BatchRepository batchRepository) {
         this.batchService = batchService;
         this.auditLogService = auditLogService;
         this.clientRepository = clientRepository;
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository = qcResultRepository;
+        this.batchRepository = batchRepository;
+    }
+
+    /**
+     * Client-isolation guard.
+     *
+     * An admin with no client assigned is a super-admin (full access).
+     * An admin whose account is scoped to a specific client may only act on
+     * batches belonging to that client — prevents horizontal privilege escalation
+     * where one client's admin deletes or views another client's appraisal data.
+     */
+    private Optional<ResponseEntity<?>> assertClientAccess(User admin, Long batchId) {
+        Client adminClient = admin.getClient();
+        if (adminClient == null) {
+            return Optional.empty(); // super-admin: no restriction
+        }
+        return batchRepository.findById(batchId).map(batch -> {
+            if (batch.getClient() == null || !adminClient.getId().equals(batch.getClient().getId())) {
+                return Optional.of(ResponseEntity.status(403)
+                        .<Object>body(Map.of("error", "ACCESS_DENIED",
+                                "message", "You do not have access to this batch.")));
+            }
+            return Optional.<ResponseEntity<?>>empty();
+        }).orElse(Optional.of(ResponseEntity.notFound().<Object>build()));
     }
 
     /**
@@ -139,14 +167,22 @@ public class BatchApiController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getBatch(@PathVariable @NonNull Long id) {
+    public ResponseEntity<?> getBatch(
+            @PathVariable @NonNull Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), id);
+        if (denied.isPresent()) return denied.get();
         return batchService.findByIdWithFiles(id)
                 .map(b -> ResponseEntity.ok(toSummary(b, true)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{id}/status")
-    public ResponseEntity<?> getBatchStatus(@PathVariable @NonNull Long id) {
+    public ResponseEntity<?> getBatchStatus(
+            @PathVariable @NonNull Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), id);
+        if (denied.isPresent()) return denied.get();
         return batchService.findById(id)
                 .map(b -> ResponseEntity.ok(Map.of(
                         "batchId",      b.getId(),
@@ -206,6 +242,8 @@ public class BatchApiController {
     public ResponseEntity<?> deleteBatch(
             @PathVariable @NonNull Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), id);
+        if (denied.isPresent()) return denied.get();
         try {
             batchService.deleteBatch(id);
             auditLogService.logEntity(principal.getUser(), "BATCH_DELETED", "Batch", id);

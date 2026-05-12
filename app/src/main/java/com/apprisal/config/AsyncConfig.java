@@ -13,9 +13,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 /**
  * Async configuration for background QC processing.
  *
- * Two concurrent batches max (OCR is CPU+IO heavy), queue of 20 pending triggers.
- * CallerRunsPolicy: if queue is full, the HTTP thread runs the task — ensures
- * no jobs are silently dropped, at the cost of a slow response for that admin request.
+ * Sizing rationale:
+ *  - OCR jobs run 5-15 min each and are CPU+IO-heavy.
+ *  - Core=4 keeps 4 batches permanently warm without idling extra threads.
+ *  - Max=10 allows bursting when demand is high.
+ *  - Queue=100 absorbs upload bursts without blocking HTTP threads.
+ *  - AbortPolicy: when the queue is full, return HTTP 503 to the admin
+ *    so they get clear feedback rather than silently blocking the request thread.
  */
 @Configuration
 @EnableAsync
@@ -26,15 +30,15 @@ public class AsyncConfig {
     @Bean("qcTaskExecutor")
     public Executor qcTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(4);
-        executor.setQueueCapacity(20);
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("qc-worker-");
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(120);
+        executor.setAwaitTerminationSeconds(300);  // 5 min — allow long OCR jobs to finish
         executor.initialize();
-        log.info("QC task executor configured: core=2, max=4, queue=20");
+        log.info("QC task executor configured: core=4, max=10, queue=100, AbortPolicy");
         return executor;
     }
 }

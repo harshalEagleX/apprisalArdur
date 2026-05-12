@@ -86,6 +86,22 @@ public class QCResult {
     @Column(name = "source_document_version")
     private Long sourceDocumentVersion;
 
+    /**
+     * Points to the QCResult this run replaced.
+     * Null for the first QC run on a file. Non-null when admin triggered a rerun.
+     * The referenced result has supersededAt set to indicate it is historical.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "rerun_of")
+    private QCResult rerunOf;
+
+    /**
+     * Non-null when this result has been superseded by a newer rerun.
+     * Historical results are kept for audit purposes and are never deleted.
+     */
+    @Column(name = "superseded_at")
+    private LocalDateTime supersededAt;
+
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
@@ -150,6 +166,17 @@ public class QCResult {
         ruleResults.add(ruleResult);
         ruleResult.setQcResult(this);
     }
+
+    /** True when this result has been replaced by a newer rerun. */
+    public boolean isSuperseded() {
+        return supersededAt != null;
+    }
+
+    public QCResult getRerunOf() { return rerunOf; }
+    public void setRerunOf(QCResult rerunOf) { this.rerunOf = rerunOf; }
+
+    public LocalDateTime getSupersededAt() { return supersededAt; }
+    public void setSupersededAt(LocalDateTime supersededAt) { this.supersededAt = supersededAt; }
 
     // Getters and Setters
     public Long getId() {

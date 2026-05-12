@@ -480,11 +480,14 @@ public class QCProcessingService {
                 appraisal.getFilename(),
                 pair.hasEngagement() ? pair.getEngagement().getFilename() : "none");
 
-        // Check if already processed
-        if (qcResultRepository.existsByBatchFileId(appraisal.getId())) {
-            log.warn("File {} already has QC result, skipping", appraisal.getFilename());
-            return qcResultRepository.findByBatchFileId(appraisal.getId())
-                    .orElseThrow(() -> new IllegalStateException("QC Result not found"));
+        // On rerun: supersede the existing active result rather than skipping.
+        // Historical results are retained for audit purposes.
+        var existingActive = qcResultRepository.findActiveByBatchFileId(appraisal.getId());
+        if (existingActive.isPresent()) {
+            log.info("File {} has an existing active QC result (id={}). Superseding it for rerun.",
+                    appraisal.getFilename(), existingActive.get().getId());
+            // The previous active result stays in the DB with supersededAt set.
+            // The new result will link back to it via rerunOf.
         }
 
         Long progressBatchId = appraisal.getBatch().getId();
@@ -607,19 +610,23 @@ public class QCProcessingService {
         BatchFile appraisal = batchFileRepository.findWithBatchAndReviewerById(appraisalId)
                 .orElseThrow(() -> new RuntimeException("BatchFile not found: " + appraisalId));
 
-        // A duplicate worker can pass the first exists check, spend time in Python,
-        // and only then discover that another worker already saved the result.
-        // Re-check after the long call so the unique constraint is a backstop, not
-        // the normal control flow.
-        var existingResult = qcResultRepository.findByBatchFileId(appraisal.getId());
-        if (existingResult.isPresent()) {
-            log.warn("File {} received a QC result while Python was running, reusing existing result",
-                    appraisal.getFilename());
-            return existingResult.get();
-        }
+        // Re-fetch the active result after the Python call. On a rerun, the
+        // pre-call active result will be superseded; on a race from a duplicate
+        // worker, the result from the first worker will already be present.
+        var activeAfterPython = qcResultRepository.findActiveByBatchFileId(appraisal.getId());
+        boolean isRerun = activeAfterPython.isPresent();
+        QCResult previousActive = activeAfterPython.orElse(null);
 
         // Determine decision
         QCDecision decision = determineDecision(pythonResponse);
+
+        // On rerun: mark the previously-active result as superseded so it becomes
+        // historical. The new result will reference it via rerunOf.
+        if (isRerun && previousActive != null) {
+            previousActive.setSupersededAt(Instant.now().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
+            qcResultRepository.save(previousActive);
+            log.info("QC result {} superseded for file {} (rerun)", previousActive.getId(), appraisal.getFilename());
+        }
 
         // Create QCResult
         QCResult qcResult = QCResult.builder()
@@ -640,6 +647,11 @@ public class QCProcessingService {
                 .sourceDocumentHash(appraisal.getContentHash())
                 .sourceDocumentVersion(appraisal.getContentVersion())
                 .build();
+
+        // Link to superseded result so the full version chain is traceable.
+        if (previousActive != null) {
+            qcResult.setRerunOf(previousActive);
+        }
 
         // Create rule results
         if (pythonResponse.ruleResults() != null) {

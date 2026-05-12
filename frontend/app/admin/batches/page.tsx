@@ -8,6 +8,7 @@ import type { ComponentType } from "react";
 import {
   getAdminBatches, processQC, assignReviewer, deleteBatch,
   reconcileStuckBatches, cancelQC, getAdminDashboard, getAllUsers,
+  bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer,
   type Batch, type User, type QCModelSelection,
 } from "@/lib/api";
 import { removeJob } from "@/lib/jobs";
@@ -137,6 +138,79 @@ export default function BatchesPage() {
   const [textModel, setTextModel]     = useState(MODEL_OPTIONS.ollama.text[0]);
   const visionModel                   = MODEL_OPTIONS.ollama.vision[0];
   const searchMountedRef              = useRef(false);
+
+  // ── Bulk selection state ─────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  const handleSelect = useCallback((id: number, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    setSelectedIds(checked ? new Set(batches.map(b => b.id)) : new Set());
+  }, [batches]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // Clear selection when page changes
+  useEffect(() => { clearSelection(); }, [page, statusFilter, debouncedSearch, clearSelection]);
+
+  const handleBulkQC = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { succeeded, failed } = await bulkProcessQC(ids, { provider: modelProvider, textModel, visionModel });
+      if (succeeded.length > 0) toast.success(`QC started for ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
+      if (failed.length > 0) toast.error(`Failed to start QC for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
+      clearSelection();
+    } catch (e) {
+      toast.error("Bulk QC failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [selectedIds, modelProvider, textModel, visionModel, clearSelection]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} batch${selectedIds.size > 1 ? "es" : ""}? This cannot be undone.`)) return;
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { succeeded, failed } = await bulkDeleteBatches(ids);
+      if (succeeded.length > 0) {
+        setBatches(prev => prev.filter(b => !succeeded.includes(b.id)));
+        toast.success(`Deleted ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
+      }
+      if (failed.length > 0) toast.error(`Failed to delete ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
+      clearSelection();
+    } catch (e) {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [selectedIds, clearSelection]);
+
+  const handleBulkAssign = useCallback(async (reviewerId: number) => {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { succeeded, failed } = await bulkAssignReviewer(ids, reviewerId);
+      if (succeeded.length > 0) toast.success(`Reviewer assigned to ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
+      if (failed.length > 0) toast.error(`Assignment failed for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
+      clearSelection();
+    } catch (e) {
+      toast.error("Bulk assign failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [selectedIds, clearSelection]);
 
   const setActionBusy = useCallback((id: number, on: boolean) => {
     setActionLoading(prev => {
@@ -359,12 +433,71 @@ export default function BatchesPage() {
 
       {reconcileResult && <ReconcileSummary result={reconcileResult} onDismiss={() => setReconcileResult(null)} />}
 
+      {/* Bulk-action toolbar — visible only when rows are selected */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-500/25 bg-indigo-950/20 px-4 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.18)]">
+          <span className="text-sm font-medium text-indigo-300">
+            {selectedIds.size} batch{selectedIds.size > 1 ? "es" : ""} selected
+          </span>
+          <span className="mx-1 h-4 w-px bg-white/10" />
+          <button
+            onClick={handleBulkQC}
+            disabled={bulkLoading}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-900/30 px-3 text-xs font-medium text-indigo-200 transition-colors hover:bg-indigo-900/60 disabled:opacity-40"
+          >
+            <Play size={12} /> Run QC on selected
+          </button>
+          {reviewers.length > 0 && (
+            <select
+              disabled={bulkLoading}
+              defaultValue=""
+              onChange={e => { if (e.target.value) { handleBulkAssign(Number(e.target.value)); e.target.value = ""; } }}
+              className="h-8 rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 focus:outline-none disabled:opacity-40"
+              aria-label="Bulk assign reviewer"
+            >
+              <option value="" disabled>Assign reviewer…</option>
+              {reviewers.map(r => (
+                <option key={r.id} value={r.id}>{r.fullName ?? r.username}</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkLoading}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/25 bg-red-950/30 px-3 text-xs font-medium text-red-300 transition-colors hover:bg-red-950/60 disabled:opacity-40"
+          >
+            <XCircle size={12} /> Delete selected
+          </button>
+          <button
+            onClick={clearSelection}
+            disabled={bulkLoading}
+            className="ml-auto text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div data-guide="admin-batches-table" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
         <div className="data-scroll">
-          <table className="w-full min-w-[1060px] text-sm">
+          <table className="w-full min-w-[1120px] text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-[#0B0F14]/80">
+                {/* Select-all checkbox */}
+                <th className="sticky top-0 z-10 w-10 bg-[#0B0F14] px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={batches.length > 0 && selectedIds.size === batches.length}
+                    ref={el => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < batches.length;
+                    }}
+                    onChange={e => handleSelectAll(e.target.checked)}
+                    className="h-4 w-4 rounded border-white/20 bg-[#11161C] accent-indigo-500 cursor-pointer"
+                    aria-label="Select all batches"
+                    disabled={batches.length === 0}
+                  />
+                </th>
                 {["Batch", "Client", "Status", "Files", "Reviewer", "Date", "Actions"].map((h, i) => (
                   <th key={h} className={`sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${i === 6 ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
@@ -372,10 +505,10 @@ export default function BatchesPage() {
             </thead>
             <tbody className="divide-y divide-white/10">
               {loading ? (
-                <tr><td colSpan={7} className="p-0"><TableSkeleton rows={6} cols={7} /></td></tr>
+                <tr><td colSpan={8} className="p-0"><TableSkeleton rows={6} cols={8} /></td></tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <EmptyState
                       icon={Search}
                       title={debouncedSearch || statusFilter ? "No batches match your filters" : "No batches yet"}
@@ -392,7 +525,7 @@ export default function BatchesPage() {
                 <BatchRow
                   key={b.id}
                   batch={b}
-                  isLoading={actionLoading.has(b.id)}
+                  isLoading={actionLoading.has(b.id) || bulkLoading}
                   progress={progress[b.id]}
                   reviewers={reviewers}
                   reviewerWorkload={reviewerWorkload}
@@ -401,6 +534,8 @@ export default function BatchesPage() {
                   onAssign={handleAssign}
                   onDelete={setDeleteTarget}
                   onOpenRecovery={setRecoveryTarget}
+                  selected={selectedIds.has(b.id)}
+                  onSelect={handleSelect}
                 />
               ))}
             </tbody>

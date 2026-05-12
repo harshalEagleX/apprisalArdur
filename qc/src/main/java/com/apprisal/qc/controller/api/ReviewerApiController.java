@@ -20,6 +20,10 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -98,33 +102,49 @@ public class ReviewerApiController {
 
     // ── Pending queue ──────────────────────────────────────────────────────────
 
+    /**
+     * Paginated pending review queue.
+     *
+     * Returns a page envelope so the frontend can render a paginator and the
+     * server never loads the entire queue into memory (OOM prevention at scale).
+     * Default page size is 50 — large enough for a productive session, small
+     * enough to keep response times fast.
+     */
     @GetMapping("/qc/results/pending")
-    public ResponseEntity<List<Map<String, Object>>> getPendingQueue(
-            @AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<Map<String, Object>> getPendingQueue(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "50") int size) {
         try {
-            List<QCResult> pending;
+            // Cap page size to 200 so a crafted request can't trigger an OOM.
+            int safeSize = Math.min(Math.max(1, size), 200);
+            PageRequest pageable = PageRequest.of(
+                    Math.max(0, page), safeSize,
+                    Sort.by(Sort.Direction.DESC, "failedCount")
+                        .and(Sort.by(Sort.Direction.DESC, "verifyCount"))
+                        .and(Sort.by(Sort.Direction.ASC,  "updatedAt")));
 
+            Page<QCResult> pendingPage;
             if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
-                // REVIEWER: only see batches assigned to them
-                pending = qcResultRepository.findPendingVerificationForReviewer(principal.getUser().getId());
+                pendingPage = qcResultRepository.findPendingVerificationForReviewerPaged(
+                        principal.getUser().getId(), pageable);
             } else {
-                // ADMIN: see all pending
-                pending = qcResultRepository.findPendingVerification();
+                pendingPage = qcResultRepository.findPendingVerificationPaged(pageable);
             }
 
-            List<Map<String, Object>> body = pending.stream().map(r -> {
+            List<Map<String, Object>> content = pendingPage.getContent().stream().map(r -> {
                 Map<String, Object> m = new HashMap<>();
-                m.put("id",              r.getId());
-                m.put("qcDecision",      r.getQcDecision() != null ? r.getQcDecision().name() : null);
-                m.put("finalDecision",   r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
-                m.put("totalRules",      r.getTotalRules());
-                m.put("passedCount",     r.getPassedCount());
-                m.put("failedCount",     r.getFailedCount());
-                m.put("verifyCount",     r.getVerifyCount());
-                m.put("manualPassCount", r.getManualPassCount());
+                m.put("id",               r.getId());
+                m.put("qcDecision",       r.getQcDecision() != null ? r.getQcDecision().name() : null);
+                m.put("finalDecision",    r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
+                m.put("totalRules",       r.getTotalRules());
+                m.put("passedCount",      r.getPassedCount());
+                m.put("failedCount",      r.getFailedCount());
+                m.put("verifyCount",      r.getVerifyCount());
+                m.put("manualPassCount",  r.getManualPassCount());
                 m.put("processingTimeMs", r.getProcessingTimeMs());
-                m.put("cacheHit",        r.getCacheHit());
-                m.put("processedAt",     r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
+                m.put("cacheHit",         r.getCacheHit());
+                m.put("processedAt",      r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
                 if (r.getBatchFile() != null) {
                     m.put("batchFile", Map.of(
                             "id",       r.getBatchFile().getId(),
@@ -134,10 +154,19 @@ public class ReviewerApiController {
                 return m;
             }).toList();
 
-            return ResponseEntity.ok(body);
+            return ResponseEntity.ok(Map.of(
+                    "content",       content,
+                    "page",          pendingPage.getNumber(),
+                    "size",          pendingPage.getSize(),
+                    "totalElements", pendingPage.getTotalElements(),
+                    "totalPages",    pendingPage.getTotalPages(),
+                    "first",         pendingPage.isFirst(),
+                    "last",          pendingPage.isLast()
+            ));
         } catch (Exception e) {
             log.error("Failed to load pending queue: {}", e.getMessage(), e);
-            return ResponseEntity.ok(List.of());
+            return ResponseEntity.ok(Map.of("content", List.of(), "totalElements", 0L,
+                    "totalPages", 0, "page", 0, "size", size));
         }
     }
 
@@ -683,5 +712,112 @@ public class ReviewerApiController {
                     "example", "A useful comment explains why the data supports the conclusion, not just that the appraiser reviewed it.");
             default -> null;
         };
+    }
+
+    // ── Override / escalation workflow (ADMIN-only) ────────────────────────────
+
+    /**
+     * Returns all rule results awaiting admin override approval, across all batches.
+     * Displayed in the admin "Override Queue" panel.
+     */
+    @GetMapping("/admin/overrides/pending")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> getPendingOverrides() {
+        List<com.apprisal.common.entity.QCRuleResult> pending = qcRuleResultRepository.findAllPendingOverrides();
+        List<Map<String, Object>> body = pending.stream().map(rr -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("ruleResultId",       rr.getId());
+            m.put("ruleId",             rr.getRuleId());
+            m.put("ruleName",           rr.getRuleName());
+            m.put("status",             rr.getStatus());
+            m.put("message",            rr.getMessage());
+            m.put("severity",           rr.getSeverity());
+            m.put("overridePending",    rr.getOverridePending());
+            m.put("overrideRequestedAt", rr.getOverrideRequestedAt() != null ? rr.getOverrideRequestedAt().toString() : null);
+            m.put("overrideRequestedBy", rr.getOverrideRequestedBy() != null ? displayName(rr.getOverrideRequestedBy()) : null);
+            m.put("reviewerComment",    rr.getReviewerComment());
+            if (rr.getQcResult() != null) {
+                m.put("qcResultId", rr.getQcResult().getId());
+                if (rr.getQcResult().getBatchFile() != null) {
+                    m.put("filename", rr.getQcResult().getBatchFile().getFilename());
+                    if (rr.getQcResult().getBatchFile().getBatch() != null) {
+                        m.put("batchId",       rr.getQcResult().getBatchFile().getBatch().getId());
+                        m.put("parentBatchId", rr.getQcResult().getBatchFile().getBatch().getParentBatchId());
+                    }
+                }
+            }
+            return m;
+        }).toList();
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Admin approves or rejects a pending FAIL override.
+     *
+     * approve=true  → final decision PASS, override cleared, reviewer informed.
+     * approve=false → override rejected, reviewer must re-decide or escalate.
+     */
+    @PostMapping("/admin/overrides/{ruleResultId}/decide")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> decideOverride(
+            @PathVariable Long ruleResultId,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
+        try {
+            boolean approve = Boolean.TRUE.equals(body.get("approve"));
+            String adminComment = body.containsKey("comment") ? String.valueOf(body.get("comment")) : "";
+
+            com.apprisal.common.entity.QCRuleResult rr = qcRuleResultRepository.findById(ruleResultId)
+                    .orElseThrow(() -> new IllegalArgumentException("Rule result not found: " + ruleResultId));
+
+            if (!Boolean.TRUE.equals(rr.getOverridePending())) {
+                return ResponseEntity.badRequest().body(Map.of("success", false,
+                        "error", "Rule result " + ruleResultId + " is not awaiting override approval."));
+            }
+
+            rr.setOverridePending(false);
+            rr.setOverrideApprovedBy(principal.getUser());
+            rr.setOverrideApprovedAt(java.time.LocalDateTime.now());
+
+            if (approve) {
+                rr.setReviewerVerified(true);
+                rr.setReviewerComment(adminComment.isBlank() ? rr.getReviewerComment() : adminComment);
+            } else {
+                // Rejection: reset the decision so the reviewer can reconsider.
+                rr.setReviewerVerified(null);
+                rr.setReviewerComment("Override rejected by admin" + (adminComment.isBlank() ? "." : ": " + adminComment));
+            }
+
+            qcRuleResultRepository.save(rr);
+
+            auditLogService.log(principal.getUser(),
+                    approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED",
+                    "QCRuleResult", ruleResultId,
+                    "comment=" + adminComment, clientIp(httpRequest), httpRequest.getHeader("User-Agent"));
+
+            // Notify the reviewer via real-time event
+            if (rr.getQcResult() != null) {
+                Map<String, Object> event = new HashMap<>();
+                event.put("type",         approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED");
+                event.put("ruleResultId", ruleResultId);
+                event.put("ruleId",       rr.getRuleId());
+                event.put("approvedBy",   displayName(principal.getUser()));
+                event.put("comment",      adminComment);
+                realtimeEventPublisher.publish("/topic/reviewer/qc/" + rr.getQcResult().getId() + "/override", event);
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "ruleResultId", ruleResultId,
+                    "approved", approve,
+                    "approvedBy", displayName(principal.getUser())
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Override decision failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("success", false, "error", "Override decision failed"));
+        }
     }
 }

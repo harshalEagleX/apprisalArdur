@@ -1,6 +1,6 @@
 "use client";
 import React, { memo } from "react";
-import { Play, Square, Trash2, AlertTriangle, AlertCircle, UserPlus } from "lucide-react";
+import { Play, RefreshCw, Square, Trash2, AlertTriangle, AlertCircle, UserPlus } from "lucide-react";
 import type { Batch, User } from "@/lib/api";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { ReviewerAssignControl } from "./ReviewerAssignControl";
@@ -17,6 +17,9 @@ export interface BatchRowProps {
   onAssign: (batchId: number, reviewerId: number) => void;
   onDelete: (batch: Batch) => void;
   onOpenRecovery: (batch: Batch) => void;
+  // Bulk-selection
+  selected?: boolean;
+  onSelect?: (id: number, checked: boolean) => void;
 }
 
 export const BatchRow = memo(function BatchRow({
@@ -30,6 +33,8 @@ export const BatchRow = memo(function BatchRow({
   onAssign,
   onDelete,
   onOpenRecovery,
+  selected = false,
+  onSelect,
 }: BatchRowProps) {
   const b = batch;
   const pct = progress ? (progress.smoothedPercent ?? progress.percent) : 0;
@@ -53,8 +58,21 @@ export const BatchRow = memo(function BatchRow({
 
   return (
     <tr
-      className={`transition-colors ${b.status === "QC_PROCESSING" ? "bg-slate-950/10" : "hover:bg-white/[0.03]"}`}
+      className={`transition-colors ${selected ? "bg-indigo-950/20" : b.status === "QC_PROCESSING" ? "bg-slate-950/10" : "hover:bg-white/[0.03]"}`}
     >
+      {/* Bulk-select checkbox */}
+      <td className="w-10 px-3 py-3" onClick={e => e.stopPropagation()}>
+        {onSelect && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={e => onSelect(b.id, e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-[#11161C] accent-indigo-500 cursor-pointer"
+            aria-label={`Select batch ${b.parentBatchId}`}
+          />
+        )}
+      </td>
+
       {/* Batch ID */}
       <td className="px-4 py-3">
         <div
@@ -176,6 +194,19 @@ export const BatchRow = memo(function BatchRow({
               {spinnerSvg}
               Processing
             </span>
+          )}
+
+          {/* Re-run QC — available after a successful QC or for review-pending batches */}
+          {(b.status === "COMPLETED" || b.status === "REVIEW_PENDING" || b.status === "IN_REVIEW") && (
+            <button
+              onClick={() => onProcessQC(b)}
+              disabled={isLoading}
+              className="inline-flex h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-md border border-indigo-500/25 bg-indigo-950/30 px-2.5 text-xs font-medium text-indigo-300 transition-colors hover:bg-indigo-950/60 disabled:opacity-40"
+              title="Re-run QC with current rules and model — previous results are preserved until the new run completes"
+            >
+              {isLoading ? spinnerSvg : <RefreshCw size={12} />}
+              Re-run QC
+            </button>
           )}
 
           {/* Stop QC */}

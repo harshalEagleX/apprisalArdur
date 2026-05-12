@@ -65,7 +65,10 @@ public class VerificationService {
     @Transactional
     public QCResult beginReviewSession(@NonNull Long qcResultId, @NonNull User reviewer,
             boolean acknowledgeExistingLock, String ipAddress, String userAgent) {
-        QCResult qcResult = getForVerification(qcResultId);
+        // Pessimistic write lock prevents two reviewers from simultaneously passing
+        // the "no active lock" check before either commits (TOCTOU race condition).
+        QCResult qcResult = qcResultRepository.findByIdForUpdate(qcResultId)
+                .orElseThrow(() -> new RuntimeException("QC Result not found: " + qcResultId));
         assertDocumentCurrent(qcResult);
         LocalDateTime now = LocalDateTime.now();
         User lockedBy = qcResult.getReviewLockedBy();

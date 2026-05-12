@@ -1,21 +1,13 @@
 /**
  * API client — all calls go to the Java backend on port 8080.
  * Two roles: ADMIN and REVIEWER only.
+ *
+ * Authentication strategy: HttpOnly "jwt" cookie set by the backend on login.
+ * The browser sends it automatically via credentials:"include". JavaScript
+ * never reads or writes the token — this eliminates the XSS token-theft vector.
  */
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
-const AUTH_TOKEN_KEY = "apprisal_auth_token";
-
-function storedAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
-}
-
-function rememberAuthToken(token: string | null): void {
-  if (typeof window === "undefined") return;
-  if (token?.trim()) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-  else window.localStorage.removeItem(AUTH_TOKEN_KEY);
-}
 
 function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
   const normalized: Record<string, string> = {};
@@ -34,7 +26,6 @@ function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   const text = await res.text();
   if (!text) return fallback;
-
   try {
     const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
     const message = typeof parsed.message === "string" ? parsed.message : parsed.error;
@@ -56,35 +47,52 @@ function sanitizeErrorMessage(message: string): string {
   if (clean.includes("Read timed out")) {
     return "The request took too long to finish. Please try again in a moment.";
   }
+  if (clean.includes("TOO_MANY_REQUESTS") || clean.includes("Too many login")) {
+    return "Too many login attempts. Please wait 5 minutes before trying again.";
+  }
   return clean;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+// Default request timeout: 30 s for data calls, 90 s for heavy OCR triggers.
+const DEFAULT_TIMEOUT_MS = 30_000;
+const LONG_TIMEOUT_MS    = 90_000;
+
+const LONG_TIMEOUT_PATHS = ["/api/qc/process/", "/api/admin/batches/upload", "/qc/process"];
+
+async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
   let res: Response;
-  const token = storedAuthToken();
-  const { headers, ...rest } = options ?? {};
+  const { headers, timeoutMs, ...rest } = options ?? {};
+
+  const timeout = timeoutMs
+    ?? (LONG_TIMEOUT_PATHS.some(p => path.includes(p)) ? LONG_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
   try {
     res = await fetch(`${JAVA}${path}`, {
+      // credentials:"include" sends the HttpOnly jwt cookie on every request.
       credentials: "include",
+      signal: controller.signal,
       ...rest,
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...normalizeHeaders(headers),
       },
     });
   } catch (err) {
-    // Spring Security 302-redirects unauthenticated /api/** calls to /login.
-    // The browser follows the redirect cross-origin; the /login response
-    // doesn't carry the right CORS headers, so fetch surfaces a generic
-    // `TypeError: Failed to fetch`. Bounce the user to login instead of
-    // letting the calling page crash.
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeout / 1000}s. Please try again.`);
+    }
+    // Network error or CORS failure (e.g. backend redirected to /login cross-origin).
     if (typeof window !== "undefined"
         && err instanceof TypeError
         && window.location.pathname !== "/login") {
       window.location.href = "/login";
     }
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
 
   if (res.status === 401 || res.status === 302) {
@@ -92,6 +100,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error("Unauthenticated");
   }
   if (res.status === 403) throw new Error("Access denied");
+  if (res.status === 429) throw new Error("Too many requests. Please wait before trying again.");
 
   if (!res.ok) {
     throw new Error(await readErrorMessage(res, `Request failed (${res.status})`));
@@ -101,45 +110,86 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return text ? JSON.parse(text) : ({} as T);
 }
 
+// ── Session expiry tracking ────────────────────────────────────────────────────
+const SESSION_EXPIRES_KEY = "apprisal_session_expires_at";
+const SESSION_TTL_MS = 24 * 60 * 60 * 1_000; // 24 h — matches JwtUtils expiry
+
+/** Record session start time after a successful login. */
+function recordSessionStart(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(SESSION_EXPIRES_KEY, String(Date.now() + SESSION_TTL_MS));
+}
+
+/** Returns milliseconds until the JWT cookie is expected to expire, or null if unknown. */
+export function sessionMsRemaining(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = sessionStorage.getItem(SESSION_EXPIRES_KEY);
+  if (!raw) return null;
+  const expiresAt = Number(raw);
+  return Number.isFinite(expiresAt) ? Math.max(0, expiresAt - Date.now()) : null;
+}
+
+/** Clear the session-expiry record on logout. */
+function clearSessionRecord(): void {
+  if (typeof window !== "undefined") sessionStorage.removeItem(SESSION_EXPIRES_KEY);
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Authenticate with username + password.
+ *
+ * The backend sets an HttpOnly "jwt" cookie on success. No token storage in
+ * JavaScript — the browser manages the cookie automatically from here on.
+ * A form-login POST to /login establishes the session cookie (JSESSIONID) as
+ * well, needed for WebSocket handshake verification.
+ */
 export async function login(username: string, password: string): Promise<void> {
-  const tokenRes = await fetch(`${JAVA}/api/auth/authenticate`, {
+  const res = await fetch(`${JAVA}/api/auth/authenticate`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (!tokenRes.ok) {
-    rememberAuthToken(null);
+
+  if (res.status === 429) {
+    throw new Error("Too many login attempts. Please wait 5 minutes before trying again.");
+  }
+  if (!res.ok) {
     throw new Error("Invalid username or password");
   }
-  const tokenBody = await tokenRes.json() as { token?: string };
-  rememberAuthToken(tokenBody.token ?? null);
+  // jwt HttpOnly cookie is now set by the backend — record expiry for the
+  // session-expiry warning hook, then nothing else needed from JS.
+  recordSessionStart();
 
+  // Also establish a session cookie for WebSocket auth fallback path.
   const form = new URLSearchParams({ username, password });
-  const res = await fetch(`${JAVA}/login`, {
+  await fetch(`${JAVA}/login`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form.toString(),
     redirect: "manual",
   });
-  const ok = res.status === 0 || res.status === 200 || res.status === 301 || res.status === 302;
-  if (!ok) {
-    rememberAuthToken(null);
-    throw new Error("Invalid username or password");
-  }
+  // Ignore session login result — primary auth is the jwt cookie above.
 }
 
 export async function logout(): Promise<void> {
-  rememberAuthToken(null);
+  clearSessionRecord();
+  // Clear jwt cookie server-side.
+  await fetch(`${JAVA}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  }).catch(() => {/* ignore network errors on logout */});
+
+  // Also invalidate the Spring session.
   await fetch(`${JAVA}/logout`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "",
     redirect: "manual",
-  });
+  }).catch(() => {/* ignore */});
 }
 
 export async function getMe(): Promise<{ role: "ADMIN" | "REVIEWER"; username: string }> {
@@ -221,6 +271,65 @@ export async function uploadBatch(
     throw new Error(await readErrorMessage(res, `Upload failed (${res.status})`));
   }
   return res.json();
+}
+
+// ── Admin: Bulk Batch Operations ──────────────────────────────────────────────
+
+/**
+ * Bulk-process QC on multiple batches in parallel.
+ * Returns a summary of how many succeeded / failed.
+ */
+export async function bulkProcessQC(
+  batchIds: number[],
+  model?: QCModelSelection,
+): Promise<{ succeeded: number[]; failed: number[] }> {
+  const results = await Promise.allSettled(
+    batchIds.map(id => processQC(id, model))
+  );
+  const succeeded: number[] = [];
+  const failed:    number[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") succeeded.push(batchIds[i]);
+    else failed.push(batchIds[i]);
+  });
+  return { succeeded, failed };
+}
+
+/**
+ * Bulk-delete batches in parallel.
+ */
+export async function bulkDeleteBatches(
+  batchIds: number[],
+): Promise<{ succeeded: number[]; failed: number[] }> {
+  const results = await Promise.allSettled(
+    batchIds.map(id => deleteBatch(id))
+  );
+  const succeeded: number[] = [];
+  const failed:    number[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") succeeded.push(batchIds[i]);
+    else failed.push(batchIds[i]);
+  });
+  return { succeeded, failed };
+}
+
+/**
+ * Bulk-assign a reviewer to multiple batches in parallel.
+ */
+export async function bulkAssignReviewer(
+  batchIds: number[],
+  reviewerId: number,
+): Promise<{ succeeded: number[]; failed: number[] }> {
+  const results = await Promise.allSettled(
+    batchIds.map(id => assignReviewer(id, reviewerId))
+  );
+  const succeeded: number[] = [];
+  const failed:    number[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") succeeded.push(batchIds[i]);
+    else failed.push(batchIds[i]);
+  });
+  return { succeeded, failed };
 }
 
 export const reconcileStuckBatches = () =>
@@ -324,6 +433,55 @@ export const recordRuleFocus = (ruleResultId: number, sessionToken: string) =>
 
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
 
+// ── Override / escalation workflow ───────────────────────────────────────────
+
+export interface PendingOverride {
+  ruleResultId: number;
+  ruleId: string;
+  ruleName: string;
+  status: string;
+  message: string;
+  severity: string;
+  overridePending: boolean;
+  overrideRequestedAt: string | null;
+  overrideRequestedBy: string | null;
+  reviewerComment: string | null;
+  qcResultId?: number;
+  filename?: string;
+  batchId?: number;
+  parentBatchId?: string;
+}
+
+export const getPendingOverrides = () =>
+  apiFetch<PendingOverride[]>("/api/reviewer/admin/overrides/pending");
+
+export const decideOverride = (
+  ruleResultId: number,
+  approve: boolean,
+  comment?: string,
+) =>
+  apiFetch<{ success: boolean; ruleResultId: number; approved: boolean; approvedBy: string }>(
+    `/api/reviewer/admin/overrides/${ruleResultId}/decide`,
+    { method: "POST", body: JSON.stringify({ approve, comment: comment ?? "" }) },
+  );
+
+export const getQCHistory = (batchFileId: number) =>
+  apiFetch<Array<{
+    id: number;
+    qcDecision: string | null;
+    finalDecision: string | null;
+    totalRules: number;
+    passedCount: number;
+    failedCount: number;
+    verifyCount: number;
+    processedAt: string | null;
+    supersededAt: string | null;
+    isActive: boolean;
+    rerunOfId: number | null;
+    cacheHit: boolean | null;
+    extractionMethod: string | null;
+  }>>(`/api/qc/history/file/${batchFileId}`);
+
 export const requestReReview = (qcResultId: number, reason: string) =>
   apiFetch<{ success: boolean; message: string }>(`/api/reviewer/qc/${qcResultId}/request-re-review`, {
     method: "POST",
@@ -348,11 +506,15 @@ export interface SubmittedQCResult {
 export const getSubmittedQueue = () =>
   apiFetch<SubmittedQCResult[]>("/api/reviewer/qc/results/submitted");
 
-export const getRealtimeUrl = () => {
-  const base = `${JAVA.replace(/^http/, "ws")}/ws/qc`;
-  const token = storedAuthToken();
-  return token ? `${base}?access_token=${encodeURIComponent(token)}` : base;
-};
+/**
+ * WebSocket URL for the QC real-time channel.
+ *
+ * No token is appended to the URL — the browser automatically sends the
+ * HttpOnly jwt cookie in the Upgrade handshake headers.  The backend's
+ * WebSocketAuthHandshakeInterceptor reads the cookie from there.
+ */
+export const getRealtimeUrl = () =>
+  `${JAVA.replace(/^http/, "ws")}/ws/qc`;
 
 // ── Analytics (ADMIN only) ────────────────────────────────────────────────────
 export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/overview?days=${days}`);
