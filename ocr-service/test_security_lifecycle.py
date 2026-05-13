@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 
 def _load_main_with_api_key(monkeypatch):
-    monkeypatch.setenv("PYTHON_API_KEY", "test-secret")
+    monkeypatch.setenv("INTERNAL_API_KEY", "test-secret")
     sys.modules.pop("main", None)
     return importlib.import_module("main")
 
@@ -67,4 +67,4 @@ def _minimal_pdf_bytes() -> bytes:
 
 
 def teardown_module():
-    os.environ.pop("PYTHON_API_KEY", None)
+    os.environ.pop("INTERNAL_API_KEY", None)

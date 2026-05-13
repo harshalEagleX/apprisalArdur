@@ -177,6 +177,19 @@ RULE_DEFAULTS = [
     ("COM-5",  "Commentary",     "STANDARD",2140, "ALL"),
     ("COM-6",  "Commentary",     "ADVISORY",2150, "ALL"),
     ("COM-7",  "Commentary",     "STANDARD",2160, "ALL"),
+    # ── Cross-Field rules — execute after engine, before final report ─────────
+    # XF rules run in CrossFieldValidator.validate() after all @rule functions.
+    # They must be registered here so operators can toggle/reorder via admin UI.
+    ("XF-1",     "CrossField",  "BLOCKING", 2200, "ALL"),
+    ("XF-2",     "CrossField",  "STANDARD", 2210, "ALL"),
+    ("XF-3",     "CrossField",  "STANDARD", 2220, "ALL"),
+    ("XF-4",     "CrossField",  "BLOCKING", 2230, "ALL"),
+    ("XF-5",     "CrossField",  "BLOCKING", 2240, "ALL"),
+    ("XF-6",     "CrossField",  "BLOCKING", 2250, "Refinance"),
+    ("XF-VIS-1", "CrossField",  "STANDARD", 2260, "ALL"),
+    ("XF-FHA-1", "CrossField",  "BLOCKING", 2270, "FHA"),
+    ("XF-FHA-2", "CrossField",  "BLOCKING", 2280, "FHA"),
+    ("XF-FHA-3", "CrossField",  "BLOCKING", 2290, "FHA"),
 ]
 
 RULE_NAMES = {
@@ -251,6 +264,13 @@ RULE_NAMES = {
     "COM-3":"Comparable Selection Rationale","COM-4":"Adjustments Explanation",
     "COM-5":"Reconciliation Sufficiency","COM-6":"Addenda Consistency",
     "COM-7":"Prior Sales Disclosure",
+    # Cross-Field
+    "XF-1":"Housing Trend vs Time Adjustments","XF-2":"Comp Prices vs Neighborhood Range",
+    "XF-3":"Condition vs Effective Age","XF-4":"Subject Address Three-Way Match",
+    "XF-5":"PUD vs HOA Consistency","XF-6":"Refinance Contract Blank Check",
+    "XF-VIS-1":"Vision Condition Check",
+    "XF-FHA-1":"FHA Case Number All Pages","XF-FHA-2":"FHA Comp Recency",
+    "XF-FHA-3":"FHA Remaining Economic Life",
 }
 
 
@@ -264,26 +284,48 @@ class RuleConfigEntry:
 
 
 def seed_rules_config():
-    """Insert default rule config rows if the table is empty. Idempotent."""
+    """
+    Upsert default rule config rows.
+
+    - Inserts any rule that does not yet exist in the DB.
+    - Corrects stale `applicable_loan_types` values for rules whose code-level
+      defaults changed (e.g. CA-1/CA-2 from USDA → ALL, new XF rules).
+    - Never overwrites operator customisations to `is_active` or `severity_level`.
+    """
     try:
         from app.database import get_db
         from app.models.db_models import RuleConfig
 
         with get_db() as db:
-            if db.query(RuleConfig).count() > 0:
-                return  # already seeded
+            existing = {r.rule_id: r for r in db.query(RuleConfig).all()}
+            inserted = 0
+            corrected = 0
 
             for rule_id, category, severity, order, loan_types in RULE_DEFAULTS:
-                db.add(RuleConfig(
-                    rule_id=rule_id,
-                    rule_name=RULE_NAMES.get(rule_id, rule_id),
-                    rule_category=category,
-                    is_active=True,
-                    severity_level=severity,
-                    execution_order=order,
-                    applicable_loan_types=loan_types,
-                ))
-        logger.info("Seeded rules_config table with %d rules", len(RULE_DEFAULTS))
+                if rule_id not in existing:
+                    db.add(RuleConfig(
+                        rule_id=rule_id,
+                        rule_name=RULE_NAMES.get(rule_id, rule_id),
+                        rule_category=category,
+                        is_active=True,
+                        severity_level=severity,
+                        execution_order=order,
+                        applicable_loan_types=loan_types,
+                    ))
+                    inserted += 1
+                else:
+                    row = existing[rule_id]
+                    # Correct stale applicable_loan_types when the code-level default
+                    # changed (e.g. CA-1/CA-2 were seeded as USDA in older versions).
+                    if (row.applicable_loan_types or "").upper() != loan_types.upper():
+                        row.applicable_loan_types = loan_types
+                        corrected += 1
+
+        if inserted or corrected:
+            logger.info(
+                "rules_config sync: %d inserted, %d corrected (loan_types)",
+                inserted, corrected,
+            )
     except Exception as e:
         logger.info("rules_config seed failed (DB may be unavailable): %s", e)
 

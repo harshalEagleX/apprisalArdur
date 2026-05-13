@@ -424,7 +424,7 @@ are in the git history permanently and must be considered compromised.
 DB_PASSWORD=npg_3xwKmGDfrVy0         ← ROTATE NOW
 JWT_SECRET=404E6352...                ← ROTATE NOW
 ADMIN_PASSWORD=Admin123!              ← ROTATE NOW
-PYTHON_API_KEY=apprisal-local-dev-key ← ROTATE NOW
+INTERNAL_API_KEY=<shared-internal-key> ← ROTATE NOW
 ```
 
 **Immediate actions:**

@@ -1150,7 +1150,7 @@ Java (port 8080)                    Python (port 5001)
          └─ RestTemplate.exchange()
               POST /qc/process       multipart/form-data
               ─────────────────────────────────────────→
-              X-API-Key: {PYTHON_API_KEY}
+              X-API-Key: {INTERNAL_API_KEY}
               file: <appraisal.pdf>
               engagement_letter: <engagement.pdf>  (optional)
               contract_file: <contract.pdf>         (optional)
@@ -1300,7 +1300,7 @@ DB operation. Spring Boot 4 supports `@ConfigurationPropertiesScan` with `@Valid
 | `ADMIN_PASSWORD` | Java | `Admin123!` | YES | ⚠️ Default is in CLAUDE.md — CHANGE IN PROD |
 | `JWT_SECRET` | Java | hardcoded Base64 string | YES | ⚠️ Default is in CLAUDE.md — CHANGE IN PROD |
 | `STORAGE_PATH` | Java | `./uploads` | YES | Files stored in CWD (lost on container restart) |
-| `PYTHON_API_KEY` | Java → Python | empty | RECOMMENDED | Python accepts any caller |
+| `INTERNAL_API_KEY` | Java → Python | none | YES | Missing or mismatched key prevents authenticated QC calls |
 | `OCR_SERVICE_URL` | Java | `http://localhost:5001` | YES | Can't reach Python |
 | `COOKIE_SECURE` | Java | `false` | YES (set true) | Cookies sent over HTTP |
 | `DATABASE_URL` | Python | none | YES | Python won't start |

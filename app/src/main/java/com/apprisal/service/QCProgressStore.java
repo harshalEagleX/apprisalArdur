@@ -85,7 +85,7 @@ public class QCProgressStore {
     }
 
     public void putIfAbsent(Long batchId, QCProgress progress) {
-        get(batchId).ifPresentOrElse(_ -> {}, () -> put(batchId, progress));
+        get(batchId).ifPresentOrElse(existing -> {}, () -> put(batchId, progress));
     }
 
     // ── Serialisation helpers ──────────────────────────────────────────────────

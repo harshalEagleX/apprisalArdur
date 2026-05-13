@@ -41,7 +41,14 @@ public class AdminSeeder implements CommandLineRunner {
             userRepository.save(Objects.requireNonNull(admin));
             System.out.println("Admin user seeded successfully.");
         } else {
-            System.out.println("Admin user already exists.");
+            User existing = userOptional.get();
+            if (!passwordEncoder.matches(adminPassword, existing.getPassword())) {
+                existing.setPassword(passwordEncoder.encode(adminPassword));
+                userRepository.save(existing);
+                System.out.println("Admin password updated to match ADMIN_PASSWORD env var.");
+            } else {
+                System.out.println("Admin user already exists.");
+            }
         }
     }
 }

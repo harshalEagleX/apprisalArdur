@@ -948,18 +948,25 @@ class OCRPipeline:
             result.total_pages = len(raw_images)
             logger.info(f"Converted {len(raw_images)} pages to images")
             
-            # Step 2 & 3: Preprocess and OCR each image
-            for page_num, raw_image in enumerate(raw_images, start=1):
-                logger.debug(f"Processing page {page_num}/{len(raw_images)}")
-                
-                # Preprocess image
+            # Step 2 & 3: Preprocess and OCR each image in parallel.
+            # Preprocessing (OpenCV) and Tesseract are both CPU-bound and
+            # release the GIL, so ThreadPoolExecutor gives real parallelism.
+            def _preprocess_and_ocr(args):
+                page_num, raw_image = args
                 clean_image = self.preprocessor.preprocess_image(raw_image)
-                
-                # Run Tesseract on preprocessed image
                 text = self._tesseract_extract(image=clean_image, config='--psm 6')
+                return page_num, text
+
+            from concurrent.futures import ThreadPoolExecutor
+            max_workers = getattr(self, 'max_workers', 4)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                page_results = list(executor.map(
+                    _preprocess_and_ocr,
+                    enumerate(raw_images, start=1),
+                ))
+
+            for page_num, text in page_results:
                 word_count = len(text.split())
-                
-                # Store results
                 result.page_index[page_num] = text
                 result.page_details.append(PageText(
                     page_number=page_num,
@@ -967,10 +974,9 @@ class OCRPipeline:
                     method=ExtractionMethod.TESSERACT,
                     confidence=self._estimate_confidence(text),
                     word_count=word_count,
-                    has_tables=True  # Assume tables since we're preprocessing
+                    has_tables=True,
                 ))
-                
-                logger.debug(f"Page {page_num}: extracted {word_count} words")
+                logger.debug("Page %d: extracted %d words", page_num, word_count)
             
             logger.info(f"Preprocessing extraction complete: {len(raw_images)} pages processed")
             

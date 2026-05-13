@@ -998,8 +998,8 @@ Emitted by `VerificationService` after a decision is saved.
 
 Base URL: `http://localhost:5001`
 
-All endpoints except `/health` require `X-API-Key: {PYTHON_API_KEY}` header.
-In dev mode (`PYTHON_API_KEY` not set), the header is optional.
+All endpoints except `/health` require `X-API-Key: {INTERNAL_API_KEY}` header.
+Java and Python both load `INTERNAL_API_KEY` from the project root `.env`; there is no fallback key or no-auth dev mode.
 
 ### Health Check
 

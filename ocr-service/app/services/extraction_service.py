@@ -36,12 +36,22 @@ class ExtractionService:
     
     def __init__(self):
         self.patterns = self._compile_patterns()
-        # Enable image preprocessing for maximum OCR quality
-        self.ocr_pipeline = OCRPipeline(
-            use_tesseract=True,
-            force_image_ocr=False,
-            use_preprocessing=True  # Enable preprocessing pipeline
-        )
+        # OCRPipeline is NOT initialized at startup — it is only created on first
+        # use by the legacy /qc/extract endpoint.  In the main /qc/process pipeline
+        # SmartQCProcessor handles all OCR and passes extracted text here, so the
+        # pipeline never runs and the memory cost (model loads, GPU alloc) is avoided.
+        self._ocr_pipeline = None
+
+    @property
+    def ocr_pipeline(self):
+        """Lazy OCRPipeline: created on first use by the legacy /qc/extract path."""
+        if self._ocr_pipeline is None:
+            self._ocr_pipeline = OCRPipeline(
+                use_tesseract=True,
+                force_image_ocr=False,
+                use_preprocessing=True,
+            )
+        return self._ocr_pipeline
     
     def extract_and_compare(
         self,

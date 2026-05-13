@@ -650,7 +650,7 @@ Achievement gates are defined in `docs/build_plan.md`.
 ## Project Identity
 
 **What this is:** A production appraisal quality control platform. It ingests appraisal PDFs,
-engagement letters, and purchase contracts — extracts structured fields — runs 31 compliance
+engagement letters, and purchase contracts — extracts structured fields — runs 146 compliance
 rules — and flags issues for human review. The system self-learns from operator corrections.
 
 **Who uses it:** Appraisal review operators. Not developers. Results must be clear, sourced,
@@ -969,7 +969,7 @@ llm_response_cache  -- cached Ollama responses by SHA-256 input hash
 | GET | /health | Service status, Tesseract available, DB reachable |
 | POST | /qc/process | Main: appraisal PDF + optional engagement + contract → full QC results |
 | POST | /qc/feedback | Operator submits correction → stored + auto-creates training_example |
-| GET | /qc/rules | List all 31 rules with severity, execution order, is_active |
+| GET | /qc/rules | List all 146 rules with severity, execution order, is_active |
 | PATCH | /admin/rules/{id} | Toggle rule on/off without restart |
 | WS | /qc/ws | WebSocket: real-time progress during processing |
 
@@ -985,7 +985,7 @@ llm_response_cache  -- cached Ollama responses by SHA-256 input hash
 | 0 | Foundation: DB, Redis, Alembic, logging | ✅ Done | Health 200, 9 tables, UUID logging |
 | 1 | Smart OCR: parallel, caching, 15s gate | ✅ Done | 14.5s cold, 114ms cached, raw text in DB |
 | 2 | Field extraction: address split, confidence, source_page | ✅ Done | All 3 docs address/city/state/zip extracted |
-| 3 | Rule engine: 31 rules, DB config, severity, ordering | ✅ Done | 31 rules, toggle works, 93ms on cached |
+| 3 | Rule engine: 146 rules, DB config, severity, ordering | ✅ Done | 136 engine + 10 XF rules, toggle works, 93ms on cached |
 | 4 | LLM commentary: COM-1..7, ollama, caching, fallback | ✅ Done | N-2 fires on real docs, fallback active |
 | 5 | Operator UI: upload, results, detail, feedback | ✅ Done | Frontend at :3000, corrections stored |
 | 6 | Feedback & ML learning loop | ✅ Done | Corrections apply same-day, retrain works, models deploy |
@@ -1014,6 +1014,6 @@ llm_response_cache  -- cached Ollama responses by SHA-256 input hash
 
 ---
 
-*Last updated: 2026-04-25*
+*Last updated: 2026-05-13*
 *System: FastAPI :5001 | Next.js :3000 | PostgreSQL@18 | Redis | Ollama :11434*
-*31 rules: S-1..S-12 + C-1..C-5 + N-1..N-7 + COM-1..COM-7*
+*146 rules: 136 engine rules (S/C/N/ST/I/SCA/R/CA/IA/ADD/DOC/SIG/PH/M/SK/FHA/USDA/MF/COM) + 10 XF cross-field rules*

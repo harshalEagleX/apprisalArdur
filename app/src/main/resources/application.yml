@@ -27,7 +27,7 @@ spring:
     hibernate:
       # Product safety: schema changes must come from migrations, not app startup.
       # Use JPA_DDL_AUTO=update only for a disposable local database.
-      ddl-auto: update
+      ddl-auto: create
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect

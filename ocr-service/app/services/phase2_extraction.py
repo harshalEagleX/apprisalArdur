@@ -637,6 +637,11 @@ class Phase2ExtractionEngine:
             r"Lender/?Client[\s\-—:]+([A-Z][a-zA-Z0-9\s&,\.\-]{3,60}?)(?:\s+Address\b|\s+Client\b|\n)",
             # Pattern 4 — last resort: any non-empty content until Address or line-end.
             r"Lender/?Client[\s\-—:]+([^\n]{3,70}?)(?:\s*Address\b|\s*\n|\s*$)",
+            # Pattern 5 — newline-separated label/value: "Lender / Client\nFoo Bank" or
+            # "Lender\nClient\nFoo Bank".  Handles spacing variants like "Lender / Client".
+            r"Lender\s*/?\s*Client[\s\-—:\n]+([A-Za-z][^\n]{3,70}?)(?:\n|$)",
+            # Pattern 6 — company suffix on next line after any Lender/Client variant.
+            r"(?:Lender|Client)[^\n]*\n([A-Z][A-Za-z0-9\s,\.&]{4,70}(?:Corp|Inc|LLC|Bank|Mortgage|Financial)[^\n]*)",
         ], page_pos, lender_pos_offset, post_clean=r'\s*(Address|Client Address)\b.*$',
            spatial_labels=["Lender/Client", "Lender"], spatial_page_range=(1, 2))
 
@@ -722,6 +727,22 @@ class Phase2ExtractionEngine:
             r"Data Source[s]?[:\s]+([A-Za-z][A-Za-z0-9 ,\.#-]{2,80}?)(?:\n|$)",
         ], page_pos, data_src_offset)
 
+        # Boilerplate contamination guard: if the extracted value is USPAP certification
+        # language (page 5+) or unreasonably long, discard it rather than propagate garbage.
+        _BOILERPLATE_MARKERS = (
+            "units, common elements", "recreation facilities",
+            "are the units", "this appraisal is made",
+            "the borrower", "intended use", "the real property",
+        )
+        _ds_meta = meta.get("data_source")
+        if _ds_meta and _ds_meta.value:
+            _ds_val = str(_ds_meta.value).lower()
+            if any(m in _ds_val for m in _BOILERPLATE_MARKERS) or len(_ds_val) > 80:
+                meta["data_source"] = FieldMetaResult(
+                    "data_source", confidence=0.0, extraction_method="not_found"
+                )
+                logger.debug("data_source guard: rejected boilerplate value")
+
         meta["mls_number"] = self._extract("mls_number", text, [
             r"MLS[:\s#]+([A-Z0-9]+)",
         ], page_pos, pos_offset)
@@ -744,6 +765,21 @@ class Phase2ExtractionEngine:
             # UAD form label: "$ <amount> as of <date>" on the reconciliation line
             r"\$\s*([\d,]{5,})\s+as\s+of",
         ], page_pos, mv_offset)
+
+        # Guard: extracted value must contain at least 5 consecutive digits (a real dollar amount).
+        # The bare-comma failure mode ("," matched the last pattern when the amount was on a
+        # separate line) is caught here before it can propagate to value-comparison rules.
+        _mv_meta = meta.get("market_value_opinion")
+        if _mv_meta and _mv_meta.value:
+            _clean = re.sub(r"[,$\s]", "", str(_mv_meta.value))
+            if not re.match(r"^\d{5,}$", _clean):
+                meta["market_value_opinion"] = FieldMetaResult(
+                    "market_value_opinion", confidence=0.0, extraction_method="not_found"
+                )
+                logger.debug(
+                    "market_value_opinion guard: rejected '%s' (not a valid dollar amount)",
+                    _mv_meta.value,
+                )
 
         self._fill_subject_value_stream_fallbacks(meta, text, page_pos, pos_offset)
 
@@ -829,6 +865,45 @@ class Phase2ExtractionEngine:
             rights_match = re.search(r"\b(Fee\s+Simple)\b", text[:12000], re.I)
             if rights_match:
                 self._put_meta(meta, "property_rights", "Fee Simple", rights_match, 1, page_pos, pos_offset, 0.68, method="context_fallback")
+
+        # ── Effective Age — XF-3 and I-1 need it ─────────────────────────────
+        if self._field_missing(meta, "effective_age"):
+            eff_age_match = re.search(
+                r"Effective\s+Age[:\s]*(\d{1,3})\s*(?:yrs?\.?|years?)?",
+                text, re.I,
+            ) or re.search(
+                r"(?:Effective|eff\.?)\s+Age[:\s]*(\d{1,3})",
+                text, re.I,
+            )
+            if eff_age_match:
+                meta["effective_age"] = FieldMetaResult(
+                    "effective_age",
+                    raw_value=eff_age_match.group(1),
+                    corrected_value=eff_age_match.group(1),
+                    confidence=0.80,
+                    source_page=page_for_pos(eff_age_match.start() + pos_offset, page_pos),
+                    extraction_method="regex_primary",
+                )
+
+        # ── Gross Living Area — I-7, SCA-17 need it ──────────────────────────
+        if self._field_missing(meta, "gla"):
+            gla_match = re.search(
+                r"(?:Gross\s+Living\s+Area|GLA)[:\s]*([\d,]{3,7})\s*(?:sq\.?\s*ft\.?)?",
+                text, re.I,
+            ) or re.search(
+                r"Above\s+Grade.*?GLA[:\s]*([\d,]{3,7})",
+                text, re.I | re.S,
+            )
+            if gla_match:
+                raw_gla = gla_match.group(1).replace(",", "")
+                meta["gla"] = FieldMetaResult(
+                    "gla",
+                    raw_value=raw_gla,
+                    corrected_value=raw_gla,
+                    confidence=0.82,
+                    source_page=page_for_pos(gla_match.start() + pos_offset, page_pos),
+                    extraction_method="regex_primary",
+                )
 
     def _field_missing(self, meta: Dict[str, FieldMetaResult], field: str) -> bool:
         existing = meta.get(field)
@@ -1720,8 +1795,11 @@ class Phase2ExtractionEngine:
         """
         label_esc = re.escape(label)
 
-        # Step 1: OCR text — [X]/[x] = checked, [ ] = unchecked
-        checked_pattern   = rf"(?:\[x\]|\[X\]|X|><)\s*{label_esc}|{label_esc}\s*(?:\[x\]|\[X\]|X|><)"
+        # Step 1: OCR text — [X]/[x] or Unicode glyph = checked, [ ] = unchecked.
+        # Digital UAD PDFs encode checked boxes as Unicode characters (✓ ✔ ● ■ ▶ ☑ ☒)
+        # rather than ASCII [X].  Both bracket-wrapped and bare glyph forms are handled.
+        _CHECKED_GLYPHS = r"(?:\[x\]|\[X\]|\[✓\]|\[✔\]|[✓✔●■▶▪☑☒]|X|><)"
+        checked_pattern   = rf"{_CHECKED_GLYPHS}\s*{label_esc}|{label_esc}\s*{_CHECKED_GLYPHS}"
         unchecked_pattern = rf"\[\s\]\s*{label_esc}|{label_esc}\s*\[\s\]"
 
         if re.search(checked_pattern, text, re.I):
@@ -2325,6 +2403,35 @@ class Phase2ExtractionEngine:
         """
         comps = []
 
+        # Pre-compute normalized subject address for deduplication across all strategies.
+        _subj_text, _ = self._text_window_for_pages(text, page_pos, 1, 2)
+        _subj_addr_match = re.search(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,\-]{4,50})', _subj_text)
+        subject_address_norm = (
+            re.sub(r'\s+', ' ', _subj_addr_match.group(1).strip().upper())
+            if _subj_addr_match else None
+        )
+
+        def _is_subject_address(candidate: str) -> bool:
+            """Return True if candidate string is the subject property address."""
+            if not subject_address_norm or not candidate:
+                return False
+            norm = re.sub(r'\s+', ' ', candidate.strip().upper())
+            return norm == subject_address_norm or subject_address_norm in norm
+
+        def _clear_subject_addr(comp_list: List[Dict]) -> List[Dict]:
+            """Null out any comp address slot that holds the subject address."""
+            for entry in comp_list:
+                addr_meta = entry.get("address")
+                if addr_meta and _is_subject_address(addr_meta.value or ""):
+                    entry["address"] = FieldMetaResult(
+                        addr_meta.name, confidence=0.0, extraction_method="not_found"
+                    )
+                    logger.debug(
+                        "Deduplication: cleared comp address '%s' (matches subject)",
+                        addr_meta.value,
+                    )
+            return comp_list
+
         # ── Strategy 0: Camelot lattice table extraction (highest priority) ──────
         # The UAD 1004 sales comparison grid is a multi-column table with vertical
         # and horizontal grid lines.  Camelot "lattice" mode reads it correctly and
@@ -2338,31 +2445,7 @@ class Phase2ExtractionEngine:
         if self._word_index and self._page_index:
             camelot_comps = self._extract_comparables_camelot(page_pos, pos_offset)
             if camelot_comps:
-                comps = camelot_comps
-
-        # Pull the already-extracted subject address so we can exclude it below.
-        # self._page_index keys are page numbers; the subject section is on pages 1-3.
-        subject_address_raw = (self._page_positions and self._word_index) and None or None
-        subject_addr_meta = None
-        # Access cached subject address from word index (populated in extract_subject)
-        for key in ("property_address",):
-            # Not directly accessible here — use regex on pages 1-2 as a cheap lookup
-            pass
-        # Fast approach: grab the first match of the address pattern on page 1-2 text
-        _subj_text, _ = self._text_window_for_pages(text, page_pos, 1, 2)
-        _subj_zip = re.search(r'\b(\d{5})\b', _subj_text)
-        _subj_addr_match = re.search(r'(\d+\s+[A-Za-z][A-Za-z0-9 \.\,\-]{4,50})', _subj_text)
-        subject_address_norm = (
-            re.sub(r'\s+', ' ', _subj_addr_match.group(1).strip().upper())
-            if _subj_addr_match else None
-        )
-
-        def _is_subject_address(candidate: str) -> bool:
-            """Return True if candidate string is the subject property address."""
-            if not subject_address_norm or not candidate:
-                return False
-            norm = re.sub(r'\s+', ' ', candidate.strip().upper())
-            return norm == subject_address_norm or subject_address_norm in norm
+                comps = _clear_subject_addr(camelot_comps)
 
         # ── Strategy 1: data-stream extraction (primary) ──────────────────────
         # PyMuPDF emits field VALUES before form LABELS in the text stream.
@@ -2508,6 +2591,8 @@ class Phase2ExtractionEngine:
             ]
             if len(street_lines) >= 2:
                 for i, sl in enumerate(street_lines[1:4], 1):
+                    if _is_subject_address(sl):
+                        continue
                     if i <= len(comps):
                         existing = comps[i - 1].get("address")
                         if existing is None or existing.value is None:
@@ -2643,6 +2728,18 @@ class Phase2ExtractionEngine:
 
         value = field.value
 
+        # Mode 0: company suffix directly followed by a form label (e.g. "LLCCounty").
+        # Must run BEFORE Mode 1 to preserve the suffix itself ("LLC") in the trimmed value.
+        # Captures up to and including the company suffix, then discards everything after.
+        _SUFFIX_STOP = re.compile(
+            r"(LLC|Inc\.?|Corp\.?|Ltd\.?|LLP)\s*(?=County|City|State|Legal|Assessor|"
+            r"Tax\s+Year|Occupant|Map\s+Reference|Census\s+Tract|Lender|Client|Address)",
+            re.I,
+        )
+        _sfx = _SUFFIX_STOP.search(value)
+        if _sfx:
+            value = value[:_sfx.end()].rstrip()
+
         # Mode 1: whitespace-separated boundary (standard case)
         boundary = re.search(
             r"\b(?:Owner of Public Record|Property Address|City|County|Legal Description|"
@@ -2653,7 +2750,7 @@ class Phase2ExtractionEngine:
 
         # Mode 2: concatenated boundary — letter immediately precedes a known label.
         # Pattern: [A-Za-z] immediately followed by County|City|Legal|etc.
-        # This fires on "LLCCounty" where \b in mode 1 does not.
+        # This fires on remaining fused cases where Mode 0 didn't match a known suffix.
         if not boundary:
             boundary = re.search(
                 r"(?<=[A-Za-z])(?:Owner\s+of\s+Public\s+Record|County|City|Legal\s+Description|"
