@@ -28,6 +28,33 @@ interface SubmittedReviewItem {
   };
 }
 
+interface QueuePageResponse<T> {
+  content?: T[];
+  totalElements?: number;
+  totalPages?: number;
+  page?: number;
+  size?: number;
+}
+
+function asArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object" && Array.isArray((value as QueuePageResponse<T>).content)) {
+    return (value as QueuePageResponse<T>).content ?? [];
+  }
+  return [];
+}
+
+function queueFilename(item: Pick<QCResult, "batchFile" | "id">): string {
+  return item.batchFile?.filename || `QC #${item.id}`;
+}
+
+function formatProcessedAt(value?: string | null): string {
+  if (!value) return "time unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "time unavailable";
+  return date.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 export default function ReviewerQueuePage() {
   const [items, setItems]     = useState<QCResult[]>([]);
   const [submittedItems, setSubmittedItems] = useState<SubmittedReviewItem[]>([]);
@@ -56,11 +83,11 @@ export default function ReviewerQueuePage() {
         fetch(`${JAVA}/api/reviewer/qc/results/submitted`, { credentials: "include" }),
       ]);
       if (!pendingRes.ok) { setError(`Server responded with ${pendingRes.status}`); return; }
-      const data: QCResult[] = await pendingRes.json();
-      setItems(data);
+      const data: unknown = await pendingRes.json();
+      setItems(asArray<QCResult>(data));
       if (submittedRes.ok) {
-        const submitted: SubmittedReviewItem[] = await submittedRes.json();
-        setSubmittedItems(submitted);
+        const submitted: unknown = await submittedRes.json();
+        setSubmittedItems(asArray<SubmittedReviewItem>(submitted));
       }
     } catch {
       setError("Could not reach the server. Is the backend running?");
@@ -86,9 +113,10 @@ export default function ReviewerQueuePage() {
   const searched = useMemo(() => items.filter(item => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    return item.batchFile.filename.toLowerCase().includes(q)
+    const filename = item.batchFile?.filename ?? "";
+    return filename.toLowerCase().includes(q)
       || String(item.id).includes(q)
-      || item.qcDecision.toLowerCase().includes(q);
+      || String(item.qcDecision ?? "").toLowerCase().includes(q);
   }), [items, query]);
   const scoped = useMemo(() => searched.filter(item => {
     if (view === "failures") return item.failedCount > 0;
@@ -108,7 +136,7 @@ export default function ReviewerQueuePage() {
   const prioritized = [...items].sort((a, b) =>
     (b.failedCount - a.failedCount) ||
     (b.verifyCount - a.verifyCount) ||
-    (new Date(a.processedAt).getTime() - new Date(b.processedAt).getTime())
+    (new Date(a.processedAt ?? 0).getTime() - new Date(b.processedAt ?? 0).getTime())
   );
   const nextItem = prioritized[0];
   const todayKey = new Date().toDateString();
@@ -117,10 +145,10 @@ export default function ReviewerQueuePage() {
   ).length;
   const oldestItem = items.reduce<QCResult | undefined>((oldest, item) => {
     if (!oldest) return item;
-    return new Date(item.processedAt).getTime() < new Date(oldest.processedAt).getTime() ? item : oldest;
+    return new Date(item.processedAt ?? 0).getTime() < new Date(oldest.processedAt ?? 0).getTime() ? item : oldest;
   }, undefined);
   const oldestPending = oldestItem
-    ? new Date(oldestItem.processedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    ? formatProcessedAt(oldestItem.processedAt)
     : "None";
   const queueReturnPath = useMemo(() => {
     const params = new URLSearchParams();
@@ -470,6 +498,7 @@ function ReviewerNextAction({ item, returnTo }: { item?: QCResult; returnTo: str
     );
   }
   const hasFailure = item.failedCount > 0;
+  const filename = queueFilename(item);
   return (
     <a
       href={reviewHref(item.id, returnTo)}
@@ -485,7 +514,7 @@ function ReviewerNextAction({ item, returnTo }: { item?: QCResult; returnTo: str
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-semibold uppercase tracking-wide opacity-70">Next review action</div>
-        <div className="mt-1 truncate text-base font-semibold text-white">{item.batchFile.filename}</div>
+        <div className="mt-1 truncate text-base font-semibold text-white">{filename}</div>
         <div className="mt-1 text-xs opacity-80">
           {item.failedCount} fail · {item.verifyCount} review · {item.passedCount} pass
         </div>
@@ -521,6 +550,7 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
         const passRate   = total > 0 ? Math.round((item.passedCount / total) * 100) : 0;
         const hasFailure = item.failedCount > 0;
         const actionLabel = hasFailure ? "Review failures" : "Review";
+        const filename = queueFilename(item);
 
         return (
           <div
@@ -539,11 +569,11 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
 
             {/* File info */}
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-slate-200 truncate" title={item.batchFile.filename}>{item.batchFile.filename}</div>
+              <div className="text-sm font-medium text-slate-200 truncate" title={filename}>{filename}</div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
                 <span className="text-[11px] text-slate-500">
-                  Processed {new Date(item.processedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  Processed {formatProcessedAt(item.processedAt)}
                 </span>
                 {item.cacheHit && (
                   <span className="text-[10px] bg-[#161B22] border border-white/10 text-slate-500 px-1.5 py-0.5 rounded font-mono">cached</span>
