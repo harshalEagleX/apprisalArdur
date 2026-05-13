@@ -5,6 +5,7 @@ FastAPI application that extracts fields from appraisal PDFs.
 
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -87,6 +88,7 @@ ensure_schema_compatibility()
 seed_rules_config()
 
 _IST = ZoneInfo("Asia/Kolkata")
+_LOG_RECORD_RESERVED = set(logging.makeLogRecord({}).__dict__) | {"asctime", "message"}
 
 
 def _elapsed_ms(started: float) -> int:
@@ -94,7 +96,7 @@ def _elapsed_ms(started: float) -> int:
 
 
 def _flow_log(event: str, *, started: Optional[float] = None, level: str = "info", **fields: Any) -> None:
-    payload = {
+    payload: Dict[str, Any] = {
         "flow": "admin_batches",
         "event": event,
         "ist": datetime.now(_IST).isoformat(),
@@ -103,7 +105,15 @@ def _flow_log(event: str, *, started: Optional[float] = None, level: str = "info
     }
     if started is not None:
         payload["elapsed_ms"] = _elapsed_ms(started)
-    getattr(logger, level)("admin_batches_timeline", extra=payload)
+
+    # logging.extra cannot contain reserved LogRecord attributes such as
+    # "filename", "module", or "thread". Rename collisions so observability
+    # never breaks the request path.
+    safe_payload = {
+        (f"field_{key}" if key in _LOG_RECORD_RESERVED else key): value
+        for key, value in payload.items()
+    }
+    getattr(logger, level)("admin_batches_timeline", extra=safe_payload)
 
 # Try to import Tesseract, but make it optional
 try:
