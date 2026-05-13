@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { trackJob, updateJob, removeJob } from "@/lib/jobs";
 import { toast } from "@/lib/toast";
+import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 
 export interface BatchProgress {
   current: number;
@@ -43,6 +44,7 @@ export function useBatchPolling(
   const [progress, setProgress] = useState<Record<number, BatchProgress>>({});
   const [startedAt, setStartedAt] = useState<Record<number, number>>({});
   const pollingRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
+  const pollingStartedPerfRef = useRef<Record<number, number>>({});
   // Keep a stable ref to the latest onBatchComplete to avoid stale closure in poll()
   const onBatchCompleteRef = useRef(onBatchComplete);
 
@@ -52,10 +54,15 @@ export function useBatchPolling(
 
   const stopPolling = useCallback((batchId: number) => {
     const jobKey = `qc-${batchId}`;
+    adminBatchTimeline("frontend_poll_stop", {
+      batch_id: batchId,
+      elapsed_ms: pollingStartedPerfRef.current[batchId] ? elapsedMs(pollingStartedPerfRef.current[batchId]) : undefined,
+    });
     if (pollingRef.current[batchId]) {
       clearInterval(pollingRef.current[batchId]);
       delete pollingRef.current[batchId];
     }
+    delete pollingStartedPerfRef.current[batchId];
     removeJob(jobKey);
     setProgress(p => {
       const n = { ...p };
@@ -78,8 +85,17 @@ export function useBatchPolling(
     const initialTotal = appraisalFiles.length > 0 ? appraisalFiles.length : 1;
     const batchFileCount = batch.fileCount ?? batch.files?.length ?? 0;
     const now = Date.now();
+    const startedPerf = performance.now();
+    pollingStartedPerfRef.current[batchId] = startedPerf;
 
     batchPollingLog("poll:start", { batchId, parentBatchId: batch.parentBatchId });
+    adminBatchTimeline("frontend_poll_start", {
+      batch_id: batchId,
+      batch_ref: batch.parentBatchId,
+      current_status: batch.status,
+      appraisal_file_count: appraisalFiles.length,
+      uploaded_file_count: batchFileCount,
+    });
 
     trackJob({
       id: jobKey,
@@ -114,6 +130,20 @@ export function useBatchPolling(
         const subPercent = Math.max(0, Math.min(1, progressRes.subPercent ?? 0));
         const clientSmoothed = Math.min(100, Math.round(((done + subPercent) / total) * 100));
         const smoothedPercent = progressRes.smoothedPercent ?? clientSmoothed;
+        adminBatchTimeline("frontend_poll_tick", {
+          batch_id: batchId,
+          batch_ref: batch.parentBatchId,
+          status: statusRes.status,
+          stage: progressRes.stage,
+          message: progressRes.message,
+          current: done,
+          total,
+          percent: progressRes.percent,
+          smoothed_percent: smoothedPercent,
+          sub_stage: progressRes.subStage,
+          sub_percent: progressRes.subPercent,
+          elapsed_ms: elapsedMs(startedPerf),
+        });
 
         updateJob(jobKey, done, total, {
           message: progressRes.message || "QC processing is running",
@@ -146,6 +176,14 @@ export function useBatchPolling(
         }));
 
         if (statusRes.status !== "QC_PROCESSING") {
+          adminBatchTimeline("frontend_poll_complete", {
+            batch_id: batchId,
+            batch_ref: batch.parentBatchId,
+            final_status: statusRes.status,
+            current: done,
+            total,
+            elapsed_ms: elapsedMs(startedPerf),
+          });
           stopPolling(batchId);
 
           if (statusRes.status === "COMPLETED" || statusRes.status === "REVIEW_PENDING") {
@@ -169,6 +207,12 @@ export function useBatchPolling(
         }
       } catch (e) {
         batchPollingLog("poll:error", { batchId, error: e });
+        adminBatchTimeline("frontend_poll_error", {
+          batch_id: batchId,
+          batch_ref: batch.parentBatchId,
+          elapsed_ms: elapsedMs(startedPerf),
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     };
 
@@ -182,6 +226,11 @@ export function useBatchPolling(
     batches.forEach(b => {
       if (b.status === "QC_PROCESSING" && !pollingRef.current[b.id]) {
         batchPollingLog("poll:auto-start", { batchId: b.id, parentBatchId: b.parentBatchId });
+        adminBatchTimeline("frontend_poll_auto_start", {
+          batch_id: b.id,
+          batch_ref: b.parentBatchId,
+          status: b.status,
+        });
         startPolling(b);
       }
     });

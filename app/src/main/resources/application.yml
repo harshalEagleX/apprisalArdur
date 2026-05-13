@@ -1,6 +1,10 @@
 spring:
   config:
-    import: optional:file:.env[.properties]
+    import:
+      # Load .env from the CWD (works when running from project root or via JAR)
+      - optional:file:.env[.properties]
+      # Fallback for IDE / Maven runs where CWD is the app/ module directory
+      - optional:file:../.env[.properties]
 
   jackson:
     time-zone: Asia/Kolkata
@@ -70,11 +74,6 @@ app:
   storage:
     path: ${STORAGE_PATH:./uploads}
 
-  api-key:
-    # Must match PYTHON_API_KEY in ocr-service/.env
-    # Dev default matches the value set in ocr-service/.env
-    python-service: ${PYTHON_API_KEY:apprisal-local-dev-key}
-
 # IMPORTANT: Use 127.0.0.1, not "localhost".
 # On macOS/Linux "localhost" often resolves to ::1 (IPv6) while uvicorn
 # listens only on 127.0.0.1 (IPv4) → silent connection failure with zero Python logs.
@@ -84,9 +83,9 @@ ocr:
     url: ${OCR_SERVICE_URL:http://127.0.0.1:5001}
     timeout-seconds: ${OCR_TIMEOUT:900}
     retry-attempts: ${OCR_RETRIES:2}
-    # FIX: was missing — OcrServiceConfig binds to ocr.service.api-key (not app.api-key.python-service)
-    # Default matches Python's .env so dev works without setting the env var explicitly
-    api-key: ${PYTHON_API_KEY:apprisal-local-dev-key}
+    # Required shared key loaded from the project root .env.
+    # No fallback: missing or stale config must fail fast instead of causing 401s later.
+    api-key: ${INTERNAL_API_KEY}
 
 qc:
   enabled: true
@@ -106,6 +105,8 @@ management:
       show-details: never
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX,Asia/Kolkata} %-5level ${PID:- } --- [%thread] %logger{40} : %msg%n"
   level:
     com.apprisal: INFO
     org.hibernate.SQL: WARN

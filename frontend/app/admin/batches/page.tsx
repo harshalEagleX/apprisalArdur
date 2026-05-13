@@ -20,6 +20,7 @@ import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
 import { toast } from "@/lib/toast";
 import { useBatchPolling } from "@/hooks/useBatchPolling";
+import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 
 const STATUSES = [
   "", "UPLOADED", "VALIDATING", "VALIDATION_FAILED",
@@ -36,6 +37,13 @@ type ReconcileResult = {
 
 function batchLog(event: string, payload?: unknown) {
   if (process.env.NODE_ENV !== "production") console.log(`[BatchesPage] ${event}`, payload ?? "");
+}
+
+function statusCounts(batches: Batch[]) {
+  return batches.reduce<Record<string, number>>((acc, batch) => {
+    acc[batch.status] = (acc[batch.status] ?? 0) + 1;
+    return acc;
+  }, {});
 }
 
 // ── Pill summary ──────────────────────────────────────────────────────────────
@@ -232,7 +240,13 @@ export default function BatchesPage() {
   }, [search]);
 
   const load = useCallback(async () => {
+    const started = performance.now();
     batchLog("load:start", { page, statusFilter, debouncedSearch });
+    adminBatchTimeline("frontend_page_load_start", {
+      page,
+      status_filter: statusFilter || "ALL",
+      search: debouncedSearch || "",
+    });
     setLoading(true);
     try {
       const [bRes, uRes, dash] = await Promise.all([
@@ -246,8 +260,21 @@ export default function BatchesPage() {
       setReviewers(uRes.filter(u => u.role === "REVIEWER"));
       setReviewerWorkload((dash.reviewerWorkload as Record<string, number> | undefined) ?? {});
       batchLog("load:success", { count: bRes.content.length });
+      adminBatchTimeline("frontend_page_load_complete", {
+        page,
+        returned: bRes.content.length,
+        total_elements: Number(bRes.totalElements ?? bRes.content.length),
+        total_pages: bRes.totalPages,
+        status_counts: statusCounts(bRes.content),
+        elapsed_ms: elapsedMs(started),
+      });
     } catch (e) {
       batchLog("load:error", e);
+      adminBatchTimeline("frontend_page_load_failed", {
+        page,
+        elapsed_ms: elapsedMs(started),
+        error: e instanceof Error ? e.message : String(e),
+      });
       toast.error("Failed to load batches");
     } finally {
       setLoading(false);
@@ -272,15 +299,46 @@ export default function BatchesPage() {
     void load();
   });
 
+  useEffect(() => {
+    if (loading) return;
+    adminBatchTimeline("frontend_table_displayed", {
+      page,
+      row_count: batches.length,
+      total_elements: totalElements,
+      status_counts: statusCounts(batches),
+      batch_ids: batches.map(b => b.id),
+    });
+  }, [batches, loading, page, totalElements]);
+
   async function handleProcessQC(batch: Batch) {
+    const started = performance.now();
+    adminBatchTimeline("frontend_qc_button_clicked", {
+      batch_id: batch.id,
+      batch_ref: batch.parentBatchId,
+      current_status: batch.status,
+      model_provider: modelProvider,
+      text_model: textModel,
+      vision_model: visionModel,
+    });
     setActionBusy(batch.id, true);
     try {
       await processQC(batch.id, { provider: modelProvider, textModel, visionModel });
       setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "QC_PROCESSING", errorMessage: undefined } : b));
       toast.info(`QC started for "${batch.parentBatchId}"`, `${MODEL_OPTIONS[modelProvider].label} · ${textModel}`);
+      adminBatchTimeline("frontend_qc_trigger_complete", {
+        batch_id: batch.id,
+        batch_ref: batch.parentBatchId,
+        elapsed_ms: elapsedMs(started),
+      });
       startPolling({ ...batch, status: "QC_PROCESSING" });
       await load();
     } catch (e) {
+      adminBatchTimeline("frontend_qc_trigger_failed", {
+        batch_id: batch.id,
+        batch_ref: batch.parentBatchId,
+        elapsed_ms: elapsedMs(started),
+        error: e instanceof Error ? e.message : String(e),
+      });
       toast.error("QC trigger failed", String(e));
     } finally {
       setActionBusy(batch.id, false);
@@ -367,7 +425,14 @@ export default function BatchesPage() {
             <RefreshCw size={13} className={reconciling ? "animate-spin" : ""} />
             Reconcile
           </button>
-          <button onClick={() => setShowUpload(true)}
+          <button onClick={() => {
+            adminBatchTimeline("frontend_upload_button_clicked", {
+              page,
+              row_count: batches.length,
+              status_filter: statusFilter || "ALL",
+            });
+            setShowUpload(true);
+          }}
             className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(226,232,240,0.16)] transition-colors hover:bg-slate-500">
             <Plus size={14} /> Upload batch
           </button>
@@ -560,8 +625,17 @@ export default function BatchesPage() {
 
       {/* Modals */}
       <UploadModal open={showUpload} onClose={() => setShowUpload(false)}
-        onUploaded={(_batchId, ref, fileCount) => {
+        onUploaded={(batchId, ref, fileCount) => {
+          adminBatchTimeline("frontend_upload_visible_complete", {
+            batch_id: batchId,
+            batch_ref: ref,
+            file_count: fileCount,
+          });
           toast.success(`Batch "${ref}" uploaded`, `${fileCount} files ready for QC`);
+          adminBatchTimeline("frontend_table_refresh_after_upload_start", {
+            batch_id: batchId,
+            batch_ref: ref,
+          });
           void load();
         }} />
       <ConfirmDialog open={!!deleteTarget} title="Delete batch"

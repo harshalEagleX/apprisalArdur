@@ -7,6 +7,8 @@
  * never reads or writes the token — this eliminates the XSS token-theft vector.
  */
 
+import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
+
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
@@ -58,6 +60,17 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const LONG_TIMEOUT_MS    = 90_000;
 
 const LONG_TIMEOUT_PATHS = ["/api/qc/process/", "/api/admin/batches/upload", "/qc/process"];
+const ADMIN_BATCH_TIMELINE_PATHS = [
+  "/api/admin/batches",
+  "/api/qc/process/",
+  "/api/qc/cancel/",
+  "/api/qc/progress/",
+  "/api/qc/reconcile",
+];
+
+function shouldLogAdminBatchTimeline(path: string): boolean {
+  return ADMIN_BATCH_TIMELINE_PATHS.some(p => path.includes(p));
+}
 
 async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
   let res: Response;
@@ -68,6 +81,17 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
+  const started = performance.now();
+  const method = rest.method ?? "GET";
+  const timeline = shouldLogAdminBatchTimeline(path);
+
+  if (timeline) {
+    adminBatchTimeline("frontend_api_request_start", {
+      path,
+      method,
+      timeout_ms: timeout,
+    });
+  }
 
   try {
     res = await fetch(`${JAVA}${path}`, {
@@ -81,6 +105,14 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
       },
     });
   } catch (err) {
+    if (timeline) {
+      adminBatchTimeline("frontend_api_request_failed", {
+        path,
+        method,
+        elapsed_ms: elapsedMs(started),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(`Request timed out after ${timeout / 1000}s. Please try again.`);
     }
@@ -95,6 +127,16 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
     clearTimeout(timer);
   }
 
+  if (timeline) {
+    adminBatchTimeline("frontend_api_response_received", {
+      path,
+      method,
+      status: res.status,
+      ok: res.ok,
+      elapsed_ms: elapsedMs(started),
+    });
+  }
+
   if (res.status === 401 || res.status === 302) {
     if (typeof window !== "undefined") window.location.href = "/login";
     throw new Error("Unauthenticated");
@@ -103,10 +145,27 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
   if (res.status === 429) throw new Error("Too many requests. Please wait before trying again.");
 
   if (!res.ok) {
+    if (timeline) {
+      adminBatchTimeline("frontend_api_response_rejected", {
+        path,
+        method,
+        status: res.status,
+        elapsed_ms: elapsedMs(started),
+      });
+    }
     throw new Error(await readErrorMessage(res, `Request failed (${res.status})`));
   }
 
   const text = await res.text();
+  if (timeline) {
+    adminBatchTimeline("frontend_api_response_parsed", {
+      path,
+      method,
+      status: res.status,
+      elapsed_ms: elapsedMs(started),
+      response_bytes: text.length,
+    });
+  }
   return text ? JSON.parse(text) : ({} as T);
 }
 
@@ -259,18 +318,50 @@ export async function uploadBatch(
   file: File,
   clientId: number
 ): Promise<{ batchId: number; parentBatchId: string; fileCount: number }> {
+  const started = performance.now();
+  adminBatchTimeline("frontend_upload_api_start", {
+    filename: file.name,
+    file_size_bytes: file.size,
+    client_id: clientId,
+  });
   const fd = new FormData();
   fd.append("file", file);
   fd.append("clientId", String(clientId));
-  const res = await fetch(`${JAVA}/api/admin/batches/upload`, {
-    method: "POST",
-    credentials: "include",
-    body: fd,
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorMessage(res, `Upload failed (${res.status})`));
+  try {
+    const res = await fetch(`${JAVA}/api/admin/batches/upload`, {
+      method: "POST",
+      credentials: "include",
+      body: fd,
+    });
+    adminBatchTimeline("frontend_upload_api_response", {
+      status: res.status,
+      ok: res.ok,
+      elapsed_ms: elapsedMs(started),
+    });
+    if (!res.ok) {
+      adminBatchTimeline("frontend_upload_api_rejected", {
+        status: res.status,
+        elapsed_ms: elapsedMs(started),
+      });
+      throw new Error(await readErrorMessage(res, `Upload failed (${res.status})`));
+    }
+    const parsed = await res.json();
+    adminBatchTimeline("frontend_upload_api_complete", {
+      batch_id: parsed.batchId,
+      batch_ref: parsed.parentBatchId,
+      file_count: parsed.fileCount,
+      elapsed_ms: elapsedMs(started),
+    });
+    return parsed;
+  } catch (err) {
+    adminBatchTimeline("frontend_upload_api_failed", {
+      filename: file.name,
+      client_id: clientId,
+      elapsed_ms: elapsedMs(started),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
   }
-  return res.json();
 }
 
 // ── Admin: Bulk Batch Operations ──────────────────────────────────────────────
@@ -344,11 +435,34 @@ export interface QCModelSelection {
   visionModel?: string;
 }
 
-export const processQC = (batchId: number, model?: QCModelSelection) =>
-  apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
+export async function processQC(batchId: number, model?: QCModelSelection) {
+  const started = performance.now();
+  adminBatchTimeline("frontend_qc_trigger_api_start", {
+    batch_id: batchId,
+    model_provider: model?.provider ?? "ollama",
+    text_model: model?.textModel,
+    vision_model: model?.visionModel,
+  });
+  try {
+    const response = await apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
     `/api/qc/process/${batchId}`,
     { method: "POST", body: JSON.stringify(model ?? { provider: "ollama" }) }
-  );
+    );
+    adminBatchTimeline("frontend_qc_trigger_api_complete", {
+      batch_id: response.batchId,
+      status: response.status,
+      elapsed_ms: elapsedMs(started),
+    });
+    return response;
+  } catch (err) {
+    adminBatchTimeline("frontend_qc_trigger_api_failed", {
+      batch_id: batchId,
+      elapsed_ms: elapsedMs(started),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+}
 
 export const cancelQC = (batchId: number) =>
   apiFetch<{ message: string; batchId: number; cancelled: boolean; status: string }>(

@@ -5,10 +5,12 @@ import logging.handlers
 import re
 from datetime import datetime
 from typing import Any, Dict
+from zoneinfo import ZoneInfo
 
 # Create logs directory
 LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
+IST = ZoneInfo("Asia/Kolkata")
 
 class JsonFormatter(logging.Formatter):
     """
@@ -36,11 +38,14 @@ class JsonFormatter(logging.Formatter):
         if "asctime" in self.fmt_dict:
             log_record["timestamp"] = self.formatTime(record, self.datefmt)
         else:
-            log_record["timestamp"] = datetime.utcnow().isoformat()
+            log_record["timestamp"] = datetime.now(IST).isoformat()
             
         log_record["level"] = record.levelname
         log_record["logger"] = record.name
         log_record["message"] = record.message
+        log_record["pid"] = os.getpid()
+        log_record["process_name"] = record.processName
+        log_record["thread_name"] = record.threadName
         
         # Add exception info if present
         if record.exc_info:
@@ -71,6 +76,12 @@ class JsonFormatter(logging.Formatter):
 
         return json.dumps(log_record)
 
+    def formatTime(self, record: logging.LogRecord, datefmt: str = None) -> str:
+        dt = datetime.fromtimestamp(record.created, IST)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.isoformat()
+
 
 def _redact_pii(value: str) -> str:
     if not value:
@@ -100,8 +111,9 @@ def setup_logging(
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
     console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        '%(asctime)s+05:30 - pid=%(process)d - %(name)s - %(levelname)s - %(message)s'
     )
+    console_formatter.converter = lambda *args: datetime.now(IST).timetuple()
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     

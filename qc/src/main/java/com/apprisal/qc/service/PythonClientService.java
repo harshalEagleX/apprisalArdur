@@ -2,6 +2,7 @@ package com.apprisal.qc.service;
 
 import com.apprisal.qc.config.OcrServiceConfig;
 import com.apprisal.common.dto.python.PythonQCResponse;
+import com.apprisal.common.util.TimelineLog;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -75,6 +76,7 @@ public class PythonClientService {
                                       QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
                                       Long batchId, Long batchFileId, Long qcResultId, String sourceHash) {
         String url = config.getUrl() + "/qc/process";
+        long callStarted = System.nanoTime();
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         String progressToken = UUID.randomUUID().toString();
         lastRetryCount.set(0);
@@ -100,6 +102,16 @@ public class PythonClientService {
         body.add("vision_model", safeModelConfig.visionModel());
         body.add("progress_token", progressToken);
         String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig);
+        log.info(TimelineLog.event("admin_batches", "java_python_call_start",
+                "batch_id", batchId,
+                "batch_file_id", batchFileId,
+                "correlation_id", correlationId,
+                "progress_token", progressToken,
+                "url", url,
+                "appraisal", appraisalPath.getFileName(),
+                "engagement", engagementPath != null ? engagementPath.getFileName() : "none",
+                "contract", contractPath != null ? contractPath.getFileName() : "none",
+                "model", safeModelConfig.label()));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -145,6 +157,18 @@ public class PythonClientService {
                 lastRetryCount.set(Math.max(0, attempt - 1));
                 log.info("Python QC completed: passed={}, failed={}, verify={}, total_rules={}",
                         result.passed(), result.failed(), result.verify(), result.totalRules());
+                log.info(TimelineLog.event("admin_batches", "java_python_call_complete",
+                        "batch_id", batchId,
+                        "batch_file_id", batchFileId,
+                        "correlation_id", correlationId,
+                        "attempt", attempt,
+                        "retries", Math.max(0, attempt - 1),
+                        "passed", result.passed(),
+                        "failed", result.failed(),
+                        "verify", result.verify(),
+                        "total_rules", result.totalRules(),
+                        "python_processing_ms", result.processingTimeMs(),
+                        "elapsed_ms", TimelineLog.elapsedMs(callStarted)));
                 return result;
 
             } catch (org.springframework.web.client.HttpClientErrorException e) {
@@ -162,6 +186,13 @@ public class PythonClientService {
                 }
                 // 4xx from Python — e.g. 422 invalid PDF, 400 bad request. Retrying will not fix bad input.
                 log.error("Python QC service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+                log.error(TimelineLog.event("admin_batches", "java_python_call_rejected",
+                        "batch_id", batchId,
+                        "batch_file_id", batchFileId,
+                        "correlation_id", correlationId,
+                        "status", e.getStatusCode(),
+                        "elapsed_ms", TimelineLog.elapsedMs(callStarted),
+                        "body", e.getResponseBodyAsString()));
                 throw new RuntimeException("Python QC service rejected the request: " +
                         e.getStatusCode() + " — " + e.getResponseBodyAsString(), e);
             } catch (org.springframework.web.client.ResourceAccessException e) {
@@ -169,6 +200,13 @@ public class PythonClientService {
                     lastRetryCount.set(Math.max(0, attempt - 1));
                     log.error("Python QC service timeout or connection refused for model {} after {} attempt(s): {}",
                             safeModelConfig.label(), attempt, e.getMessage());
+                    log.error(TimelineLog.event("admin_batches", "java_python_call_failed",
+                            "batch_id", batchId,
+                            "batch_file_id", batchFileId,
+                            "correlation_id", correlationId,
+                            "attempt", attempt,
+                            "elapsed_ms", TimelineLog.elapsedMs(callStarted),
+                            "error", e.getMessage()));
                     throw new RuntimeException("Python QC service timed out after " + config.getTimeoutSeconds() + "s " +
                             "while processing model " + safeModelConfig.label() + ". " +
                             "The ocr-service was reachable, but downstream OCR/LLM work may have stalled or timed out.", e);
@@ -181,6 +219,14 @@ public class PythonClientService {
                     lastRetryCount.set(Math.max(0, attempt - 1));
                     log.error("Python QC service internal error ({}) after {} attempt(s): {}",
                             e.getStatusCode(), attempt, e.getResponseBodyAsString());
+                    log.error(TimelineLog.event("admin_batches", "java_python_call_failed",
+                            "batch_id", batchId,
+                            "batch_file_id", batchFileId,
+                            "correlation_id", correlationId,
+                            "attempt", attempt,
+                            "status", e.getStatusCode(),
+                            "elapsed_ms", TimelineLog.elapsedMs(callStarted),
+                            "body", e.getResponseBodyAsString()));
                     throw new RuntimeException("Python QC service error: " + e.getStatusCode(), e);
                 }
                 log.warn("Python QC attempt {}/{} got {} from Python. Retrying...",
@@ -190,6 +236,13 @@ public class PythonClientService {
                 if (attempt >= maxAttempts) {
                     lastRetryCount.set(Math.max(0, attempt - 1));
                     log.error("Failed to call Python QC service after {} attempt(s): {}", attempt, e.getMessage(), e);
+                    log.error(TimelineLog.event("admin_batches", "java_python_call_failed",
+                            "batch_id", batchId,
+                            "batch_file_id", batchFileId,
+                            "correlation_id", correlationId,
+                            "attempt", attempt,
+                            "elapsed_ms", TimelineLog.elapsedMs(callStarted),
+                            "error", e.getMessage()));
                     throw new RuntimeException("Python QC service call failed: " + e.getMessage(), e);
                 }
                 log.warn("Python QC attempt {}/{} failed: {}. Retrying...", attempt, maxAttempts, e.getMessage());

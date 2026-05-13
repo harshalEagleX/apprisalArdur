@@ -14,6 +14,7 @@ import com.apprisal.qc.service.PythonClientService;
 import com.apprisal.qc.service.QCModelConfig;
 import com.apprisal.qc.service.QCProcessingService;
 import com.apprisal.qc.service.StuckBatchReconciler;
+import com.apprisal.common.util.TimelineLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -71,20 +72,31 @@ public class QCApiController {
     public ResponseEntity<Map<String, Object>> processBatch(
             @PathVariable @NonNull Long batchId,
             @RequestBody(required = false) Map<String, String> modelRequest) {
+        long started = System.nanoTime();
         QCModelConfig modelConfig = new QCModelConfig(
                 modelRequest != null ? modelRequest.get("provider") : null,
                 modelRequest != null ? modelRequest.get("textModel") : null,
                 modelRequest != null ? modelRequest.get("visionModel") : null);
+        log.info(TimelineLog.event("admin_batches", "java_qc_trigger_received",
+                "batch_id", batchId,
+                "model", modelConfig.label()));
         log.info("QC processing requested for batch {} using {}", batchId, modelConfig.label());
 
         // Validate batch exists and is in a triggerable state
         var batchOpt = batchRepository.findById(batchId);
         if (batchOpt.isEmpty()) {
+            log.warn(TimelineLog.event("admin_batches", "java_qc_trigger_rejected",
+                    "batch_id", batchId,
+                    "reason", "batch_not_found",
+                    "elapsed_ms", TimelineLog.elapsedMs(started)));
             return ResponseEntity.notFound().build();
         }
         var batch = batchOpt.get();
 
         if (batch.getStatus() == BatchStatus.QC_PROCESSING) {
+            log.info(TimelineLog.event("admin_batches", "java_qc_trigger_already_running",
+                    "batch_id", batchId,
+                    "elapsed_ms", TimelineLog.elapsedMs(started)));
             return ResponseEntity.ok(Map.of(
                 "message", "Batch is already being processed",
                 "batchId", batchId,
@@ -101,6 +113,10 @@ public class QCApiController {
             var latestStatus = batchRepository.findById(batchId)
                     .map(b -> b.getStatus() != null ? b.getStatus().name() : "UNKNOWN")
                     .orElse("NOT_FOUND");
+            log.warn(TimelineLog.event("admin_batches", "java_qc_trigger_claim_failed",
+                    "batch_id", batchId,
+                    "status", latestStatus,
+                    "elapsed_ms", TimelineLog.elapsedMs(started)));
             return ResponseEntity.ok(Map.of(
                 "message", "Batch could not be claimed for QC",
                 "batchId", batchId,
@@ -112,6 +128,11 @@ public class QCApiController {
         // Fire async — returns immediately
         qcProcessingService.processBatchAsync(batchId, modelConfig);
 
+        log.info(TimelineLog.event("admin_batches", "java_qc_trigger_accepted",
+                "batch_id", batchId,
+                "model", modelConfig.label(),
+                "elapsed_ms", TimelineLog.elapsedMs(started),
+                "poll_url", "/api/admin/batches/" + batchId + "/status"));
         return ResponseEntity.accepted().body(Map.of(
             "message", "QC processing started",
             "batchId", batchId,
@@ -186,6 +207,7 @@ public class QCApiController {
     @GetMapping("/progress/{batchId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> getBatchProgress(@PathVariable @NonNull Long batchId) {
+        long started = System.nanoTime();
         if (!batchRepository.existsById(batchId)) {
             return ResponseEntity.notFound().build();
         }
@@ -227,6 +249,14 @@ public class QCApiController {
         body.put("subMessage", progress.subMessage());
         body.put("subPercent", progress.subPercent());
         body.put("subElapsedMs", progress.subElapsedMs());
+        log.info(TimelineLog.event("admin_batches", "java_progress_served",
+                "batch_id", batchId,
+                "stage", progress.stage(),
+                "current", progress.current(),
+                "total", progress.total(),
+                "percent", progress.percent(),
+                "running", progress.running(),
+                "elapsed_ms", TimelineLog.elapsedMs(started)));
         return ResponseEntity.ok(body);
     }
 

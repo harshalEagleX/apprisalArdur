@@ -14,6 +14,7 @@ import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.service.BusinessEventService;
 import com.apprisal.common.service.FileMatchingService;
 import com.apprisal.common.util.AppTime;
+import com.apprisal.common.util.TimelineLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -236,6 +237,7 @@ public class BatchService {
     @Transactional
     @SuppressWarnings("null")
     public Batch createFromZip(MultipartFile file, Client client, User creator) {
+        long flowStarted = System.nanoTime();
         if (file == null || file.isEmpty()) {
             throw new ValidationException("file", "File is required");
         }
@@ -272,6 +274,13 @@ public class BatchService {
                 ? originalFilename.replace(".zip", "")
                 : "BATCH_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
+        log.info(TimelineLog.event("admin_batches", "java_upload_start",
+                "batch_ref", parentBatchId,
+                "client_code", client.getCode(),
+                "user", creator.getUsername(),
+                "zip_name", originalFilename,
+                "zip_bytes", file.getSize(),
+                "file_hash", fileHash));
         log.info("Creating batch '{}' for client '{}' by user '{}'",
                 parentBatchId, client.getCode(), creator.getUsername());
 
@@ -288,9 +297,16 @@ public class BatchService {
         batch.setFileHash(fileHash);
 
         try {
+            long extractStarted = System.nanoTime();
             Path batchDir = Paths.get(storagePath, client.getCode(), parentBatchId);
             Files.createDirectories(batchDir);
             extractAndValidateZip(file, batch, batchDir);
+            log.info(TimelineLog.event("admin_batches", "java_upload_extracted",
+                    "batch_ref", parentBatchId,
+                    "client_code", client.getCode(),
+                    "file_count", batch.getFiles().size(),
+                    "storage_dir", batchDir,
+                    "elapsed_ms", TimelineLog.elapsedMs(extractStarted)));
             // UPLOADED = ZIP is valid, files are on disk, waiting for admin to trigger QC.
             // QC_PROCESSING is only set by QCProcessingService when Python is actually called.
             // Setting QC_PROCESSING here was the bug that hid the "Run QC" button forever.
@@ -318,7 +334,15 @@ public class BatchService {
         }
 
         // ONE save in the success path — cascade creates all files atomically
+        long saveStarted = System.nanoTime();
         batch = Objects.requireNonNull(batchRepository.save(batch));
+        log.info(TimelineLog.event("admin_batches", "java_upload_saved",
+                "batch_id", batch.getId(),
+                "batch_ref", batch.getParentBatchId(),
+                "status", batch.getStatus(),
+                "file_count", batch.getFileCount(),
+                "save_ms", TimelineLog.elapsedMs(saveStarted),
+                "total_elapsed_ms", TimelineLog.elapsedMs(flowStarted)));
         auditLogService.logEntity(creator, "BATCH_UPLOAD", "Batch", batch.getId());
         Map<String, Object> eventPayload = new HashMap<>();
         eventPayload.put("parent_batch_id", batch.getParentBatchId());

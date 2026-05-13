@@ -11,11 +11,44 @@ import time
 import shutil
 import tempfile
 import uuid
+from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-load_dotenv()
+
+_SERVICE_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _SERVICE_DIR.parent
+_ROOT_ENV = _PROJECT_ROOT / ".env"
+_SERVICE_ENV = _SERVICE_DIR / ".env"
+
+
+def _defined_env_names(path: Path, names: set[str]) -> set[str]:
+    if not path.is_file():
+        return set()
+
+    found: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key = stripped.split("=", 1)[0].strip()
+        if key in names:
+            found.add(key)
+    return found
+
+
+# Shared auth lives in the project root .env. The service-local .env may contain
+# Python-only settings, but must never duplicate the Java/Python shared API key.
+_DUPLICATED_API_KEY_NAMES = _defined_env_names(_SERVICE_ENV, {"INTERNAL_API_KEY", "PYTHON_API_KEY"})
+if _DUPLICATED_API_KEY_NAMES:
+    names = ", ".join(sorted(_DUPLICATED_API_KEY_NAMES))
+    raise RuntimeError(
+        f"Do not define {names} in {_SERVICE_ENV}. Define INTERNAL_API_KEY once in {_ROOT_ENV}."
+    )
+load_dotenv(_SERVICE_ENV, override=False)
+load_dotenv(_ROOT_ENV, override=False)
 
 os.environ.setdefault("TZ", "Asia/Kolkata")
 if hasattr(time, "tzset"):
@@ -52,6 +85,25 @@ from app.database import ensure_schema_compatibility
 from app.rule_engine.rules_db import seed_rules_config
 ensure_schema_compatibility()
 seed_rules_config()
+
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def _flow_log(event: str, *, started: Optional[float] = None, level: str = "info", **fields: Any) -> None:
+    payload = {
+        "flow": "admin_batches",
+        "event": event,
+        "ist": datetime.now(_IST).isoformat(),
+        "pid": os.getpid(),
+        **fields,
+    }
+    if started is not None:
+        payload["elapsed_ms"] = _elapsed_ms(started)
+    getattr(logger, level)("admin_batches_timeline", extra=payload)
 
 # Try to import Tesseract, but make it optional
 try:
@@ -103,24 +155,49 @@ app.add_middleware(
 )
 
 # ── API-Key authentication ─────────────────────────────────────────────────────
-_API_KEY        = os.getenv("PYTHON_API_KEY", "")          # empty = dev mode (no key required)
+_API_KEY = os.getenv("INTERNAL_API_KEY")
+if not _API_KEY or not _API_KEY.strip():
+    raise RuntimeError(
+        f"Missing required INTERNAL_API_KEY. Define it once in {_ROOT_ENV} before starting Python."
+    )
+_API_KEY = _API_KEY.strip()
+_flow_log(
+    "python_service_ready",
+    root_env=str(_ROOT_ENV),
+    service_env=str(_SERVICE_ENV),
+    api_key_configured=True,
+)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def _require_api_key(api_key: str = Security(_api_key_header)) -> None:
-    """Validate X-API-Key header. Skipped in dev mode (PYTHON_API_KEY not set)."""
-    if not _API_KEY:
-        return  # dev mode — no key required
+    """Validate X-API-Key header."""
     if api_key != _API_KEY:
+        received_hint = (api_key[:6] + "...") if (api_key and len(api_key) > 6) else repr(api_key)
+        expected_hint = _API_KEY[:6] + "..."
+        _flow_log(
+            "python_auth_failed",
+            level="warning",
+            received_hint=received_hint,
+            expected_hint=expected_hint,
+        )
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "Auth failure: X-API-Key mismatch. received=%s expected=%s. "
+            "Java and Python must both load INTERNAL_API_KEY from the project root .env.",
+            received_hint, expected_hint,
+        )
         raise HTTPException(
             status_code=401,
-            detail={"error": "UNAUTHORIZED", "message": "Invalid or missing API key"},
+            detail={
+                "error": "UNAUTHORIZED",
+                "message": "Invalid or missing X-API-Key header",
+                "hint": "Java ocr.service.api-key and Python INTERNAL_API_KEY must come from the same root .env",
+            },
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
 
 def _require_ws_api_key(websocket: WebSocket) -> bool:
-    if not _API_KEY:
-        return True
     supplied = websocket.headers.get("x-api-key") or websocket.query_params.get("api_key")
     return supplied == _API_KEY
 
@@ -596,8 +673,36 @@ async def process_qc(
     """
     request_id = getattr(request.state, "request_id", None)
     processing_job_id: Optional[str] = None
+    flow_started = time.perf_counter()
+    effective_correlation_id = correlation_id or request.headers.get("x-correlation-id")
+    _flow_log(
+        "python_qc_request_start",
+        request_id=request_id,
+        correlation_id=effective_correlation_id,
+        batch_id=batch_id,
+        batch_file_id=batch_file_id,
+        qc_result_id=qc_result_id,
+        filename=file.filename,
+        has_engagement_letter=engagement_letter is not None,
+        has_contract_file=contract_file is not None,
+        model_provider=model_provider,
+        text_model=text_model,
+        vision_model=vision_model,
+        progress_token=progress_token,
+    )
 
     if not file.filename.lower().endswith('.pdf'):
+        _flow_log(
+            "python_qc_http_failed",
+            started=flow_started,
+            level="warning",
+            request_id=request_id,
+            correlation_id=effective_correlation_id,
+            batch_id=batch_id,
+            batch_file_id=batch_file_id,
+            status_code=400,
+            detail="Only PDF files are accepted",
+        )
         logger.warning(
             "Invalid file type in process_qc",
             extra={"uploaded_filename": file.filename, "request_id": request_id}
@@ -631,8 +736,19 @@ async def process_qc(
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Stream appraisal PDF to disk
+            copy_started = time.perf_counter()
             pdf_path = os.path.join(temp_dir, f"qc_input_{uuid.uuid4()}.pdf")
             _copy_upload_limited(file, pdf_path, label="appraisal PDF")
+            _flow_log(
+                "python_qc_appraisal_saved",
+                started=copy_started,
+                request_id=request_id,
+                correlation_id=effective_correlation_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                filename=file.filename,
+                bytes=os.path.getsize(pdf_path),
+            )
 
             err = validate_upload(pdf_path, request_id)
             if err:
@@ -661,12 +777,33 @@ async def process_qc(
                 tracestate=request.headers.get("tracestate"),
             )
             processing_job_id = _require_durable_job(processing_job_id)
+            _flow_log(
+                "python_qc_job_ready",
+                started=flow_started,
+                request_id=request_id,
+                correlation_id=effective_correlation_id,
+                processing_job_id=processing_job_id,
+                job_status=job_status,
+                reused=reused,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                file_hash=file_hash,
+            )
             if reused and job_status == "completed":
                 existing = processing_lifecycle.get_job_status(processing_job_id)
                 if existing and existing.get("result_json"):
                     payload = json.loads(existing["result_json"])
                     payload["file_hash"] = file_hash
                     payload["processing_job_id"] = processing_job_id
+                    _flow_log(
+                        "python_qc_return_cached_result",
+                        started=flow_started,
+                        request_id=request_id,
+                        correlation_id=effective_correlation_id,
+                        processing_job_id=processing_job_id,
+                        batch_id=batch_id,
+                        batch_file_id=batch_file_id,
+                    )
                     return payload
             elif reused and job_status == "in_progress":
                 raise HTTPException(
@@ -688,6 +825,7 @@ async def process_qc(
             # Process engagement letter if provided
             engagement_text = None
             if engagement_letter:
+                stage_started = time.perf_counter()
                 _emit("ocr_engagement", "Reading engagement letter", 0.08)
                 eng_path = os.path.join(temp_dir, f"qc_eng_{uuid.uuid4()}")
                 _copy_upload_limited(
@@ -712,10 +850,22 @@ async def process_qc(
                 else:
                     with open(eng_path, "rb") as f:
                         engagement_text = f.read().decode('utf-8', errors='ignore')
+                _flow_log(
+                    "python_qc_engagement_done",
+                    started=stage_started,
+                    request_id=request_id,
+                    correlation_id=effective_correlation_id,
+                    processing_job_id=processing_job_id,
+                    batch_id=batch_id,
+                    batch_file_id=batch_file_id,
+                    filename=engagement_letter.filename,
+                    chars=len(engagement_text or ""),
+                )
 
             # Process contract / purchase agreement if provided
             contract_text = None
             if contract_file:
+                stage_started = time.perf_counter()
                 _emit("ocr_contract", "Reading purchase contract", 0.18)
                 con_path = os.path.join(temp_dir, f"qc_con_{uuid.uuid4()}")
                 _copy_upload_limited(
@@ -740,6 +890,17 @@ async def process_qc(
                 else:
                     with open(con_path, "rb") as f:
                         contract_text = f.read().decode('utf-8', errors='ignore')
+                _flow_log(
+                    "python_qc_contract_done",
+                    started=stage_started,
+                    request_id=request_id,
+                    correlation_id=effective_correlation_id,
+                    processing_job_id=processing_job_id,
+                    batch_id=batch_id,
+                    batch_file_id=batch_file_id,
+                    filename=contract_file.filename,
+                    chars=len(contract_text or ""),
+                )
 
             # Run QC processor in threadpool
             processor = get_qc_processor()
@@ -776,7 +937,33 @@ async def process_qc(
                             tracestate=request.headers.get("tracestate"),
                         )
 
+            processor_started = time.perf_counter()
+            _flow_log(
+                "python_qc_processor_start",
+                started=flow_started,
+                request_id=request_id,
+                correlation_id=effective_correlation_id,
+                processing_job_id=processing_job_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                filename=file.filename,
+            )
             results = await run_in_threadpool(_run_processor)
+            _flow_log(
+                "python_qc_processor_complete",
+                started=processor_started,
+                request_id=request_id,
+                correlation_id=effective_correlation_id,
+                processing_job_id=processing_job_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                filename=file.filename,
+                total_rules=results.total_rules,
+                passed=results.passed,
+                failed=results.failed,
+                verify=results.verify,
+                python_processing_ms=results.processing_time_ms,
+            )
 
             _emit("complete", "QC pipeline complete", 1.0)
             logger.info("QC processing completed", extra={"request_id": request_id})
@@ -784,14 +971,50 @@ async def process_qc(
             payload["file_hash"] = file_hash
             payload["processing_job_id"] = processing_job_id
             processing_lifecycle.complete_job(processing_job_id, document_id=results.document_id, result_payload=payload)
+            _flow_log(
+                "python_qc_response_ready",
+                started=flow_started,
+                request_id=request_id,
+                correlation_id=effective_correlation_id,
+                processing_job_id=processing_job_id,
+                batch_id=batch_id,
+                batch_file_id=batch_file_id,
+                total_rules=results.total_rules,
+                passed=results.passed,
+                failed=results.failed,
+                verify=results.verify,
+            )
             return payload
             
     except HTTPException as exc:
         _fail_job_for_http_exception(processing_job_id, exc)
+        _flow_log(
+            "python_qc_http_failed",
+            started=flow_started,
+            level="warning",
+            request_id=request_id,
+            correlation_id=effective_correlation_id,
+            processing_job_id=processing_job_id,
+            batch_id=batch_id,
+            batch_file_id=batch_file_id,
+            status_code=exc.status_code,
+            detail=exc.detail,
+        )
         raise
     except fitz.FileDataError:
         processing_lifecycle.fail_job(processing_job_id, "PDF file is corrupted or encrypted", "input_validation")
         logger.error("Corrupted PDF in process_qc", extra={"request_id": request_id})
+        _flow_log(
+            "python_qc_failed",
+            started=flow_started,
+            level="error",
+            request_id=request_id,
+            correlation_id=effective_correlation_id,
+            processing_job_id=processing_job_id,
+            batch_id=batch_id,
+            batch_file_id=batch_file_id,
+            error="PDF file is corrupted or encrypted",
+        )
         raise HTTPException(
             status_code=400,
             detail={"error": "CORRUPTED_PDF", "message": "PDF file is corrupted or encrypted"}
@@ -799,6 +1022,17 @@ async def process_qc(
     except Exception as e:
         processing_lifecycle.fail_job(processing_job_id, str(e))
         logger.error("QC Processing error", extra={"error": str(e), "request_id": request_id}, exc_info=True)
+        _flow_log(
+            "python_qc_failed",
+            started=flow_started,
+            level="error",
+            request_id=request_id,
+            correlation_id=effective_correlation_id,
+            processing_job_id=processing_job_id,
+            batch_id=batch_id,
+            batch_file_id=batch_file_id,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=500,
             detail={"error": "QC_PROCESSING_ERROR", "message": str(e)}

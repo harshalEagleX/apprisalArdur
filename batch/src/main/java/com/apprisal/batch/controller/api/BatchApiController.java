@@ -8,6 +8,9 @@ import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.ClientRepository;
 import com.apprisal.common.repository.QCResultRepository;
+import com.apprisal.common.util.TimelineLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,6 +33,8 @@ import java.util.Optional;
 @RequestMapping("/api/admin/batches")
 @PreAuthorize("hasRole('ADMIN')")
 public class BatchApiController {
+
+    private static final Logger log = LoggerFactory.getLogger(BatchApiController.class);
 
     private final BatchService batchService;
     private final AuditLogService auditLogService;
@@ -67,12 +72,12 @@ public class BatchApiController {
         }
         return batchRepository.findById(batchId).map(batch -> {
             if (batch.getClient() == null || !adminClient.getId().equals(batch.getClient().getId())) {
-                return Optional.of(ResponseEntity.status(403)
-                        .<Object>body(Map.of("error", "ACCESS_DENIED",
+                return Optional.<ResponseEntity<?>>of(ResponseEntity.status(403)
+                        .body(Map.of("error", "ACCESS_DENIED",
                                 "message", "You do not have access to this batch.")));
             }
             return Optional.<ResponseEntity<?>>empty();
-        }).orElse(Optional.of(ResponseEntity.notFound().<Object>build()));
+        }).orElse(Optional.of(ResponseEntity.notFound().build()));
     }
 
     /**
@@ -92,6 +97,7 @@ public class BatchApiController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search) {
+        long started = System.nanoTime();
 
         BatchStatus batchStatus = null;
         if (status != null && !status.isBlank()) {
@@ -106,6 +112,14 @@ public class BatchApiController {
                 ? batchService.searchAdminBatches(batchStatus, search, PageRequest.of(page, size, Sort.by("createdAt").descending()))
                 : batchService.findAll(PageRequest.of(page, size, Sort.by("createdAt").descending()));
 
+        log.info(TimelineLog.event("admin_batches", "java_list_served",
+                "page", page,
+                "size", size,
+                "status_filter", status,
+                "search", search,
+                "returned", batchPage.getContent().size(),
+                "total_elements", batchPage.getTotalElements(),
+                "elapsed_ms", TimelineLog.elapsedMs(started)));
         return ResponseEntity.ok(Map.of(
             "content",       batchPage.getContent().stream().map(b -> toSummary(b, false)).toList(),
             "totalPages",    batchPage.getTotalPages(),
@@ -181,9 +195,10 @@ public class BatchApiController {
     public ResponseEntity<?> getBatchStatus(
             @PathVariable @NonNull Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
+        long started = System.nanoTime();
         Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), id);
         if (denied.isPresent()) return denied.get();
-        return batchService.findById(id)
+        ResponseEntity<?> response = batchService.findById(id)
                 .map(b -> ResponseEntity.ok(Map.of(
                         "batchId",      b.getId(),
                         "status",       b.getStatus() != null ? b.getStatus().name() : null,
@@ -194,6 +209,11 @@ public class BatchApiController {
                         "updatedAt",    b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null
                 )))
                 .orElse(ResponseEntity.notFound().build());
+        log.info(TimelineLog.event("admin_batches", "java_status_served",
+                "batch_id", id,
+                "http_status", response.getStatusCode().value(),
+                "elapsed_ms", TimelineLog.elapsedMs(started)));
+        return response;
     }
 
     /**
@@ -206,8 +226,14 @@ public class BatchApiController {
             @RequestParam MultipartFile file,
             @RequestParam @NonNull Long clientId,
             @AuthenticationPrincipal UserPrincipal principal) {
+        long started = System.nanoTime();
 
         User admin = principal.getUser();
+        log.info(TimelineLog.event("admin_batches", "java_upload_request",
+                "client_id", clientId,
+                "user", admin.getUsername(),
+                "zip_name", file.getOriginalFilename(),
+                "zip_bytes", file.getSize()));
 
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "File is required"));
@@ -232,8 +258,19 @@ public class BatchApiController {
             response.put("parentBatchId",  batch.getParentBatchId());
             response.put("fileCount",      batch.getFileCount());
             response.put("status",         batch.getStatus() != null ? batch.getStatus().name() : null);
+            log.info(TimelineLog.event("admin_batches", "java_upload_response",
+                    "batch_id", batch.getId(),
+                    "batch_ref", batch.getParentBatchId(),
+                    "status", batch.getStatus(),
+                    "file_count", batch.getFileCount(),
+                    "elapsed_ms", TimelineLog.elapsedMs(started)));
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            log.warn(TimelineLog.event("admin_batches", "java_upload_failed",
+                    "client_id", clientId,
+                    "zip_name", file.getOriginalFilename(),
+                    "elapsed_ms", TimelineLog.elapsedMs(started),
+                    "error", e.getMessage()));
             return ResponseEntity.badRequest().body(Map.of("error", "Upload failed: " + e.getMessage()));
         }
     }
