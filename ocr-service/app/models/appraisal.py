@@ -203,7 +203,19 @@ class AppraisalReport(BaseModel):
     site: SiteSection = Field(default_factory=SiteSection)
     improvements: ImprovementSection = Field(default_factory=ImprovementSection)
     sales_comparison: SalesComparisonSection = Field(default_factory=SalesComparisonSection)
-    # Add other sections as needed
+
+    # Final appraised value from the Reconciliation section (Rule R-2).
+    # Used by C-2 to perform the "contract price triangle" check:
+    #   contract_price ↔ appraised_value ↔ comparable_sales
+    # If appraised_value differs from contract_price by >3% → FLAG
+    # If appraised_value differs by >10% → HOLD for escalation
+    appraised_value: Optional[float] = None
+
+    # Effective date of the appraisal (date the inspection occurred).
+    # Used by C-2 to calculate how old the purchase contract is relative
+    # to when the appraiser actually visited — old contracts in volatile
+    # markets require additional commentary per domain rule.
+    effective_date: Optional[str] = None
 
 class ValidationContext(BaseModel):
     """
