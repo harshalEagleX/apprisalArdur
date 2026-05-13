@@ -19,8 +19,17 @@ import os
 import shutil
 import tempfile
 import time
+from pathlib import Path
 
 from celery import Celery
+from dotenv import load_dotenv
+
+# Load .env files so the worker gets correct config when started directly via
+# `celery -A app.tasks.celery_app worker` (bypasses main.py's dotenv loading).
+_SERVICE_DIR = Path(__file__).resolve().parent.parent.parent  # ocr-service/
+_PROJECT_ROOT = _SERVICE_DIR.parent
+load_dotenv(_SERVICE_DIR / ".env", override=False)
+load_dotenv(_PROJECT_ROOT / ".env", override=False)
 
 os.environ.setdefault("TZ", "Asia/Kolkata")
 if hasattr(time, "tzset"):

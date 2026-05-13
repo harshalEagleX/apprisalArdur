@@ -118,18 +118,7 @@ CREATE TABLE IF NOT EXISTS _user_aud (
 ALTER TABLE _user_aud
 ADD CONSTRAINT fk_user_aud_rev
 FOREIGN KEY (rev)
-REFERENCES revinfo(rev);
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_aud_rev'
-    ) THEN
-        ALTER TABLE _user_aud
-        ADD CONSTRAINT fk_user_aud_rev
-        FOREIGN KEY (rev) REFERENCES revinfo(rev);
-    END IF;
-END $$;
+REFERENCES revision_info(id);
 
 CREATE TABLE IF NOT EXISTS client_AUD (
     id      BIGINT  NOT NULL,

@@ -234,6 +234,24 @@ ALTER TABLE qc_rule_result_aud
 -- SECTION 11: Missing indexes
 -- ═══════════════════════════════════════════════════════════════════════════
 
+CREATE TABLE IF NOT EXISTS business_event (
+    id              BIGSERIAL PRIMARY KEY,
+    event_type      VARCHAR(100) NOT NULL,
+    actor_user_id   BIGINT REFERENCES _user(id),
+    actor_role      VARCHAR(50),
+    entity_type     VARCHAR(100),
+    entity_id       BIGINT,
+    batch_id        BIGINT,
+    batch_file_id   BIGINT,
+    qc_result_id    BIGINT,
+    rule_result_id  BIGINT,
+    correlation_id  VARCHAR(64),
+    source_layer    VARCHAR(50),
+    outcome         VARCHAR(50),
+    payload_json    TEXT,
+    occurred_at     TIMESTAMP NOT NULL
+);
+
 -- Cross-service bridge: Java → Python lookups (previously full-table scans)
 CREATE INDEX IF NOT EXISTS idx_qc_result_python_doc_id
     ON qc_result (python_document_id)
@@ -246,6 +264,18 @@ CREATE INDEX IF NOT EXISTS idx_qc_result_python_job_id
 -- Analytics: "all business events involving entity X"
 CREATE INDEX IF NOT EXISTS idx_business_event_entity
     ON business_event (entity_type, entity_id);
+
+CREATE INDEX IF NOT EXISTS idx_business_event_type_time
+    ON business_event (event_type, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_business_event_batch_time
+    ON business_event (batch_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_business_event_qc_time
+    ON business_event (qc_result_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_business_event_corr
+    ON business_event (correlation_id);
 
 -- Reporting: "all outcomes for rule S-1 across all QC runs"
 CREATE INDEX IF NOT EXISTS idx_qc_rule_result_rule_id

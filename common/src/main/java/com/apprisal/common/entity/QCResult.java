@@ -141,6 +141,10 @@ public class QCResult {
     @Column(name = "reviewer_notes", columnDefinition = "TEXT")
     private String reviewerNotes;
 
+    // QCRuleResult is @NotAudited (removed to avoid 137 Envers rows per QC run).
+    // Envers requires @NotAudited on the owning side's collection when the target
+    // entity is not audited. Rule outcome history is tracked via BusinessEvent instead.
+    @NotAudited
     @OneToMany(mappedBy = "qcResult", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<QCRuleResult> ruleResults = new ArrayList<>();
 

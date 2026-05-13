@@ -1,6 +1,28 @@
 -- Backfill Python-derived QC rule cells so processing output is explicit
 -- instead of SQL NULL. Reviewer workflow columns intentionally remain nullable.
 
+ALTER TABLE qc_rule_result
+    ADD COLUMN IF NOT EXISTS target_field VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS pdf_page INTEGER,
+    ADD COLUMN IF NOT EXISTS bbox_x REAL,
+    ADD COLUMN IF NOT EXISTS bbox_y REAL,
+    ADD COLUMN IF NOT EXISTS bbox_w REAL,
+    ADD COLUMN IF NOT EXISTS bbox_h REAL;
+
+ALTER TABLE qc_rule_result_aud
+    ADD COLUMN IF NOT EXISTS message TEXT,
+    ADD COLUMN IF NOT EXISTS details TEXT,
+    ADD COLUMN IF NOT EXISTS action_item TEXT,
+    ADD COLUMN IF NOT EXISTS appraisal_value TEXT,
+    ADD COLUMN IF NOT EXISTS engagement_value TEXT,
+    ADD COLUMN IF NOT EXISTS severity VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS target_field VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS pdf_page INTEGER,
+    ADD COLUMN IF NOT EXISTS bbox_x REAL,
+    ADD COLUMN IF NOT EXISTS bbox_y REAL,
+    ADD COLUMN IF NOT EXISTS bbox_w REAL,
+    ADD COLUMN IF NOT EXISTS bbox_h REAL;
+
 UPDATE qc_rule_result SET
     rule_name = COALESCE(rule_name, rule_id, 'UNKNOWN_RULE'),
     message = COALESCE(message, 'No rule message provided.'),
