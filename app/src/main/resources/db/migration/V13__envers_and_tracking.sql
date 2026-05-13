@@ -63,8 +63,8 @@ CREATE INDEX IF NOT EXISTS idx_pm_model_version ON processing_metrics (model_ver
 CREATE INDEX IF NOT EXISTS idx_pm_cache_hit     ON processing_metrics (cache_hit);
 
 -- ── Envers audit tables for core entities ────────────────────────────────────
--- Hibernate Envers creates _AUD tables automatically on ddl-auto=validate,
--- so we pre-create them to satisfy Flyway baseline.
+-- Historical manual SQL reference. Runtime schema is now managed by
+-- JPA/Hibernate ddl-auto=update; no Flyway baseline is used.
 
 CREATE TABLE IF NOT EXISTS batch_AUD (
     id             BIGINT  NOT NULL,

@@ -25,9 +25,11 @@ spring:
 
   jpa:
     hibernate:
-      # validate: Hibernate checks entity↔schema match but never modifies tables.
-      # All schema changes must go through Flyway migrations in db/migration/.
-      ddl-auto: validate
+      # Java schema is managed directly by JPA/Hibernate. Do not wire Flyway,
+      # Liquibase, or other third-party migration runners in this project.
+      # Manual DB fixes stay manual; Python tables are recreated separately with
+      # ocr-service/manage_db.py recreate.
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -42,16 +44,6 @@ spring:
         format_sql: false
     show-sql: false
     open-in-view: false
-
-  flyway:
-    enabled: true
-    # baseline-on-migrate: true is required because the schema was originally built
-    # by ddl-auto before Flyway was adopted. On first run, Flyway creates
-    # flyway_schema_history, marks V0 as the baseline, then runs V1–V25+.
-    # All existing migrations use IF NOT EXISTS so they are idempotent on an
-    # already-populated schema.
-    baseline-on-migrate: true
-    locations: classpath:db/migration
 
   servlet:
     multipart:

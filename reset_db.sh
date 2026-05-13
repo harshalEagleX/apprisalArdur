@@ -3,8 +3,8 @@
 # reset_db.sh — Full database reset for Apprisal QC platform
 #
 # Drops ALL tables (Java + Python) from the shared PostgreSQL database, then
-# recreates the Python-managed tables immediately. Java tables are recreated
-# automatically when the Spring Boot app starts — Flyway runs V1–V25 in order.
+# recreates the Python-managed tables with manage_db.py recreate. Java tables
+# are managed by JPA/Hibernate when the Spring Boot app starts. No Flyway.
 #
 # Usage:
 #   bash reset_db.sh          # interactive confirmation
@@ -55,8 +55,8 @@ if [[ "${1:-}" != "--yes" ]]; then
     echo "║  This will DROP ALL TABLES — ALL DATA IS LOST.       ║"
     echo "║                                                       ║"
     echo "║  After reset:                                         ║"
-    echo "║  • Python tables → recreated by this script          ║"
-    echo "║  • Java tables   → recreated by Flyway on app start  ║"
+    echo "║  • Python tables → manage_db.py recreate             ║"
+    echo "║  • Java tables   → JPA/Hibernate on app start        ║"
     echo "╚══════════════════════════════════════════════════════╝"
     echo ""
     read -r -p "  Type 'yes' to continue: " confirm
@@ -75,13 +75,13 @@ echo "  ✓ Schema cleared."
 
 # ── Step 2: Recreate Python-managed tables ────────────────────────────────────
 echo ""
-echo "Step 2/3 — Creating Python-managed tables..."
+echo "Step 2/3 — Recreating Python-managed tables..."
 if [[ ! -d "$OCR_DIR" ]]; then
     echo "  WARNING: ocr-service directory not found at $OCR_DIR — skipping Python tables."
 else
     PYTHON="${PYTHON_CMD:-python}"
     cd "$OCR_DIR"
-    $PYTHON manage_db.py create
+    printf 'yes\n' | $PYTHON manage_db.py recreate
     echo ""
     echo "  → Seeding rules_config (146 rules)..."
     $PYTHON -c "
@@ -94,11 +94,11 @@ print(f'  ✓ rules_config seeded — {n} rules.')
     cd "$SCRIPT_DIR"
 fi
 
-# ── Step 3: Instructions for Java / Flyway ────────────────────────────────────
+# ── Step 3: Instructions for Java / JPA-Hibernate ─────────────────────────────
 echo ""
-echo "Step 3/3 — Java tables (Flyway V1–V25)"
-echo "  ✓ Flyway will run automatically on next Spring Boot startup."
-echo "  ✓ All 25 migrations run in order. baseline-on-migrate is enabled."
+echo "Step 3/3 — Java tables (JPA/Hibernate)"
+echo "  ✓ Hibernate will manage Java-owned tables on next Spring Boot startup."
+echo "  ✓ Flyway/Liquibase/third-party migration runners are intentionally not used."
 
 echo ""
 echo "══════════════════════════════════════════════════════════"
@@ -111,6 +111,5 @@ echo ""
 echo "    Option B — IntelliJ:"
 echo "      Run ApprisalApplication.java"
 echo ""
-echo "  After Java starts you should see in logs:"
-echo "    'Successfully applied 25 migration(s)'"
+echo "  After Java starts, verify Hibernate connects cleanly and creates/updates Java-owned tables."
 echo "══════════════════════════════════════════════════════════"

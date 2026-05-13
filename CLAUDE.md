@@ -36,3 +36,10 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+## Database Schema Policy
+
+- Do not add or re-enable Flyway, Liquibase, Alembic for Java, or any other third-party Java migration runner.
+- Java-owned tables are managed by JPA/Hibernate (`spring.jpa.hibernate.ddl-auto=update`) plus manual database work when needed.
+- Python-owned tables are recreated with `cd ocr-service && python manage_db.py recreate`.
+- Keep comments, scripts, and docs aligned with this policy whenever database behavior changes.

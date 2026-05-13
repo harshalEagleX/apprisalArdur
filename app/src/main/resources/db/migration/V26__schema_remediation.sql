@@ -1,7 +1,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- V26: Complete schema remediation
 --
--- Full audit of every @Audited Java entity vs Flyway-managed AUD tables plus
+-- Full audit of every @Audited Java entity vs manually managed AUD tables plus
 -- runtime-visible gaps between entity field definitions and migration history.
 --
 -- Sections:
@@ -22,8 +22,8 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- SECTION 1: qc_result — add 4 entity columns absent from all migrations
 --
--- These columns existed only in the ddl-auto:create-built schema. With
--- ddl-auto:validate they cause startup failure.
+-- These columns existed only in the ddl-auto:create-built schema. With manual
+-- database handling, keep this as reference SQL for any environment that needs it.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE qc_result
