@@ -564,11 +564,12 @@ public class PythonClientService {
      */
     public boolean isHealthy() {
         try {
-            String url = config.getUrl() + "/health";
+            // Use /live (instant, no DB/Ollama checks) — /health is expensive (~7s)
+            String url = config.getUrl() + "/live";
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
             return response.getStatusCode().is2xxSuccessful();
         } catch (Exception e) {
-            log.warn("Python service health check failed: {}", e.getMessage());
+            log.warn("Python service liveness check failed: {}", e.getMessage());
             return false;
         }
     }

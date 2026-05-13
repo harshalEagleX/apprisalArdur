@@ -5,11 +5,14 @@ import com.apprisal.common.repository.BusinessEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -60,6 +63,53 @@ public class BusinessEventService {
     public void batchEvent(String eventType, User actor, Batch batch, String outcome, Map<String, ?> payload) {
         record(eventType, actor, "java", outcome, "Batch", batch != null ? batch.getId() : null,
                 batch != null ? batch.getId() : null, null, null, null, payload);
+    }
+
+    /**
+     * Build a BusinessEvent object without saving it — use with recordAll() for bulk inserts.
+     */
+    public BusinessEvent buildEvent(String eventType, User actor, String sourceLayer, String outcome,
+                                    String entityType, Long entityId, Long batchId, Long batchFileId,
+                                    Long qcResultId, Long ruleResultId, Map<String, ?> payload) {
+        BusinessEvent event = new BusinessEvent();
+        event.setEventType(eventType);
+        event.setActor(actor);
+        event.setActorRole(actor != null && actor.getRole() != null ? actor.getRole().name() : null);
+        event.setSourceLayer(sourceLayer);
+        event.setOutcome(outcome);
+        event.setEntityType(entityType);
+        event.setEntityId(entityId);
+        event.setBatchId(batchId);
+        event.setBatchFileId(batchFileId);
+        event.setQcResultId(qcResultId);
+        event.setRuleResultId(ruleResultId);
+        event.setCorrelationId(resolveCorrelationId(batchId, batchFileId, qcResultId, ruleResultId));
+        event.setPayloadJson(toPayloadJson(eventType, payload));
+        return event;
+    }
+
+    /**
+     * Save a list of events in one transaction — replaces N individual record() calls.
+     * Use this for bulk writes (e.g., 137 QC rule events) to avoid N × REQUIRES_NEW round trips.
+     */
+    @Transactional
+    public void recordAll(List<BusinessEvent> events) {
+        if (events == null || events.isEmpty()) return;
+        try {
+            repository.saveAll(events);
+        } catch (Exception e) {
+            log.error("Batch business event capture failed for {} events: {}", events.size(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Same as recordAll() but runs in the background — caller is not blocked.
+     * Use for QC rule events that are non-critical to the user-visible response.
+     */
+    @Async("qcTaskExecutor")
+    @Transactional
+    public void recordAllAsync(List<BusinessEvent> events) {
+        recordAll(events);
     }
 
     public void qcEvent(String eventType, User actor, QCResult qcResult, String outcome, Map<String, ?> payload) {

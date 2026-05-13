@@ -485,11 +485,6 @@ class SmartQCProcessor:
                     supporting_document_missing=supporting_document_missing,
                     missing_supporting_documents=missing_supporting_documents,
                 )
-            processing_lifecycle.complete_job(
-                processing_job_id,
-                document_id=document_id,
-                result_payload=results.model_dump(),
-            )
             return results
     
     def _map_extraction_to_report(

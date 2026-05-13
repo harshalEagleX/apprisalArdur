@@ -22,9 +22,19 @@ import java.util.Optional;
 public interface QCResultRepository extends JpaRepository<QCResult, Long> {
 
     /**
-     * Find QC result for a specific batch file.
+     * Find the active (non-superseded) QC result for a batch file.
+     *
+     * After rerun support was added, multiple QCResults can exist per BatchFile
+     * (historical results keep supersededAt set). This method always returns the
+     * ONE currently-active result. Use findAllByBatchFileIdOrderByProcessedAtDesc
+     * when you need the full version history.
      */
-    Optional<QCResult> findByBatchFileId(Long batchFileId);
+    @Query("""
+        SELECT qr FROM QCResult qr
+        WHERE qr.batchFile.id = :batchFileId
+          AND qr.supersededAt IS NULL
+        """)
+    Optional<QCResult> findByBatchFileId(@Param("batchFileId") Long batchFileId);
 
     /**
      * Acquire an exclusive row-level lock on a QCResult before mutating its
@@ -203,9 +213,16 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     List<Object[]> countByDecisionForBatch(@Param("batchId") Long batchId);
 
     /**
-     * Check if a batch file already has a QC result.
+     * Check if a batch file has an active (non-superseded) QC result.
+     * Returns false for files whose only QCResult has been superseded by a rerun.
      */
-    boolean existsByBatchFileId(Long batchFileId);
+    @Query("""
+        SELECT CASE WHEN COUNT(qr) > 0 THEN TRUE ELSE FALSE END
+        FROM QCResult qr
+        WHERE qr.batchFile.id = :batchFileId
+          AND qr.supersededAt IS NULL
+        """)
+    boolean existsByBatchFileId(@Param("batchFileId") Long batchFileId);
 
     /**
      * Find the active (non-superseded) QC result for a batch file.

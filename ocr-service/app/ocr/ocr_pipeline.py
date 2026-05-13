@@ -54,6 +54,14 @@ try:
 except Exception:
     CAMELOT_AVAILABLE = False
 
+# Camelot lattice mode requires Ghostscript to convert PDF pages to images.
+# Resolved once at startup via app.config so the check is shared with /health.
+try:
+    from app.config import GHOSTSCRIPT_CMD as _gs_cmd
+    GHOSTSCRIPT_AVAILABLE = _gs_cmd is not None
+except Exception:
+    GHOSTSCRIPT_AVAILABLE = False
+
 
 class ExtractionMethod(str, Enum):
     """Method used to extract text from a page."""
@@ -491,12 +499,17 @@ class OCRPipeline:
         return "\n".join(blocks)
 
     def _camelot_page_tables(self, pdf_path: str, page_number: int) -> str:
-        """Extract grid tables with Camelot, preferring lattice then stream."""
+        """Extract grid tables with Camelot. Uses lattice (requires Ghostscript) when available,
+        otherwise falls back directly to stream to avoid a per-page exception."""
         if not CAMELOT_AVAILABLE:
             return ""
 
+        # Skip lattice entirely if Ghostscript is not installed — lattice needs gs to rasterize
+        # PDF pages. Without it, every attempt raises an exception before reading any table data.
+        flavors = ("lattice", "stream") if GHOSTSCRIPT_AVAILABLE else ("stream",)
+
         blocks = []
-        for flavor in ("lattice", "stream"):
+        for flavor in flavors:
             try:
                 tables = camelot.read_pdf(
                     pdf_path,

@@ -10,6 +10,7 @@ Toggle:      UPDATE rules_config SET is_active=false WHERE rule_id='S-5';
 """
 
 import logging
+import time
 from typing import Dict, Optional
 from dataclasses import dataclass
 
@@ -330,12 +331,29 @@ def seed_rules_config():
         logger.info("rules_config seed failed (DB may be unavailable): %s", e)
 
 
-def load_rule_configs() -> Dict[str, RuleConfigEntry]:
+_rule_config_cache: Optional[Dict[str, "RuleConfigEntry"]] = None
+_rule_config_cache_ts: float = 0.0
+_RULE_CONFIG_CACHE_TTL = 3600  # 1 hour — rules rarely change in dev
+
+
+def invalidate_rule_config_cache() -> None:
+    """Force next load_rule_configs() call to re-query the DB."""
+    global _rule_config_cache, _rule_config_cache_ts
+    _rule_config_cache = None
+    _rule_config_cache_ts = 0.0
+
+
+def load_rule_configs() -> Dict[str, "RuleConfigEntry"]:
     """
-    Load active rule configurations from DB.
-    Returns dict of rule_id → RuleConfigEntry.
+    Load active rule configurations from DB, cached in memory for 1 hour.
+    Avoids one DB round trip per QC job (~200ms on remote DB, ~40s on cold start).
+    Call invalidate_rule_config_cache() after toggling a rule via /admin/rules.
     Falls back to built-in defaults if DB unavailable.
     """
+    global _rule_config_cache, _rule_config_cache_ts
+    if _rule_config_cache is not None and (time.monotonic() - _rule_config_cache_ts) < _RULE_CONFIG_CACHE_TTL:
+        return _rule_config_cache
+
     # Build defaults first
     defaults = {
         rule_id: RuleConfigEntry(
@@ -357,6 +375,8 @@ def load_rule_configs() -> Dict[str, RuleConfigEntry]:
         with get_db() as db:
             rows = db.query(RuleConfig).all()
             if not rows:
+                _rule_config_cache = defaults
+                _rule_config_cache_ts = time.monotonic()
                 return defaults
 
             configs = {}
@@ -368,6 +388,8 @@ def load_rule_configs() -> Dict[str, RuleConfigEntry]:
                     is_active=row.is_active,
                     applicable_loan_types=row.applicable_loan_types or "ALL",
                 )
+            _rule_config_cache = configs
+            _rule_config_cache_ts = time.monotonic()
             return configs
 
     except Exception as e:

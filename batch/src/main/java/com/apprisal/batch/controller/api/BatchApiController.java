@@ -1,13 +1,12 @@
 package com.apprisal.batch.controller.api;
 
+import com.apprisal.common.dto.BatchStatusView;
 import com.apprisal.common.entity.*;
 import com.apprisal.batch.service.BatchService;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.security.UserPrincipal;
-import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.ClientRepository;
-import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.util.TimelineLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,21 +38,15 @@ public class BatchApiController {
     private final BatchService batchService;
     private final AuditLogService auditLogService;
     private final ClientRepository clientRepository;
-    private final BatchFileRepository batchFileRepository;
-    private final QCResultRepository qcResultRepository;
     private final BatchRepository batchRepository;
 
     public BatchApiController(BatchService batchService,
                               AuditLogService auditLogService,
                               ClientRepository clientRepository,
-                              BatchFileRepository batchFileRepository,
-                              QCResultRepository qcResultRepository,
                               BatchRepository batchRepository) {
         this.batchService = batchService;
         this.auditLogService = auditLogService;
         this.clientRepository = clientRepository;
-        this.batchFileRepository = batchFileRepository;
-        this.qcResultRepository = qcResultRepository;
         this.batchRepository = batchRepository;
     }
 
@@ -88,7 +81,7 @@ public class BatchApiController {
      * "Serializing PageImpl instances as-is is not supported" warning and
      * to guarantee a consistent shape for the frontend.
      *
-     * Each batch item includes fileCount (from @Formula — no lazy-load required)
+     * Each batch item includes fileCount (denormalized column — no lazy-load required)
      * so the frontend gets accurate file counts without loading the full files list.
      */
     @GetMapping
@@ -130,7 +123,7 @@ public class BatchApiController {
 
     /**
      * Converts a Batch to a summary map for the list API.
-     * Uses @Formula fileCount — no lazy-loading of the files collection required.
+     * Uses denormalized fileCount column — no lazy-loading of the files collection required.
      */
     private Map<String, Object> toSummary(Batch b, boolean includeFiles) {
         Map<String, Object> m = new HashMap<>();
@@ -141,7 +134,7 @@ public class BatchApiController {
         m.put("fileHash",      b.getFileHash());
         m.put("createdAt",     b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
         m.put("updatedAt",     b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null);
-        // fileCount from @Formula — always accurate, no lazy-load required
+        // fileCount from denormalized column — always accurate, no lazy-load required
         m.put("fileCount", b.getFileCount());
         if (includeFiles) {
             m.put("files", b.getFiles().stream().map(f -> Map.of(
@@ -154,7 +147,7 @@ public class BatchApiController {
             )).toList());
         } else {
             // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
-            // returns (open-in-view=false). Use fileCount for the count display.
+            // returns (open-in-view=false). fileCount column has the accurate count.
             m.put("files", List.of());
         }
         // Embed reviewer
@@ -198,17 +191,22 @@ public class BatchApiController {
         long started = System.nanoTime();
         Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), id);
         if (denied.isPresent()) return denied.get();
-        ResponseEntity<?> response = batchService.findById(id)
-                .map(b -> ResponseEntity.ok(Map.of(
-                        "batchId",      b.getId(),
-                        "status",       b.getStatus() != null ? b.getStatus().name() : null,
-                        "totalFiles",   b.getFileCount(),
-                        "processingTotalFiles", batchFileRepository.countByBatchIdAndFileType(id, FileType.APPRAISAL),
-                        "completedFiles", qcResultRepository.countByBatchId(id),
-                        "errorMessage", b.getErrorMessage() != null ? b.getErrorMessage() : "",
-                        "updatedAt",    b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null
-                )))
-                .orElse(ResponseEntity.notFound().build());
+        // Single query replaces: batch load + countByBatchIdAndFileType + countByBatchId
+        BatchStatusView view = batchRepository.findStatusById(id);
+        ResponseEntity<?> response;
+        if (view == null) {
+            response = ResponseEntity.notFound().build();
+        } else {
+            response = ResponseEntity.ok(Map.of(
+                    "batchId",              view.getBatchId(),
+                    "status",               view.getStatus() != null ? view.getStatus().name() : null,
+                    "totalFiles",           view.getTotalFiles(),
+                    "processingTotalFiles", view.getProcessingTotalFiles(),
+                    "completedFiles",       view.getCompletedFiles(),
+                    "errorMessage",         view.getErrorMessage() != null ? view.getErrorMessage() : "",
+                    "updatedAt",            view.getUpdatedAt() != null ? view.getUpdatedAt().toString() : null
+            ));
+        }
         log.info(TimelineLog.event("admin_batches", "java_status_served",
                 "batch_id", id,
                 "http_status", response.getStatusCode().value(),

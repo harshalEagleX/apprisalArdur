@@ -25,9 +25,9 @@ spring:
 
   jpa:
     hibernate:
-      # Product safety: schema changes must come from migrations, not app startup.
-      # Use JPA_DDL_AUTO=update only for a disposable local database.
-      ddl-auto: create
+      # validate: Hibernate checks entity↔schema match but never modifies tables.
+      # All schema changes must go through Flyway migrations in db/migration/.
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -43,9 +43,15 @@ spring:
     show-sql: false
     open-in-view: false
 
-  # ❌ REMOVE FLYWAY COMPLETELY
   flyway:
-    enabled: false
+    enabled: true
+    # baseline-on-migrate: true is required because the schema was originally built
+    # by ddl-auto before Flyway was adopted. On first run, Flyway creates
+    # flyway_schema_history, marks V0 as the baseline, then runs V1–V25+.
+    # All existing migrations use IF NOT EXISTS so they are idempotent on an
+    # already-populated schema.
+    baseline-on-migrate: true
+    locations: classpath:db/migration
 
   servlet:
     multipart:

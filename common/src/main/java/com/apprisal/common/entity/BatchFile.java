@@ -3,6 +3,7 @@ package com.apprisal.common.entity;
 import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 import java.time.LocalDateTime;
 
 /**
@@ -55,6 +56,9 @@ public class BatchFile {
     @Column(nullable = false)
     private FileStatus status = FileStatus.PENDING;
 
+    // Raw OCR text — large, write-once, and never needed in audit history.
+    // Envers would store it in every batch_file_aud row, wasting significant space.
+    @NotAudited
     @Column(name = "ocr_data", columnDefinition = "TEXT")
     private String ocrData;
 

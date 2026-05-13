@@ -1,0 +1,41 @@
+# ── Dev profile ─────────────────────────────────────────────────────────────────
+# Overrides DB to local Postgres regardless of any DB_URL in .env.
+# Activating this profile means you never accidentally run QC against the remote
+# Neon database and removes the ~200ms per-query network round trip.
+#
+# How to activate (pick one):
+#   IntelliJ IDEA  →  Run/Debug Configuration → "Active profiles": dev
+#   Maven          →  mvn spring-boot:run -Dspring-boot.run.profiles=dev
+#   Environment    →  export SPRING_PROFILES_ACTIVE=dev
+#
+# One-time local Postgres setup (Mac):
+#   brew install postgresql@16
+#   brew services start postgresql@16
+#   createdb ardurApprisal          # uses your OS username by default
+#   # Verify: psql ardurApprisal -c '\dt'
+#
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ardurApprisal
+    username: ${DB_USERNAME:${user.name}}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      # Fail fast locally — localhost should respond in <1ms, not 30s
+      connection-timeout: 3000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    com.apprisal: DEBUG
+    org.flywaydb: INFO

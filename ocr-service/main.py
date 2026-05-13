@@ -439,9 +439,15 @@ def _check_celery_worker() -> bool:
         return False
 
 
+@app.get("/live")
+async def liveness():
+    """Cheap liveness probe — Java calls this before every QC job instead of /health."""
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health_check():
-    """Health check: binaries + DB + Ollama model readiness."""
+    """Full readiness check: binaries + DB + Ollama model readiness. Slow — do not call per-job."""
     binary_issues = validate_binaries()
     system_info = get_system_info()
     db_ok          = await run_in_threadpool(_check_db_connection)
@@ -1474,6 +1480,8 @@ async def toggle_rule(rule_id: str, is_active: bool, _auth: None = Security(_req
             if not row:
                 raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found in DB config")
             row.is_active = is_active
+        from app.rule_engine.rules_db import invalidate_rule_config_cache
+        invalidate_rule_config_cache()
         return {"rule_id": rule_id, "is_active": is_active, "status": "updated"}
     except HTTPException:
         raise

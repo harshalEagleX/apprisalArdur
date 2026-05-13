@@ -3,7 +3,6 @@ package com.apprisal.common.entity;
 import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import jakarta.persistence.Version;
-import org.hibernate.annotations.Formula;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -57,17 +56,12 @@ public class Batch {
     private List<BatchFile> files = new ArrayList<>();
 
     /**
-     * Eagerly-computed file count via SQL formula — avoids lazy-load issues when
-     * batches are serialized in list API responses (open-in-view = false).
-     * Read-only: maintained by the DB, never set directly.
-     *
-     * @NotAudited: Envers cannot audit @Formula fields (no physical column exists
-     * in the audit table). This field is derived — the audit trail is captured
-     * through the BatchFile audit entries instead.
+     * Denormalized file count — incremented by addFile(), decremented by removeFile().
+     * Replaces the @Formula subquery that fired on every batch list row load.
+     * ddl-auto: update will auto-add this column on next startup.
      */
-    @org.hibernate.envers.NotAudited
-    @Formula("(SELECT COUNT(*) FROM batch_file bf WHERE bf.batch_id = id)")
-    private Integer fileCount;
+    @Column(name = "file_count", nullable = false, columnDefinition = "integer default 0")
+    private Integer fileCount = 0;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -150,16 +144,18 @@ public class Batch {
     public void addFile(BatchFile file) {
         files.add(file);
         file.setBatch(this);
+        fileCount = (fileCount != null ? fileCount : 0) + 1;
     }
 
     public void removeFile(BatchFile file) {
         files.remove(file);
         file.setBatch(null);
+        fileCount = Math.max(0, (fileCount != null ? fileCount : 1) - 1);
     }
 
     public Long getVersion() { return version; }
 
-    public Integer getFileCount() { return fileCount != null ? fileCount : files.size(); }
+    public Integer getFileCount() { return fileCount != null ? fileCount : 0; }
 
     public String getFileHash() { return fileHash; }
     public void setFileHash(String fileHash) { this.fileHash = fileHash; }

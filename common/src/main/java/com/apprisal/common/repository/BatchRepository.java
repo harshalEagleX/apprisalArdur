@@ -1,5 +1,6 @@
 package com.apprisal.common.repository;
 
+import com.apprisal.common.dto.BatchStatusView;
 import com.apprisal.common.entity.Batch;
 import com.apprisal.common.entity.BatchStatus;
 import com.apprisal.common.entity.User;
@@ -198,6 +199,25 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
         ORDER BY b.updatedAt ASC
         """)
     List<Batch> findExpiredInReviewBatches(@Param("now") LocalDateTime now);
+
+    /**
+     * Single-query alternative for the status polling endpoint.
+     * Replaces three separate queries (batch load + 2 counts) with one JPQL statement.
+     */
+    @Query("""
+        SELECT b.id                                                                       AS batchId,
+               b.status                                                                   AS status,
+               b.errorMessage                                                             AS errorMessage,
+               b.updatedAt                                                                AS updatedAt,
+               (SELECT COUNT(f) FROM BatchFile f WHERE f.batch.id = b.id)                AS totalFiles,
+               (SELECT COUNT(f2) FROM BatchFile f2
+                WHERE f2.batch.id = b.id
+                  AND f2.fileType = com.apprisal.common.entity.FileType.APPRAISAL)       AS processingTotalFiles,
+               (SELECT COUNT(qr) FROM QCResult qr WHERE qr.batchFile.batch.id = b.id)   AS completedFiles
+        FROM Batch b
+        WHERE b.id = :id
+        """)
+    BatchStatusView findStatusById(@Param("id") Long id);
 
     // Efficient TopN queries for dashboards
     List<Batch> findTop10ByOrderByCreatedAtDesc();

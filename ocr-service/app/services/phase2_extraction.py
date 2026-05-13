@@ -2282,18 +2282,24 @@ class Phase2ExtractionEngine:
         if not pdf_path:
             return []   # Path not available — skip Camelot
 
-        try:
-            tables = camelot.read_pdf(
-                pdf_path,
-                pages=pages_arg,
-                flavor="lattice",
-                copy_text=["v"],   # propagate vertical spans (merged cells)
-                strip_text="\n",
-            )
-        except Exception as exc:
-            logger.info("Camelot comparable grid extraction failed: %s", exc)
-            return []
-
+        # Try lattice first (cleaner column alignment), fall back to stream
+        # if Ghostscript is not installed (lattice requires gs to rasterize pages).
+        tables = None
+        for _flavor, _kwargs in [
+            ("lattice", {"copy_text": ["v"]}),
+            ("stream",  {}),
+        ]:
+            try:
+                tables = camelot.read_pdf(
+                    pdf_path,
+                    pages=pages_arg,
+                    flavor=_flavor,
+                    strip_text="\n",
+                    **_kwargs,
+                )
+                break
+            except Exception as exc:
+                logger.debug("Camelot %s comparable extraction failed: %s", _flavor, exc)
         if not tables:
             return []
 

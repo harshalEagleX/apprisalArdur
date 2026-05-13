@@ -2,20 +2,21 @@ package com.apprisal.common.entity;
 
 import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
-import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 
 /**
  * QCRuleResult entity storing individual rule outcomes from Python QC
  * processing.
- * 
+ *
  * Each rule (S-1, S-2, C-1, etc.) produces one QCRuleResult with:
  * - status: PASS, FAIL, VERIFY
  * - message: Detailed message from Python
  * - needsVerification: true for VERIFY/ERROR items
  * - reviewerVerified: null=pending, true=pass, false=fail
+ *
+ * @Audited intentionally removed: 137 machine-generated rows per QC job × Envers = 274 inserts.
+ * Audit trail for rule results is captured via BusinessEvent (QC_RULE_EVALUATED) instead.
  */
-@Audited
 @Entity
 @Table(name = "qc_rule_result",
        indexes = {
@@ -99,6 +100,9 @@ public class QCRuleResult {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     // Comparison fields for reviewer UI
     @Column(name = "appraisal_value", columnDefinition = "TEXT")
     private String appraisalValue;
@@ -159,11 +163,13 @@ public class QCRuleResult {
     @PrePersist
     protected void onCreate() {
         createdAt = AppTime.now();
+        updatedAt = createdAt;
         fillProcessingDefaults();
     }
 
     @PreUpdate
     protected void onUpdate() {
+        updatedAt = AppTime.now();
         fillProcessingDefaults();
     }
 
@@ -378,6 +384,9 @@ public class QCRuleResult {
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     public String getAppraisalValue() {
         return appraisalValue;

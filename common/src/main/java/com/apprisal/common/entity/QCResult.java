@@ -3,6 +3,7 @@ package com.apprisal.common.entity;
 import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,8 +30,11 @@ public class QCResult {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // unique=false: the DB uniqueness is enforced by a PARTIAL index
+    // (uq_qc_result_batch_file_active WHERE superseded_at IS NULL) so reruns
+    // can create a new active result while historical superseded results coexist.
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_file_id", nullable = false)
+    @JoinColumn(name = "batch_file_id", nullable = false, unique = false)
     private BatchFile batchFile;
 
     @Enumerated(EnumType.STRING)
@@ -41,6 +45,9 @@ public class QCResult {
     @Column(name = "final_decision")
     private FinalDecision finalDecision;
 
+    // Full JSON blob from Python — large, write-once, redundant in audit revisions.
+    // The QCRuleResult rows carry the granular rule outcomes; this is raw data only.
+    @NotAudited
     @Column(name = "python_response", columnDefinition = "TEXT")
     private String pythonResponse;
 

@@ -122,20 +122,39 @@ OCR_CONFIG = {
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024   # 50 MB
 MAX_PAGE_COUNT = 100                      # Reject construction plans, etc.
 
+def _ghostscript_path():
+    """Return the path to the gs binary, or None if not installed."""
+    import shutil
+    for name in ("gs", "gswin64c", "gswin32c"):
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
+
+
+GHOSTSCRIPT_CMD = _ghostscript_path()
+
+
 # Validation: Check if critical binaries exist
 def validate_binaries():
     """Validate that required binaries are available."""
     issues = []
-    
+
     if not os.path.exists(TESSERACT_CMD):
         issues.append(f"Tesseract not found at: {TESSERACT_CMD}")
-    
+
     if not os.path.exists(PDFINFO_CMD):
         issues.append(f"pdfinfo not found at: {PDFINFO_CMD}")
-    
+
     if not os.path.exists(PDFTOPPM_CMD):
         issues.append(f"pdftoppm not found at: {PDFTOPPM_CMD}")
-    
+
+    # Ghostscript is optional but required for Camelot lattice mode.
+    # Without it, table extraction falls back to stream mode automatically.
+    # Install with: brew install ghostscript
+    if not GHOSTSCRIPT_CMD:
+        issues.append("Ghostscript (gs) not found — Camelot will use stream mode only (brew install ghostscript)")
+
     return issues
 
 
@@ -153,6 +172,8 @@ def get_system_info():
         'pdftoppm_exists': os.path.exists(PDFTOPPM_CMD),
         'magick_cmd': MAGICK_CMD,
         'magick_exists': os.path.exists(MAGICK_CMD),
+        'ghostscript_cmd': GHOSTSCRIPT_CMD,
+        'ghostscript_available': GHOSTSCRIPT_CMD is not None,
     }
 
 

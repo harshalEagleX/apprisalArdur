@@ -551,86 +551,87 @@ public class QCProcessingService {
         long queueWaitMs = queueWaitMs(progressBatchId, pythonStartedAt);
         int retryCount = 0;
 
+        PythonQCResponse pythonResponse;
+
         if (!pythonClient.isCeleryWorkerRunning()) {
             log.warn("Celery worker is not connected; using synchronous Python QC for batch {} file {}",
                     progressBatchId, appraisal.getFilename());
             updateSubProgress(progressBatchId, "python_sync",
                     "Celery worker unavailable — running OCR directly for " + appraisal.getFilename(), 0.05, 0);
-            PythonQCResponse pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
-            retryCount = pythonClient.getLastRetryCount();
-            throwIfCancelled(progressBatchId);
-            return self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
-        }
-
-        // --- Async queue path (Celery worker) ---
-        // Submit the job and poll for completion so Python HTTP threads are never
-        // held open for the full OCR+LLM duration (5-15 min on M1 8 GB).
-        // On each poll we check for batch cancellation so Stop QC is still instant.
-        PythonQCResponse pythonResponse;
-        PythonClientService.JobSubmitResponse job;
-        try {
-            job = pythonClient.submitQCJob(
-                    pair.getAppraisalPath(),
-                    pair.getEngagementPath(),
-                    pair.getContractPath(),
-                    modelConfig,
-                    progressBatchId,
-                    appraisal.getId(),
-                    null,
-                    appraisal.getContentHash());
-
-            updateSubProgress(progressBatchId, "queued",
-                    "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
-
-        } catch (CancellationException ce) {
-            throw ce;
-        } catch (Exception submitEx) {
-            // Fall back only if the job could not be queued at all. Once Python
-            // returns a durable job id, Java must poll that job instead of
-            // starting a duplicate sync request with the same idempotency key.
-            log.warn("Async submit unavailable for batch {} file {} ({}), falling back to sync call",
-                    progressBatchId, appraisal.getFilename(), submitEx.getMessage());
-            updateSubProgress(progressBatchId, "python_sync",
-                    "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
-            pythonResponse = pythonClient.processQC(
-                    pair.getAppraisalPath(),
-                    pair.getEngagementPath(),
-                    pair.getContractPath(),
-                    modelConfig,
-                    snapshot -> {
-                        String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
-                        String subMessage = snapshot.message() != null ? snapshot.message()
-                                : "Processing " + appraisal.getFilename();
-                        updateSubProgress(progressBatchId, subStage, subMessage,
-                                snapshot.subPercent(), snapshot.elapsedMs());
-                    },
-                    progressBatchId,
-                    appraisal.getId(),
-                    null,
-                    appraisal.getContentHash());
-            retryCount = pythonClient.getLastRetryCount();
-            throwIfCancelled(progressBatchId);
-            return self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
-        }
-
-        Duration timeout = Duration.ofSeconds(Math.max(900, (long) pythonClient.getConfig().getTimeoutSeconds() * 4));
-        try {
-            pythonResponse = pythonClient.waitForJobResult(
-                    job.jobId(),
-                    timeout,
-                    () -> isCancellationRequested(progressBatchId));
-        } catch (PythonClientService.CeleryWorkerUnavailableException workerEx) {
-            log.warn("Queued Python job {} was not picked up by Celery; taking it over synchronously",
-                    workerEx.jobId());
-            updateSubProgress(progressBatchId, "python_sync",
-                    "Celery worker did not pick up queued job — running OCR directly for " + appraisal.getFilename(),
-                    0.05, 0);
             pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
-        }
-        retryCount = pythonClient.getLastRetryCount();
-        throwIfCancelled(progressBatchId);
+            retryCount = pythonClient.getLastRetryCount();
+            throwIfCancelled(progressBatchId);
+        } else {
+            // --- Async queue path (Celery worker) ---
+            PythonClientService.JobSubmitResponse job;
+            try {
+                job = pythonClient.submitQCJob(
+                        pair.getAppraisalPath(),
+                        pair.getEngagementPath(),
+                        pair.getContractPath(),
+                        modelConfig,
+                        progressBatchId,
+                        appraisal.getId(),
+                        null,
+                        appraisal.getContentHash());
 
-        return self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
+                updateSubProgress(progressBatchId, "queued",
+                        "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
+
+            } catch (CancellationException ce) {
+                throw ce;
+            } catch (Exception submitEx) {
+                log.warn("Async submit unavailable for batch {} file {} ({}), falling back to sync call",
+                        progressBatchId, appraisal.getFilename(), submitEx.getMessage());
+                updateSubProgress(progressBatchId, "python_sync",
+                        "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
+                pythonResponse = pythonClient.processQC(
+                        pair.getAppraisalPath(),
+                        pair.getEngagementPath(),
+                        pair.getContractPath(),
+                        modelConfig,
+                        snapshot -> {
+                            String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
+                            String subMessage = snapshot.message() != null ? snapshot.message()
+                                    : "Processing " + appraisal.getFilename();
+                            updateSubProgress(progressBatchId, subStage, subMessage,
+                                    snapshot.subPercent(), snapshot.elapsedMs());
+                        },
+                        progressBatchId,
+                        appraisal.getId(),
+                        null,
+                        appraisal.getContentHash());
+                retryCount = pythonClient.getLastRetryCount();
+                throwIfCancelled(progressBatchId);
+
+                QCResult syncFallbackResult = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
+                self.recordQcEventsAsync(syncFallbackResult, pythonResponse, syncFallbackResult.getQcDecision(), modelConfig);
+                return syncFallbackResult;
+            }
+
+            Duration timeout = Duration.ofSeconds(Math.max(900, (long) pythonClient.getConfig().getTimeoutSeconds() * 4));
+            try {
+                pythonResponse = pythonClient.waitForJobResult(
+                        job.jobId(),
+                        timeout,
+                        () -> isCancellationRequested(progressBatchId));
+            } catch (PythonClientService.CeleryWorkerUnavailableException workerEx) {
+                log.warn("Queued Python job {} was not picked up by Celery; taking it over synchronously",
+                        workerEx.jobId());
+                updateSubProgress(progressBatchId, "python_sync",
+                        "Celery worker did not pick up queued job — running OCR directly for " + appraisal.getFilename(),
+                        0.05, 0);
+                pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
+            }
+            retryCount = pythonClient.getLastRetryCount();
+            throwIfCancelled(progressBatchId);
+        }
+
+        QCResult result = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
+        // Fire QC rule events in the background — user sees REVIEW_PENDING immediately,
+        // 137 event inserts happen after the batch status is already unlocked.
+        self.recordQcEventsAsync(result, pythonResponse, result.getQcDecision(), modelConfig);
+        return result;
     }
 
     private PythonQCResponse runSyncPythonQc(
@@ -768,52 +769,77 @@ public class QCProcessingService {
                 "rule_rows", qcResult.getRuleResults() != null ? qcResult.getRuleResults().size() : 0,
                 "elapsed_ms", TimelineLog.elapsedMs(persistStarted)));
 
-        recordQcEvents(qcResult, pythonResponse, decision, modelConfig);
-
         // Capture processing metrics for analytics
         saveMetrics(qcResult, pythonResponse, appraisal, modelConfig, queueWaitMs, retryCount);
 
         return qcResult;
     }
 
-    private void recordQcEvents(QCResult qcResult, PythonQCResponse pythonResponse, QCDecision decision, QCModelConfig modelConfig) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("decision", decision.name());
-        payload.put("total_rules", pythonResponse.totalRules());
-        payload.put("passed", pythonResponse.passed());
-        payload.put("failed", pythonResponse.failed());
-        payload.put("verify", pythonResponse.verify());
-        payload.put("processing_time_ms", pythonResponse.processingTimeMs());
-        payload.put("model_provider", pythonResponse.modelProvider() != null ? pythonResponse.modelProvider() : modelConfig.provider());
-        payload.put("model_name", pythonResponse.modelName() != null ? pythonResponse.modelName() : modelConfig.textModel());
-        payload.put("vision_model", pythonResponse.visionModel() != null ? pythonResponse.visionModel() : modelConfig.visionModel());
-        payload.put("supporting_document_missing", Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing()));
-        payload.put("missing_supporting_documents", pythonResponse.missingSupportingDocuments());
-        businessEventService.qcEvent(Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "FILE_OCR_CACHED" : "FILE_OCR_EXTRACTED",
-                null,
-                qcResult,
-                Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "CACHE_HIT" : "EXTRACTED",
-                payload);
-        businessEventService.qcEvent("QC_COMPLETED", null, qcResult, decision.name(), payload);
+    /**
+     * Build and persist all QC events for a single file result in one DB round trip.
+     *
+     * Runs @Async so the caller (processFilePair) is unblocked immediately after saving
+     * the QCResult. The batch status transitions to REVIEW_PENDING before these events land.
+     * Previously this fired 137 individual REQUIRES_NEW transactions (≈112s on remote Neon).
+     */
+    @Async("qcTaskExecutor")
+    public void recordQcEventsAsync(QCResult qcResult, PythonQCResponse pythonResponse, QCDecision decision, QCModelConfig modelConfig) {
+        try {
+            BatchFile file = qcResult.getBatchFile();
+            Batch batch = file != null ? file.getBatch() : null;
+            Long batchId = batch != null ? batch.getId() : null;
+            Long fileId = file != null ? file.getId() : null;
 
-        if (qcResult.getRuleResults() == null) {
-            return;
-        }
-        for (QCRuleResult ruleResult : qcResult.getRuleResults()) {
-            Map<String, Object> rulePayload = new LinkedHashMap<>();
-            rulePayload.put("rule_id", ruleResult.getRuleId());
-            rulePayload.put("rule_name", ruleResult.getRuleName());
-            rulePayload.put("status", ruleResult.getStatus());
-            rulePayload.put("severity", ruleResult.getSeverity());
-            rulePayload.put("review_required", Boolean.TRUE.equals(ruleResult.getReviewRequired()));
-            rulePayload.put("needs_verification", Boolean.TRUE.equals(ruleResult.getNeedsVerification()));
-            rulePayload.put("confidence_score", ruleResult.getConfidenceScore());
-            rulePayload.put("pdf_page", ruleResult.getPdfPage());
-            businessEventService.record("QC_RULE_EVALUATED", null, "java", ruleResult.getStatus(),
-                    "QCRuleResult", ruleResult.getId(),
-                    qcResult.getBatchFile() != null && qcResult.getBatchFile().getBatch() != null ? qcResult.getBatchFile().getBatch().getId() : null,
-                    qcResult.getBatchFile() != null ? qcResult.getBatchFile().getId() : null,
-                    qcResult.getId(), ruleResult.getId(), rulePayload);
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("decision", decision.name());
+            payload.put("total_rules", pythonResponse.totalRules());
+            payload.put("passed", pythonResponse.passed());
+            payload.put("failed", pythonResponse.failed());
+            payload.put("verify", pythonResponse.verify());
+            payload.put("processing_time_ms", pythonResponse.processingTimeMs());
+            payload.put("model_provider", pythonResponse.modelProvider() != null ? pythonResponse.modelProvider() : modelConfig.provider());
+            payload.put("model_name", pythonResponse.modelName() != null ? pythonResponse.modelName() : modelConfig.textModel());
+            payload.put("vision_model", pythonResponse.visionModel() != null ? pythonResponse.visionModel() : modelConfig.visionModel());
+            payload.put("supporting_document_missing", Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing()));
+            payload.put("missing_supporting_documents", pythonResponse.missingSupportingDocuments());
+
+            List<BusinessEvent> events = new ArrayList<>();
+
+            // OCR event
+            events.add(businessEventService.buildEvent(
+                    Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "FILE_OCR_CACHED" : "FILE_OCR_EXTRACTED",
+                    null, "java",
+                    Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "CACHE_HIT" : "EXTRACTED",
+                    "QCResult", qcResult.getId(), batchId, fileId, qcResult.getId(), null, payload));
+
+            // QC completed event
+            events.add(businessEventService.buildEvent(
+                    "QC_COMPLETED", null, "java", decision.name(),
+                    "QCResult", qcResult.getId(), batchId, fileId, qcResult.getId(), null, payload));
+
+            // One event per rule result
+            if (qcResult.getRuleResults() != null) {
+                for (QCRuleResult ruleResult : qcResult.getRuleResults()) {
+                    Map<String, Object> rulePayload = new LinkedHashMap<>();
+                    rulePayload.put("rule_id", ruleResult.getRuleId());
+                    rulePayload.put("rule_name", ruleResult.getRuleName());
+                    rulePayload.put("status", ruleResult.getStatus());
+                    rulePayload.put("severity", ruleResult.getSeverity());
+                    rulePayload.put("review_required", Boolean.TRUE.equals(ruleResult.getReviewRequired()));
+                    rulePayload.put("needs_verification", Boolean.TRUE.equals(ruleResult.getNeedsVerification()));
+                    rulePayload.put("confidence_score", ruleResult.getConfidenceScore());
+                    rulePayload.put("pdf_page", ruleResult.getPdfPage());
+                    events.add(businessEventService.buildEvent(
+                            "QC_RULE_EVALUATED", null, "java", ruleResult.getStatus(),
+                            "QCRuleResult", ruleResult.getId(), batchId, fileId,
+                            qcResult.getId(), ruleResult.getId(), rulePayload));
+                }
+            }
+
+            // Save all events in a single transaction instead of one per event
+            businessEventService.recordAll(events);
+        } catch (Exception e) {
+            log.error("Async QC event recording failed for qcResult={}: {}", qcResult.getId(), e.getMessage(), e);
         }
     }
 
