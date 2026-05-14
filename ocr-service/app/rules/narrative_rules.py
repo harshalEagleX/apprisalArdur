@@ -27,9 +27,26 @@ try:
         is_neighborhood_description_specific, is_ollama_available,
         OLLAMA_MODEL,
     )
-    _OLLAMA_OK = is_ollama_available()
+    _OLLAMA_IMPORT_OK = True
 except Exception:
-    _OLLAMA_OK = False
+    _OLLAMA_IMPORT_OK = False
+
+import time as _time
+
+_OLLAMA_LAST_CHECK: float = 0.0
+_OLLAMA_CACHED_OK: bool = False
+
+
+def _ollama_ok() -> bool:
+    """Return True if Ollama + llava:13b are reachable. Re-checks every 30 s."""
+    global _OLLAMA_LAST_CHECK, _OLLAMA_CACHED_OK
+    if not _OLLAMA_IMPORT_OK:
+        return False
+    now = _time.monotonic()
+    if now - _OLLAMA_LAST_CHECK > 30.0:
+        _OLLAMA_CACHED_OK = is_ollama_available()
+        _OLLAMA_LAST_CHECK = now
+    return _OLLAMA_CACHED_OK
 
 try:
     from app.services.llm_cache import get_cached_llm, save_llm_response
@@ -48,7 +65,7 @@ def _llm_classify_canned(text: str) -> Optional[bool]:
         cached = get_cached_llm("canned_detection", text[:800])
         if cached is not None:
             return cached.strip().upper() == "CANNED"
-    if _OLLAMA_OK:
+    if _ollama_ok():
         result = classify_commentary(text)
         if result is not None and _CACHE_OK:
             save_llm_response("canned_detection", text[:800],
@@ -69,7 +86,7 @@ def _llm_market_quality(text: str) -> dict:
                 return json.loads(cached)
             except Exception:
                 pass
-    if _OLLAMA_OK:
+    if _ollama_ok():
         result = analyze_market_conditions(text)
         if result and _CACHE_OK:
             import json
@@ -86,7 +103,7 @@ def _llm_nbr_specific(text: str) -> Optional[bool]:
         cached = get_cached_llm("nbr_specific", text[:600])
         if cached is not None:
             return cached.strip().upper() == "YES"
-    if _OLLAMA_OK:
+    if _ollama_ok():
         result = is_neighborhood_description_specific(text)
         if result is not None and _CACHE_OK:
             save_llm_response("nbr_specific", text[:600],

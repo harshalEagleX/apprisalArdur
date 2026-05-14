@@ -1,10 +1,10 @@
 """
 Ollama Service — local LLM inference for appraisal QC commentary analysis.
 
-Models: llava:7b for both text and vision by default.
+Models: llava:13b for both text and vision by default.
 
 Setup (one-time):
-    ollama pull llava:7b
+    ollama pull llava:13b
 
 All calls are synchronous (this service runs inside a threadpool in FastAPI).
 Temperature is fixed at 0 for deterministic QC decisions.
@@ -27,8 +27,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
-OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
+OLLAMA_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:13b")
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:13b")
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "45.0"))  # seconds
 OLLAMA_TEXT_NUM_CTX = int(os.getenv("OLLAMA_TEXT_NUM_CTX", "1024"))
 OLLAMA_VISION_NUM_CTX = int(os.getenv("OLLAMA_VISION_NUM_CTX", "1024"))

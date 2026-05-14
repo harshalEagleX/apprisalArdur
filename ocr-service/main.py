@@ -400,7 +400,7 @@ class ErrorResponse(BaseModel):
 
 async def _check_ollama_readiness() -> dict:
     """Probe Ollama for reachability and required model availability."""
-    required_model = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
+    required_model = os.getenv("OLLAMA_TEXT_MODEL", "llava:13b")
     try:
         import httpx as _httpx
         async with _httpx.AsyncClient(timeout=5.0) as client:

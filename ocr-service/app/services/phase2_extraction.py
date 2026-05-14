@@ -30,14 +30,32 @@ from app.services.ocr_correction import apply_ocr_correction
 logger = logging.getLogger(__name__)
 
 # llava:13b vision fallback for uncertain checkboxes
+import time as _time
+
 try:
     from app.services.ollama_service import detect_checkbox_vision, is_vision_model_available
-    _VISION_OK = is_vision_model_available()
-    if _VISION_OK:
-        logger.info("llava:13b available — checkbox vision fallback enabled")
+    _VISION_IMPORT_OK = True
 except Exception:
-    _VISION_OK = False
-    detect_checkbox_vision = None
+    _VISION_IMPORT_OK = False
+    detect_checkbox_vision = None  # type: ignore[assignment]
+    is_vision_model_available = None  # type: ignore[assignment]
+
+_VISION_LAST_CHECK: float = 0.0
+_VISION_CACHED_OK: bool = False
+
+
+def _vision_ok() -> bool:
+    """Return True if llava:13b is reachable for vision. Re-checks every 30 s."""
+    global _VISION_LAST_CHECK, _VISION_CACHED_OK
+    if not _VISION_IMPORT_OK or is_vision_model_available is None:
+        return False
+    now = _time.monotonic()
+    if now - _VISION_LAST_CHECK > 30.0:
+        _VISION_CACHED_OK = is_vision_model_available()
+        if _VISION_CACHED_OK:
+            logger.info("llava:13b available — checkbox vision fallback enabled")
+        _VISION_LAST_CHECK = now
+    return _VISION_CACHED_OK
 
 # State → expected first digit(s) of zip code
 _STATE_ZIP_PREFIXES: Dict[str, Tuple[str, ...]] = {
@@ -1813,7 +1831,7 @@ class Phase2ExtractionEngine:
             return opencv_result
 
         # Step 3: llava:13b vision (only when Step 2 is ambiguous or unavailable)
-        if _VISION_OK and detect_checkbox_vision and self._page_images:
+        if _vision_ok() and detect_checkbox_vision and self._page_images:
             for pg_num in [1, 2, 3]:
                 page_img = self._page_images.get(pg_num)
                 if page_img is not None:

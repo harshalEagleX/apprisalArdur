@@ -47,8 +47,8 @@ from app.services.cache_service import (
 )
 from app.services import processing_lifecycle
 
-DEFAULT_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:7b")
-DEFAULT_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:7b")
+DEFAULT_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:13b")
+DEFAULT_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:13b")
 from app.services.phase2_extraction import phase2_engine
 
 logger = logging.getLogger(__name__)
