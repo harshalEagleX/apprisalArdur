@@ -644,6 +644,12 @@ class Phase2ExtractionEngine:
         # ── S-10: Lender / Client ─────────────────────────────────────────────
         lender_text, lender_pos_offset = self._text_window_for_pages(text, page_pos, 1, 2)
         meta["lender_name"] = self._extract("lender_name", lender_text, [
+            # Pattern 0a — Camelot flattens label+address into one cell: "Lender/ClientAddress"
+            # then puts the value on the next line: "Clear2Mortgage, Inc.219 S Main St"
+            r"Lender/?Client(?:/?Address)?[\s\t\n\r]+([A-Za-z][A-Za-z0-9\s,\.&]+?(?:Corp\.?|Inc\.?|LLC|LLP|Co\.?|Bank|Mortgage|Financial|Services?|Funding|Capital|Lending))(?=[\.!,]?\d)",
+            # Pattern 0b — suffix immediately followed by a street number (no space).
+            # Handles OCR concatenation: "Clear2Mortgage, Inc.219 S Main St..."
+            r"Lender/?Client[\s—:-]+([A-Za-z][A-Za-z0-9\s,\.&]+?(?:Corp\.?|Inc\.?|LLC|LLP|Co\.?|Bank|Mortgage|Financial|Services?|Funding|Capital|Lending))(?=[\.!,]?\d)",
             # Pattern 1 — corporate suffix (most specific): stops before Address or EOL.
             # Handles "Clear2Mortgage, Inc." because [A-Za-z0-9\s,\.&]+ matches digits.
             r"Lender/?Client[\s—:-]+([A-Za-z][A-Za-z0-9\s,\.&]+?(?:Corporation|Corp|Inc\.?|LLC|LLP|Company|Co\.?|Bank|Mortgage|Credit Union|Funding|Capital|Financial|Home Loans?|Lending|Services?))(?:\.?\s+(?:Address|Client)|\s*\n|\s*$)",
@@ -811,23 +817,25 @@ class Phase2ExtractionEngine:
         ], page_pos, pos_offset)
 
         # ── Neighbourhood description and market conditions ───────────────────
-        # Use the neighborhood section text from DocumentSectionMap when available.
-        # This prevents description/commentary extraction from matching text in
-        # the Subject, Contract, or Site sections that happen to contain the same
-        # label words (e.g. "Market Conditions" appears in multiple addenda pages).
+        # Spatial section_text() filters by Y-band, which excludes the free-text
+        # blocks (Neighborhood Description, Market Conditions) that sit below the
+        # checkbox grid in most UAD PDFs.  Use the spatial section ONLY for the
+        # checkbox grid; always search the full OCR text for commentary blocks.
         nbr_section_text = (
             self._doc_section_map.section_text("neighborhood")
             if self._doc_section_map else ""
         )
         nbr_search_text = nbr_section_text if len(nbr_section_text) >= 80 else text
+        # For commentary: full text search anchored to labels so addendum pages
+        # don't produce false matches before the main-form section is found.
+        commentary_search_text = text
 
-        meta["neighborhood_description"] = self._extract_text_block("neighborhood_description", nbr_search_text, [
-            r"(?:Neighborhood Description|Neighborhood Boundaries)[:\s]+(.{30,800}?)(?:\n{2,}|\Z)",
-        ], page_pos, pos_offset)
-
-        meta["market_conditions_commentary"] = self._extract_text_block("market_conditions_commentary", nbr_search_text, [
-            r"Market Conditions[:\s]+(.{30,800}?)(?:\n{2,}|\Z)",
-        ], page_pos, pos_offset)
+        meta["neighborhood_description"] = self._extract_neighborhood_commentary(
+            commentary_search_text, "neighborhood_description", page_pos, pos_offset
+        )
+        meta["market_conditions_commentary"] = self._extract_neighborhood_commentary(
+            commentary_search_text, "market_conditions_commentary", page_pos, pos_offset
+        )
 
         # ── Neighborhood grid fields (N-1..N-5) ──────────────────────────────
         # Use neighborhood section text for the grid too — the one-unit housing
@@ -1871,6 +1879,13 @@ class Phase2ExtractionEngine:
                 confidence = 0.55 if value else 0.0
                 source_page = self._neighborhood_page()
                 bbox = {}
+            if not value:
+                # Camelot flattens UAD checkboxes into label rows without [X] markers.
+                # Try a positional heuristic: in the concatenated label row, the checked
+                # value appears first in its group (Camelot writes selected cell first).
+                value = self._positional_checkbox_choice(text, field, labels)
+                confidence = 0.50 if value else 0.0
+                source_page = self._neighborhood_page()
             meta[field] = FieldMetaResult(
                 field, raw_value=value, corrected_value=self._normalize_neighborhood_option(value), confidence=confidence,
                 source_page=source_page, extraction_method="spatial_anchor" if value and confidence >= 0.75 else ("regex_fallback" if value else "not_found"),
@@ -2113,6 +2128,59 @@ class Phase2ExtractionEngine:
                 return label
         return None
 
+    def _positional_checkbox_choice(self, text: str, field: str, labels: List[str]) -> Optional[str]:
+        """
+        Positional heuristic for UAD neighborhood checkboxes when [X] markers
+        are absent (Camelot PDF table extraction flattens cells into label rows).
+
+        Strategy 1 — find the group row by the field name keyword, then take the
+        FIRST label from that group that appears AFTER the field keyword (UAD
+        forms write the selected option first in the flattened cell).
+
+        Strategy 2 — infer from the market commentary text (e.g. "3-6 months"
+        strongly implies Marketing Time = "3-6 mths").
+        """
+        # Field keyword → what to search near it in the flat OCR row
+        field_anchors = {
+            "location":       ["Location"],
+            "built_up":       ["Built-Up", "Built.Up", "BuiltUp"],
+            "growth_rate":    ["Growth"],
+            "property_values":["Property Values", "PropertyValues"],
+            "demand_supply":  ["Demand", "Supply", "Demand/Supply"],
+            "marketing_time": ["Marketing Time", "MarketingTime"],
+        }
+        anchors = field_anchors.get(field, [])
+        for anchor in anchors:
+            pat = rf"{re.escape(anchor)}\s*[:\s]*(.{{0,120}}?)(?=\n|Location|Built|Growth|Property|Demand|Marketing|Neighborhood|\Z)"
+            m = re.search(pat, text, re.I | re.S)
+            if m:
+                row_text = m.group(1)
+                for label in labels:
+                    lp = re.escape(label).replace(r"\ ", r"\s*").replace(r"\%", r"%?")
+                    if re.search(lp, row_text, re.I):
+                        return label
+
+        # Strategy 2: infer Marketing Time from narrative
+        if field == "marketing_time":
+            narr = text
+            if re.search(r"under\s+3\s*(?:months?|mths?)", narr, re.I):
+                return "Under 3 mths"
+            if re.search(r"3[\s-]6\s*(?:months?|mths?)", narr, re.I):
+                return "3-6 mths"
+            if re.search(r"over\s+6\s*(?:months?|mths?)", narr, re.I):
+                return "Over 6 mths"
+
+        # Strategy 3: infer Property Values from narrative
+        if field == "property_values":
+            if re.search(r"\bincreasing\b", text, re.I):
+                return "Increasing"
+            if re.search(r"\bdeclining\b", text, re.I):
+                return "Declining"
+            if re.search(r"\bstable\b", text, re.I):
+                return "Stable"
+
+        return None
+
     def _normalize_neighborhood_option(self, value: Optional[str]) -> Optional[str]:
         if not value:
             return value
@@ -2247,6 +2315,83 @@ class Phase2ExtractionEngine:
         if not section:
             return None
         return self._clean_commentary(section)
+
+    def _extract_neighborhood_commentary(
+        self,
+        text: str,
+        field: str,
+        page_pos,
+        pos_offset,
+    ):
+        """
+        Extract neighborhood_description or market_conditions_commentary.
+
+        Spatial section_text() cuts off the free-text blocks in most UAD PDFs
+        because they lie below the checkbox grid's Y-band.  This method searches
+        the FULL OCR text for the first occurrence of the section label, then
+        captures everything up to the next major form label.
+
+        Two-pass strategy:
+          Pass 1 — use the first known-good text block (non-empty capture after label)
+          Pass 2 — direct text search for common boilerplate starters / known phrases
+        """
+        if field == "neighborhood_description":
+            start_pats = [
+                r"Neighborhood\s+Description\s*[\n\r:]+\s*(.{30,1000}?)(?=\s*Market\s+Conditions|\s*Dimensions|\s*DimensionsArea|\Z)",
+                r"Neighborhood\s+Description\s+(.{30,1000}?)(?=Market\s+Conditions|Dimensions|\Z)",
+            ]
+            fallback_pats = [
+                r"((?:There\s+are\s+no\s+apparent\s+adverse|The\s+subject\s+(?:property\s+is\s+)?located|The\s+neighborhood\s+is).{20,500}?)(?=Market\s+Conditions|\Z)",
+            ]
+        else:  # market_conditions_commentary
+            start_pats = [
+                r"Market\s+Conditions\s*(?:\([^)]*\))?\s*[\n\r:]+\s*(.{30,1000}?)(?=\s*Dimensions|\s*DimensionsArea|\s*Site\b|\s*Specific\s+Zoning|\Z)",
+                r"Market\s+Conditions\s*(?:\([^)]*\))?\s+(.{30,1000}?)(?=Dimensions|DimensionsArea|Site\b|Specific\s+Zoning|\Z)",
+            ]
+            fallback_pats = [
+                r"((?:Various\s+types\s+of\s+financing|The\s+market(?:ability)?|Financing|Interest\s+rates).{20,500}?)(?=Dimensions|DimensionsArea|\Z)",
+            ]
+
+        for pat in start_pats:
+            m = re.search(pat, text, re.I | re.S)
+            if m:
+                val = self._clean_commentary(m.group(1))
+                if val:
+                    page = self._page_from_pos(page_pos, m.start() + pos_offset)
+                    return FieldMetaResult(
+                        field, raw_value=val, corrected_value=val,
+                        confidence=0.82, source_page=page,
+                        extraction_method="regex_primary",
+                    )
+
+        for pat in fallback_pats:
+            m = re.search(pat, text, re.I | re.S)
+            if m:
+                val = self._clean_commentary(m.group(1))
+                if val:
+                    page = self._page_from_pos(page_pos, m.start() + pos_offset)
+                    return FieldMetaResult(
+                        field, raw_value=val, corrected_value=val,
+                        confidence=0.65, source_page=page,
+                        extraction_method="regex_fallback",
+                    )
+
+        return FieldMetaResult(
+            field, raw_value="__NOT_FOUND__", corrected_value=None,
+            confidence=0.0, extraction_method="not_found",
+        )
+
+    def _page_from_pos(self, page_pos, char_pos: int) -> Optional[int]:
+        """Return the page number for a given character offset in the full text."""
+        if not page_pos:
+            return None
+        page = None
+        for pg, start in page_pos:
+            if start <= char_pos:
+                page = pg
+            else:
+                break
+        return page
 
     def _section(self, text: str, start_pattern: str, end_pattern: str) -> str:
         match = re.search(rf"{start_pattern}(.{{0,1600}}?)(?={end_pattern}|\Z)", text, re.I | re.S)

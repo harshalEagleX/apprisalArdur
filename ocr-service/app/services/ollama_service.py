@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llava:13b")
 OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava:13b")
+# Fast text model for commentary analysis (COM rules). mistral:7b takes 1-3s vs
+# 45s for llava:13b on pure text tasks.  Falls back to OLLAMA_MODEL when absent.
+OLLAMA_FAST_TEXT_MODEL = os.getenv("OLLAMA_FAST_TEXT_MODEL", "mistral:7b")
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "45.0"))  # seconds
 OLLAMA_TEXT_NUM_CTX = int(os.getenv("OLLAMA_TEXT_NUM_CTX", "1024"))
 OLLAMA_VISION_NUM_CTX = int(os.getenv("OLLAMA_VISION_NUM_CTX", "1024"))
@@ -63,6 +66,24 @@ def get_active_text_model() -> str:
 
 def get_active_vision_model() -> str:
     return _VISION_MODEL_OVERRIDE.get() or OLLAMA_VISION_MODEL
+
+
+def get_fast_text_model() -> str:
+    """
+    Return the best available text-only model for commentary analysis.
+
+    Prefers mistral:7b (1-3s per call) over llava:13b (45s per call).
+    Falls back to the configured text model if mistral is not installed.
+    """
+    try:
+        r = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+        if r.status_code == 200:
+            names = [m.get("name", "") for m in r.json().get("models", [])]
+            if any(OLLAMA_FAST_TEXT_MODEL in n for n in names):
+                return OLLAMA_FAST_TEXT_MODEL
+    except Exception:
+        pass
+    return get_active_text_model()
 
 
 @contextmanager
@@ -126,15 +147,16 @@ def is_ollama_available() -> bool:
 # Core call
 # ---------------------------------------------------------------------------
 
-def _generate(prompt: str, system: str = "", max_tokens: int = 256) -> Optional[str]:
+def _generate(prompt: str, system: str = "", max_tokens: int = 256, model: Optional[str] = None) -> Optional[str]:
     """
     POST to /api/generate (non-streaming).
     Returns the model response string, or None on failure.
+    Pass model= to override the active text model (e.g. use mistral:7b for text).
     """
     if _ollama_disabled_for_request():
         return None
     payload = {
-        "model": get_active_text_model(),
+        "model": model or get_active_text_model(),
         "prompt": prompt,
         "system": system,
         "stream": False,
@@ -566,7 +588,7 @@ def classify_commentary(text: str) -> Optional[bool]:
         pass
 
     prompt = f'Commentary to classify:\n"""\n{text[:800]}\n"""'
-    response = _generate(prompt, system=CANNED_SYSTEM, max_tokens=10)
+    response = _generate(prompt, system=CANNED_SYSTEM, max_tokens=10, model=get_fast_text_model())
     if not response:
         return None
 
@@ -641,7 +663,7 @@ def analyze_market_conditions(text: str) -> dict:
         return fallback
 
     prompt = f'Market conditions commentary:\n"""\n{text[:800]}\n"""'
-    response = _generate(prompt, system=MARKET_SYSTEM, max_tokens=128)
+    response = _generate(prompt, system=MARKET_SYSTEM, max_tokens=128, model=get_fast_text_model())
     if not response:
         return fallback
 
@@ -683,7 +705,7 @@ def is_neighborhood_description_specific(text: str) -> Optional[bool]:
         return None
 
     prompt = f'Neighborhood description:\n"""\n{text[:600]}\n"""'
-    response = _generate(prompt, system=NBR_SYSTEM, max_tokens=5)
+    response = _generate(prompt, system=NBR_SYSTEM, max_tokens=5, model=get_fast_text_model())
     if not response:
         return None
 

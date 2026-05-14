@@ -419,13 +419,10 @@ class SmartQCProcessor:
                 doc_section_map=getattr(phase2_engine, "_doc_section_map", None),
             )
 
-            _emit("llm_enrichment", f"Enriching context with {model_name}", 0.70)
-            try:
-                from app.services.llm_enrichment import enrich_context_sync
-                with processing_lifecycle.stage("llm_enrichment"):
-                    enrich_context_sync(ctx)
-            except Exception as e:
-                logger.info("LLM enrichment not run before rules: %s", e)
+            # Pre-rule llm_enrichment disabled — it times out (45s) on llava:13b and
+            # disables Ollama for the entire request, preventing COM rules from using
+            # mistral:7b for commentary analysis.  COM rules call Ollama directly.
+            logger.info("Pre-rule llm_enrichment stage skipped (use_ollama_enrichment=%s)", model_provider == "ollama")
 
             # Step 6b: Full-document Ollama analysis (only when Ollama is the provider)
             ollama_doc_analysis: dict = {}
