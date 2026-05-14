@@ -144,8 +144,8 @@ def _call_ollama(prompt: str, system: str, max_tokens: int = 256) -> Tuple[Optio
     """
     try:
         import httpx
-        from app.services.ollama_service import OLLAMA_BASE_URL, get_active_text_model, OLLAMA_TEXT_KEEP_ALIVE
-        model = get_active_text_model()
+        from app.services.ollama_service import OLLAMA_BASE_URL, get_fast_text_model, OLLAMA_TEXT_KEEP_ALIVE
+        model = get_fast_text_model()  # prefers mistral:7b (1-3s) over llava:13b (45s)
         payload = {
             "model": model,
             "prompt": prompt,
