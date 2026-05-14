@@ -62,7 +62,7 @@ public class BatchFile {
     @Column(name = "ocr_data", columnDefinition = "TEXT")
     private String ocrData;
 
-    @Column(name = "error_message")
+    @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
     /**

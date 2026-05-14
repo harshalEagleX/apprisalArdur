@@ -626,25 +626,36 @@ class ExtractionService:
     def extract_engagement_letter(self, text: str) -> EngagementLetterExtract:
         """Extract facts from engagement letter text."""
         letter = EngagementLetterExtract()
+
+        order_property = self._extract_order_property(text)
+        if order_property:
+            letter.property_address = order_property.get("street")
+            letter.city = order_property.get("city")
+            letter.state = order_property.get("state")
+            letter.zip_code = order_property.get("zip_code")
+            letter.county = order_property.get("county")
         
         # Property Address
-        letter.property_address = self._extract_field(text, [
-            r"Property Address[:\s]+(?!City|State|Zip|County|Property)(?:\( Additional Resources \) )?([^\n]+)",
-            r"Subject Property[:\s]+(?!City|State|Zip|County)([^\n]+)",
-            # Fallback
-            r"(?m)^(\d+\s+[A-Za-z0-9\.\s]+(?:St|Ave|Rd|Blvd|Ln|Dr|Way|Ct|Pl|Cir|Hwy|Road|Street|Avenue|Drive).*?)$"
-        ])
+        if not letter.property_address:
+            letter.property_address = self._extract_field(text, [
+                r"Property Address[ \t]*:[ \t]*(?!City|State|Zip|County|Property)(?:\( Additional Resources \) )?([^\n]+)",
+                r"Subject Property[ \t]*:[ \t]*(?!City|State|Zip|County)([^\n]+)",
+                # Fallback
+                r"(?m)^(\d+\s+[A-Za-z0-9\.\s]+(?:St|Ave|Rd|Blvd|Ln|Dr|Way|Ct|Pl|Cir|Hwy|Road|Street|Avenue|Drive).*?)$"
+            ])
         
         if letter.property_address:
             parts = self._parse_address_components(letter.property_address)
-            letter.city = parts.get("city")
-            letter.state = parts.get("state")
-            letter.zip_code = parts.get("zip_code")
+            letter.city = letter.city or parts.get("city")
+            letter.state = letter.state or parts.get("state")
+            letter.zip_code = letter.zip_code or parts.get("zip_code")
+            if parts.get("street"):
+                letter.property_address = parts["street"]
             # Strip city/state/zip from property_address so it contains only the
             # street. S-1 rule uses property_address as eng_street; if it contains
             # city/state/zip the fuzzy comparison fails and the display shows a
             # confusingly duplicated formatted string.
-            if letter.zip_code:
+            elif letter.zip_code:
                 zip_pos = letter.property_address.find(letter.zip_code)
                 if zip_pos > 0:
                     candidate = letter.property_address[:zip_pos].strip().rstrip(",").strip()
@@ -655,7 +666,11 @@ class ExtractionService:
                     if candidate:
                         letter.property_address = candidate
         
-        letter.county = self._extract_field(text, [r"County[:\s]+([^\n]+)"])
+        if not letter.county:
+            letter.county = self._extract_field(text, [
+                r"Property County[ \t]*:[ \t]*([^\n]+)",
+                r"\bCounty[ \t]*:[ \t]*([^\n]+)",
+            ])
         
         # Borrower — extract from engagement letter / AMC order form.
         #
@@ -681,6 +696,11 @@ class ExtractionService:
                 r"Borrower\s+Name[:\s]*\n+\s*([^\n;]{2,120}?)(?:\s*;[^\n]*)?(?:\n|$)",
                 text,
                 re.IGNORECASE,
+            )
+        if not borrower_match:
+            borrower_match = re.search(
+                r"(?im)^Borrower[ \t]*:\s*\n+\s*([^\n;:]{2,120}?)(?:\s*;[^\n]*)?(?:\n|$)",
+                text,
             )
         if borrower_match:
             raw = borrower_match.group(1).strip()
@@ -718,7 +738,9 @@ class ExtractionService:
         ])
         
         # Transaction type — anchor on "Transaction Type:" field label if present
-        txn_match = re.search(r"Transaction\s+Type[:\s]+(\w+)", text, re.I)
+        txn_match = re.search(r"Transaction\s+Type[ \t]*:[ \t]*(\w+)", text, re.I)
+        if not txn_match:
+            txn_match = re.search(r"Intended\s+Use[ \t]*:[ \t]*(\w+)", text, re.I)
         if txn_match:
             txn = txn_match.group(1).upper()
             if "PURCHASE" in txn:
@@ -947,6 +969,62 @@ class ExtractionService:
             if match:
                 return match.group(1).strip()
         return None
+
+    def _extract_order_property(self, text: str) -> Dict[str, Optional[str]]:
+        """Extract the subject property block from AMC/order-form layouts."""
+        lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+        if not lines:
+            return {}
+
+        raw_address = None
+        county = None
+        for idx, line in enumerate(lines):
+            key = line.lower().rstrip(":")
+            if key not in {"property", "property address"}:
+                continue
+
+            collected = []
+            for candidate in lines[idx + 1 : idx + 8]:
+                lower = candidate.lower()
+                if lower in {"map link", "( additional resources )"}:
+                    continue
+                if lower.startswith("property county:"):
+                    county = candidate.split(":", 1)[1].strip()
+                    break
+                if lower.endswith(" county"):
+                    county = re.sub(r"\s+county$", "", candidate, flags=re.I).strip()
+                    break
+                if lower.startswith((
+                    "order priority:",
+                    "intended use:",
+                    "purchase price:",
+                    "property type:",
+                    "occupancy:",
+                    "uad report needed:",
+                )):
+                    break
+
+                collected.append(candidate)
+                joined = " ".join(collected)
+                if re.search(r"\b\d{5}(?:-\d{4})?\b", joined):
+                    break
+
+            if collected:
+                raw_address = " ".join(collected)
+                break
+
+        if not raw_address:
+            return {}
+
+        parsed = self._parse_address_components(raw_address)
+        street = parsed.get("street") or raw_address
+        return {
+            "street": street,
+            "city": parsed.get("city"),
+            "state": parsed.get("state"),
+            "zip_code": parsed.get("zip_code"),
+            "county": county,
+        }
     
     def _parse_address_components(self, address: str) -> Dict:
         """
@@ -959,6 +1037,22 @@ class ExtractionService:
           4. Street = everything before city
         """
         result = {}
+        state_names = {
+            "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR",
+            "CALIFORNIA": "CA", "COLORADO": "CO", "CONNECTICUT": "CT", "DELAWARE": "DE",
+            "FLORIDA": "FL", "GEORGIA": "GA", "HAWAII": "HI", "IDAHO": "ID",
+            "ILLINOIS": "IL", "INDIANA": "IN", "IOWA": "IA", "KANSAS": "KS",
+            "KENTUCKY": "KY", "LOUISIANA": "LA", "MAINE": "ME", "MARYLAND": "MD",
+            "MASSACHUSETTS": "MA", "MICHIGAN": "MI", "MINNESOTA": "MN", "MISSISSIPPI": "MS",
+            "MISSOURI": "MO", "MONTANA": "MT", "NEBRASKA": "NE", "NEVADA": "NV",
+            "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ", "NEW MEXICO": "NM",
+            "NEW YORK": "NY", "NORTH CAROLINA": "NC", "NORTH DAKOTA": "ND",
+            "OHIO": "OH", "OKLAHOMA": "OK", "OREGON": "OR", "PENNSYLVANIA": "PA",
+            "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC", "SOUTH DAKOTA": "SD",
+            "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT", "VERMONT": "VT",
+            "VIRGINIA": "VA", "WASHINGTON": "WA", "WEST VIRGINIA": "WV",
+            "WISCONSIN": "WI", "WYOMING": "WY",
+        }
 
         # Strip trailing noise
         address = re.sub(r'\s+Property County:.*$', '', address, flags=re.IGNORECASE)
@@ -966,33 +1060,63 @@ class ExtractionService:
         address = re.sub(r'\s+\(.*?\)\s*', ' ', address)
         address = address.strip()
 
-        # Step 1: find zip (5-digit number)
-        zip_m = re.search(r'\b(\d{5}(?:-\d{4})?)\b', address)
-        if not zip_m:
+        # Step 1: find zip (last 5-digit number; street numbers can also be 5 digits)
+        zip_matches = list(re.finditer(r'\b(\d{5}(?:-\d{4})?)\b', address))
+        if not zip_matches:
             return result
+        zip_m = zip_matches[-1]
         result["zip_code"] = zip_m.group(1)
         before_zip = address[:zip_m.start()].strip()
 
-        # Step 2: find state (2 uppercase letters immediately before zip)
+        # Step 2: find state (2-letter abbreviation or full state name before zip)
         state_m = re.search(r'\b([A-Z]{2})\s*$', before_zip)
+        state_name_m = None
         if not state_m:
             # Try anywhere before zip
             state_m = re.search(r'\b([A-Z]{2})\s+\d{5}', address)
         if not state_m:
-            return result
-        result["state"] = state_m.group(1)
-        before_state = before_zip[:state_m.start()].strip().rstrip(',').strip()
+            for state_name, abbr in sorted(state_names.items(), key=lambda item: len(item[0]), reverse=True):
+                match = re.search(rf"\b{re.escape(state_name)}\b\s*,?\s*$", before_zip, re.I)
+                if match:
+                    state_name_m = match
+                    result["state"] = abbr
+                    break
+        if not state_m:
+            if not state_name_m:
+                return result
+            before_state = before_zip[:state_name_m.start()].strip().rstrip(',').strip()
+        else:
+            result["state"] = state_m.group(1).upper()
+            before_state = before_zip[:state_m.start()].strip().rstrip(',').strip()
 
-        # Step 3: city = last word(s) in before_state (after last comma if any)
+        # Step 3: city + street split
         if ',' in before_state:
             parts = before_state.rsplit(',', 1)
+            street_part = parts[0].strip()
             city_candidate = parts[-1].strip()
         else:
-            # City is the last 1-2 words that look like a city name
             words = before_state.split()
-            city_candidate = words[-1] if words else ""
+            suffixes = {
+                "ST", "STREET", "AVE", "AVENUE", "RD", "ROAD", "BLVD", "BOULEVARD",
+                "LN", "LANE", "DR", "DRIVE", "WAY", "CT", "COURT", "PL", "PLACE",
+                "CIR", "CIRCLE", "HWY", "HIGHWAY", "PKWY", "PARKWAY", "TRACE", "TR",
+                "TRL", "TRAIL", "TER", "TERRACE",
+            }
+            suffix_idx = None
+            for idx in range(len(words) - 1, -1, -1):
+                if re.sub(r"[^A-Za-z]", "", words[idx]).upper() in suffixes:
+                    suffix_idx = idx
+                    break
+            if suffix_idx is not None and suffix_idx + 1 < len(words):
+                street_part = " ".join(words[:suffix_idx + 1]).strip()
+                city_candidate = " ".join(words[suffix_idx + 1:]).strip()
+            else:
+                street_part = " ".join(words[:-1]).strip()
+                city_candidate = words[-1] if words else ""
 
         result["city"] = city_candidate
+        if street_part:
+            result["street"] = street_part
         return result
     
     def _parse_money(self, value_str: str) -> Optional[float]:

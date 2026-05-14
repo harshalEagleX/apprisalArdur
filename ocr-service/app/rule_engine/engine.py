@@ -110,6 +110,12 @@ class RuleEngine:
                 self.logger.log_result(result)
 
             except DataMissingException as e:
+                missing_field_name = str(e.field_name or "")
+                missing_external_source = bool(re.search(
+                    r"\b(engagement|order|contract|purchase agreement|client engagement letter)\b",
+                    missing_field_name,
+                    re.I,
+                ))
                 res = RuleResult(
                     rule_id=rule_id,
                     rule_name=getattr(rule_func, "rule_name", rule_id),
@@ -124,7 +130,14 @@ class RuleEngine:
                     retry_eligible=True,
                 )
                 res.target_field = self._normalize_field_name(e.field_name)
-                self._attach_location_meta(context, rule_id, res, field_hint=e.field_name)
+                if missing_external_source:
+                    res.confidence = 0.0
+                    res.field_confidence = 0.0
+                    res.source_page = None
+                    res.evidence = []
+                    res.decision_path.append("external_expected_value_missing")
+                else:
+                    self._attach_location_meta(context, rule_id, res, field_hint=e.field_name)
                 self._complete_rule_outcome(res)
                 results.append(res)
                 self.logger.log_result(res)

@@ -27,9 +27,10 @@ spring:
     hibernate:
       # Java schema is managed directly by JPA/Hibernate. Do not wire Flyway,
       # Liquibase, or other third-party migration runners in this project.
-      # Manual DB fixes stay manual; Python tables are recreated separately with
-      # ocr-service/manage_db.py recreate.
-      ddl-auto: update
+      # Manual DB fixes stay manual; Python tables are reconciled separately
+      # through ocr-service/manage_db.py update. Use update here because the
+      # shared database is persistent across restarts, not disposable.
+      ddl-auto: create
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect

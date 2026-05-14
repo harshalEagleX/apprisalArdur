@@ -735,7 +735,7 @@ public class QCProcessingService {
                         .reviewRequired(needsReview)
                         .appraisalValue(textOr(pr.appraisalValue(), NO_APPRAISAL_VALUE))
                         .engagementValue(textOr(pr.engagementValue(), NO_ENGAGEMENT_VALUE))
-                        .confidenceScore(pr.confidence() != null ? pr.confidence() : 0.0d)
+                        .confidenceScore(confidenceFor(pr, normalizedStatus))
                         .extractedValue(pr.extractedValue() != null ? String.valueOf(pr.extractedValue()) : NO_EXTRACTED_VALUE)
                         .expectedValue(pr.expectedValue() != null ? String.valueOf(pr.expectedValue()) : NO_EXPECTED_VALUE)
                         .verifyQuestion(textOr(pr.verifyQuestion(), ""))
@@ -996,6 +996,35 @@ public class QCProcessingService {
             return fallback != null ? fallback : NOT_PROVIDED;
         }
         return value;
+    }
+
+    private double confidenceFor(PythonRuleResult rule, String normalizedStatus) {
+        double reported = rule.confidence() != null ? rule.confidence() : 0.0d;
+        boolean hasAnyValue = hasRealValue(rule.appraisalValue())
+                || hasRealValue(rule.engagementValue())
+                || hasRealValue(rule.extractedValue())
+                || hasRealValue(rule.expectedValue());
+
+        if (!hasAnyValue && needsVerification(normalizedStatus)) {
+            return 0.0d;
+        }
+        return reported;
+    }
+
+    private boolean hasRealValue(Object value) {
+        if (value == null) {
+            return false;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isBlank()) {
+            return false;
+        }
+        return !text.equals(NO_APPRAISAL_VALUE)
+                && !text.equals(NO_ENGAGEMENT_VALUE)
+                && !text.equals(NO_EXTRACTED_VALUE)
+                && !text.equals(NO_EXPECTED_VALUE)
+                && !text.equals(NOT_PROVIDED)
+                && !text.equals("__NOT_FOUND__");
     }
 
     private String targetFieldFor(String ruleId) {

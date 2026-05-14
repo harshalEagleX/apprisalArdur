@@ -30,6 +30,9 @@ class ExtractionStatus(str, Enum):
     PARTIAL_MATCH = "PARTIAL_MATCH"
 
 
+MISSING_VALUE_SENTINELS = {"__NOT_FOUND__", "__NOT_PROVIDED__", "__NO_EXTRACTED_VALUE__", "__NO_EXPECTED_VALUE__"}
+
+
 @dataclass
 class FieldMetaResult:
     """Metadata for a single extracted field."""
@@ -86,6 +89,7 @@ class FieldMetaResult:
     def __post_init__(self) -> None:
         if self.extraction_status is None:
             if self.value is None:
+                self.confidence = 0.0
                 self.extraction_status = ExtractionStatus.NOT_FOUND
             elif self.effective_confidence < 0.50:
                 self.extraction_status = ExtractionStatus.LOW_CONFIDENCE
@@ -103,17 +107,25 @@ class FieldMetaResult:
         if self.parser is None:
             self.parser = self.extraction_method
 
+        if self.value is None:
+            self.confidence = 0.0
+
         if self.value is None and not self.failure_reason:
             self.failure_reason = "Field was not found by the configured extraction strategies."
 
     @property
     def value(self) -> Optional[str]:
         """The best available value (corrected if available, else raw)."""
-        return self.corrected_value if self.corrected_value is not None else self.raw_value
+        value = self.corrected_value if self.corrected_value is not None else self.raw_value
+        if isinstance(value, str) and value.strip().upper() in MISSING_VALUE_SENTINELS:
+            return None
+        return value
 
     @property
     def effective_confidence(self) -> float:
         """Confidence after sanity-check penalty."""
+        if self.value is None:
+            return 0.0
         if self.sanity_check_failed:
             return max(0.0, self.confidence - 0.25)
         return self.confidence

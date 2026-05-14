@@ -1,34 +1,25 @@
 # ── Dev profile ─────────────────────────────────────────────────────────────────
-# Overrides DB to local Postgres regardless of any DB_URL in .env.
-# Activating this profile means you never accidentally run QC against the remote
-# Neon database and removes the ~200ms per-query network round trip.
+# Dev uses the same DB_URL/DB_USERNAME/DB_PASSWORD from the project root .env as
+# the default profile. Keep Java and Python on one shared local database so QC
+# jobs, batches, processing lifecycle rows, and OCR caches do not split across
+# local and remote databases.
 #
 # How to activate (pick one):
 #   IntelliJ IDEA  →  Run/Debug Configuration → "Active profiles": dev
 #   Maven          →  mvn spring-boot:run -Dspring-boot.run.profiles=dev
 #   Environment    →  export SPRING_PROFILES_ACTIVE=dev
 #
-# One-time local Postgres setup (Mac):
-#   brew install postgresql@16
-#   brew services start postgresql@16
-#   createdb ardurApprisal          # uses your OS username by default
-#   # Verify: psql ardurApprisal -c '\dt'
-#
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ardurApprisal
-    username: ${DB_USERNAME:${user.name}}
-    password: ${DB_PASSWORD:}
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
-      # Fail fast locally — localhost should respond in <1ms, not 30s
-      connection-timeout: 3000
+      connection-timeout: 30000
 
   jpa:
     hibernate:
       # Dev follows the same no-Flyway rule: Hibernate updates Java-owned tables.
-      ddl-auto: update
+      ddl-auto: create
     show-sql: false
 
 logging:

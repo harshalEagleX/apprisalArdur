@@ -1057,7 +1057,16 @@ async def process_qc(
 
 # ── Async job queue (Celery) ──────────────────────────────────────────────────
 # Jobs directory — files saved here survive until the Celery worker finishes.
-_ASYNC_JOBS_DIR = os.getenv("ASYNC_JOBS_DIR", "/tmp/ocr_jobs")
+# Keep this default in lockstep with app.tasks.celery_app._JOB_DIR_ROOT. The
+# worker validates and later deletes job_dir, so /qc/submit must only create
+# directories inside that same safe root.
+_ASYNC_JOBS_DIR = os.path.realpath(
+    os.getenv(
+        "ASYNC_JOBS_DIR",
+        os.getenv("JOB_DIR_ROOT", os.path.join(tempfile.gettempdir(), "apprisal_jobs")),
+    )
+)
+os.makedirs(_ASYNC_JOBS_DIR, exist_ok=True, mode=0o700)
 
 
 @app.post("/qc/submit", status_code=202)

@@ -1,2 +1,0 @@
-ALTER TABLE batch ADD COLUMN IF NOT EXISTS error_message TEXT;
-ALTER TABLE batch_aud ADD COLUMN IF NOT EXISTS error_message TEXT;

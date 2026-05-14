@@ -432,6 +432,11 @@ def validate_property_address(ctx: ValidationContext) -> RuleResult:
             rule_name="Property Address Validation",
             status=RuleStatus.PASS,
             message="Property address components match engagement letter.",
+            appraisal_value=f"{subj.address}, {subj.city}, {subj.state} {subj.zip_code}",
+            engagement_value=f"{eng_street}, {eng_city}, {eng_state} {eng_zip}",
+            extracted_value=f"{subj.address}, {subj.city}, {subj.state} {subj.zip_code}",
+            expected_value=f"{eng_street}, {eng_city}, {eng_state} {eng_zip}",
+            target_field="property_address",
             compared_values={
                 "street": subj.address,
                 "city": subj.city,
@@ -611,6 +616,11 @@ def validate_borrower_name(ctx: ValidationContext) -> RuleResult:
         rule_name="Borrower Name Validation",
         status=RuleStatus.PASS,
         message="Borrower name matches engagement letter.",
+        appraisal_value=str(ctx.report.subject.borrower),
+        engagement_value=str(ctx.engagement_letter.borrower_name),
+        extracted_value=str(ctx.report.subject.borrower),
+        expected_value=str(ctx.engagement_letter.borrower_name),
+        target_field="borrower_name",
         compared_values={"report": rpt_borrower, "engagement": eng_borrower},
         decision_path=["borrower_extracted", "engagement_borrower_found", "names_match", "pass"],
     )
