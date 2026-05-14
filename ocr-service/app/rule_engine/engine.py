@@ -101,10 +101,22 @@ class RuleEngine:
             try:
                 result = rule_func(context)
 
-                # Ollama enrichment — independent LLM assessment of every rule
-                if enrich_with_ollama and result.status not in {
-                    RuleStatus.NOT_EXECUTED, RuleStatus.NOT_APPLICABLE,
-                }:
+                # Ollama enrichment — LLM assessment for rules where it adds real value.
+                # Only fired for: COM rules (commentary quality, always useful),
+                # FAIL/REVIEW rules in cross-doc rule families (S-1,S-2,S-10,C-1,C-2).
+                # Structural and presence rules (N-1..5, ST, I, SCA, PH, SK, M, SIG)
+                # are handled correctly by deterministic logic — Ollama adds noise, not signal.
+                _ENRICH_RULE_PREFIXES = {"COM", "ADD"}
+                _ENRICH_RULE_IDS = {"S-1", "S-2", "S-5", "S-10", "S-12", "C-2", "C-4", "C-5", "N-6", "N-7"}
+                _should_enrich = (
+                    enrich_with_ollama
+                    and result.status not in {RuleStatus.NOT_EXECUTED, RuleStatus.NOT_APPLICABLE, RuleStatus.PASS}
+                    and (
+                        (rule_id or "").split("-")[0].upper() in _ENRICH_RULE_PREFIXES
+                        or rule_id in _ENRICH_RULE_IDS
+                    )
+                )
+                if _should_enrich:
                     try:
                         from app.services.ollama_enrichment import per_rule as _enrich
                         engagement_text = ""

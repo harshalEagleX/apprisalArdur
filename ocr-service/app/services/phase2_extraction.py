@@ -2375,7 +2375,6 @@ class Phase2ExtractionEngine:
                         confidence=0.65, source_page=page,
                         extraction_method="regex_fallback",
                     )
-
         return FieldMetaResult(
             field, raw_value="__NOT_FOUND__", corrected_value=None,
             confidence=0.0, extraction_method="not_found",
