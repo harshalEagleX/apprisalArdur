@@ -139,6 +139,9 @@ class QCResults(BaseModel):
     supporting_document_missing: bool = False
     missing_supporting_documents: List[str] = []
 
+    # Ollama full-document analysis (populated when model_provider=ollama)
+    ollama_doc_analysis: Optional[Dict[str, Any]] = None
+
 
 class SmartQCProcessor:
     """
@@ -424,11 +427,30 @@ class SmartQCProcessor:
             except Exception as e:
                 logger.info("LLM enrichment not run before rules: %s", e)
 
+            # Step 6b: Full-document Ollama analysis (only when Ollama is the provider)
+            ollama_doc_analysis: dict = {}
+            use_ollama_enrichment = model_provider == "ollama"
+            if use_ollama_enrichment:
+                _emit("ollama_full_doc", "Running full-document Ollama analysis", 0.72)
+                try:
+                    from app.services.ollama_enrichment import full_doc as _ollama_full_doc
+                    with processing_lifecycle.stage("ollama_full_doc"):
+                        engagement_raw = engagement_letter_text or ""
+                        contract_raw = contract_text or ""
+                        ollama_doc_analysis = _ollama_full_doc(
+                            appraisal_text=full_text,
+                            engagement_text=engagement_raw,
+                            contract_text=contract_raw,
+                        )
+                    logger.info("Ollama full-doc analysis: %s", ollama_doc_analysis)
+                except Exception as _oda_err:
+                    logger.info("Ollama full-doc analysis skipped: %s", _oda_err)
+
             # Step 7: Execute rule engine
-            logger.info("Executing rule engine")
-            _emit("rules", "Executing QC rules", 0.90)
+            logger.info("Executing rule engine (ollama_enrich=%s)", use_ollama_enrichment)
+            _emit("rules", "Executing QC rules with Ollama enrichment" if use_ollama_enrichment else "Executing QC rules", 0.90)
             with processing_lifecycle.stage("rule_engine"):
-                rule_results = engine.execute(ctx)
+                rule_results = engine.execute(ctx, enrich_with_ollama=use_ollama_enrichment)
                 from app.rule_engine.cross_field_validator import CrossFieldValidator
                 rule_results.extend(CrossFieldValidator().validate(ctx))
 
@@ -484,6 +506,7 @@ class SmartQCProcessor:
                     vision_model=vision_model,
                     supporting_document_missing=supporting_document_missing,
                     missing_supporting_documents=missing_supporting_documents,
+                    ollama_doc_analysis=ollama_doc_analysis if ollama_doc_analysis else None,
                 )
             return results
     
@@ -733,6 +756,7 @@ class SmartQCProcessor:
         vision_model: Optional[str] = None,
         supporting_document_missing: bool = False,
         missing_supporting_documents: Optional[List[str]] = None,
+        ollama_doc_analysis: Optional[Dict] = None,
     ) -> QCResults:
         """Assemble final QC results."""
         model_provider = (model_provider or "ollama").strip().lower()
@@ -871,6 +895,7 @@ class SmartQCProcessor:
             processing_notices=extraction_result.notices,
             supporting_document_missing=supporting_document_missing,
             missing_supporting_documents=missing_supporting_documents or [],
+            ollama_doc_analysis=ollama_doc_analysis,
         )
 
     def _public_status(self, status: RuleStatus) -> str:

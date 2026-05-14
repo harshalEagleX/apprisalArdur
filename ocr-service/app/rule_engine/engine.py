@@ -39,7 +39,7 @@ class RuleEngine:
         self._rules[rule_id] = rule_func
         return rule_func
 
-    def execute(self, context: ValidationContext) -> List[RuleResult]:
+    def execute(self, context: ValidationContext, enrich_with_ollama: bool = False) -> List[RuleResult]:
         """
         Execute all active rules in DB-configured order.
 
@@ -47,6 +47,9 @@ class RuleEngine:
           1. Structural rules  (S-1–S-6, C-1–C-3)  — simple field comparisons
           2. Logic rules       (S-7–S-12, C-4–C-5)  — multi-field checks
           3. Narrative rules   (N-1–N-7)             — LLM commentary analysis
+
+        When enrich_with_ollama=True, each rule result is additionally
+        assessed by llava:13b after the deterministic check.
         """
         from app.rule_engine.rules_db import load_rule_configs
 
@@ -97,6 +100,37 @@ class RuleEngine:
 
             try:
                 result = rule_func(context)
+
+                # Ollama enrichment — independent LLM assessment of every rule
+                if enrich_with_ollama and result.status not in {
+                    RuleStatus.NOT_EXECUTED, RuleStatus.NOT_APPLICABLE,
+                }:
+                    try:
+                        from app.services.ollama_enrichment import per_rule as _enrich
+                        engagement_text = ""
+                        contract_text = ""
+                        if context.engagement_letter:
+                            eng = context.engagement_letter
+                            parts = [v for v in [
+                                getattr(eng, "borrower_name", None),
+                                getattr(eng, "property_address", None),
+                                getattr(eng, "lender_name", None),
+                            ] if v]
+                            engagement_text = " | ".join(parts)
+                        enrichment = _enrich(
+                            rule_id=rule_id,
+                            rule_name=getattr(rule_func, "rule_name", rule_id),
+                            status=result.status.value if hasattr(result.status, "value") else str(result.status),
+                            message=result.message or "",
+                            raw_text=context.raw_text or "",
+                            engagement_text=engagement_text,
+                            contract_text=contract_text,
+                        )
+                        result.details = {**(result.details or {}), **{
+                            f"ollama_{k}": v for k, v in enrichment.items()
+                        }}
+                    except Exception as _enrich_err:
+                        logger.debug("Ollama enrichment failed for %s: %s", rule_id, _enrich_err)
 
                 # Attach Phase 3 metadata if not set by the rule itself
                 if cfg:
