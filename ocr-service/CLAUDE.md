@@ -510,6 +510,250 @@ CORS: Only allow `ALLOWED_ORIGINS` from env var. Never `allow_origins=["*"]` in 
 
 ---
 
+## Engineering Strategy Principles
+
+> Derived from: *Apprisal Platform — Engineering Thinking and Development Strategy Guide*
+> Prepared for: EagleX Info Solution PVT LTD
+> These principles translate the strategy document into specific directives for AI coding assistant behavior on this codebase.
+
+---
+
+### P-1 Define "Done" at Three Levels Before Starting Any Task
+
+Every task — a new rule, a new extractor, a bug fix, a performance improvement — must have explicit done criteria at three levels before any code is written. AI coding assistant must state these criteria when beginning significant work.
+
+**Level 1 — Technically Done:** Code written, existing tests pass, no regressions.
+
+**Level 2 — Functionally Done:** The feature does what it was designed to do on real documents. For an extraction change this means: field-level accuracy is measured on all 3 test documents with a documented rate. "Seems to work" is NOT functionally done. If you cannot state the accuracy rate, the work is not done.
+
+**Level 3 — Operationally Done:** The change can be operated, monitored, and debugged by someone other than the implementer. This includes: logging that explains what happened when something goes wrong, config values for any behavior that might need tuning, and the service can restart cleanly with the change applied.
+
+Never mark a task complete if it has not passed all three levels.
+
+---
+
+### P-2 Read Existing Code Deeply Before Extending It
+
+Before adding any new extraction logic, rule, or service layer, read the existing code with these specific questions:
+
+1. **What does this code actually do?** Trace it on a real document. Not what comments say — what it does.
+2. **What assumptions does it make?** Every regex that expects a specific label format, every confidence threshold that is hardcoded, every field that is assumed to be on a specific page — write these down. Each is a fragility.
+3. **Where does it fail?** Run it on an unusual document and observe where it breaks.
+4. **What would have to change to support a new AMC format?** If the answer is "many scattered files," the abstraction is insufficient.
+
+If you skip this step and build on top of misunderstood code, the result will be inconsistent, fragile, and harder to maintain than what existed before.
+
+---
+
+### P-3 Separation of Concerns — One Sentence Test
+
+Every function and class you write must pass the One Sentence Test: can you describe what it does in one sentence without using the word "and"?
+
+If a function extracts a field **and** validates it **and** logs the result — it is doing three things and must be broken apart.
+
+In this codebase, the boundaries are:
+
+- OCR → returns text only. Knows nothing about fields.
+- Phase 2 extraction → takes text, returns FieldMetaResult dicts. Knows nothing about rules.
+- Rule engine → takes ValidationContext, returns RuleResult list. Knows nothing about OCR.
+- QC processor → orchestrates. Knows nothing about extraction internals.
+
+**Never cross these boundaries.** If you are about to add validation logic to an extractor, stop. If you are about to add extraction logic to a rule, stop.
+
+---
+
+### P-4 Configuration Over Hardcoding — Always
+
+Any behavioral value that might need to change based on experience, AMC variation, or business requirements is a configuration value, not a hardcoded constant. Before hardcoding any value, ask: is this the same for all AMCs, in all conditions, forever?
+
+Values that must be configuration (not code):
+
+- Confidence thresholds per field and per AMC
+- Synonym lists for field labels
+- Extraction method preference order
+- Ollama model names and timeouts
+- Rule severity and execution order (already in DB — keep it there)
+- Retry counts and backoff timing for OCR jobs
+
+When a business analyst needs to adjust a threshold, they should do it without a developer. When an AMC onboards with unusual label wording, the synonym should be addable without a deployment.
+
+---
+
+### P-5 Keep Raw Inputs Alongside Every Output
+
+Every extraction operation must preserve its inputs alongside its outputs. This is not optional and cannot be deferred.
+
+When Phase 2 extracts a field value, the following must all be stored:
+
+- `raw_value` — what OCR literally produced
+- `corrected_value` — after normalization
+- `source_page` — which page
+- `extraction_method` — how it was found
+- `confidence_score` — computed, never default 0.0
+
+**Why:** When an output is wrong, you cannot debug, fix, or generate training data from it unless you kept the input. Discarding intermediate data makes the system permanently harder to improve. This is conceptual debt that compounds.
+
+---
+
+### P-6 Design for Graceful Degradation — Each Tier Fails Independently
+
+Every stage in the extraction and rule pipeline must fail independently. A failure in one stage never blocks downstream stages or returns an error for the whole document.
+
+The required behavior for every component:
+
+- **OCR failure on one page** → skip that page, flag it, continue with other pages
+- **LLM timeout** → set `_REQUEST_OLLAMA_DISABLED`, use keyword fallback, continue
+- **Phase 2 extraction returns NOT_FOUND** → rule gets `DataMissingException`, returns EXTRACTION_FAILED, pipeline continues
+- **One rule crashes** → that rule returns SYSTEM_ERROR, all other 136 rules continue
+- **DB write fails on persist** → log error, return results to caller anyway
+
+A document that produces partial results with honest confidence scores and REVIEW flags is always better than a document that fails completely and produces no results.
+
+---
+
+### P-7 Incremental Build — Never Build Everything at Once
+
+The system must be built in deployable increments. Each increment:
+
+1. Solves the current most pressing problem — not all imaginable future problems
+2. Gets deployed to production and observed on real documents before the next increment starts
+3. Stays small enough to deliver in days, not weeks
+
+Real conditions always reveal things that test conditions do not. If an increment is not deployed and observed, the learning from it never happens. Do not combine increments to accelerate — staying disciplined about increment size is what makes each one reliable.
+
+When implementing, choose the simplest correct approach first. Measure its behavior. Then improve based on what you actually observe, not what you predict.
+
+---
+
+### P-8 Define Measurement Before Building the Feature
+
+Before implementing any improvement to extraction, enrichment, or rule logic, define:
+
+- **What metric will be tracked?** (field-level accuracy, human correction rate, confidence calibration)
+- **What constitutes meaningful improvement?** (specific numerical threshold)
+- **What constitutes failure?** (regression in any previously passing case)
+
+Do not define success criteria after the fact. Do not claim improvement without quantitative measurement. The test documents exist precisely for this purpose.
+
+For the Ollama enrichment layer: before claiming it improves results, measure the exact change in PASS/FAIL/REVIEW counts on both test batches. This has already been done once (MSL vs #2321525470). Future enrichment changes must be measured the same way.
+
+---
+
+### P-9 Pay Technical Debt Incrementally — Never Accumulate
+
+Every time you touch existing code for any reason, pay a small amount of debt in that area:
+
+- Modifying an extraction pattern → also move any nearby hardcoded threshold into config
+- Debugging a rule → also add a unit test for that rule
+- Adding a synonym → also add a test case for that synonym
+- Reading a function to understand it → if it does two things, split it into two
+
+Do not stop feature work to do "cleanup sprints" — that rarely produces lasting improvement. Do pay small debts continuously. This keeps the system healthy without disrupting delivery.
+
+**The most dangerous debt in this codebase:** extraction patterns that assume specific label wording. Every regex anchored to a specific human-readable label is debt. The move toward positional extraction and narrative inference (as implemented in `_positional_checkbox_choice`) is the correct direction.
+
+---
+
+### P-10 Reviewer Is a System Actor, Not a UI User
+
+The reviewer is a processing component in the pipeline whose domain expertise cannot be automated. Design every reviewer-facing output with this in mind:
+
+1. **Every field shown to the reviewer must include:** confidence score + the exact source text from which it was extracted. A reviewer cannot correct what they cannot see the origin of.
+
+2. **Corrections must be structured, not free-form.** When a reviewer changes a value, capture: was the OCR wrong, was the label not recognized, was the document format unusual? This structured feedback is training data.
+
+3. **Minimize cognitive load.** High-confidence extractions → compact, scannable. Low-confidence or REVIEW status → prominent with clear plain-language explanation. Never use raw confidence numbers as the only signal — translate them: "This was difficult to read from a scanned document and should be verified."
+
+4. **Reviewer corrections are the primary training signal** for improving extraction. Every feedback_events row that lacks `original_value`, `corrected_value`, `rule_id`, and `source_page` is a lost training opportunity.
+
+---
+
+### P-11 Observability — Know What the System Is Doing
+
+A system whose behavior is invisible is not a product-grade system. The following metrics must be tracked and visible at all times:
+
+| Metric | Purpose |
+| --- | --- |
+| Field-level extraction accuracy by AMC | Is extraction improving or regressing? |
+| Human correction rate by field type | Which fields need more work? |
+| Confidence calibration (score vs actual accuracy) | Are confidence scores honest? |
+| llm_call_logs count and status | Is Ollama being called? Timing out? |
+| Processing job durations by stage | Where is time being spent? |
+
+When any metric changes unexpectedly, it signals that something in the system changed — new document format, model drift, real improvement, or regression. Without this visibility, you are guessing.
+
+The logging in this service (structured JSON to `logs/app.log`) is the foundation. Every major stage in the pipeline already logs its stage name and duration. Build on this, never remove it.
+
+---
+
+### P-12 Contracts Between Components — State Them Explicitly
+
+Before building any new component or modifying an existing one, write down its contract:
+
+- **Input:** format, required fields, valid ranges
+- **Output:** format, guarantees
+- **Errors:** what signals it may produce and what they mean
+- **Timing:** is it expected to complete within a specific window?
+
+The existing contracts in this codebase:
+
+- `Phase2ExtractionEngine.extract_subject(full_text, page_index, ...)` → `(SubjectSectionExtract, Dict[str, FieldMetaResult])`
+- `RuleEngine.execute(context, enrich_with_ollama)` → `List[RuleResult]`
+- `ollama_service._generate(prompt, system, max_tokens, model)` → `Optional[str]`
+
+When you upgrade a component (e.g., improve an extraction pattern), the contract must remain stable. Upstream and downstream components must not need to change. If they do, the abstraction boundaries are wrong.
+
+---
+
+### P-13 Performance — Async for Bottlenecks, Measure Before Optimizing
+
+The three bottlenecks in this system are OCR processing, LLM inference, and model training. All three must be async — they run as Celery tasks or background threads, never blocking an HTTP request.
+
+**Never optimize a component you have not measured.** The only valid approach is:
+
+1. Deploy the simplest correct implementation
+2. Measure actual throughput and latency on real documents under real load
+3. Identify the actual bottleneck (not the predicted one)
+4. Optimize specifically that bottleneck
+
+In particular: do not optimize Ollama call latency by reducing context size, changing prompts, or batching calls until you have confirmed that Ollama latency is the actual bottleneck for the specific workload. The 2026-05 benchmarks showed that Phase 2 field extraction (Camelot, spatial anchoring) consumes more wall-clock time than the rule engine on cached documents. That measurement — not intuition — should drive optimization decisions.
+
+---
+
+### P-14 Dual-Model Strategy — Text vs Vision
+
+This system now has two Ollama models available:
+
+- `mistral:7b` — text generation: 1-3 seconds per call. Use for all commentary analysis (COM rules, ADD rules, enrichment of text-heavy fields)
+- `llava:13b` — vision + text: 45 seconds per call. Use ONLY for image-based tasks (checkbox detection, photo analysis)
+
+On 8GB M1 RAM, they cannot run simultaneously. Ollama handles the switch automatically (~10-15s load time). The pipeline routes to the right model via `get_fast_text_model()` for text tasks.
+
+**Rule:** Never route a text-only task to `llava:13b`. Never route an image task to `mistral:7b`. Every call to `_generate()` should pass `model=get_fast_text_model()` for text analysis and the active vision model for image tasks.
+
+---
+
+### P-15 The Long Game — How to Keep the System Healthy Over Years
+
+Every design decision made today will be read, debugged, and extended by someone (possibly yourself) in two years. The discipline of long-game thinking:
+
+1. **Write code for the next reader, not just the next execution.** Functions do what their names say. Variable names describe what they hold. The one-sentence rule (P-3) is the test.
+
+2. **Never leave a "TODO" in production code without a linked issue.** A TODO that has no accountability is a debt note with no maturity date.
+
+3. **Extraction patterns change as document formats evolve.** Every regex that assumes a specific label wording will eventually break. The path forward is AMC format profiles, synonym registries, and positional extraction — not more specific regexes.
+
+4. **Model versions must be archived indefinitely.** When a model is retrained and deployed, every historical extraction result must remain traceable to the model version that produced it. Tag every `extracted_fields` row with its source model version.
+
+5. **Data is the most valuable long-term asset.** The `page_ocr_results.raw_text`, `extracted_fields`, and `feedback_events` tables are more valuable than any code. Protect them — never truncate, never schema-break without migration, never delete without archiving.
+
+---
+
+*Last updated: 2026-05-15*
+*Source: Apprisal Platform — Engineering Thinking and Development Strategy Guide (EagleX Info Solution PVT LTD)*
+
+---
+
 ## Testing Standards
 
 Every new rule or extractor must have tests against real documents before being considered done.
