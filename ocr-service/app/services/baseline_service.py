@@ -31,6 +31,7 @@ from app.models.db_models import (
     TestSetDocumentRow,
 )
 from app.extraction.spatial_tier3 import SpatialTier3Extractor
+from app.ocr.pipeline import process_document as _pipeline_process
 
 logger = logging.getLogger(__name__)
 
@@ -227,8 +228,8 @@ def run_baseline(label: str = "Week1-Day4") -> BaselineReport:
     Run extraction on all test set documents, compare to ground truth,
     store in adaptive_baseline_runs and adaptive_extraction_results.
     """
-    extractor = SpatialTier3Extractor()
     report = BaselineReport(run_label=label)
+    spatial_extractor = SpatialTier3Extractor()
 
     with get_db() as session:
         test_docs = session.query(TestSetDocumentRow).all()
@@ -243,7 +244,7 @@ def run_baseline(label: str = "Week1-Day4") -> BaselineReport:
 
             # Load and extract
             try:
-                result_set: ExtractionResultSet = extractor.extract(doc_path, test_doc.document_type)
+                result_set: ExtractionResultSet = spatial_extractor.extract(doc_path, test_doc.document_type)
             except Exception as exc:
                 logger.error("Extraction failed for %s: %s", test_doc.document_id, exc)
                 continue
