@@ -23,9 +23,11 @@ from app.models.db_models import (
     AmcProfileRow,
     AmcTemplateVersionRow,
     BaselineRunRow,
+    DocumentClassificationRow,
     ExtractionResultRow,
     CorrectionRow,
     FieldSchemaLogRow,
+    PageOcrResultRow,
     TestGroundTruthRow,
     TestSetDocumentRow,
 )
@@ -40,6 +42,8 @@ MANAGED_TABLES = [
     "adaptive_test_set",
     "adaptive_test_ground_truth",
     "adaptive_baseline_runs",
+    "adaptive_page_ocr_results",
+    "adaptive_document_classifications",
 ]
 
 

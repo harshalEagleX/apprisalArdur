@@ -1,19 +1,21 @@
 """
-Day 3 — Python-owned database models
+Days 3–7 — Python-owned database models
 
 These tables belong to the Python OCR service.
 Created/dropped via `python manage_db.py` (no Alembic, per CLAUDE.md policy).
 Never touched by the Java Spring Boot service.
 
 Tables:
-  adaptive_extraction_results  — every field extraction attempt, permanent record
-  adaptive_corrections         — every human reviewer correction
-  adaptive_amc_profiles        — one row per AMC, grows with each document
+  adaptive_extraction_results    — every field extraction attempt, permanent record
+  adaptive_corrections           — every human reviewer correction
+  adaptive_amc_profiles          — one row per AMC, grows with each document
   adaptive_amc_template_versions — one row per known AMC template version
-  adaptive_field_schema_log    — schema version history
-  adaptive_test_set            — Day 4 test set documents
-  adaptive_test_ground_truth   — Day 4 manually verified correct field values
-  adaptive_baseline_runs       — Day 4 baseline measurement snapshots
+  adaptive_field_schema_log      — schema version history
+  adaptive_test_set              — Day 4 test set documents
+  adaptive_test_ground_truth     — Day 4 manually verified correct field values
+  adaptive_baseline_runs         — Day 4 baseline measurement snapshots
+  adaptive_page_ocr_results      — Day 7 per-page OCR metadata and preprocessing log
+  adaptive_document_classifications — Day 9 per-document classification results
 """
 
 import json
@@ -349,3 +351,100 @@ class BaselineRunRow(Base):
     # Overall rates
     field_accuracy_rate: Mapped[float] = mapped_column(Float, default=0.0)
     document_accuracy_rate: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+# ---------------------------------------------------------------------------
+# adaptive_page_ocr_results  (Day 7)
+# ---------------------------------------------------------------------------
+
+class PageOcrResultRow(Base):
+    """
+    Day 7: Per-page OCR metadata and preprocessing audit trail.
+
+    For every page of every document processed:
+    - Records whether direct PyMuPDF extraction or Tesseract was used
+    - Records image quality assessment for scanned pages
+    - Records which preprocessing steps were applied and in what order
+    - Stores text quality score (used by confidence system to reduce field confidence
+      on pages with poor OCR output)
+    - Stores normalization transformation history (Day 8)
+    """
+    __tablename__ = "adaptive_page_ocr_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Which OCR path was used for this page
+    ocr_path: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # "pymupdf_direct" | "tesseract"
+
+    # Word count BEFORE any preprocessing (used to decide which path to take)
+    word_count_raw: Mapped[int] = mapped_column(Integer, default=0)
+    # Word count AFTER OCR processing (quality signal)
+    word_count_ocr: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Image quality assessment (only populated for scanned pages)
+    dpi_estimated: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    image_quality_flag: Mapped[Optional[str]] = mapped_column(
+        String(16), nullable=True
+    )  # "low" | "normal" | "high"
+    image_variance: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Which preprocessing steps were applied (JSON list, ordered)
+    preprocessing_steps_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Text quality score 0.0-1.0 (estimated OCR accuracy)
+    # Computed from: word_count_ocr/word_count_expected, character error indicators
+    text_quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Day 8: normalization transformation history (JSON list of {transform, before, after})
+    normalization_log_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Raw text character length before and after normalization
+    raw_text_length: Mapped[int] = mapped_column(Integer, default=0)
+    normalized_text_length: Mapped[int] = mapped_column(Integer, default=0)
+
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+
+
+# ---------------------------------------------------------------------------
+# adaptive_document_classifications  (Day 9)
+# ---------------------------------------------------------------------------
+
+class DocumentClassificationRow(Base):
+    """
+    Day 9: Document type classification result for every processed document.
+
+    Broad classification (engagement_letter | appraisal_report | sales_contract | ...)
+    plus template-level AMC matching. Classification happens before any extraction.
+    Stored here so the extraction tier can load the right strategy.
+    """
+    __tablename__ = "adaptive_document_classifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    document_path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Broad category result
+    document_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    type_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Keyword match counts per document type (JSON dict)
+    keyword_scores_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # AMC template matching
+    amc_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    amc_template_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    amc_match_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Structural fingerprint of this document (for future AMC matching)
+    fingerprint_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    total_pages: Mapped[int] = mapped_column(Integer, default=0)
+    classified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
