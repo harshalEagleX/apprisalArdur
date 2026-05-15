@@ -189,14 +189,75 @@ batches:
         path: "sort/#2321525470/appraisal/90 NE 32nd St Unit 524.pdf"
         document_type: appraisal_report
         is_scanned: false
+        notes: "Form 1073 — Individual Condominium Unit. All values manually verified from screenshots."
         fields:
-          property_address:   {value: "90 NE 32nd St",            verified_by: inferred}
-          city:               {value: "Miami",                    verified_by: inferred}
-          state:              {value: "FL",                        verified_by: inferred}
-          zip_code:           {value: "33137",                     verified_by: inferred}
-          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
-          appraised_value:    {value: "587000",                   verified_by: inferred}
-          effective_date:     {value: "2026-05-08",               verified_by: inferred}
+          # Subject / address fields (visible screenshots pages 2-3 right)
+          property_address:   {value: "90 NE 32nd St",            verified_by: manual}
+          unit_number:        {value: "524",                       verified_by: manual}
+          city:               {value: "Miami",                    verified_by: manual}
+          county:             {value: "Miami-Dade",               verified_by: manual}
+          state:              {value: "FL",                        verified_by: manual}
+          zip_code:           {value: "33137",                     verified_by: manual}
+          borrower_name:      {value: "Gonzalo Mata Camacho",     verified_by: manual}
+          lender_name:        {value: "Champions Fundings, LLC",  verified_by: manual, notes: "Typo in form — 'Fundings' not 'Funding'"}
+          assessors_parcel_number: {value: "01-31-25-078-XXXX",   verified_by: manual, notes: "Partially masked in form per screenshot"}
+          tax_year:           {value: "2026",                     verified_by: manual}
+          real_estate_taxes:  {value: "0",                        verified_by: manual}
+          # Condo project fields (screenshots pages 2-3 right and 4-5)
+          project_name:       {value: "The Standard Residences, Midtown Miami", verified_by: manual}
+          project_phase:      {value: "1",                        verified_by: manual}
+          map_reference:      {value: "53-41-25",                 verified_by: manual}
+          census_tract:       {value: "0026.00",                  verified_by: manual}
+          property_rights:    {value: "Fee Simple",               verified_by: manual}
+          assignment_type:    {value: "Purchase Transaction",     verified_by: manual}
+          hoa_monthly_assessment: {value: "635",                  verified_by: manual}
+          stories_in_building: {value: "12",                      verified_by: manual}
+          elevators_count:    {value: "4",                        verified_by: manual}
+          total_units_in_project: {value: "324",                  verified_by: manual}
+          units_completed:    {value: "324",                      verified_by: manual}
+          units_for_sale:     {value: "100",                      verified_by: manual}
+          units_sold:         {value: "224",                      verified_by: manual}
+          units_rented:       {value: "0",                        verified_by: manual}
+          units_owner_occupied: {value: "324",                    verified_by: manual}
+          has_commercial_space: {value: "True",                   verified_by: manual}
+          commercial_space_pct: {value: "10",                     verified_by: manual}
+          project_primary_occupancy: {value: "Principal Residence", verified_by: manual}
+          # Unit-level improvements (page 4-5 left)
+          floor_number:       {value: "5th Floor",                verified_by: manual}
+          total_rooms:        {value: "2",                        verified_by: manual}
+          bedrooms:           {value: "0",                        verified_by: manual}
+          baths:              {value: "1.0",                      verified_by: manual}
+          gla:                {value: "425",                      verified_by: manual}
+          condition_rating:   {value: "C1",                       verified_by: manual}
+          year_built:         {value: "2026",                     verified_by: manual}
+          # Contract section
+          contract_price:     {value: "459900",                   verified_by: manual}
+          contract_date:      {value: "2022-07-25",               verified_by: manual}
+          # Reconciliation / final values
+          appraised_value:    {value: "587000",                   verified_by: manual}
+          effective_date:     {value: "2026-05-08",               verified_by: manual}
+          indicated_value_sca: {value: "587000",                  verified_by: manual}
+          indicated_value_income_approach: {absent: true,         verified_by: manual, notes: "Income approach not required per appraiser"}
+          # Appraiser info (signature pages)
+          appraiser_name:     {value: "Juan Mendoza",             verified_by: manual}
+          appraiser_company_name: {value: "JM Property Appraisal Inc", verified_by: manual}
+          appraiser_state_cert_number: {value: "CERT RES RD5879", verified_by: manual}
+          appraiser_cert_state: {value: "FL",                     verified_by: manual}
+          appraiser_cert_expiration_date: {value: "2026-11-30",   verified_by: manual}
+          date_of_signature:  {value: "2026-05-12",               verified_by: manual}
+          # Market conditions (page 12-13)
+          mca_total_sales_prior_7_12: {value: "16",              verified_by: manual}
+          mca_total_sales_prior_4_6:  {value: "10",              verified_by: manual}
+          mca_total_sales_current_3:  {value: "8",               verified_by: manual}
+          mca_median_sale_price_prior_7_12: {value: "460000",    verified_by: manual}
+          mca_median_sale_price_prior_4_6:  {value: "425000",    verified_by: manual}
+          mca_median_sale_price_current_3:  {value: "450000",    verified_by: manual}
+          # Income approach (page 18)
+          income_approach_monthly_rent: {value: "2300",          verified_by: manual}
+          indicated_monthly_market_rent: {value: "2300",         verified_by: manual}
+          # Neighborhood
+          location:           {value: "Urban",                    verified_by: manual}
+          property_values:    {value: "Stable",                   verified_by: manual}
 
       contract:
         path: "sort/#2321525470/contract/90 NE 32nd St Unit 524 CONTRACT.pdf"
