@@ -30,8 +30,7 @@ from app.models.db_models import (
     TestGroundTruthRow,
     TestSetDocumentRow,
 )
-from app.ocr.document import load_pdf
-from app.extraction.tier3_pattern import Tier3PatternExtractor
+from app.extraction.spatial_tier3 import SpatialTier3Extractor
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +227,7 @@ def run_baseline(label: str = "Week1-Day4") -> BaselineReport:
     Run extraction on all test set documents, compare to ground truth,
     store in adaptive_baseline_runs and adaptive_extraction_results.
     """
-    extractor = Tier3PatternExtractor()
+    extractor = SpatialTier3Extractor()
     report = BaselineReport(run_label=label)
 
     with get_db() as session:
@@ -244,8 +243,7 @@ def run_baseline(label: str = "Week1-Day4") -> BaselineReport:
 
             # Load and extract
             try:
-                loaded = load_pdf(doc_path)
-                result_set: ExtractionResultSet = extractor.extract(loaded, test_doc.document_type)
+                result_set: ExtractionResultSet = extractor.extract(doc_path, test_doc.document_type)
             except Exception as exc:
                 logger.error("Extraction failed for %s: %s", test_doc.document_id, exc)
                 continue

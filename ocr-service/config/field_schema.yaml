@@ -1898,7 +1898,6 @@ fields:
       - "Unit #"
       - "Unit Number"
       - "Unit No."
-      - "Unit"
       - "Apt #"
       - "Apartment #"
       - "Suite #"
@@ -1940,7 +1939,9 @@ fields:
       - "# of Stories"
       - "Number of Stories"
       - "Stories"
+      - "Total Stories"
       - "Floors in Building"
+      - "# Stories"
     source_authority: appraisal_report
     sections: [condo_project]
     notes: "Total stories in the condo building — distinct from unit stories."
@@ -2046,6 +2047,8 @@ fields:
     required: optional
     value_range: {min: 0, max: 50000}
     synonyms:
+      - "HOA $"
+      - "HOA"
       - "HOA Mo. Assessment"
       - "HOA Monthly Assessment"
       - "Monthly HOA Assessment"
@@ -2942,10 +2945,11 @@ fields:
     required: optional
     synonyms:
       - "Appraiser Name"
-      - "Appraiser"
-      - "Name"
       - "Appraiser's Name"
       - "Appraisers Name"
+      - "APPRAISER:"
+      - "Appraiser (print)"
+      - "Signature Appraiser Name"
     source_authority: appraisal_report
     sections: [appraiser]
     required_for_review: true
