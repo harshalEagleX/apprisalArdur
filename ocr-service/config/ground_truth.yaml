@@ -1,0 +1,282 @@
+# =============================================================================
+# Apprisal Platform — Day 4 Ground Truth
+# Manually verified correct field values for all test documents.
+#
+# verified_by values:
+#   manual   — a human read the document and confirmed this value
+#   inferred — value read directly from clear, unambiguous PDF text
+#
+# absent: true means the field genuinely does not exist in this document.
+# Omitting a field means it was not verified (not counted in accuracy).
+# =============================================================================
+
+amc_profiles:
+  equity_solutions_usa:
+    amc_name: "Equity Solutions USA, Inc"
+    client_name: "Champions Funding, LLC"
+
+  henderson_appraisal:
+    amc_name: "Henderson Appraisal Services"
+    client_name: "Clear2Mortgage, Inc."
+
+batches:
+
+  # ---------------------------------------------------------------------------
+  # MSL — Henderson Appraisal Services / Clear2Mortgage
+  # AMC: henderson_appraisal
+  # ---------------------------------------------------------------------------
+  MSL:
+    amc_id: henderson_appraisal
+    documents:
+      appraisal:
+        path: "EQSS/MSL/appraisal/96 Baell Trace Ct SE.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        fields:
+          property_address:   {value: "96 Baell Trace Ct SE",    verified_by: inferred}
+          city:               {value: "Moultrie",                 verified_by: inferred}
+          state:              {value: "GA",                       verified_by: inferred}
+          zip_code:           {value: "31788",                    verified_by: inferred}
+          county:             {value: "Colquitt",                 verified_by: inferred}
+          borrower_name:      {value: "Hung La",                  verified_by: inferred}
+          owner_of_public_record: {value: "Precision Builders and Developers LLC", verified_by: inferred}
+          lender_name:        {value: "Clear2Mortgage, Inc.",     verified_by: inferred}
+          lender_address:     {value: "219 S Main Street Ste 111, Royal Oak, MI 48067", verified_by: inferred}
+          assessors_parcel_number: {value: "m052 245",            verified_by: inferred}
+          tax_year:           {value: "2025",                     verified_by: inferred}
+          real_estate_taxes:  {value: "423",                      verified_by: inferred}
+          neighborhood_name:  {value: "Sagecreek",                verified_by: inferred}
+          census_tract:       {value: "9707.03",                  verified_by: inferred}
+          contract_price:     {value: "263000",                   verified_by: inferred}
+          assignment_type:    {value: "Purchase Transaction",     verified_by: inferred}
+          property_rights:    {value: "Fee Simple",               verified_by: inferred}
+          appraised_value:    {value: "276000",                   verified_by: inferred}
+          effective_date:     {value: "2026-04-17",               verified_by: inferred}
+          site_area:          {value: "7841",                     verified_by: inferred}
+          site_shape:         {value: "Irregular",                verified_by: inferred}
+          zoning_classification: {value: "R-10",                  verified_by: inferred}
+          zoning_compliance:  {value: "Legal",                    verified_by: inferred}
+          year_built:         {value: "2025",                     verified_by: inferred}
+          condition_rating:   {value: "C1",                       verified_by: inferred}
+          fema_flood_zone:    {value: "X",                        verified_by: inferred}
+          gla:                {value: "1513",                     verified_by: inferred}
+          bedrooms:           {value: "3",                        verified_by: inferred}
+          baths:              {value: "2.0",                      verified_by: inferred}
+          total_rooms:        {value: "6",                        verified_by: inferred}
+          property_values:    {value: "Increasing",               verified_by: inferred}
+          location:           {value: "Suburban",                 verified_by: inferred}
+
+      engagement:
+        path: "EQSS/MSL/engagement/96 Baell Tr Ct Order form.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          property_address:   {value: "96 SE Baell Trace Ct",     verified_by: inferred}
+          city:               {value: "Moultrie",                  verified_by: inferred}
+          state:              {value: "GA",                        verified_by: inferred}
+          zip_code:           {value: "31788",                     verified_by: inferred}
+          county:             {value: "Colquitt",                  verified_by: inferred}
+          borrower_name:      {value: "Hung La",                   verified_by: inferred}
+          lender_name:        {value: "Clear2Mortgage, Inc.",      verified_by: inferred}
+          loan_type:          {value: "Conventional",              verified_by: inferred}
+          assignment_type:    {value: "Purchase Transaction",      verified_by: inferred}
+
+      contract:
+        path: "EQSS/MSL/contract/96 baell Tr Ct CONTRACT.pdf"
+        document_type: sales_contract
+        is_scanned: true
+        fields:
+          state:              {value: "GA",                        verified_by: inferred, notes: "DocuSign header only — document is scanned"}
+
+  # ---------------------------------------------------------------------------
+  # TestX121 — EQSS format / different lender
+  # AMC: unknown (engagement not yet parsed)
+  # ---------------------------------------------------------------------------
+  TestX121:
+    amc_id: eqss_unknown
+    documents:
+      appraisal:
+        path: "EQSS/TestX121/appraisal/2307 Merrily Cir N.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        fields:
+          city:               {value: "Seffner",                   verified_by: inferred}
+          state:              {value: "FL",                        verified_by: inferred}
+          zip_code:           {value: "33584",                     verified_by: inferred}
+          county:             {value: "Hillsborough",              verified_by: inferred}
+          assignment_type:    {value: "Purchase Transaction",      verified_by: inferred}
+          property_rights:    {value: "Fee Simple",                verified_by: inferred}
+
+      engagement:
+        path: "EQSS/TestX121/engagement/2307 Merrily order form.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          property_address:   {value: "2307 Merrily Circle North", verified_by: inferred}
+          city:               {value: "Seffner",                   verified_by: inferred}
+          state:              {value: "FL",                        verified_by: inferred}
+          zip_code:           {value: "33584",                     verified_by: inferred}
+          county:             {value: "Hillsborough",              verified_by: inferred}
+
+      contract:
+        path: "EQSS/TestX121/contract/2307 Merrily CONTRACT (1).pdf"
+        document_type: sales_contract
+        is_scanned: false
+        fields:
+          state:              {value: "FL",                        verified_by: inferred}
+
+  # ---------------------------------------------------------------------------
+  # #2321525427 — Equity Solutions / Champions Funding / Blue Palm Appraisal
+  # AMC: equity_solutions_usa
+  # ---------------------------------------------------------------------------
+  "#2321525427":
+    amc_id: equity_solutions_usa
+    documents:
+      engagement:
+        path: "sort/#2321525427/engagement/1718 Theon St Order form.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          property_address:   {value: "1718 Theon St",            verified_by: inferred}
+          city:               {value: "Sebring",                  verified_by: inferred}
+          state:              {value: "FL",                        verified_by: inferred}
+          zip_code:           {value: "33870",                     verified_by: inferred}
+          county:             {value: "Highlands",                 verified_by: inferred}
+          borrower_name:      {value: "Iris M Lopez",             verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          lender_address:     {value: "365 East Germann Road, Suite 140, Gilbert, Arizona, 85297", verified_by: inferred}
+          assignment_type:    {value: "Purchase Transaction",     verified_by: inferred}
+
+      appraisal:
+        path: "sort/#2321525427/appraisal/1718 Theon St.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        fields:
+          property_address:   {value: "1718 Theon St",            verified_by: inferred}
+          city:               {value: "Sebring",                  verified_by: inferred}
+          state:              {value: "FL",                        verified_by: inferred}
+          zip_code:           {value: "33870",                     verified_by: inferred}
+          county:             {value: "Highlands",                 verified_by: inferred}
+          borrower_name:      {value: "Iris Lopez",               verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          tax_year:           {value: "2025",                     verified_by: inferred}
+          real_estate_taxes:  {value: "1150",                     verified_by: inferred}
+          neighborhood_name:  {value: "Sebring",                  verified_by: inferred}
+          census_tract:       {value: "9608.00",                  verified_by: inferred}
+
+  # ---------------------------------------------------------------------------
+  # #2321525470 — Equity Solutions / Champions Funding / JM Property Appraisal
+  # AMC: equity_solutions_usa
+  # Form: 1073 Condo (not standard 1004 — tests form-type diversity)
+  # ---------------------------------------------------------------------------
+  "#2321525470":
+    amc_id: equity_solutions_usa
+    documents:
+      engagement:
+        path: "sort/#2321525470/engagement/90 NE 32nd St Unit 524 Order form.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          property_address:   {value: "90 NE 32nd St",            verified_by: inferred}
+          city:               {value: "Miami",                    verified_by: inferred}
+          state:              {value: "FL",                        verified_by: inferred}
+          zip_code:           {value: "33137",                     verified_by: inferred}
+          borrower_name:      {value: "GONZALO MATA CAMACHO",     verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          assignment_type:    {value: "Purchase Transaction",     verified_by: inferred}
+
+      appraisal:
+        path: "sort/#2321525470/appraisal/90 NE 32nd St Unit 524.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        fields:
+          property_address:   {value: "90 NE 32nd St",            verified_by: inferred}
+          city:               {value: "Miami",                    verified_by: inferred}
+          state:              {value: "FL",                        verified_by: inferred}
+          zip_code:           {value: "33137",                     verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          appraised_value:    {value: "587000",                   verified_by: inferred}
+          effective_date:     {value: "2026-05-08",               verified_by: inferred}
+
+      contract:
+        path: "sort/#2321525470/contract/90 NE 32nd St Unit 524 CONTRACT.pdf"
+        document_type: sales_contract
+        is_scanned: false
+        fields:
+          state:              {value: "FL",                        verified_by: inferred}
+
+  # ---------------------------------------------------------------------------
+  # #2321525505 — Equity Solutions / Champions Funding / Freese & Co
+  # AMC: equity_solutions_usa
+  # ---------------------------------------------------------------------------
+  "#2321525505":
+    amc_id: equity_solutions_usa
+    documents:
+      engagement:
+        path: "sort/#2321525505/engagement/28203 Fantail Dr Order form.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          property_address:   {value: "28203 FANTAIL DR",         verified_by: inferred}
+          city:               {value: "Katy",                     verified_by: inferred}
+          state:              {value: "TX",                        verified_by: inferred}
+          zip_code:           {value: "77494",                     verified_by: inferred}
+          county:             {value: "Fort Bend",                 verified_by: inferred}
+          borrower_name:      {value: "Anton Deineko",            verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          assignment_type:    {value: "Purchase Transaction",     verified_by: inferred}
+
+      appraisal:
+        path: "sort/#2321525505/appraisal/28203 Fantail Dr.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        fields:
+          property_address:   {value: "28203 Fantail Dr",         verified_by: inferred}
+          city:               {value: "Katy",                     verified_by: inferred}
+          state:              {value: "TX",                        verified_by: inferred}
+          zip_code:           {value: "77494",                     verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          appraised_value:    {value: "381000",                   verified_by: inferred}
+          effective_date:     {value: "2026-05-11",               verified_by: inferred}
+
+      contract:
+        path: "sort/#2321525505/contract/28203 Fantail Dr CONTRACT.pdf"
+        document_type: sales_contract
+        is_scanned: false
+        fields:
+          state:              {value: "TX",                        verified_by: inferred}
+
+  # ---------------------------------------------------------------------------
+  # #2321525530 — Equity Solutions / Champions Funding / Brian McCoy
+  # AMC: equity_solutions_usa
+  # Form: 1004D Final Inspection (no appraised value — references original)
+  # ---------------------------------------------------------------------------
+  "#2321525530":
+    amc_id: equity_solutions_usa
+    documents:
+      engagement:
+        path: "sort/#2321525530/engagement/1218 E Alpine Dr Order form.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          property_address:   {value: "1218 E Alpine Dr",         verified_by: inferred}
+          city:               {value: "Terra Alta",               verified_by: inferred}
+          state:              {value: "WV",                        verified_by: inferred}
+          zip_code:           {value: "26764",                     verified_by: inferred}
+          county:             {value: "Preston",                   verified_by: inferred}
+          borrower_name:      {value: "Danny Mauricio Ortega",    verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+
+      appraisal:
+        path: "sort/#2321525530/appraisal/1218 E Alpine Dr.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        fields:
+          property_address:   {value: "1218 E Alpine Dr",         verified_by: inferred}
+          city:               {value: "Terra Alta",               verified_by: inferred}
+          state:              {value: "WV",                        verified_by: inferred}
+          zip_code:           {value: "26764",                     verified_by: inferred}
+          county:             {value: "Preston",                   verified_by: inferred}
+          borrower_name:      {value: "Danny Mauricio Ortega",    verified_by: inferred}
+          lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
+          appraised_value:    {absent: true, notes: "1004D Final Inspection — no appraised value on this form"}
