@@ -374,27 +374,101 @@ class DocumentClassifier:
             )
             session.add(row)
 
-            # Auto-create AMC profile skeleton if AMC is new
+            # Create or update AMC profile (Layer Four — format registry)
             if result.amc_id:
                 existing = session.query(AmcProfileRow).filter_by(
                     amc_id=result.amc_id
                 ).first()
                 if not existing:
+                    # Build initial terminology mapping from known AMC fingerprints
+                    term_map = self._build_initial_terminology(result.amc_id)
                     profile = AmcProfileRow(
                         amc_id=result.amc_id,
                         amc_name=result.amc_id.replace("_", " ").title(),
                         document_count=1,
                         maturity_level="new",
                         fingerprint_json=json.dumps(result.fingerprint),
+                        terminology_mapping_json=json.dumps(term_map),
+                        confidence_threshold_overrides_json=json.dumps({}),
                     )
                     session.add(profile)
-                    logger.info("Auto-created AMC profile skeleton for: %s", result.amc_id)
+                    logger.info(
+                        "Created AMC profile: %s — %d terminology mappings",
+                        result.amc_id, len(term_map),
+                    )
                 else:
+                    # Update fingerprint (merge with existing by averaging structural props)
                     existing.document_count += 1
                     if existing.document_count >= 50:
                         existing.maturity_level = "mature"
                     elif existing.document_count >= 10:
                         existing.maturity_level = "developing"
+                    # Update fingerprint with latest document's properties
+                    existing.fingerprint_json = json.dumps(result.fingerprint)
+
+
+    def _build_initial_terminology(self, amc_id: str) -> dict:
+        """
+        Build the initial terminology mapping for a new AMC profile.
+        This maps AMC-specific label variants to canonical field names,
+        derived from the AMC fingerprints we've observed in real documents.
+
+        Format: {amc_label_variant: canonical_field_name}
+        This is the starting point — corrections will extend it via fast-path.
+        """
+        # Known terminology mappings observed in real documents from each AMC
+        # (Architecture Guide §11: AMC Profile System — no code changes to onboard new AMC)
+        _KNOWN_TERMINOLOGIES: dict = {
+            "equity_solutions_usa": {
+                "File ID": "lender_reference_number",
+                "Service Fee": "appraisal_fee",
+                "Entry Contact": "contact_name",
+                "Champions Funding": "lender_name",
+                "Form: Conventional 1004": "form_type",
+                "Priority: Rush": "order_priority",
+                "Priority: Standard": "order_priority",
+            },
+            "henderson_appraisal": {
+                "Clear2Mortgage": "lender_name",
+                "Henderson Appraisal Services": "appraiser_company_name",
+                "SGAMLS": "mls_data_source",
+            },
+            "blue_palm_appraisal": {
+                "Blue Palm Appraisal": "appraiser_company_name",
+                "MatrixMLS": "mls_data_source",
+            },
+            "jm_property_appraisal": {
+                "JM Property Appraisal Inc": "appraiser_company_name",
+                "SEFMLS": "mls_data_source",
+                "Champions Fundings": "lender_name",
+            },
+            "freese_and_co": {
+                "Freese & Company": "appraiser_company_name",
+                "Freese & Co": "appraiser_company_name",
+            },
+        }
+        return _KNOWN_TERMINOLOGIES.get(amc_id, {})
+
+    def apply_amc_terminology(self, text: str, amc_id: str) -> str:
+        """
+        Apply AMC-specific terminology normalization before extraction.
+        Translates AMC-specific labels to canonical equivalents so the
+        extraction tier doesn't need AMC-specific code.
+        Architecture Guide §11: 'AMC onboarding is a configuration task, not a development task.'
+        """
+        try:
+            from app.database import get_db
+            from app.models.db_models import AmcProfileRow
+            with get_db() as session:
+                profile = session.query(AmcProfileRow).filter_by(amc_id=amc_id).first()
+                if not profile:
+                    return text
+                term_map = profile.get_terminology_mapping()
+                for amc_term, canonical in term_map.items():
+                    text = text.replace(amc_term, canonical)
+        except Exception:
+            pass
+        return text
 
 
 # Module-level singleton

@@ -33,6 +33,7 @@ import fitz
 
 from app.core.result import ExtractionMethod, ExtractionResult, ExtractionResultSet
 from app.core.schema import FieldDefinition, schema_loader
+from app.extraction.fuzzy_match import find_best_label_match
 from app.ocr.spatial_extractor import (
     SpatialWord,
     SpatialWordMap,
@@ -263,6 +264,33 @@ class SpatialTier3Extractor:
                 source_page=page_num,
                 normalization_applied=[f"spatial_{fd.data_type}"],
             )
+
+        # Pass 3 — Fuzzy label matching (Day 11 integration).
+        # Handles OCR-garbled labels that exact spatial matching can't find.
+        # Only runs for string fields — numeric types are found by data patterns.
+        if fd.data_type == "string":
+            full_page_text = "\n".join(
+                page_maps.get(pn, SpatialWordMap([])).all_words_as_text()
+                for pn in sorted(page_maps)
+                if pn in page_range
+            )
+            hit = find_best_label_match(full_page_text, fd.synonyms, r"[^\n]{1,80}")
+            if hit:
+                raw, snippet, pos, method = hit
+                val = raw.strip().rstrip(".,;:")
+                if val and len(val) > 1 and not self._is_known_label_text(val):
+                    # Map fuzzy match to approximate page number
+                    page_num = min(page_range) if page_range else 1
+                    return ExtractionResult(
+                        canonical_name=name,
+                        document_type=document_type,
+                        value=val,
+                        raw_source_text=snippet,
+                        extraction_method=ExtractionMethod.FUZZY_LABEL_MATCH,
+                        confidence=self._schema.method_confidence(ExtractionMethod.FUZZY_LABEL_MATCH),
+                        source_page=page_num,
+                        normalization_applied=["fuzzy_label_strip_whitespace"],
+                    )
 
         return ExtractionResult(
             canonical_name=name,

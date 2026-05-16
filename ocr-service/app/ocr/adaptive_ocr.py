@@ -266,13 +266,25 @@ class AdaptiveOCREngine:
         self._max_workers = max_workers
 
     def process(self, path: Path) -> AdaptiveDocument:
-        """Process a PDF with adaptive per-page OCR. Returns an AdaptiveDocument."""
+        """
+        Process a PDF with adaptive per-page OCR.
+
+        CLAUDE.md Rule 8: compute SHA-256 hash first, check DB for existing result.
+        If found → return cached AdaptiveDocument without re-running OCR.
+        If not found → run OCR, store results.
+        """
         start = time.time()
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(f"PDF not found: {path}")
 
+        # Rule 8 — hash before OCR
         file_hash = self._hash_file(path)
+        cached = self._check_cache(file_hash)
+        if cached is not None:
+            logger.info("Cache hit for %s (hash=%s) — skipping OCR", path.name, file_hash[:12])
+            return cached
+
         fitz_doc = fitz.open(str(path))
         total_pages = len(fitz_doc)
 
@@ -371,6 +383,34 @@ class AdaptiveOCREngine:
             for chunk in iter(lambda: f.read(65536), b""):
                 h.update(chunk)
         return h.hexdigest()
+
+    @staticmethod
+    def _check_cache(file_hash: str) -> Optional["AdaptiveDocument"]:
+        """
+        Rule 8: Check if this file_hash has already been processed.
+        Returns a minimal AdaptiveDocument shell if found, None if not.
+        Currently checks the adaptive_page_ocr_results table for existing rows.
+        Full text cache is not stored here (OCR text lives in page_ocr_results);
+        this check prevents re-running the expensive OCR pipeline.
+        """
+        try:
+            from app.database import get_db
+            from app.models.db_models import PageOcrResultRow
+            with get_db() as session:
+                existing = session.query(PageOcrResultRow).filter_by(
+                    document_id=file_hash
+                ).first()
+                if existing:
+                    return AdaptiveDocument(
+                        path="(cached)",
+                        file_hash=file_hash,
+                        total_pages=0,
+                        pages=[],
+                        processing_time_ms=0,
+                    )
+        except Exception as exc:
+            logger.debug("Cache check failed (non-fatal): %s", exc)
+        return None
 
     def persist_ocr_metadata(self, doc: AdaptiveDocument, document_id: str) -> None:
         """Store per-page OCR metadata in adaptive_page_ocr_results."""

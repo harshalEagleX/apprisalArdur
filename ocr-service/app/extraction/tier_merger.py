@@ -25,8 +25,26 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from app.core.result import ExtractionMethod, ExtractionResult
+from app.core.result import ExtractionMethod, ExtractionResult, RoutingDecision
 from app.core.schema import schema_loader
+
+
+def _compute_routing(canonical_name: str, confidence: float) -> str:
+    """
+    Apply confidence thresholds from the field schema to produce a routing decision.
+    Architecture Guide §12: auto_accept → no review, review → optional, reject → manual.
+    These thresholds are configuration, not hardcoded (Engineering Principle P-4).
+    """
+    if confidence == 0.0:
+        return RoutingDecision.NOT_FOUND
+
+    thresholds = schema_loader.thresholds_for(canonical_name)
+    if confidence >= thresholds.auto_accept:
+        return RoutingDecision.AUTO_ACCEPT
+    elif confidence >= thresholds.review:
+        return RoutingDecision.OPTIONAL_REVIEW
+    else:
+        return RoutingDecision.MANDATORY_REVIEW
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +124,9 @@ class MergedFieldResult:
             r.source_page = winner.source_page
             r.hallucination_flag = winner.hallucination_flag
         r.sanity_check_reason = self.agreement_pattern if not self.found else None
+
+        # Apply confidence-based routing from schema thresholds (Architecture Guide §12)
+        r.routing = _compute_routing(self.canonical_name, self.confidence)
         return r
 
 

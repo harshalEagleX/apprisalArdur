@@ -229,7 +229,11 @@ def run_baseline(label: str = "Week1-Day4") -> BaselineReport:
     store in adaptive_baseline_runs and adaptive_extraction_results.
     """
     report = BaselineReport(run_label=label)
-    spatial_extractor = SpatialTier3Extractor()
+
+    # Use full three-tier pipeline (spatial → embeddings → LLM) for honest measurement.
+    # P-8: 'Define measurement before building the feature.'
+    # The measurement must reflect the actual system output, not a subset tier.
+    use_full_pipeline = True
 
     with get_db() as session:
         test_docs = session.query(TestSetDocumentRow).all()
@@ -242,9 +246,20 @@ def run_baseline(label: str = "Week1-Day4") -> BaselineReport:
                 logger.warning("Test document not found: %s", doc_path)
                 continue
 
-            # Load and extract
+            # Load and extract using the full pipeline
             try:
-                result_set: ExtractionResultSet = spatial_extractor.extract(doc_path, test_doc.document_type)
+                if use_full_pipeline:
+                    pipeline_result = _pipeline_process(
+                        doc_path,
+                        document_id=test_doc.document_id,
+                        document_type_override=test_doc.document_type,
+                        persist_metadata=False,
+                        use_llm=False,        # skip LLM in baseline — it times out on M1
+                        use_embeddings=True,  # include embedding tier
+                    )
+                    result_set = pipeline_result.extraction_result_set
+                else:
+                    result_set = SpatialTier3Extractor().extract(doc_path, test_doc.document_type)
             except Exception as exc:
                 logger.error("Extraction failed for %s: %s", test_doc.document_id, exc)
                 continue

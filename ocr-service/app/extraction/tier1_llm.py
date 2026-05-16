@@ -2,22 +2,21 @@
 Day 13 — Tier One LLM Extraction
 
 Uses a local Ollama LLM (mistral:7b) to extract fields that spatial and
-pattern matching cannot find — primarily checkbox fields, narrative context
-fields, and fields with ambiguous label placement.
+pattern matching cannot find. This is the final fallback tier — it runs
+AFTER spatial (Tier 3) and embedding (Tier 2) extraction.
 
-Architecture rules (CLAUDE.md Rule 1 + Architecture Guide):
-  - LLM is a FALLBACK tier only. It runs AFTER spatial extraction.
-  - LLM never used as primary extractor for structured fields with exact values.
-  - Every LLM value MUST be verified against the source text passage the model cites.
-  - Values that cannot be found in the cited source text → hallucination_flag=True.
-  - Confidence for unverifiable values is capped at 0.40.
+The Architecture Guide's three-tier ordering is:
+  Tier 1 — Pattern + spatial (Weeks 1-2)
+  Tier 2 — Embedding similarity (Day 15-16)
+  Tier 3 — LLM semantic understanding (Day 13-14, most powerful, used last)
 
-Prompts are section-specific: subject, contract, condo_project, appraiser.
-Each prompt sends only the relevant page text, not the full document.
-This prevents context confusion and token waste.
+The 30-day plan names this "Tier One LLM" because it was built first in Week 3;
+the Architecture Guide calls it Tier Three because it runs last in the pipeline.
+Both refer to this same component.
 
-Day 13 completes: LLM calling successfully + hallucination detection working.
-Day 14 completes: Prompt refinements applied based on measured error analysis.
+Hallucination detection: every LLM value is verified against the cited source
+text. Unverifiable values get hallucination_flag=True and confidence capped at 0.40.
+LLM timeout / Ollama unavailability → returns empty dict, pipeline continues (Rule 9).
 """
 
 from __future__ import annotations
@@ -96,13 +95,13 @@ _SECTION_FIELDS: Dict[str, List[str]] = {
 
 # For each section, which pages to send (relative to total pages)
 _SECTION_PAGE_SLICES: Dict[str, tuple] = {
-    "subject":       (0.0, 0.30),   # first 30%
+    "subject":       (0.0, 0.30),
     "contract":      (0.0, 0.30),
     "condo_project": (0.10, 0.45),
     "neighborhood":  (0.10, 0.35),
     "site":          (0.10, 0.45),
     "improvements":  (0.10, 0.50),
-    "appraiser":     (0.55, 1.0),   # last 45%
+    "appraiser":     (0.55, 1.0),
     "reconciliation":(0.40, 0.80),
 }
 

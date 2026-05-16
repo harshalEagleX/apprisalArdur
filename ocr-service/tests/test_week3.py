@@ -111,10 +111,12 @@ class TestDay13LLMTier1:
     def test_section_field_groups_cover_important_fields(self):
         from app.extraction.tier1_llm import _SECTION_FIELDS
         all_llm_fields = {f for fields in _SECTION_FIELDS.values() for f in fields}
+        # LLM handles ALL fields that spatial/embedding fail on
         assert "property_rights" in all_llm_fields
         assert "assignment_type" in all_llm_fields
         assert "appraiser_name" in all_llm_fields
         assert "market_conditions_commentary" in all_llm_fields
+        assert "neighborhood_description" in all_llm_fields
 
     @pytest.mark.skipif(not MSL_ENG.exists(), reason="Document not available")
     def test_llm_extracts_from_real_engagement(self):
