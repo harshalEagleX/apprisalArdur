@@ -59,36 +59,84 @@ def _table_contains_any(table: List[List], keywords: List[str]) -> bool:
 def _extract_price_age_grid(table: List[List]) -> Dict[str, str]:
     """
     Parse the UAD neighborhood price/age grid.
-    Format:
-      Row 0:                    PRICE $000    |    AGE (yrs)
-      Row 1: One-Unit Housing:  Low  High Pred.  Low  High Pred.
-      Row 2: (values)           220   340  275     0    5    1
+
+    Real UAD 1004 layout — PRICE and AGE are SEPARATE columns,
+    with Low/High/Pred. as ROW labels:
+
+        | One-Unit Housing |  PRICE $(000)  |  AGE (yrs) |
+        | Low              |      220       |      0     |
+        | High             |    1,750       |     76     |
+        | Pred.            |      400       |     40     |
+
+    We anchor on:
+      - the header row (find which column is PRICE, which is AGE)
+      - the label column (find which row is Low / High / Pred.)
+    Then read each cell at the intersection. Numbers <5000 only — that
+    excludes 6-digit comp sale prices that may bleed into adjacent tables.
     """
-    results = {}
+    results: Dict[str, str] = {}
+    if not table or len(table) < 2:
+        return results
 
-    # Find the data row (numbers)
-    for row in table:
-        texts = [str(c or "").strip() for c in row]
-        nums = [_clean_number(t) for t in texts]
-
-        # Neighborhood price range: values in $000 notation (max ~5000)
-        # Filter out comp sale prices (6-digit full amounts)
-        small_nums = [n for n in nums if n and float(n) < 5000]
-
-        if len(small_nums) >= 3:
-            # Map positions to field names based on column order
-            # Typical layout: Low | High | Pred | Low | High | Pred
-            num_positions = [(i, nums[i]) for i in range(len(nums))
-                             if nums[i] and float(nums[i]) < 5000]
-            if len(num_positions) >= 3:
-                field_map = [
-                    "price_low", "price_high", "predominant_price",
-                    "age_low", "age_high", "predominant_age",
-                ]
-                for idx, (pos, val) in enumerate(num_positions[:6]):
-                    if idx < len(field_map) and val:
-                        results[field_map[idx]] = val
+    # 1. Locate header row and column indices for PRICE and AGE.
+    price_col = age_col = None
+    header_row_idx = None
+    for r_idx, row in enumerate(table[:4]):  # header is in the top of the table
+        for c_idx, cell in enumerate(row):
+            t = str(cell or "").lower()
+            if price_col is None and "price" in t and "000" in t.replace(" ", ""):
+                price_col = c_idx
+                header_row_idx = r_idx
+            elif price_col is None and t.strip() == "price":
+                price_col = c_idx
+                header_row_idx = r_idx
+            if age_col is None and ("age" in t and ("yrs" in t or t.strip() == "age")):
+                age_col = c_idx
+                if header_row_idx is None:
+                    header_row_idx = r_idx
+        if price_col is not None and age_col is not None:
             break
+
+    # If we can't find both columns, this table is not the price/age grid.
+    if price_col is None and age_col is None:
+        return results
+    if header_row_idx is None:
+        header_row_idx = 0
+
+    # 2. For each data row below the header, find its Low/High/Pred. label
+    #    and read the value at the PRICE and AGE columns.
+    row_label_map = {
+        "low": ("price_low", "age_low"),
+        "high": ("price_high", "age_high"),
+        "pred": ("predominant_price", "predominant_age"),
+        "pred.": ("predominant_price", "predominant_age"),
+        "predominant": ("predominant_price", "predominant_age"),
+    }
+
+    for row in table[header_row_idx + 1:]:
+        # Find a Low / High / Pred. label anywhere in this row.
+        row_label = None
+        for cell in row:
+            t = str(cell or "").strip().lower().rstrip(".")
+            if t in ("low", "high", "pred", "predominant"):
+                row_label = "pred" if t in ("pred", "predominant") else t
+                break
+        if not row_label:
+            continue
+
+        price_field, age_field = row_label_map[row_label]
+
+        if price_col is not None and price_col < len(row):
+            v = _clean_number(row[price_col])
+            # Neighborhood price is in $000; sanity range 1..5000.
+            if v and 1 <= float(v) < 5000 and price_field not in results:
+                results[price_field] = v
+
+        if age_col is not None and age_col < len(row):
+            v = _clean_number(row[age_col])
+            # Age in years; sanity range 0..200.
+            if v and 0 <= float(v) <= 200 and age_field not in results:
+                results[age_field] = v
 
     return results
 

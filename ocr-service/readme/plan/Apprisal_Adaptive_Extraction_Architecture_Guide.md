@@ -1,8 +1,8 @@
 # Apprisal Platform — Adaptive & Future-Proof Document Extraction Architecture Guide
 
-**Prepared for:** EagleX Info Solution PVT LTD  
-**Document Purpose:** Long-term strategic and architectural guidance for moving from regex-based extraction to intelligent, format-independent, context-aware document understanding  
-**Scope:** Engagement letters, appraisal reports, contact forms, AMC templates, QC documents, and all appraisal workflow documents  
+**Prepared for:** EagleX Info Solution PVT LTD
+**Document Purpose:** Long-term strategic and architectural guidance for moving from regex-based extraction to intelligent, format-independent, context-aware document understanding
+**Scope:** Engagement letters, appraisal reports, contact forms, AMC templates, QC documents, and all appraisal workflow documents
 **Audience:** Platform architects, backend engineers, product owners
 
 ---
@@ -350,7 +350,7 @@ Tesseract with OpenCV preprocessing handles the text extraction that feeds docum
 
 ### For Semantic Field Extraction
 
-The local Ollama LLM running llama3:8b or a similar model is the right choice for the Tier One extraction role. The key to making this work well is prompt engineering — the instructions you give the model matter enormously. A well-crafted prompt that explains the appraisal domain, gives examples of the kinds of fields being extracted, and specifies the exact output format can dramatically improve extraction quality without changing the model itself.
+The local Ollama LLM running llamaor a similar model is the right choice for the Tier One extraction role. The key to making this work well is prompt engineering — the instructions you give the model matter enormously. A well-crafted prompt that explains the appraisal domain, gives examples of the kinds of fields being extracted, and specifies the exact output format can dramatically improve extraction quality without changing the model itself.
 
 The sentence-transformers library provides the embedding models needed for Tier Two semantic similarity matching. The all-MiniLM-L6-v2 model you already have is a good starting point. For better domain accuracy, you can fine-tune this model on a dataset of appraisal field labels and their synonyms.
 
@@ -650,6 +650,6 @@ The result is a document extraction platform that does not break when formats ch
 
 ---
 
-*Document Version 1.0 — EagleX Info Solution PVT LTD*  
-*Architecture guidance prepared for the Apprisal platform extraction layer transition.*  
+*Document Version 1.0 — EagleX Info Solution PVT LTD*
+*Architecture guidance prepared for the Apprisal platform extraction layer transition.*
 *This document should be treated as a living reference and updated as the platform evolves.*

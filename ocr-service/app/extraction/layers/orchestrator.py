@@ -42,6 +42,7 @@ _CONF = {
     "visual_checkbox": 0.92,   # OpenCV pixel fill — direct visual evidence
     "drawing_checkbox": 0.92,  # X-mark in drawing layer — direct visual evidence
     "camelot_table":    0.90,  # Camelot Ghostscript-rendered table — 92-95% verified
+    "uad_template":     0.89,  # UAD form known field positions — high confidence
     "grid_table":       0.88,  # pdfplumber table cell — precise coordinate match
     "spatial_label":    0.85,  # label→value spatial proximity
     "paddle_ocr":       0.80,  # PaddleOCR from scanned page
@@ -144,9 +145,22 @@ def run_full_extraction(
                 )
         return "l4b", results
 
-    tasks = [run_l0, run_l1, run_l2, run_l3, run_l4, run_l4b]
+    def run_l5():
+        """UAD Form Template Parser — fills Yes/No, grids, GLA, dates by known positions."""
+        from app.extraction.layers.l5_uad_template import extract_with_uad_template
+        raw = extract_with_uad_template(pdf_path)
+        results = {}
+        for fname, val in raw.items():
+            if val:
+                results[fname] = _make_result(
+                    fname, str(val), document_type,
+                    "uad_template", _CONF.get("uad_template", 0.88),
+                )
+        return "l5", results
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    tasks = [run_l0, run_l1, run_l2, run_l3, run_l4, run_l4b, run_l5]
+
+    with ThreadPoolExecutor(max_workers=7) as executor:
         futures = {executor.submit(fn): fn.__name__ for fn in tasks}
         raw: Dict[str, object] = {}
         for future in as_completed(futures):
@@ -208,6 +222,13 @@ def run_full_extraction(
     # L3 — PaddleOCR for scanned pages (only fills pages not covered by digital OCR)
     # PaddleOCR output feeds through spatial matching re-run (TODO: integrate fully)
 
+    # L5 — UAD template parser (fills Yes/No, grids, GLA, effective_date by known positions)
+    l5 = raw.get("l5", {})
+    for fname, result in l5.items():
+        if hasattr(result, "found") and result.found:
+            if fname not in merged or merged[fname].effective_confidence < _CONF["uad_template"]:
+                merged[fname] = result
+
     # ── Ensure every schema field has a result ──────────────────────────────
     result_set = ExtractionResultSet(
         document_path=str(pdf_path),
@@ -223,7 +244,7 @@ def run_full_extraction(
         else:
             result_set.add(_not_found(fname, document_type))
 
-    # Add extra fields from Camelot that aren't in the schema template
+    # Add extra fields from Camelot/L5 that aren't in the schema template
     # (comp_1_sale_price, comp_2_gla, etc. — schema only has comp_N_ templates)
     schema_names = {fd.canonical_name for fd in schema.all_fields()}
     for fname, result in merged.items():
@@ -234,7 +255,7 @@ def run_full_extraction(
 
     elapsed = int((time.time() - start) * 1000)
     found = len(result_set.found_results())
-    layers_used = [k for k in ("l0", "l1", "l2", "l3", "l4", "l4b") if raw.get(k)]
+    layers_used = [k for k in ("l0", "l1", "l2", "l3", "l4", "l4b", "l5") if raw.get(k)]
 
     logger.info(
         "Orchestrator: %s | %d/%d fields | layers=%s | %dms",

@@ -1,10 +1,11 @@
 # Apprisal Platform — One Month Implementation Plan
+
 ## Adaptive & Future-Proof Document Extraction System
 
-**Prepared for:** EagleX Info Solution PVT LTD  
-**Execution Window:** 30 Calendar Days  
-**Goal:** Fully functional adaptive extraction system — from regex-only to three-tier intelligent extraction with confidence scoring, AMC profile registry, correction capture, and reviewer-facing dashboard  
-**Constraint:** No code in this document. Every instruction is written in plain engineering language.  
+**Prepared for:** EagleX Info Solution PVT LTD
+**Execution Window:** 30 Calendar Days
+**Goal:** Fully functional adaptive extraction system — from regex-only to three-tier intelligent extraction with confidence scoring, AMC profile registry, correction capture, and reviewer-facing dashboard
+**Constraint:** No code in this document. Every instruction is written in plain engineering language.
 **How to Use This Document:** Read the entire plan once before starting anything. Understand the dependency chain. Never start a task whose prerequisite is incomplete. Revisit this plan every morning.
 
 ---
@@ -23,7 +24,7 @@ Before the thirty-day clock starts, the following must already be true. If any o
 
 **All team members must read both the Architecture Guide and the Engineering Thinking Guide completely before Day One.** Not skim. Read. Every person who will write code for this project must understand the five-layer architecture, the three-tier extraction model, and the principle of separation of concerns before they write a single line.
 
-**Ollama must be installed and the llama3:8b-instruct-q4_0 model must be downloaded and running locally.** LLM inference is the most time-sensitive component to get working because it takes time to download, configure, and verify. Do not let this block you on Day 8. Resolve it before Day One.
+**Ollama must be installed and the mirtisal or llava model must be downloaded and running locally.** LLM inference is the most time-sensitive component to get working because it takes time to download, configure, and verify. Do not let this block you on Day 8. Resolve it before Day One.
 
 ---
 
@@ -31,24 +32,25 @@ Before the thirty-day clock starts, the following must already be true. If any o
 
 The month is divided into five weeks, each with a specific theme and a specific set of deliverables. Each week builds entirely on the previous week. Nothing in Week Two is possible without Week One being complete.
 
-**Week One — Foundation and Schema (Days 1–6)**  
+**Week One — Foundation and Schema (Days 1–6)**
 Purpose: Build everything that everything else depends on. No extraction intelligence is added this week. Only architecture, data structures, and measurement infrastructure.
 
-**Week Two — Layer One Complete (Days 7–12)**  
+**Week Two — Layer One Complete (Days 7–12)**
 Purpose: The entire document ingestion and preprocessing pipeline must be working adaptively and correctly by the end of this week. OCR, normalization, table detection, and document classification must all be complete.
 
-**Week Three — Layer Two Complete (Days 13–20)**  
+**Week Three — Layer Two Complete (Days 13–20)**
 Purpose: All three extraction tiers must be working and their outputs must be merged using confidence scores. This is the core intelligence week.
 
-**Week Four — Layer Three and Four Complete (Days 21–26)**  
+**Week Four — Layer Three and Four Complete (Days 21–26)**
 Purpose: Context-aware validation, cross-document consistency checking, AMC profile registry, and confidence-driven reviewer routing must all be working.
 
-**Week Five — Layer Five, Integration, and Hardening (Days 27–30)**  
+**Week Five — Layer Five, Integration, and Hardening (Days 27–30)**
 Purpose: Correction capture, feedback mechanism, end-to-end integration testing, error handling audit, and production readiness verification.
 
 ---
 
 ## Week One — Foundation and Schema
+
 ### Days 1 through 6
 
 The entire purpose of this week is to build the invisible infrastructure that all future intelligence depends on. At the end of this week, you will have nothing new that is user-visible. You will have everything that makes user-visible improvements possible. Do not rush this week. A weak foundation means every layer above it is unstable.
@@ -158,6 +160,7 @@ If any of these are not true at the end of Day 6, do not start Week Two until th
 ---
 
 ## Week Two — Layer One Complete
+
 ### Days 7 through 12
 
 This week you make the document ingestion and preprocessing layer fully adaptive. By the end of this week, your system must correctly handle scanned documents, natively digital documents, and hybrid documents. It must classify documents by type. It must normalize text reliably. It must extract table structures in a format that downstream extraction can use.
@@ -275,6 +278,7 @@ Run the full Layer One pipeline — adaptive OCR, normalization, document classi
 ---
 
 ## Week Three — Layer Two Complete
+
 ### Days 13 through 20
 
 This is the most important week of the project. You are building the core intelligence — the three-tier extraction ensemble with confidence merging. By the end of this week, your system will be extracting fields using LLM semantic understanding, embedding similarity, and enhanced pattern matching, with their outputs merged into a single confident result.
@@ -389,7 +393,9 @@ Run the complete three-tier extraction pipeline on all fifteen test documents. M
 
 **Measurement protocol.** For every canonical field in every test document, compare the merged extraction result against the correct value from the test set. Record field-level accuracy, document-level accuracy, and AMC-level accuracy. Compare against the Week One baseline and the Week Two measurements.
 
-**Expected accuracy at this point.** After three-tier extraction, you should be seeing significant improvement over baseline, particularly in the fields that were previously failing due to label variation and contextual ambiguity. A realistic target is fifteen to thirty percentage points improvement over baseline across the most important fields.
+**Expected accuracy at this point.** After three-tier extraction, you should be seeing significant improvement over baseline, particularly in the fields that were previously failing due to label variation and contextual ambiguity. A realistic target is fifteen to thirty percentage points improvement over baseline across the most important fields
+
+.
 
 **Investigating accuracy that falls short of expectations.** If certain fields are still performing poorly after three-tier extraction, investigate why. Is the LLM consistently misidentifying these fields? Is the embedding similarity producing false positives? Is the pattern matching still relying on labels that do not appear in some documents? Each failure type has a specific fix.
 
@@ -406,6 +412,7 @@ Use today to fix any issues found during Day 19 testing and to prepare for Week 
 ---
 
 ## Week Four — Layer Three and Layer Four Complete
+
 ### Days 21 through 26
 
 This week you build context-aware validation, cross-document consistency checking, the AMC profile registry, and the confidence-driven routing logic that decides which fields go to auto-acceptance and which go to human review.
@@ -509,6 +516,7 @@ Run all test documents through the complete pipeline including validation, consi
 ---
 
 ## Week Five — Layer Five, Integration, and Hardening
+
 ### Days 27 through 30
 
 This final week is about connecting everything together, making the system production-ready, and ensuring that every error condition is handled gracefully.
@@ -613,9 +621,72 @@ The last day is for measurement, documentation, and ensuring the system is ready
 
 These limitations are not failures. They are the honest scope of what can be built in thirty days. Document them. Plan for them. Build the next development cycle to address them.
 
+### Why and When Ollama Will Not Work — Every Point
+
+* A document from a completely new AMC arrives and the LLM has never seen that AMC's label style, so it misidentifies or misses fields entirely until the profile is manually built.
+* The LLM context window fills up when a document exceeds roughly thirty dense pages, causing the later pages to be silently cut off and never extracted.
+* When Ollama is already running an inference job and a second document arrives simultaneously, the second job queues and the reviewer waits with no feedback on why processing is slow.
+* The LLM hallucinates a field value that looks plausible — a nearby dollar amount, a similar date — and your hallucination detection misses it because the invented value is textually close to real content in the document.
+* A scanned document with poor OCR quality sends garbled text to the LLM and the model confidently extracts nonsense because it tries to interpret whatever text it receives rather than admitting the input is unreadable.
+* Prompt drift happens when a new document uses phrasing the model interprets differently than intended, producing a systematically wrong extraction for that field type across all similar documents without any error being thrown.
+* The LLM returns a correctly extracted value in the wrong format — a date as "January 5th 2024" instead of your internal normalized format — and your parser fails silently, storing an empty result instead of flagging a format mismatch.
+* When the GPU is under load from simultaneous OCR preprocessing and LLM inference, VRAM pressure causes Ollama to slow dramatically or crash, and without a GPU resource scheduler the two processes fight each other.
+* After thirty days you have no automated retraining, so every systematic error the LLM makes today it will still make six months from now unless a developer manually rewrites the prompt.
+* New AMC documents with unfamiliar abbreviations go into the LLM unchanged because the terminology normalization layer only knows abbreviations you have manually mapped, and the LLM guesses rather than translates.
+* The LLM returns high self-reported confidence on wrong answers, so your merging logic treats the hallucinated value as credible and boosts its merged confidence score incorrectly.
+* Table content from the comparable sale grid gets linearized into plain text before reaching the LLM, and the model loses the row-column relationships, causing it to assign values from Comparable 2's row to Comparable 1's fields.
+* When Ollama is unavailable due to a crash or restart, the entire Tier One extraction silently produces zero results and the merging layer outputs low-confidence results for every field without alerting anyone that the LLM was completely offline.
+
 ---
 
-*Document Version 1.0 — EagleX Info Solution PVT LTD*  
-*One-month implementation plan for the Apprisal adaptive extraction system.*  
-*This document is the operational guide for the development team during the thirty-day implementation window.*  
+*Document Version 1.0 — EagleX Info Solution PVT LTD*
+*One-month implementation plan for the Apprisal adaptive extraction system.*
+*This document is the operational guide for the development team during the thirty-day implementation window.*
 *Read it completely before starting. Reference it every day. Update it when circumstances require plan changes.*
+
+---
+
+## Reconciliation Notes (Version 1.1 — 2026-05-16)
+
+Three corrections to align this plan with the **Adaptive & Future-Proof Document Extraction Architecture Guide** and with CLAUDE.md engineering principles. Where the two documents disagreed, the Architecture Guide and CLAUDE.md are authoritative — this plan is updated to match.
+
+### 1. Three-tier extraction — tier numbering corrected
+
+The original Days 11/13/15 of this plan numbered the tiers backwards relative to the Architecture Guide. The correct order is:
+
+* **Tier One = Enhanced rule-based extraction** (regex + synonym expansion + spatial anchors + table/grid resolvers). Cheapest, most precise, always-on floor. This is what is built today (Days 7–12).
+* **Tier Two = Embedding-based semantic matching** (sentence-transformers). Fills label-variation gaps Tier One misses.
+* **Tier Three = LLM extraction** via Ollama (mistral/llava). Only invoked for fields the first two tiers fail to reach with sufficient confidence. Reserved for evaluative or context-heavy fields.
+
+**Why this order matters.** Architecture Guide §17 (Common Mistakes) and CLAUDE.md P-14 both warn explicitly: *"Using the LLM for structured field extraction is the most common mistake."* LLMs hallucinate dollar amounts, dates, and addresses. They are appropriate for narrative commentary classification, not for precise value extraction. The cheap, deterministic rule tier must be first.
+
+Day 13 should be retitled *"Tier Three LLM Extraction — Prompt Engineering for fallback fields only"*. Day 15 stays as Tier Two. Day 11 stays as Tier One.
+
+### 2. Adaptive OCR — must actually wire PaddleOCR into the field extractor
+
+Day 7 prescribes per-page adaptive OCR. The current codebase calls PaddleOCR for scanned pages but does **not** feed its output back into the spatial label-matcher — `orchestrator.run_l3()` returns a dict the spatial layer ignores. On the 23-doc test set, six purely-scanned PDFs receive 20–37 field extractions versus 130–170 for digital PDFs. The deficit is entirely because Tier One never sees the OCR text.
+
+**Required addition to Day 7:** after PaddleOCR runs, its word boxes and text must replace the empty pages in the spatial extractor's word source so that Tier One can find labels and values on scanned pages. Without this wiring, all subsequent tiers are blind for any document that is not natively digital.
+
+### 3. Confidence merge — per-method floor plus tier-agreement bonus
+
+Day 17 describes a confidence-merge purely as a function of which tiers agreed. The current orchestrator uses a per-extraction-method floor (visual_checkbox 0.92, drawing_checkbox 0.92, camelot_table 0.90, uad_template 0.89, grid_table 0.88, spatial_label 0.85, paddle_ocr 0.80, fuzzy_label 0.72, embedding 0.68, llm 0.72). The two views are reconciled as:
+
+* The per-method floor is the **base confidence** for a single-tier extraction. It expresses how reliable that *evidence type* is on a clean page.
+* When two or more independent tiers produce the same value for the same field, add an **agreement bonus**: +0.05 for two-tier agreement, +0.10 for three-tier agreement, capped at 0.99.
+* When tiers disagree, the highest-base-confidence value wins and a `discrepancy_flag` is recorded against the field for reviewer attention.
+
+This keeps the existing method-floor table while honoring the agreement-driven calibration described in the Architecture Guide §14.
+
+### 4. L0–L5 codebase naming versus Architecture Guide layers — clarification
+
+The codebase uses `l0_pdfplumber.py`, `l1_checkbox_visual.py`, `l2_grid_resolver.py`, `l3_paddle_ocr.py`, `l4_camelot.py`, `l5_uad_template.py`, and the orchestrator. These numbers do **not** correspond to the Architecture Guide's "Layer One … Layer Five". They are sub-strategies that all belong to:
+
+* **Architecture Guide Layer One** (ingestion + preprocessing): l0, l3, l4 (Camelot)
+* **Architecture Guide Layer Two Tier One** (rule-based extraction): l1, l2, l4_camelot, l5, spatial_tier3
+
+To reduce confusion going forward, refer to the codebase modules by their filename suffix (e.g. "the UAD template parser" rather than "L5"). The Architecture Guide layers should be the canonical mental model.
+
+---
+
+*Reconciliation appendix appended 2026-05-16 based on real measurement of the layered extraction test on 23 appraisals. Future versions of this plan and the Architecture Guide should be cross-referenced before any change to one is committed.*

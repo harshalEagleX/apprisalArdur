@@ -7,115 +7,6 @@
 
 ---
 
-## The Most Critical Rules for AI Coding Assistant to Follow
-
-### Rule 1 — Never Use LLM for Structured Field Extraction
-
-LLM must NEVER be used to extract structured fields from appraisal text.
-Fields like address, borrower name, contract price, dates — always use regex plus spatial anchoring.
-
-LLM is ONLY allowed for:
-
-- Commentary quality analysis (canned vs specific)
-- Market conditions narrative quality
-- Reconciliation sufficiency evaluation
-
-If the AI coding assistant suggests using LLM to extract a field, that is wrong. Correct it.
-
-### Rule 2 — Checkbox Detection Uses Three-State Logic
-
-Checkboxes in OCR text exist in three distinct states. Handle all three explicitly:
-
-- A marked checkbox near a label → CHECKED (True)
-- An empty checkbox near a label → UNCHECKED (False)
-- Neither found → UNKNOWN (None) → return VERIFY status, never FAIL
-
-Never return FAIL from an UNKNOWN checkbox state.
-Never treat an explicit empty checkbox the same as a not-found checkbox.
-
-When vision model analysis is available, run pixel analysis first. Only escalate to the vision model when pixel confidence is below 75%. Cache all vision model results by document, page, and bounding box.
-
-### Rule 3 — Every Extracted Field Must Have Four Properties Populated
-
-When extraction produces any field value, all four of these must be set. Never leave them as defaults:
-
-- `confidence_score` (float 0.0–1.0) — compute it, never leave as 0.0
-- `source_page` (int) — which page of the PDF this came from
-- `extraction_method` — how it was found (spatial anchor, regex primary, regex fallback, not found)
-- `raw_value` — what OCR literally produced before any correction
-
-This data feeds the ML training loop. Missing it means the model cannot learn from that extraction.
-
-### Rule 4 — Rules Must Never Crash the Whole Pipeline
-
-Every rule function is wrapped in try/except at the engine level. If one rule raises any exception:
-
-- That rule returns `status=SYSTEM_ERROR`
-- All other rules continue running
-- The error is logged with rule_id and request_id
-- The full response still returns with all other rule results
-
-Do not write rule functions that can propagate exceptions out of the try/except boundary.
-
-### Rule 5 — Address Parsing Must Use Data Patterns, Not Label Words
-
-The zip code parser must find the 5-digit number pattern, not search for the word "Code" or "Zip".
-OCR mangles label words ("aP Code", "Zip Gode") but rarely mangles the actual 5-digit number.
-
-Correct approach:
-1. Find 5-digit number at end of address block → zip code
-2. Find 2-letter uppercase before it → state
-3. Find text between the city anchor keyword and the state → city
-4. Find text before the city anchor → street
-
-Never write a regex that depends on the word "Code" or "Zip" appearing correctly in OCR output.
-
-### Rule 6 — Raw OCR Text Must Be Saved to Database
-
-After every OCR operation, the raw text column must be inserted with the full unmodified OCR output.
-This is the training signal for the correction ML model.
-Do not skip this to save time or because the text seems unimportant or low quality.
-
-### Rule 7 — Parallel Page Processing Always Uses a Thread Pool
-
-OCR processes pages in parallel using a thread pool executor — never sequentially.
-The worker count comes from an environment variable. Sequential page processing is a regression.
-If you see a for loop iterating over pages in OCR processing code, fix it immediately.
-
-### Rule 8 — File Hash Before OCR, Always
-
-Before running OCR on any uploaded PDF:
-1. Compute SHA-256 hash of the file bytes
-2. Check the database for an existing hash match
-3. If found: return cached extraction result — do not re-run OCR
-4. If not found: run OCR, then save hash and results to database
-
-This prevents repeating 14 seconds of OCR processing on retry requests for the same document.
-
-### Rule 9 — LLM Calls Must Always Have a Fallback
-
-Every call to the local LLM must have a fallback that activates on:
-
-- Timeout beyond the configured limit
-- Connection refused
-- Invalid or unexpected response format
-- Empty response
-
-The fallback for commentary analysis is keyword-based matching.
-The pipeline must never return a 500 error because the local LLM is down or slow.
-
-### Rule 10 — Feedback Must Be Stored With Full Context
-
-Every operator correction must include:
-
-- `original_ocr_text` — what OCR produced
-- `system_extracted_value` — what extraction produced from the OCR
-- `operator_provided_value` — what the operator says is correct
-- `rule_id` — which rule was involved
-- `source_page` — which page the field came from
-
-Missing any of these makes the training example useless for the ML model.
-
 ---
 
 ## Engineering Strategy Principles
@@ -267,11 +158,8 @@ The most dangerous debt in this codebase is extraction patterns that assume spec
 The reviewer is a processing component in the pipeline whose domain expertise cannot be automated. Design every reviewer-facing output with this in mind:
 
 1. **Every field shown to the reviewer must include:** confidence score plus the exact source text from which it was extracted. A reviewer cannot correct what they cannot see the origin of.
-
 2. **Corrections must be structured, not free-form.** When a reviewer changes a value, capture: was the OCR wrong, was the label not recognized, was the document format unusual? This structured feedback is training data.
-
 3. **Minimize cognitive load.** High-confidence extractions → compact, scannable. Low-confidence or REVIEW status → prominent with clear plain-language explanation. Never use raw confidence numbers as the only signal — translate them.
-
 4. **Reviewer corrections are the primary training signal** for improving extraction. Every feedback record that lacks original value, corrected value, rule ID, and source page is a lost training opportunity.
 
 ---
@@ -280,13 +168,13 @@ The reviewer is a processing component in the pipeline whose domain expertise ca
 
 A system whose behavior is invisible is not a product-grade system. The following metrics must be tracked and visible at all times:
 
-| Metric | Purpose |
-|--------|---------|
-| Field-level extraction accuracy by AMC | Is extraction improving or regressing? |
-| Human correction rate by field type | Which fields need more work? |
-| Confidence calibration (score vs actual accuracy) | Are confidence scores honest? |
-| LLM call count and status | Is the model being called? Timing out? |
-| Processing job durations by stage | Where is time being spent? |
+| Metric                                            | Purpose                                |
+| ------------------------------------------------- | -------------------------------------- |
+| Field-level extraction accuracy by AMC            | Is extraction improving or regressing? |
+| Human correction rate by field type               | Which fields need more work?           |
+| Confidence calibration (score vs actual accuracy) | Are confidence scores honest?          |
+| LLM call count and status                         | Is the model being called? Timing out? |
+| Processing job durations by stage                 | Where is time being spent?             |
 
 When any metric changes unexpectedly, it signals that something in the system changed — new document format, model drift, real improvement, or regression. Without this visibility, you are guessing.
 
@@ -340,13 +228,9 @@ Never route a text-only task to the vision model. Never route an image task to t
 Every design decision made today will be read, debugged, and extended by someone in two years. The discipline of long-game thinking:
 
 1. **Write code for the next reader, not just the next execution.** Functions do what their names say. Variable names describe what they hold. The one-sentence rule is the test.
-
 2. **Never leave a TODO in production code without a linked issue.** A TODO with no accountability is a debt note with no maturity date.
-
 3. **Extraction patterns change as document formats evolve.** Every regex that assumes a specific label wording will eventually break. The path forward is AMC format profiles, synonym registries, and positional extraction — not more specific regexes.
-
 4. **Model versions must be archived indefinitely.** When a model is retrained and deployed, every historical extraction result must remain traceable to the model version that produced it.
-
 5. **Data is the most valuable long-term asset.** The raw OCR text, extracted fields, and feedback events stored in the database are more valuable than any code. Protect them — never truncate, never break the schema without migration, never delete without archiving.
 
 ---
@@ -550,7 +434,7 @@ Enterprise-grade intelligent document processing platforms — such as those off
 
 Every serious enterprise IDP platform uses a pre-trained foundation model as the base and then fine-tunes it on domain-specific data. The foundation model provides broad language understanding — it has seen billions of documents and understands how language works in general. The fine-tuning step adapts that broad knowledge to the specific vocabulary, document structures, and field definitions of the target domain.
 
-For this platform, the equivalent of the foundation model is a general-purpose local LLM like Mistral or Llama. The equivalent of fine-tuning is building a training dataset from human-reviewed extractions and using it to train a lightweight domain-specific classifier or NER model. You do not need GPU clusters to do this — lightweight models trained on labeled examples run on ordinary hardware.
+For this platform, the equivalent of the foundation model is a general-purpose local LLM like Mistral or mirtisal or llava. The equivalent of fine-tuning is building a training dataset from human-reviewed extractions and using it to train a lightweight domain-specific classifier or NER model. You do not need GPU clusters to do this — lightweight models trained on labeled examples run on ordinary hardware.
 
 **The Human-in-the-Loop Architecture**
 
@@ -667,11 +551,8 @@ Confidence scores are the mechanism by which the system communicates its uncerta
 Confidence scoring should be a function of multiple factors, each contributing to the final score:
 
 - **Extraction tier used:** Exact label match from the regex tier produces the highest base confidence. Synonym match from the expanded regex tier produces slightly lower confidence. Embedding match from the semantic tier produces moderate confidence. LLM inference produces variable confidence based on the LLM's own output quality signals.
-
 - **OCR quality on the source page:** A field extracted from a page where OCR confidence is high warrants higher extraction confidence. A field extracted from a noisy page warrants lower confidence regardless of how well the pattern matched.
-
 - **Field value plausibility:** A date field that produces a date within a plausible range warrants higher confidence than one that produces an implausible date. A dollar amount within the expected range for the document type warrants higher confidence.
-
 - **Agreement across extraction tiers:** When multiple extraction tiers independently produce the same value, confidence is higher than when only one tier finds the value.
 
 **Confidence Calibration**
