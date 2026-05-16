@@ -402,6 +402,9 @@ class PageOcrResultRow(Base):
     # Day 8: normalization transformation history (JSON list of {transform, before, after})
     normalization_log_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # SHA-256 file hash — the dedup key for Rule 8 cache lookup
+    file_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+
     # Raw text character length before and after normalization
     raw_text_length: Mapped[int] = mapped_column(Integer, default=0)
     normalized_text_length: Mapped[int] = mapped_column(Integer, default=0)

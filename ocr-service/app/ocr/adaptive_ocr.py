@@ -397,9 +397,15 @@ class AdaptiveOCREngine:
             from app.database import get_db
             from app.models.db_models import PageOcrResultRow
             with get_db() as session:
-                existing = session.query(PageOcrResultRow).filter_by(
-                    document_id=file_hash
+                # Look up by file_hash column (the proper dedup key)
+                # Fall back to document_id for backwards compatibility
+                existing = session.query(PageOcrResultRow).filter(
+                    PageOcrResultRow.file_hash == file_hash
                 ).first()
+                if existing is None:
+                    existing = session.query(PageOcrResultRow).filter_by(
+                        document_id=file_hash
+                    ).first()
                 if existing:
                     return AdaptiveDocument(
                         path="(cached)",
@@ -413,7 +419,11 @@ class AdaptiveOCREngine:
         return None
 
     def persist_ocr_metadata(self, doc: AdaptiveDocument, document_id: str) -> None:
-        """Store per-page OCR metadata in adaptive_page_ocr_results."""
+        """
+        Store per-page OCR metadata in adaptive_page_ocr_results.
+        Stores BOTH the human-readable document_id AND the file_hash.
+        The file_hash is the dedup key for Rule 8 cache lookup.
+        """
         from app.database import get_db
         from app.models.db_models import PageOcrResultRow
 
@@ -422,6 +432,7 @@ class AdaptiveOCREngine:
                 m = page.metadata
                 row = PageOcrResultRow(
                     document_id=document_id,
+                    file_hash=doc.file_hash,    # Rule 8 dedup key
                     page_number=page.page_number,
                     ocr_path=m.ocr_path,
                     word_count_raw=m.word_count_raw,

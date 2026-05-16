@@ -254,37 +254,23 @@ def _verify_value_in_source(value: Optional[str], source_text: Optional[str], fu
 
 
 # ---------------------------------------------------------------------------
-# Ollama client
+# Ollama client — wrapped by resilience layer (all 13 failure modes)
 # ---------------------------------------------------------------------------
 
-def _call_ollama(prompt: str, timeout: int = None) -> Optional[str]:
+def _call_ollama(prompt: str, chunk_text: str = "", amc_id: Optional[str] = None,
+                 text_quality_score: float = 1.0) -> Optional[str]:
     """
-    Call Ollama with the text model. Returns raw response text or None on failure.
-    CLAUDE.md Rule 9: always has a fallback — returns None if Ollama is unavailable.
+    Call Ollama through the resilience layer.
+    Defenses applied: circuit breaker, quality gate, AMC terminology, semaphore,
+    model pinning, format validation. Rule 9 fallback always returns None on failure.
     """
-    if timeout is None:
-        timeout = OLLAMA_TIMEOUT_TEXT
-
-    try:
-        resp = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": OLLAMA_TEXT_MODEL,
-                "prompt": prompt,
-                "system": _SYSTEM_PROMPT,
-                "stream": False,
-                "options": {
-                    "temperature": 0.0,   # deterministic output
-                    "num_predict": 2048,
-                },
-            },
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        return resp.json().get("response", "")
-    except Exception as exc:
-        logger.warning("Ollama call failed: %s", exc)
-        return None
+    from app.extraction.llm_resilience import resilient_ollama_call
+    return resilient_ollama_call(
+        prompt=prompt,
+        chunk_text=chunk_text,
+        amc_id=amc_id,
+        text_quality_score=text_quality_score,
+    )
 
 
 def _parse_llm_response(response_text: str) -> Dict[str, dict]:
@@ -346,11 +332,19 @@ class LLMTier1Extractor:
         document_type: str,
         already_found: Dict[str, ExtractionResult],
         total_pages: int,
+        amc_id: Optional[str] = None,
+        page_quality_scores: Optional[Dict[int, float]] = None,
     ) -> Dict[str, ExtractionResult]:
         """
         Extract fields that spatial extraction didn't find.
+        amc_id: used for terminology normalization before sending to LLM (Defense 1+10).
+        page_quality_scores: OCR quality per page — low-quality pages skip LLM (Defense 5).
         Returns a dict of {canonical_name: ExtractionResult} for newly found fields.
         """
+        from app.extraction.llm_resilience import check_ollama_health, _circuit_is_open
+        if _circuit_is_open():
+            logger.info("LLM circuit breaker open — skipping all LLM extraction")
+            return {}
         if not self.is_available():
             logger.info("Ollama not available — Tier 1 LLM skipped")
             return {}
@@ -389,10 +383,16 @@ class LLMTier1Extractor:
             if len(chunk.strip()) < 50:
                 continue
 
-            # Build prompt and call LLM
+            # Defense 5: compute average quality for this section's pages
+            if page_quality_scores:
+                section_quality = sum(page_quality_scores.get(p, 1.0) for p in section_pages) / max(len(section_pages), 1)
+            else:
+                section_quality = 1.0
+
+            # Build prompt and call LLM through resilience layer
             prompt = _build_extraction_prompt(section, missing_in_section, chunk, document_type)
             start = time.time()
-            response = _call_ollama(prompt)
+            response = _call_ollama(prompt, chunk_text=chunk, amc_id=amc_id, text_quality_score=section_quality)
             elapsed = int((time.time() - start) * 1000)
 
             if not response:
@@ -414,10 +414,23 @@ class LLMTier1Extractor:
                 if not value or value.lower() in ("null", "none", "n/a", ""):
                     continue
 
-                # Hallucination detection
-                confidence_mult = _verify_value_in_source(value, source_text, full_text)
-                is_hallucination = confidence_mult < 0.5
-                base_conf = _LLM_VERIFIED_CONFIDENCE if confidence_mult >= 0.85 else _LLM_BASE_CONFIDENCE
+                # Defense 4: Tighter hallucination detection via resilience layer
+                from app.extraction.llm_resilience import verify_extraction_against_source, validate_extracted_format
+                verified, confidence_mult = verify_extraction_against_source(value, source_text, full_text)
+                is_hallucination = not verified
+
+                # Defense 7: Format validation
+                fd = self._schema.get_field(fname)
+                if fd and fd.data_type not in ("string", "string_list"):
+                    fmt_ok, normalized_val = validate_extracted_format(value, fd.data_type)
+                    if fmt_ok and normalized_val:
+                        value = normalized_val
+                    elif not fmt_ok:
+                        logger.debug("LLM format invalid for %s: %r (type=%s)", fname, value[:30], fd.data_type)
+                        continue  # skip this field — wrong format
+                # Defense 11: use calibrated confidence, not LLM's self-reported
+                from app.extraction.llm_resilience import llm_base_confidence
+                base_conf = llm_base_confidence(verified)
                 final_conf = min(
                     _HALLUCINATION_CONFIDENCE_CAP if is_hallucination else base_conf,
                     base_conf * confidence_mult,

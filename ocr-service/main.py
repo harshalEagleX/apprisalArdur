@@ -70,12 +70,15 @@ async def startup():
 
 @app.get("/health")
 async def health():
+    from app.extraction.llm_resilience import check_ollama_health
+    ollama_status = check_ollama_health()
     return {
         "status": "ok",
         "schema_version": schema_loader.schema_version,
         "field_count": len(schema_loader.all_fields()),
         "model_version": MODEL_VERSION,
         "database": "connected" if verify_connection() else "disconnected",
+        "ollama": ollama_status,
     }
 
 
