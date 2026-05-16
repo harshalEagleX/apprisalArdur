@@ -52,6 +52,14 @@ async def startup():
     log.info("Schema: version=%s fields=%d", schema_loader.schema_version, len(schema_loader.all_fields()))
     if verify_connection():
         log.info("Database: connected")
+        # Day 23: seed routing config from schema on startup if not already done
+        try:
+            from app.services.routing_config import seed_routing_config
+            seeded = seed_routing_config()
+            if seeded:
+                log.info("Routing config seeded: %d fields", seeded)
+        except Exception as exc:
+            log.warning("Routing config seed failed: %s", exc)
     else:
         log.warning("Database: NOT connected — check DATABASE_URL in .env")
 
@@ -252,3 +260,92 @@ async def trigger_baseline(label: str = "manual"):
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Week 4 — Semantic validation + routing config + AMC profile endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/validate/{document_id}")
+async def validate_document(document_id: str, doc_type: str = "appraisal_report"):
+    """Day 21: Run semantic validation on an extracted document."""
+    from app.database import get_db
+    from app.models.db_models import ExtractionResultRow
+    from app.core.result import ExtractionResult, ExtractionResultSet, ExtractionMethod
+    from app.services.semantic_validator import validate
+
+    # Reconstruct ExtractionResultSet from DB results
+    rs = ExtractionResultSet(document_path="", document_type=doc_type)
+    try:
+        with get_db() as session:
+            rows = session.query(ExtractionResultRow).filter_by(
+                document_id=document_id, document_type=doc_type
+            ).order_by(ExtractionResultRow.extracted_at.desc()).all()
+
+            seen = set()
+            for row in rows:
+                if row.field_name in seen:
+                    continue
+                seen.add(row.field_name)
+                rs.add(ExtractionResult(
+                    canonical_name=row.field_name,
+                    document_type=doc_type,
+                    value=row.field_value,
+                    extraction_method=row.extraction_method or ExtractionMethod.NOT_FOUND,
+                    confidence=row.confidence_score or 0.0,
+                    source_page=row.source_page or 0,
+                ))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"DB read failed: {exc}")
+
+    results = validate(rs, document_id)
+    return {
+        "document_id": document_id,
+        "rules_run": len(results),
+        "failures": [{"rule": r.rule_id, "explanation": r.explanation} for r in results if r.result == "fail"],
+        "warnings": [{"rule": r.rule_id, "explanation": r.explanation} for r in results if r.result == "warning"],
+        "passes": sum(1 for r in results if r.result == "pass"),
+    }
+
+
+@app.get("/routing/config")
+async def get_routing_config(field_name: Optional[str] = None, amc_id: Optional[str] = None):
+    """Day 23: Get confidence thresholds for a field (from DB)."""
+    from app.services.routing_config import get_thresholds
+    from app.core.schema import schema_loader
+    if field_name:
+        return get_thresholds(field_name, amc_id)
+    # Return all fields
+    return {f.canonical_name: get_thresholds(f.canonical_name, amc_id) for f in schema_loader.all_fields()}
+
+
+class RoutingUpdateRequest(BaseModel):
+    field_name: str
+    auto_accept: float
+    review: float
+    reject: float
+    amc_id: Optional[str] = None
+    rationale: str = ""
+
+
+@app.put("/routing/config")
+async def update_routing_config(req: RoutingUpdateRequest):
+    """Day 23: Update routing threshold — no developer needed, no deployment."""
+    from app.services.routing_config import update_threshold
+    success = update_threshold(
+        field_name=req.field_name,
+        auto_accept=req.auto_accept,
+        review=req.review,
+        reject=req.reject,
+        amc_id=req.amc_id,
+        rationale=req.rationale,
+        updated_by="admin_api",
+    )
+    return {"updated": success, "field_name": req.field_name, "amc_id": req.amc_id}
+
+
+@app.get("/amc/profiles")
+async def list_amc_profiles():
+    """Day 24: List all AMC profiles — for the operations dashboard."""
+    from app.services.amc_profile_service import list_profiles
+    return list_profiles()

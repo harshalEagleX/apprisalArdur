@@ -26,10 +26,12 @@ from app.models.db_models import (
     DocumentClassificationRow,
     ExtractionResultRow,
     CorrectionRow,
+    FieldRoutingConfigRow,
     FieldSchemaLogRow,
     PageOcrResultRow,
     TestGroundTruthRow,
     TestSetDocumentRow,
+    ValidationResultRow,
 )
 
 # Only adaptive_* tables — never touch Java-owned tables
@@ -44,6 +46,8 @@ MANAGED_TABLES = [
     "adaptive_baseline_runs",
     "adaptive_page_ocr_results",
     "adaptive_document_classifications",
+    "adaptive_field_routing_config",    # Day 23
+    "adaptive_validation_results",      # Day 21
 ]
 
 

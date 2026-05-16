@@ -1,5 +1,5 @@
 """
-Days 3–7 — Python-owned database models
+Days 3–7 + Week 4 — Python-owned database models
 
 These tables belong to the Python OCR service.
 Created/dropped via `python manage_db.py` (no Alembic, per CLAUDE.md policy).
@@ -448,3 +448,57 @@ class DocumentClassificationRow(Base):
     classified_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )
+
+
+# ---------------------------------------------------------------------------
+# adaptive_field_routing_config  (Day 23)
+# ---------------------------------------------------------------------------
+
+class FieldRoutingConfigRow(Base):
+    """
+    Day 23: Per-field, per-AMC confidence thresholds stored in DB as configuration.
+    Plan Day 23: 'All threshold values must be stored in the database, not hardcoded.'
+    Architecture Guide §14: 'Thresholds should be configurable per field and per AMC.'
+    """
+    __tablename__ = "adaptive_field_routing_config"
+    __table_args__ = (
+        UniqueConstraint("field_name", "amc_id", name="uq_routing_field_amc"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    field_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    amc_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+
+    auto_accept: Mapped[float] = mapped_column(Float, nullable=False, default=0.90)
+    review: Mapped[float] = mapped_column(Float, nullable=False, default=0.65)
+    reject: Mapped[float] = mapped_column(Float, nullable=False, default=0.30)
+
+    rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_by: Mapped[str] = mapped_column(String(64), default="system")
+
+
+# ---------------------------------------------------------------------------
+# adaptive_validation_results  (Day 21)
+# ---------------------------------------------------------------------------
+
+class ValidationResultRow(Base):
+    """
+    Day 21: Semantic validation results per document, per rule.
+    Architecture Guide §7: context-aware validation that checks field relationships.
+    Each row is one rule result; the collection forms the QC report.
+    """
+    __tablename__ = "adaptive_validation_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    transaction_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+
+    rule_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    rule_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    fields_involved: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list
+    result: Mapped[str] = mapped_column(String(16), nullable=False)  # pass|fail|warning|info
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    field_values_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    validated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
