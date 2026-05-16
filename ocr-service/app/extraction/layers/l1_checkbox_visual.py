@@ -29,10 +29,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import cv2
-import numpy as np
-
 logger = logging.getLogger(__name__)
+
+# Defer heavy imports to function level to avoid circular import issues
+# cv2 and numpy are imported inside functions that need them
 
 # Render DPI for checkbox analysis (150 is enough, faster than 300)
 _RENDER_DPI = 150
@@ -91,8 +91,9 @@ class CheckedBox:
     page_number: int
 
 
-def _render_page_to_image(page) -> np.ndarray:
+def _render_page_to_image(page):
     """Render a fitz page to a grayscale numpy array at _RENDER_DPI."""
+    import numpy as np
     import fitz
     scale = _RENDER_DPI / 72.0
     mat = fitz.Matrix(scale, scale)
@@ -100,41 +101,35 @@ def _render_page_to_image(page) -> np.ndarray:
     return np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
 
 
-def _find_checkbox_squares(gray: np.ndarray) -> List[Tuple[int, int, int, int]]:
+def _find_checkbox_squares(gray) -> List[Tuple[int, int, int, int]]:
     """
     Find checkbox squares via contour detection.
     Returns list of (x, y, w, h) for each candidate checkbox.
     """
-    # Threshold
+    import cv2
     _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
-
-    # Find contours
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     boxes = []
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        # Filter by size (checkbox-sized squares)
         if not (_CHECKBOX_MIN_SIZE <= w <= _CHECKBOX_MAX_SIZE and
                 _CHECKBOX_MIN_SIZE <= h <= _CHECKBOX_MAX_SIZE):
             continue
-        # Must be roughly square
         if max(w, h) / max(min(w, h), 1) > 2.0:
             continue
         boxes.append((x, y, w, h))
-
     return boxes
 
 
-def _measure_fill(gray: np.ndarray, x: int, y: int, w: int, h: int) -> float:
+def _measure_fill(gray, x: int, y: int, w: int, h: int) -> float:
     """Measure what fraction of pixels inside the box are dark (filled)."""
-    # Add 2px margin inside to avoid box border itself
+    import numpy as np
     margin = 2
     inner = gray[y + margin: y + h - margin, x + margin: x + w - margin]
     if inner.size == 0:
         return 0.0
-    dark_pixels = np.sum(inner < 128)
-    return float(dark_pixels) / inner.size
+    return float(np.sum(inner < 128)) / inner.size
 
 
 def _find_text_right_of(
@@ -213,6 +208,7 @@ def extract_checkboxes_visual(
 
         # Render and detect
         try:
+            import cv2, numpy as np
             gray = _render_page_to_image(page)
             boxes = _find_checkbox_squares(gray)
         except Exception as exc:
