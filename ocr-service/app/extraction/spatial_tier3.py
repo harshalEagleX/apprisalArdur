@@ -108,16 +108,33 @@ class SpatialTier3Extractor:
                 except Exception as exc:
                     logger.warning("Scanned page OCR failed p%d: %s", page_num + 1, exc)
 
+        # Step 1b: Checkbox extraction from PDF drawings layer (BEFORE text-spatial)
+        # This correctly detects checked checkboxes on UAD forms (TOTAL software)
+        # where the check mark is a vector X in the drawings layer, not text.
+        checkbox_results: Dict[str, ExtractionResult] = {}
+        try:
+            from app.ocr.checkbox_extractor import checkbox_extractor
+            checkbox_results = checkbox_extractor.extract_document(
+                pdf_path, document_type, max_pages=min(10, total_pages)
+            )
+        except Exception as exc:
+            logger.warning("Checkbox extraction failed (non-fatal): %s", exc)
+
         fitz_doc.close()
 
         # Build full-document word map (all pages merged)
         full_map = self._merge_page_maps(page_maps)
 
         # Run spatial extraction for every schema field
+        # Checkbox results take priority for enum/boolean fields
         spatial_results: Dict[str, ExtractionResult] = {}
 
         for fd in self._schema.all_fields():
-            result = self._extract_field(fd, page_maps, full_map, document_type, total_pages)
+            # Checkbox extraction has highest confidence for enum/boolean fields
+            if fd.canonical_name in checkbox_results and checkbox_results[fd.canonical_name].found:
+                result = checkbox_results[fd.canonical_name]
+            else:
+                result = self._extract_field(fd, page_maps, full_map, document_type, total_pages)
             spatial_results[fd.canonical_name] = result
             result_set.add(result)
 
