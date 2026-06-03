@@ -1,0 +1,25 @@
+# QC rule-engine thresholds. Editable without code changes (P-4).
+# Confidence cutoffs: below these, an otherwise PASS/FAIL rule is downgraded to
+# VERIFY so a human confirms. Checkbox reads are noisier → higher bar.
+confidence:
+  structured: 0.75        # addresses, names, numbers, dates
+  checkbox: 0.85          # checkbox / enum / boolean fields
+  commentary: 0.0         # NLP rules always VERIFY (advisory)
+
+# Fuzzy cross-document match bands (Jaro-Winkler).
+match:
+  match_threshold: 0.88   # >= → match (PASS)
+  review_threshold: 0.75  # [review, match) → VERIFY; < review → mismatch (FAIL)
+
+# Numeric tolerances.
+numeric:
+  currency_tolerance: 0.0 # exact match after stripping $ and commas
+
+# Per-rule semantic thresholds drawn from the checklist text.
+semantic:
+  value_vs_contract_pct: 20.0      # appraised value vs contract price hold band
+  predominant_price_pct: 10.0      # market value vs predominant price comment band
+  listing_price_pct: 3.0           # listing vs opinion of value comment band
+  net_adjustment_pct: 15.0         # comp net adjustment cap
+  comp_sale_window_months: 12      # comparable sale recency
+  remaining_economic_life_min: 30  # FHA/VA minimum years

@@ -1,0 +1,124 @@
+================================================================================
+APPRISAL ADAPTIVE EXTRACTION + QC ENGINE — TASK HISTORY
+Branch: adaptive | Maintained by the AI assistant, updated each work session.
+Dates are absolute (YYYY-MM-DD). Newest section at the bottom.
+================================================================================
+
+LEGEND:  [x] done   [~] partial/in-progress   [ ] not started
+
+--------------------------------------------------------------------------------
+2026-06-03  — SESSION 1: pipeline hardening + DB + QC rule engine + engagement extractor
+--------------------------------------------------------------------------------
+
+ENVIRONMENT / GROUNDWORK
+[x] Confirmed runtime: conda env `apprisal` (py3.11) at
+    /opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/python (has all deps).
+    Local Postgres `ardurApprisal` :5432. Ollama mistral:7b + llava:13b. Tesseract 5.5.2.
+[x] Read all planning docs + QCChceklistOpus.md + both QC Checklist xlsx.
+[x] Mapped uploads/ structure: 15 transaction folders (appraisal+engagement+contract),
+    Orders/ = 27 loose PDFs. ~7 demo properties repeated across batches.
+
+EXTRACTION PIPELINE FIXES
+[x] BUG: l3_paddle_ocr.py:59 stray `@dataclass_like = None` SyntaxError -> L3 never
+    imported -> scanned PDFs got 0 OCR. FIXED (removed line).
+[x] BUG: pytesseract in-memory image roundtrip broken in this env (UnicodeDecodeError
+    byte 0x89). FIXED adaptive_ocr._run_tesseract + spatial_extractor.from_tesseract
+    to write a temp PNG and pass the path. (Also fixes test_pipeline_detects_scanned_contract.)
+[x] Wired PaddleOCR into scanned-page OCR (SpatialWordMap.from_paddle_words +
+    spatial_tier3._ocr_scanned_page PaddleOCR-first). Scanned appraisal 0 -> 29+ fields.
+[x] BUG: adaptive_ocr._check_cache returned empty-pages doc on any page_ocr row match
+    -> poisoned OCR. FIXED to always cache-miss (return None) until real cache exists.
+[x] pytest: 137 passed, 1 failed before fixes (the scanned-contract test, now fixed).
+
+DB PERSISTENCE (every adaptive_* table populated)
+[x] Built app/services/pipeline_runner.py::process_and_persist — classify -> extract
+    (layered orchestrator) -> validate -> route -> persist to adaptive_extraction_results
+    (+routing), adaptive_document_classifications, adaptive_page_ocr_results,
+    adaptive_validation_results. Wired /qc/process to use it (was weak Tier3PatternExtractor).
+[x] Batch runner scripts/process_corpus.py. Ran full corpus: 35/35 docs, 0 errors,
+    3280 field extractions. Appraisals avg 122 fields (digital 140-169), engagement 44,
+    contract 32. Verified rows in DB.
+[x] NOTE: pg_stat_user_tables n_live_tup is stale (read 0); use SELECT count(*).
+
+QC RULE ENGINE (app/qc/) — full product, MIRA-aligned (per user answers)
+[x] 5-state model PASS/FAIL/VERIFY/HOLD/NOT_APPLICABLE/SKIPPED (result.py).
+[x] matching.py — pure Jaro-Winkler + address/name normalize; bands 0.88 match /
+    0.75 review; currency exact.
+[x] context.py — QCContext over 3 docs; derives loan/transaction/form type.
+[x] config.py + config/qc_thresholds.yaml + config/qc_templates.yaml (VERBATIM
+    rejection templates from the Detailed.xlsx).
+[x] registry.py (@rule) + helpers.py (present/format/cross_doc_match/boolean, with
+    confidence->VERIFY downgrade) + engine.py (run_qc, applicability, persist).
+[x] 27 Phase 1-2 rules: subject, contract, neighborhood, site, signature, global.
+[x] transaction.py::run_transaction_qc(folder) — extract 3 docs -> context -> engine ->
+    persist to adaptive_validation_results. Verified on 28203 Fantail.
+
+ENGAGEMENT-LETTER EXTRACTOR (raises cross-doc rule accuracy)
+[x] app/extraction/engagement_extractor.py — label-anchored, Format A (Equity Solutions
+    next-line) + Format B (ESFL/ASAP same-line) + no-comma addresses. Parses property
+    block, splits lender name/address, derives loan/transaction type. Tested on 4 letters.
+[x] Wired as authoritative overlay in transaction._overlay_engagement (owns engagement
+    cross-doc fields; drops layered garbage).
+[x] Measured: 28203 Fantail FAIL 2->1, PASS 16->20. S-1 address/city + S-10 lender PASS.
+
+APPRAISAL SUBJECT-ROW FIX (2026-06-03, same session)
+[x] spatial_tier3._subject_address_row — segments the URAR subject header row by
+    label x-positions so subject city/state/zip are read (not lender block / street#).
+    Verified: Fantail TX/77494, Theon FL/33870, Pearson MI/48316, city "Shelby Township".
+[x] RESULT: 28203 Fantail QC FAIL->VERIFY (PASS 21, FAIL 0, VERIFY 5). All deterministic
+    subject + cross-doc rules auto-clear; only genuine review items remain (scanned
+    contract price/date, lender address, appraiser-name fuzzy, boundaries).
+[x] Theon (refi): C-1 correctly FAILs (contract section populated on refinance).
+
+RULE EXPANSION BATCH (2026-06-03, same session)
+[x] Added rules: Improvements (I-1 gen desc, I-7 room count, I-9 condition C1-6,
+    I-Q quality Q1-6, I-11 conformity), Reconciliation (R-1 SCA==market value w/
+    confidence gate, R-2 As-Is/Subject-To), Cost (CA-1 site value, CA-2 econ life
+    FHA/VA), Neighborhood (N-1 characteristics checkboxes, N-3 price range lo<=hi),
+    Site (ST-2 area unit, ST-7 utilities). Templates added to qc_templates.yaml.
+[x] Total rules now ~48 across 11 sections. Validated on 28203 Fantail: 32 PASS,
+    1 FAIL (R-1 value), 10 VERIFY, 1 N/A, 4 SKIPPED — no crashes, sensible results.
+    Improvements all PASS (condition C3, quality Q3). R-1 gated to VERIFY on low conf.
+
+SALES COMPARISON RULES (2026-06-03, same session)
+[x] app/qc/rules/sales_comparison.py — SCA-2 (min comparable sales w/ value
+    threshold), SCA-NET (net adjustment <=15% of comp sale price), SCA-BR (market
+    value bracketed by adjusted sale prices). Built on the RELIABLE Camelot indexed
+    fields comp_{1..6}_sale_price/_net_adjustment/_adjusted_sale_price.
+[x] Validated on synthetic contexts: 3-comp clean PASS/PASS; 2-comp $1M -> VERIFY
+    count + 20% net adj + out-of-bracket. 43 registered rules total.
+[~] DEFERRED SCA grid-cell rules (SCA-3/4/5/6/7/8/9/11/12 per-comp address/proximity/
+    data-source/date-of-sale/"0 if no adjustment"): comp_N_* template fields are noisy
+    (comp_N_gla holds the adjustment not GLA; comp_N_data_source="used, offering..").
+    GATE: needs a dedicated comparable-grid extractor (per-comp columns) — analogous
+    to the engagement extractor. This is the #1 SCA accuracy lever.
+
+COMPARABLE-GRID EXTRACTOR (2026-06-03, same session)
+[x] app/extraction/comp_grid_extractor.py — reconstructs the URAR sales grid
+    geometrically: finds grid page(s), detects comp column anchors (merge raw
+    anchors within 100px to avoid long-address false splits; subject column is
+    in the x<130 label region so detected anchors are comps-only), reads each
+    DESCRIPTIVE feature per comp column (address, proximity, data source,
+    date-of-sale, location, view, design, quality, actual age, condition, real
+    GLA + gla_adjustment, garage). Currency columns (sale/net/adjusted) left to
+    Camelot. Verified: Fantail comp1 '2531 Llano Springs Dr' 0.08mi NW C3 Q3
+    GLA 2369; Theon comps correct. FIXES the comp_N_gla=adjustment bug.
+[x] Wired as appraisal overlay in transaction._overlay_comp_grid.
+[x] Unlocked SCA grid rules: SCA-4 (proximity present+direction), SCA-5 (data
+    source present), SCA-8 (date-of-sale c-before-s sequencing). Gated _comp_indices
+    on Camelot sale_price so blank template columns don't make phantom findings.
+[x] Validated on Fantail: SCA 6 PASS / 3 VERIFY (data source) / 1 SKIP. 46 rules.
+
+WHAT'S LEFT (priority order)
+[ ] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
+    grid extractor right-column capture; add SCA-16 condition consistency vs subject.
+[ ] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->
+    enables C-2 price/date + C-4 concessions to move from VERIFY to decisive.
+[ ] Finish Phase 1-2 rules (remaining subject/site/improvement presence, full signature
+    cross-doc set, SCA address/proximity/data-source presence).
+[ ] Phase 3 intra-report consistency: grid<->improvements<->sketch, land-use=100%,
+    net-adj 15%, bracketing, date sequencing in grid.
+[ ] Phase 4 checkbox-confidence rules; Phase 5 NLP commentary (mistral); Phase 6 photo
+    presence (llava); Phase 7 external data (USPS/ASC.gov stubs); Phase 8 FHA/USDA overlays.
+[ ] Reviewer output surface (Next.js dashboard reading adaptive_validation_results w/ bbox).
+[ ] Orders/ (27 loose PDFs) auto-classify + QC.

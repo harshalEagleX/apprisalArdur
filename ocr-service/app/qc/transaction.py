@@ -1,0 +1,162 @@
+"""
+Transaction-level QC entry point.
+
+Given a transaction folder (with appraisal/, engagement/, contract/ subfolders)
+this: extracts each document with the layered orchestrator, builds a QCContext,
+runs the rule engine, and (optionally) persists the QC report.
+
+This is the product entry point the API/dashboard call to QC a whole case.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from pathlib import Path
+from typing import Dict, Optional
+
+from app.qc.config import qc_config
+from app.qc.context import QCContext
+from app.qc.engine import persist_report, run_qc
+from app.qc.result import QCReport
+
+# ensure rules are registered
+import app.qc.rules  # noqa: F401
+
+logger = logging.getLogger(__name__)
+
+_DOC_TYPE = {
+    "appraisal": "appraisal_report",
+    "engagement": "engagement_letter",
+    "contract": "sales_contract",
+}
+
+
+def _first_pdf(folder: Path, sub: str) -> Optional[Path]:
+    d = folder / sub
+    if not d.is_dir():
+        return None
+    pdfs = sorted(d.glob("*.pdf"))
+    return pdfs[0] if pdfs else None
+
+
+def extract_documents(folder: Path) -> Dict[str, object]:
+    """Extract each present document. Returns {role: ExtractionResultSet}."""
+    from app.extraction.layers.orchestrator import run_full_extraction
+    sets: Dict[str, object] = {}
+    for role, dtype in _DOC_TYPE.items():
+        pdf = _first_pdf(folder, role)
+        if pdf is None:
+            continue
+        try:
+            rs = run_full_extraction(pdf, dtype, use_paddle=True, use_llm=False)
+            if role == "engagement":
+                rs = _overlay_engagement(rs, pdf, dtype)
+            elif role == "appraisal":
+                rs = _overlay_comp_grid(rs, pdf, dtype)
+            sets[role] = rs
+        except Exception as exc:
+            logger.error("Extraction failed for %s/%s: %s", folder.name, role, exc)
+    return sets
+
+
+def _overlay_comp_grid(rs, pdf, dtype):
+    """Overlay per-comparable DESCRIPTIVE grid fields (address, proximity, date,
+    condition, quality, real GLA, location, data source) parsed column-wise from
+    the sales grid. Currency comp fields (sale_price/net/adjusted) are left to
+    Camelot, which reads those right-aligned columns reliably."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.comp_grid_extractor import extract_comp_grid
+    try:
+        grid = extract_comp_grid(pdf)
+    except Exception as exc:
+        logger.warning("Comp-grid extraction failed for %s: %s", pdf.name, exc)
+        return rs
+    if not grid:
+        return rs
+    existing = {name: r for name, r in rs}
+    for name, value in grid.items():
+        if not value or not str(value).strip():
+            continue
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=str(value),
+            raw_source_text=str(value), extraction_method="comp_grid",
+            confidence=0.88, source_page=0, normalization_applied=["comp_grid"],
+        )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method="comp_grid+layered")
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def _overlay_engagement(rs, pdf, dtype):
+    """Overlay the dedicated label-based engagement fields on top of the layered
+    output — the order form is free-form, so the label extractor is far more
+    accurate for the cross-document fields the QC rules depend on."""
+    from app.core.result import ExtractionResult
+    from app.extraction.engagement_extractor import extract_engagement_fields
+    try:
+        fields = extract_engagement_fields(pdf)
+    except Exception as exc:
+        logger.warning("Engagement label extraction failed for %s: %s", pdf.name, exc)
+        return rs
+    # Fields the label extractor OWNS for an engagement letter. For any owned
+    # field the label extractor did not find, drop the layered value too — the
+    # free-form layered read of these is unreliable (it produced merged/garbage
+    # values), and a wrong value is worse than NOT_FOUND for a cross-doc rule.
+    owned = {
+        "property_address", "city", "state", "zip_code", "county",
+        "borrower_name", "co_borrower_name", "lender_name", "lender_address",
+        "loan_type", "assignment_type", "form_type",
+    }
+    existing = {name: r for name, r in rs}
+    for name in owned:
+        if name not in fields:
+            existing.pop(name, None)
+    for name, value in fields.items():
+        if not value:
+            continue
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=str(value),
+            raw_source_text=str(value), extraction_method="engagement_label",
+            confidence=0.92, source_page=1, normalization_applied=["engagement_label"],
+        )
+    from app.core.result import ExtractionResultSet
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method="engagement_label+layered")
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def run_transaction_qc(folder, transaction_id: Optional[str] = None,
+                       persist: bool = True, min_phase: Optional[int] = None) -> QCReport:
+    """Full QC for one transaction folder."""
+    folder = Path(folder)
+    transaction_id = transaction_id or str(folder).split("uploads/")[-1]
+    start = time.time()
+
+    sets = extract_documents(folder)
+    ctx = QCContext(
+        transaction_id=transaction_id,
+        appraisal=sets.get("appraisal"),
+        engagement=sets.get("engagement"),
+        contract=sets.get("contract"),
+        structured_conf=qc_config.structured_conf,
+        checkbox_conf=qc_config.checkbox_conf,
+    )
+    report = run_qc(ctx, min_phase=min_phase)
+
+    if persist:
+        doc_id = (_first_pdf(folder, "appraisal") or folder).name
+        persist_report(report, document_id=doc_id)
+
+    logger.info(
+        "QC %s | loan=%s txn=%s | %s | %.1fs",
+        transaction_id, ctx.loan_type, ctx.transaction_type,
+        report.counts(), time.time() - start,
+    )
+    return report

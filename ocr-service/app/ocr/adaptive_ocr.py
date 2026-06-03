@@ -211,10 +211,28 @@ def _preprocess_scanned_page(
 
 
 def _run_tesseract(pil_image) -> str:
-    """Run Tesseract OCR on a preprocessed page image."""
+    """Run Tesseract OCR on a preprocessed page image.
+
+    Writes the image to a temp PNG and passes the *path* to pytesseract rather
+    than the in-memory image. In this environment pytesseract's in-memory
+    temp-file roundtrip is broken — it reads back the input PNG and raises a
+    UnicodeDecodeError on byte 0x89 (the PNG signature). Passing a file path is
+    the reliable code path. See app.ocr.spatial_extractor for the same fix.
+    """
+    import os
+    import tempfile
     import pytesseract
     config = "--psm 6 --oem 3"  # assume uniform block of text, LSTM engine
-    return pytesseract.image_to_string(pil_image, config=config)
+    fd, tmp = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        pil_image.save(tmp)
+        return pytesseract.image_to_string(tmp, config=config)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def _estimate_text_quality(text: str, ocr_path: str) -> float:
@@ -387,35 +405,21 @@ class AdaptiveOCREngine:
     @staticmethod
     def _check_cache(file_hash: str) -> Optional["AdaptiveDocument"]:
         """
-        Rule 8: Check if this file_hash has already been processed.
-        Returns a minimal AdaptiveDocument shell if found, None if not.
-        Currently checks the adaptive_page_ocr_results table for existing rows.
-        Full text cache is not stored here (OCR text lives in page_ocr_results);
-        this check prevents re-running the expensive OCR pipeline.
+        Rule 8 dedup hook. Currently always a cache MISS (returns None).
+
+        The previous implementation returned an AdaptiveDocument shell with
+        pages=[] whenever any adaptive_page_ocr_results row matched the hash.
+        That is not a usable cache: a 0-page document silently produces empty
+        OCR text, so every downstream extraction on a "cache hit" got nothing —
+        and any process (e.g. the end-to-end pipeline runner) that records page
+        OCR metadata by file_hash would poison OCR for that document forever.
+
+        Page OCR rows do not store reconstructable per-page text/positions, so a
+        correct text cache cannot be rebuilt from them here. Until a real cache
+        (full OCR payload keyed by hash) exists, always run OCR — correct and
+        safe beats a broken short-circuit. Re-enable this only when a cache hit
+        can return the actual pages.
         """
-        try:
-            from app.database import get_db
-            from app.models.db_models import PageOcrResultRow
-            with get_db() as session:
-                # Look up by file_hash column (the proper dedup key)
-                # Fall back to document_id for backwards compatibility
-                existing = session.query(PageOcrResultRow).filter(
-                    PageOcrResultRow.file_hash == file_hash
-                ).first()
-                if existing is None:
-                    existing = session.query(PageOcrResultRow).filter_by(
-                        document_id=file_hash
-                    ).first()
-                if existing:
-                    return AdaptiveDocument(
-                        path="(cached)",
-                        file_hash=file_hash,
-                        total_pages=0,
-                        pages=[],
-                        processing_time_ms=0,
-                    )
-        except Exception as exc:
-            logger.debug("Cache check failed (non-fatal): %s", exc)
         return None
 
     def persist_ocr_metadata(self, doc: AdaptiveDocument, document_id: str) -> None:

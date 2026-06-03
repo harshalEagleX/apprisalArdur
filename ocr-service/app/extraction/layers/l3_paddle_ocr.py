@@ -56,9 +56,6 @@ def _page_to_image_array(page) -> np.ndarray:
     return np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
 
 
-@dataclass_like = None   # avoid circular import issues
-
-
 def ocr_scanned_page_with_paddle(
     page,
     page_number: int,

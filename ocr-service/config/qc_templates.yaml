@@ -1,0 +1,95 @@
+# Client-facing rejection templates — VERBATIM from "Appraisal QC Checklist
+# -Detailed.xlsx" (Sheet1). These are the lender-approved standard wording; do
+# not paraphrase. Placeholders {a}/{b}/{value}/{field}/{comp} are filled at
+# emit time. Reviewers may add context but the base text is fixed (Q38).
+
+# ---- Subject ----
+S-1-address:  "Property address does not match with order form."
+S-1-city:     "Property City name does not match with order form."
+S-1-zip:      "Property Zip code does not match with order form. (First 5 digits must match)"
+S-1-county:   "Property county does not match with order form."
+S-2-coborrower: "Please include Co-borrower name {value} as per order form."
+S-2-refi-owner: "Assignment type of the report is noted as 'Refinance'; however, the owner name and the borrower name are different, please revise or comment."
+S-3-blank:    "{field} field should not be blank."
+S-4-taxyear:  "Tax Year must be the latest or within the last 2 years."
+S-4-taxdecimal: "R.E. Taxes should not contain decimals."
+S-5-neighborhood: "The neighborhood name in subject section is mentioned as N/A. Per the UAD requirements, the appraiser should enter a neighborhood name. It may be a name recognized by the municipality in which the property is sited, such as a subdivision name. If there is no neighborhood name recognized by the municipality, enter the common name by which residents refer to the location. Please revise."
+S-6-mapref:   "Map Reference should be in numeric and must be provided."
+S-6-census:   "Census Tract should be in the format XXXX.XX and must be provided."
+S-7-occ-vacant: "The subject section indicates that the property is owner occupied however the photos appear to show the property is currently vacant. Please revise or comment."
+S-7-occ-occupied: "In subject section, occupancy is marked as vacant however as per photos subject property appears to be occupied, please revise or comment if it is a staged home."
+S-8-assessment: "In the subject section, please specify what the special assessment of ${value} is for."
+S-9-pud:      "HOA dues are noted as \"${value}\" per year in the subject section however PUD box is not marked, please revise."
+S-10-lender:  "Please correct the lender's name so it reflects as: {value}"
+S-10-lender-addr: "Please correct the lender's address so it reflects as: {value}"
+S-11-rights:  "Only one Property Rights Appraised checkbox may be marked."
+S-12-datasource: "Please provide Data sources in subject section for the question “Is the subject property currently offered for sale or has it been offered for sale in the twelve months prior to the effective date of this appraisal?” as per UAD requirement."
+
+# ---- Contract ----
+C-1-refi-blank: "The assignment is meant for a refinance transaction; per the UAD requirements, the contract section should be left blank."
+C-2-price:    "In the contract section Contract Price noted as ${a}; however, the purchase contract shows ${b}. Please verify."
+C-2-date:     "In the contract section Contract Date noted as {a}; however, the purchase contract shows {b}. Please verify."
+C-3-datasource: "Please provide data source for \"Is the property seller the owner of public record?\" under contract section."
+C-4-concession: "Purchase agreement shows the concession as ${b}; however, the report shows concession as ${a}, please verify."
+
+# ---- Neighborhood ----
+N-1-checkbox: "In the neighborhood section checkbox is missing for {field}, please revise."
+N-3-range:    "One unit housing price and age range should be Low to High."
+N-4-landuse:  "The sum of present land use in the neighborhood section should always be 100%, please verify and revise as needed."
+N-4-other:    "In the Present land use % if 'Other' is given a value then a description is needed."
+N-5-boundary: "{field} boundary is missing under Neighborhood Boundaries, please revise."
+N-5-delineation: "Neighborhood Boundaries does not contain boundary delineations. The Neighborhood Boundaries must be clearly delineated using 'North', 'South', 'East' and 'West'."
+
+# ---- Site ----
+ST-5-nozoning: "Zoning Compliance is marked 'No Zoning', please comment if the subject can be rebuilt if destroyed."
+ST-5-nonconforming: "Zoning Compliance is marked 'Legal Non-Conforming'. Please explain why and if subject can be rebuilt if destroyed over 50%."
+ST-5-illegal-hold: "Zoning Compliance is marked 'Illegal'. HOLD for escalation."
+ST-6-hbu-hold: "Highest and Best Use is not marked 'Yes'. HOLD for escalation."
+ST-7-wellseptic: "Private well and septic system: please comment if it is typical and if having this feature has impact on marketability and value."
+ST-7-privatestreet: "Subject has “Private Street”; please comment on condition of the subject’s “Private Street” and who is responsible for the maintenance."
+ST-8-flood:   "The appraisal indicates the subject property is in a FEMA designated flood zone. Please comment if it will impact the marketability of the Subject."
+
+# ---- Sales Comparison ----
+SCA-7-concession: "Please provide \"Sales or Financing Concessions\" for comp {comp}, or comment why adjustment is not warranted."
+SCA-8-datesale: "Please verify whether the \"Date of Sale/Time\" for comp {comp} is correct as the sale date (S) is prior to the contract date (C)."
+SCA-grid-zero: "Difference from subject to comp {comp} for {field} is not adjusted; the grid adjustment field must contain a 0 or commentary."
+SCA-net15:    "Please address Comps {value} exceeding 15% net adjustments."
+SCA-bracket:  "Market Value is not bracketed by the adjusted sale prices of the comps. Please revise accordingly."
+SCA-2-count:  "A minimum of 3 comparable sales is required (4 for values of $1,000,000 or more). Only {value} comparable sale(s) were identified in the grid; please verify."
+SCA-4-prox:   "Please provide Proximity to Subject (distance in miles and direction) for comp {comp} under the sales grid section."
+SCA-5-ds:     "Please have a data source (MLS name, MLS #, DOM) for comp {comp} under the sales grid section."
+SCA-16-cond:  "Please provide a Condition rating (UAD C1-C6) for comp {comp} in the sales grid."
+
+# ---- Reconciliation / Cost / Income ----
+R-1-mismatch: "In reconciliation section, Indicated Market Value does not match with indicated value by Sales Comparison Approach. Please revise."
+R-2-asisbox:  "At least one box ('As Is' or 'Subject To') must be checked in the reconciliation section."
+CA-1-sitevalue: "Please provide an Opinion of site value in the report."
+
+# ---- Signature ----
+SIG-1-missing: "The Appraiser Signatures are missing throughout the report, please sign in all the designated spaces."
+SIG-date:     "Please correct the \"Date of signature and report\" on the signature page. The signature date should be greater than or equal to the effective date."
+SIG-2-field:  "{field} on the signature page should match the engagement letter."
+SIG-amc-missing: "In the signature card, please include the AMC name: {value}."
+SIG-amc-wrong: "In the signature card, please update the AMC name: {value}."
+
+# ---- Improvements ----
+I-1-gendesc:  "Please complete the General Description (Design/Style and Year Built) in the improvements section."
+I-7-roomcount: "Please complete the Above Grade room count (Total Rooms, Bedrooms, Baths, GLA) in the improvements section."
+I-9-condition: "Condition of the Property must be UAD compliant (C1-C6), match the photos/commentary, and be supported by the effective age."
+I-Q-quality:  "Quality of Construction must be UAD compliant (Q1-Q6)."
+I-11-conform: "The property does not conform to the neighborhood; please provide extensive commentary (why it does not conform, can it be rebuilt if destroyed over 50%, is it overbuilt)."
+
+# ---- Site (additional) ----
+ST-2-area:    "Site Area must include a unit designation: 'sf' for sites under 1 acre, 'ac' for 1 acre or more."
+ST-7-utilities: "Utilities (Gas and Electricity) checkboxes should be marked in the site section; the description field cannot state None or N/A."
+
+# ---- Reconciliation / Cost (additional) ----
+CA-2-life:    "Estimated Remaining Economic Life must be at least 30 years for FHA/VA, or explain why the subject does not meet the minimum."
+
+# ---- Docs ----
+DOC-1-expired: "Please provide an updated copy of your License, as the copy provided in the report has expired."
+
+# ---- Maps ----
+M-1-location: "Location map must show the subject and all comparables; please provide/revise."
+M-3-plat:     "Plat Map is required as site dimensions could not be provided on page 1."
+M-4-flood:    "Flood Map is required as the subject is located in a Flood Zone."

@@ -48,6 +48,14 @@ _SPATIAL_RIGHT = "spatial_right_of_label"
 _SPATIAL_BELOW = "spatial_below_label"
 _SPATIAL_DATA = "spatial_data_pattern"
 
+_US_STATES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID",
+    "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS",
+    "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
+    "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+    "WI", "WY", "DC",
+}
+
 # Confidence scores for spatial methods
 _CONF_SPATIAL_RIGHT = 0.88
 _CONF_SPATIAL_BELOW = 0.82
@@ -183,11 +191,25 @@ class SpatialTier3Extractor:
         """
         name = fd.canonical_name
 
-        # Data-pattern fields — not label-dependent
+        # Data-pattern fields — try spatial label match first (the value sits
+        # next to the "Zip Code"/"State" label on the URAR form), then fall back
+        # to a text pattern. Spatial-first avoids grabbing the street number as
+        # the zip or a stray 2-letter token as the state.
         if name == "zip_code":
-            return self._data_pattern_zip(fd, full_map, document_type)
+            row = self._subject_address_row(page_maps)
+            if row.get("zip_code"):
+                return self._found(fd, document_type, row["zip_code"], row["zip_code"],
+                                   _SPATIAL_RIGHT, 0.9, row.get("page", 1))
+            hit = self._spatial_validated(fd, page_maps, document_type, r"^(\d{5})(?:-\d{4})?$", 1)
+            return hit or self._data_pattern_zip(fd, full_map, document_type)
         if name == "state":
-            return self._data_pattern_state(fd, full_map, document_type)
+            row = self._subject_address_row(page_maps)
+            if row.get("state"):
+                return self._found(fd, document_type, row["state"], row["state"],
+                                   _SPATIAL_RIGHT, 0.9, row.get("page", 1))
+            hit = self._spatial_validated(fd, page_maps, document_type, r"^([A-Z]{2})$", 1,
+                                          valid=_US_STATES)
+            return hit or self._data_pattern_state(fd, full_map, document_type)
         if name == "appraised_value":
             return self._structural_appraised_value(fd, page_maps, document_type)
         if name in ("effective_date", "date_of_signature"):
@@ -396,11 +418,89 @@ class SpatialTier3Extractor:
     # Data-pattern extractors (don't depend on labels)
     # ------------------------------------------------------------------
 
+    def _subject_address_row(self, page_maps) -> dict:
+        """Parse the URAR subject row 'Property Address | City | State | Zip Code'
+        where each value sits to the RIGHT of its label on the SAME row. Segment
+        the row by label x-positions so the subject's own state/zip are read
+        (not the lender block's adjacent 'ST ZIP' or the street number).
+        Memoized per page_maps object."""
+        cache = getattr(self, "_subj_cache", None)
+        if cache and cache[0] is page_maps:
+            return cache[1]
+        result: dict = {}
+        for pn in sorted(page_maps)[:3]:
+            wm = page_maps[pn]
+
+            def first_label(t):
+                cands = [w for w in wm._words
+                         if w.text.lower().rstrip(":") == t and w.y0 < 300]
+                return min(cands, key=lambda w: w.y0) if cands else None
+
+            city_l, state_l, zip_l = first_label("city"), first_label("state"), first_label("zip")
+            if not (state_l and zip_l):
+                continue
+            # the three labels must share one row (the subject header row)
+            if abs(state_l.y_center - zip_l.y_center) > 3:
+                continue
+            ry = state_l.y_center
+            row = sorted([w for w in wm._words if abs(w.y_center - ry) < 3], key=lambda w: w.x0)
+            code = next((w for w in row if w.text.lower().rstrip(":") == "code"
+                         and abs(w.x0 - zip_l.x0) < 40), None)
+            zip_end = code.x1 if code else zip_l.x1
+            _lbl = {"city", "state", "zip", "code", "property", "address"}
+            # zip: first 5-digit token at/after the Zip Code label
+            for w in row:
+                if w.x0 >= zip_end - 2 and re.fullmatch(r"\d{5}(?:-\d{4})?", w.text):
+                    result["zip_code"] = w.text[:5]
+                    break
+            # state: 2-letter US state between the State and Zip labels
+            for w in row:
+                if state_l.x1 <= w.x0 < zip_l.x0 - 2 and w.text.upper() in _US_STATES:
+                    result["state"] = w.text.upper()
+                    break
+            # city: tokens between the City and State labels
+            if city_l and abs(city_l.y_center - ry) <= 3:
+                cv = [w.text for w in row
+                      if city_l.x1 <= w.x0 < state_l.x0 - 2
+                      and w.text.lower().rstrip(":") not in _lbl]
+                if cv:
+                    result["city"] = " ".join(cv)
+            if result:
+                result["page"] = pn
+                break
+        self._subj_cache = (page_maps, result)
+        return result
+
+    def _spatial_validated(self, fd, page_maps, dt, pattern, group, valid=None):
+        """Spatial label match restricted to subject pages, validated by regex
+        (and optional allowed-value set). Returns an ExtractionResult or None."""
+        for page_num in sorted(page_maps)[:3]:   # subject section is up front
+            wm = page_maps[page_num]
+            hit = extract_field_spatially(wm, fd.synonyms, self._known_labels)
+            if not hit:
+                continue
+            raw, method, _ = hit
+            m = re.search(pattern, raw.strip())
+            if not m:
+                continue
+            val = m.group(group)
+            if valid is not None and val.upper() not in valid:
+                continue
+            return self._found(fd, dt, val.upper() if valid else val, raw, method,
+                               _CONF_SPATIAL_RIGHT, page_num)
+        return None
+
     def _data_pattern_zip(self, fd, full_map, dt):
         all_text = full_map.all_words_as_text()
+        # Prefer a zip that follows a 2-letter state code ("TX 77494") — this
+        # avoids grabbing the street number (e.g. "28203 Fantail Dr"), which a
+        # bare first-5-digit search would wrongly return.
+        m = re.search(r"\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b", all_text)
+        if m:
+            return self._found(fd, dt, m.group(2), m.group(0), ExtractionMethod.DATA_PATTERN_ONLY, 0.82, 1)
         m = re.search(r"\b(\d{5})(?:-\d{4})?\b", all_text)
         if m:
-            return self._found(fd, dt, m.group(1), m.group(0), ExtractionMethod.DATA_PATTERN_ONLY, 0.78, 1)
+            return self._found(fd, dt, m.group(1), m.group(0), ExtractionMethod.DATA_PATTERN_ONLY, 0.7, 1)
         return self._not_found(fd, dt)
 
     def _data_pattern_state(self, fd, full_map, dt):
@@ -601,9 +701,26 @@ class SpatialTier3Extractor:
 
     @staticmethod
     def _ocr_scanned_page(page, page_num: int) -> SpatialWordMap:
-        """Render a scanned page to image and run Tesseract for word positions."""
+        """Render a scanned page and build a SpatialWordMap of its words.
+
+        PaddleOCR is the primary engine — it handles form-style appraisal
+        layouts far better than Tesseract and returns word boxes already in
+        PDF points, so scanned pages share the digital pages' coordinate frame.
+        Tesseract is the fallback when PaddleOCR is unavailable or finds nothing.
+        Wiring this in is what lets Tier One (spatial label matching) see
+        scanned pages at all — see plan reconciliation note #2.
+        """
+        # Primary: PaddleOCR (returns points-scaled (x0,y0,x1,y1,text,conf))
+        try:
+            from app.extraction.layers.l3_paddle_ocr import ocr_scanned_page_with_paddle
+            paddle_words = ocr_scanned_page_with_paddle(page, page_num)
+            if paddle_words:
+                return SpatialWordMap.from_paddle_words(paddle_words, page_num)
+        except Exception as exc:
+            logger.warning("PaddleOCR failed p%d, falling back to Tesseract: %s", page_num, exc)
+
+        # Fallback: Tesseract
         from PIL import Image
-        import numpy as np
         mat = fitz.Matrix(300 / 72, 300 / 72)
         pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
         img = Image.frombytes("L", [pix.width, pix.height], pix.samples)

@@ -119,74 +119,31 @@ class ProcessRequest(BaseModel):
 @app.post("/qc/process")
 async def process_document(req: ProcessRequest):
     """
-    Extract fields from a document and optionally store results in the DB.
-    Returns the extraction result set as JSON.
+    Run the full pipeline on a document — classify, extract (strong layered
+    orchestrator), validate, route — and persist every stage to the DB.
+    Returns a summary of the document journey.
+
+    document_type may be passed explicitly or left to the classifier; an
+    explicit, recognised type is honoured, otherwise classification decides.
     """
-    from app.ocr.document import load_pdf
-    from app.extraction.tier3_pattern import Tier3PatternExtractor
-    from app.database import get_db
-    from app.models.db_models import ExtractionResultRow
+    from app.services.pipeline_runner import process_and_persist
 
     doc_path = Path(req.document_path)
     if not doc_path.exists():
         raise HTTPException(status_code=404, detail=f"Document not found: {req.document_path}")
 
     valid_types = {"appraisal_report", "engagement_letter", "sales_contract", "qc_checklist"}
-    if req.document_type not in valid_types:
-        raise HTTPException(status_code=422, detail=f"document_type must be one of {sorted(valid_types)}")
+    explicit_type = req.document_type if req.document_type in valid_types else None
 
     try:
-        loaded = load_pdf(doc_path)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Failed to load PDF: {exc}")
-
-    extractor = Tier3PatternExtractor()
-    result_set = extractor.extract(loaded, req.document_type)
-
-    # Persist if requested
-    if req.store_results:
-        try:
-            with get_db() as session:
-                for canonical, result in result_set:
-                    row = ExtractionResultRow(
-                        document_id=str(doc_path.name),
-                        amc_id=req.amc_id,
-                        document_type=req.document_type,
-                        document_path=str(doc_path),
-                        total_pages=result_set.total_pages,
-                        field_name=canonical,
-                        field_value=result.value,
-                        raw_source_text=result.raw_source_text,
-                        extraction_method=result.extraction_method,
-                        confidence_score=result.effective_confidence,
-                        source_page=result.source_page,
-                        char_start=result.char_start,
-                        normalization_steps=json.dumps(result.normalization_applied or []),
-                        sanity_check_failed=result.sanity_check_failed,
-                        hallucination_flag=result.hallucination_flag,
-                        model_version=MODEL_VERSION,
-                    )
-                    session.add(row)
-        except Exception as exc:
-            logging.getLogger(__name__).error("DB persist failed: %s", exc)
-
-    summary = result_set.summary()
-    found = [
-        {
-            "field": r.canonical_name,
-            "value": r.value,
-            "confidence": r.effective_confidence,
-            "method": r.extraction_method,
-            "page": r.source_page,
-        }
-        for _, r in result_set if r.found
-    ]
-
-    return {
-        "summary": summary,
-        "found_fields": found,
-        "missing_required": result_set.required_missing(schema_loader),
-    }
+        return process_and_persist(
+            doc_path,
+            document_type=explicit_type,
+            amc_id=req.amc_id,
+            store=req.store_results,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------

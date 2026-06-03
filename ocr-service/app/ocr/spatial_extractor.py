@@ -103,11 +103,26 @@ class SpatialWordMap:
         Build SpatialWordMap from Tesseract OCR on a page image.
         Used for scanned pages where PyMuPDF has no embedded text.
         """
+        import os
+        import tempfile
         import pytesseract
-        data = pytesseract.image_to_data(
-            image, output_type=pytesseract.Output.DICT,
-            config="--psm 6 --oem 3",
-        )
+        # pytesseract's in-memory temp-file roundtrip is broken in this
+        # environment (it reads back the input PNG and raises a
+        # UnicodeDecodeError on byte 0x89). Write the image ourselves and pass
+        # the path — the reliable code path. Same fix as adaptive_ocr._run_tesseract.
+        fd, tmp = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            image.save(tmp)
+            data = pytesseract.image_to_data(
+                tmp, output_type=pytesseract.Output.DICT,
+                config="--psm 6 --oem 3",
+            )
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
         words = []
         n = len(data["text"])
         for i in range(n):
@@ -123,6 +138,30 @@ class SpatialWordMap:
                 text=text,
                 page_number=page_number,
             ))
+        return cls(words)
+
+    @classmethod
+    def from_paddle_words(
+        cls,
+        paddle_words: List[Tuple[float, float, float, float, str, float]],
+        page_number: int,
+    ) -> "SpatialWordMap":
+        """
+        Build SpatialWordMap from PaddleOCR word boxes.
+
+        PaddleOCR returns (x0, y0, x1, y1, text, confidence) already scaled to
+        PDF points (72 DPI), matching from_fitz_page's coordinate space — so
+        scanned and digital pages share one spatial frame. Used as the primary
+        OCR for scanned pages (better than Tesseract on form layouts).
+        """
+        words = [
+            SpatialWord(
+                x0=float(x0), y0=float(y0), x1=float(x1), y1=float(y1),
+                text=text.strip(), page_number=page_number,
+            )
+            for (x0, y0, x1, y1, text, conf) in paddle_words
+            if text and text.strip()
+        ]
         return cls(words)
 
     # ------------------------------------------------------------------
