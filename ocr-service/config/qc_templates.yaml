@@ -86,6 +86,29 @@ ST-7-utilities: "Utilities (Gas and Electricity) checkboxes should be marked in 
 # ---- Reconciliation / Cost (additional) ----
 CA-2-life:    "Estimated Remaining Economic Life must be at least 30 years for FHA/VA, or explain why the subject does not meet the minimum."
 
+# ---- FHA / USDA (conditional on loan type) ----
+FHA-2-case:   "FHA Case # is required in the format XXX-XXXXXXX (10 digits, dash between) on all pages of the report."
+FHA-2-match:  "FHA Case Number in the report is {a}; however the order form shows {b}. Please verify."
+FHA-3-intended: "FHA requires BOTH the Intended Use and Intended User statements (Lender/Client and HUD/FHA). Please include them."
+FHA-4-mpr:    "Please include a statement noting whether the subject meets FHA Minimum Property Requirements per HUD Handbook 4000.1."
+FHA-5-comps:  "FHA requires comparable sales 1, 2 and 3 to be within 12 months of the effective date. Please address comp {comp}."
+FHA-10-life:  "Estimated Remaining Economic Life must be given and at least 30 years for FHA; please clearly explain if less."
+USDA-1-cost:  "The Cost Approach is required on all USDA loans; please complete the cost approach."
+ADD-4-mc:     "The 1004MC Market Conditions Addendum is required for FHA/USDA loans; please ensure it is included and completed."
+
+# ---- Commentary / NLP (advisory) ----
+N-6-blank:    "The Neighborhood Description must be completed with a description specific to the area."
+N-6-canned:   "The Neighborhood Description appears to contain canned/generic commentary ({hits}); please make it specific to the subject area."
+N-7-see1004mc: "Market Conditions commentary states to 'See 1004MC' or defers to the addendum; per UAD this section must contain the actual market analysis. Please revise."
+N-7-blank:    "Market Conditions must be completed with the actual market analysis."
+ADD-1-canned: "{field} appears to contain canned/generic commentary ({hits}); commentary must be specific to this report."
+RECON-terms:  "Reconciliation commentary uses a prohibited term ({hits}). Terms like 'equal weight/consideration' and 'weighted average' should not be used; discuss how the sales were weighted to derive the value."
+
+# ---- Photographs ----
+PH-1-missing: "Required subject photos appear to be missing ({which}). At a minimum, subject front, rear and street scene photos are required."
+PH-2-interior: "Interior photos appear incomplete (missing {which}). Photos of the kitchen, living room, all bedrooms and all baths are required for interior inspection reports."
+FHA-9-sides:  "FHA requires photos of all four sides of the subject (front, rear, left and right); {which} appears to be missing."
+
 # ---- Docs ----
 DOC-1-expired: "Please provide an updated copy of your License, as the copy provided in the report has expired."
 

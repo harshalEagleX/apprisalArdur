@@ -84,19 +84,32 @@ def _column_anchors(words) -> List[float]:
     return anchors
 
 
-def _row_words(words, label_prefix: str):
-    """Find the grid row whose label column begins with label_prefix."""
-    cands = [w for w in words if w["x0"] < _LABEL_X_MAX]
-    # build label text per row-y
+def _row_words(words, label_prefix: str, anchors=None):
+    """Find the grid row whose label column begins with label_prefix.
+
+    A label can occur more than once on the page (e.g. "Data Source(s)" appears
+    in the comp grid AND the prior-sales-history block). When it does, pick the
+    occurrence with the most words sitting in the comparable columns — that is
+    the actual sales-grid row, not a same-named row elsewhere.
+    """
     from collections import defaultdict
     by_y = defaultdict(list)
-    for w in cands:
-        by_y[round(w["top"] / _ROW_TOL) * _ROW_TOL].append(w)
-    for y, ws in by_y.items():
-        label = " ".join(t["text"] for t in sorted(ws, key=lambda w: w["x0"])).lower()
-        if label.startswith(label_prefix):
-            return y
-    return None
+    for w in words:
+        if w["x0"] < _LABEL_X_MAX:
+            by_y[round(w["top"] / _ROW_TOL) * _ROW_TOL].append(w)
+    matches = [y for y, ws in by_y.items()
+               if " ".join(t["text"] for t in sorted(ws, key=lambda w: w["x0"])).lower().startswith(label_prefix)]
+    if not matches:
+        return None
+    if len(matches) == 1 or not anchors:
+        return matches[0]
+
+    def comp_word_count(y):
+        return sum(1 for w in words
+                   if abs(w["top"] - y) < _ROW_TOL
+                   and any(abs(w["x0"] - a) < 60 for a in anchors))
+
+    return max(matches, key=comp_word_count)
 
 
 def _value_in_band(words, y: float, lo: float, hi: float) -> str:
@@ -132,7 +145,7 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
             for prefix, suffix in _FEATURES:
                 if suffix is None:
                     continue
-                y = _row_words(words, prefix)
+                y = _row_words(words, prefix, comp_anchors)
                 if y is None:
                     continue
                 for k, (vlo, vhi, ahi) in enumerate(bounds):

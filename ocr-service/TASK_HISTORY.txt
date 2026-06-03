@@ -137,8 +137,122 @@ FULL-CORPUS QC RESULTS (2026-06-03, same session)
     property rights) converts many VERIFY->PASS. #2 = SCA-5 grid data-source column.
     Outlier: sort/#2321525530 (1218 Alpine, 6-page non-standard form) F8/P15.
 
+CHECKBOX DISAMBIGUATION FIX (2026-06-03, same session)
+[x] checkbox_extractor.map_label_to_field now position-aware: "Stable" appears in
+    BOTH growth_rate (left col x<190) and property_values (middle col x>=190); the
+    flat map always returned growth_rate, so property_values="Stable" was lost ->
+    NOT_FOUND -> N-1 VERIFY. Now disambiguated by checkbox x (cb['x']).
+[x] MEASURED (P-8): property_values NOT_FOUND -> 'Stable' on Fantail + 96 Baell;
+    growth_rate unchanged (no regression). Neighborhood characteristics 4/6 -> 5/6.
+[~] STILL: marketing_time / demand_supply miss on SOME docs (per-doc checkbox X-mark
+    rendering primitives differ; find_checked_checkboxes needs broader X detection or
+    spatial fallback). Separate deeper checkbox-detection fix.
+
+SCA-5 DATA SOURCE FIX (#2) (2026-06-03, same session)
+[x] comp_grid_extractor._row_words now disambiguates duplicate labels: "Data
+    Source(s)" occurs in BOTH the comp grid AND prior-sales-history; it was matching
+    the wrong (prior-sales) row. Now picks the row with the most words in the comp
+    columns. MEASURED: Fantail comp data_source NONE -> 'HARMLS#34869583;DOM' (1-4),
+    Pearson -> 'MLS/Tax Data Realcomp'. SCA-5 VERIFY->PASS for these comps.
+
+PADDLEOCR 3.x FIX + CONTRACT EXTRACTOR (#3) (2026-06-03, same session)
+[x] FOUND: PaddleOCR 3.5.0 changed its API — old use_gpu/show_log/use_angle_cls args
+    raised 'Unknown argument' so PaddleOCR was SILENTLY unavailable the whole time;
+    scanned pages fell back to Tesseract (earlier "0->29 via PaddleOCR" was really
+    Tesseract). Migrated l3_paddle_ocr _get_paddle_ocr to 3.x constructor + predict()
+    result parsing (rec_texts/rec_scores/rec_polys). NOTE: 3.x on CPU is slow (~40s/pg).
+[x] app/extraction/contract_extractor.py — best-effort price/date. Uses embedded text
+    or Tesseract (reliable here) for scanned TREC. Price via TARGETED strategies:
+    Cash portion (A) + Loan (B) = Sales Price; or explicit 'Sales Price (Sum...)' line.
+    Dropped the 'largest amount' fallback (it grabbed garbage 599843).
+    MEASURED: 28203 TREC price=380000 (CORRECT, truth $380k); unreadable contracts
+    (96 Baell, Pearson, Merrily) return None -> C-2 stays VERIFY (no false mismatch).
+[x] Wired transaction._overlay_contract (only sets fields when confidently found).
+    => C-2 becomes DECISIVE when contract readable, VERIFY otherwise (safe).
+[x] PERF: PaddleOCR 3.x CPU ~40s/pg made runs slow+noisy. Reverted _ocr_scanned_page
+    to Tesseract-primary (fast ~1-2s/pg); set transaction use_paddle=False. PaddleOCR
+    3.x kept available for a GPU path. Fantail run back to 94s.
+[x] VALIDATED Fantail: C-2a PASS (appraisal 380000 == contract 380000), C-1 PASS,
+    C-2b VERIFY (date heuristic). Fantail now 43 PASS / 1 FAIL / 11 VERIFY (was 38P).
+
+CHECKBOX DETECTION BREADTH (#1) (2026-06-03, same session)
+[x] Diagnosed: missing enum/boolean fields are a MIX of (a) correct NOT_FOUND
+    (occupant often blank on purchases), (b) multi-checkbox-per-row label
+    association (utilities Electricity/Gas each have Public+Other boxes), and
+    (c) per-doc X-mark detection gaps (demand_supply).
+[x] find_label_for_checkbox widened to allow the box to sit slightly left/on its
+    option word (cx-4). MEASURED on 96 Baell: occupant_status NONE->'Vacant',
+    utilities_water/sewer ->True, marketing_time '3-6 mths'; location/built_up/
+    growth unchanged (no regression). 8 enum fields now on Baell.
+[~] STILL miss on SOME docs: demand_supply, utilities_electricity/gas — the X-mark
+    isn't detected by find_checked_checkboxes (requires rect+2 diagonals); some
+    boxes use other primitives. Deeper per-section detection work remains.
+
+PHASE 8: FHA/USDA CONDITIONAL OVERLAY RULES (2026-06-03, same session)
+[x] app/qc/rules/fha_usda.py — FHA-2 (case # format XXX-XXXXXXX + match order form),
+    FHA-3 (intended use/user statements), FHA-10 (remaining econ life >=30),
+    USDA-1 (cost approach required), ADD-4 (1004MC required for FHA/USDA). Gated on
+    ctx.loan_type (engagement-letter authority) via applies_when; engine records
+    non-applicable ones as NOT_APPLICABLE (greyed, not missing).
+[x] VALIDATED on real FHA txn (2307 Merrily, loan_type=FHA): FHA-2 PASS (098-2547550
+    matches format), ADD-4 PASS (1004MC present), USDA-1 NOT_APPLICABLE (correct),
+    FHA-3/FHA-10 VERIFY. 52 rules total. On conventional files all FHA/USDA = N/A.
+
+PHASE 5: NLP COMMENTARY (DETERMINISTIC) (2026-06-03, same session)
+[x] config/qc_canned_phrases.yaml (canned phrases + reconciliation forbidden terms
+    + min length). app/qc/commentary.py analyzer (blank/too_short/canned_hits/
+    defers_to_form). app/qc/rules/commentary.py: N-6 (neighborhood desc specific),
+    N-7 (market conditions not 'See 1004MC'), ADD-1 (no canned in SCA summary/recon),
+    RECON-T (no 'equal weight'/'weighted average'). All VERIFY (advisory), no LLM.
+[x] VALIDATED on synthetic: canned -> N-6 VERIFY, 'See 1004MC' -> N-7 VERIFY,
+    'equal weight' -> RECON-T VERIFY, clean text -> PASS. 56 rules total.
+[~] FUTURE: optional mistral 'why-not-what' judgement on top of these signals.
+
+PHASE 6: PHOTO PRESENCE (CAPTION-BASED) (2026-06-03, same session)
+[x] app/extraction/photo_detector.py — caption-phrase detection (Subject Front/Rear,
+    Street Scene, Left/Right side, interior rooms kitchen/living/dining/bedroom/bath).
+    Deterministic + fast (no llava). transaction._overlay_photos adds photo_* pseudo-
+    fields so PH rules read them without touching the PDF (P-3).
+[x] app/qc/rules/photos.py: PH-1 (front/rear/street), PH-2 (interior rooms), FHA-9
+    (4-side, FHA-gated). All VERIFY-advisory.
+[x] VALIDATED: Fantail + Merrily front/rear/street + all interior rooms present ->
+    PH-1 PASS, PH-2 PASS. 59 rules total. (llava vision pass = future enhancement
+    for condition/quality-from-photo, not presence.)
+
+REVIEWER DASHBOARD (Next.js) (2026-06-03, same session)
+[x] Backend: GET /qc/transactions (list QC'd txns + overall/counts) and existing
+    GET /qc/report/{id}; added CORS middleware (allow localhost:3000) so the dev
+    frontend can call the Python service directly.
+[x] frontend/app/qc-review/page.tsx — self-contained client page (dark theme, matches
+    their tailwind). Left: transaction list w/ status pills. Right: report grouped by
+    section, status-coded findings, verbatim messages, side-by-side evidence
+    (doc=value, confidence, page). Toggle to show passed/N-A rules.
+[x] VERIFIED end-to-end via curl: /qc/transactions + /qc/report return the exact shapes
+    the page consumes; CORS preflight OK; page type-checks (tsc no errors).
+    To view: run Python svc on :5001 + `cd frontend && npm run dev` -> :3000/qc-review.
+[x] INFRA: cleared a stale postgresql@18 postmaster.pid lock that had stopped the DB.
+
+REGRESSION TESTS + DEMO DOCS (2026-06-03, same session)
+[x] tests/test_qc_engine.py — 17 pure-function tests (matching bands, address/name
+    normalize, commentary canned/clean, contract price cash+loan + no-false-positive,
+    UAD date sequencing, engine status precedence + FHA-N/A gating + land-use sum).
+    All 17 pass.
+[x] FIX: sales_comparison._parse_uad_date now normalizes 2-digit years to 20xx.
+[x] readme/QC_DEMO_QUICKSTART.md — full demo run instructions (DB, corpus QC, API,
+    dashboard) + architecture diagram + config knobs.
+[x] Re-running full corpus to refresh dashboard data to the 59-rule engine (background).
+
+OPTIONAL LLM COMMENTARY JUDGE (2026-06-03, same session)
+[x] commentary.llm_commentary_judgement(text) — opt-in mistral 'why-not-what' +
+    specificity judge, reuses llm_resilience.resilient_ollama_call (circuit breaker,
+    temp 0). NOT in the hot QC path. Degrades to None when Ollama is down (verified:
+    Ollama currently not serving -> returns None gracefully). Deterministic canned
+    detection remains the always-on primary. To enable judgements: `ollama serve`.
+
 WHAT'S LEFT (priority order)
-[ ] #1 CHECKBOX/ENUM extraction (visual_checkbox feeding N-1/R-2/ST-7/occupancy/rights).
+[ ] Checkbox detection primitives: extend find_checked_checkboxes beyond rect+2-diagonal
+    (filled boxes / single-stroke checks) for demand_supply/electricity/gas misses.
+    miss on some docs) — extend find_checked_checkboxes X-mark primitives + spatial fallback.
 [ ] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
     grid extractor right-column capture; add SCA-16 condition consistency vs subject.
 [ ] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->

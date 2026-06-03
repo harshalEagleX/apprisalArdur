@@ -49,11 +49,16 @@ def extract_documents(folder: Path) -> Dict[str, object]:
         if pdf is None:
             continue
         try:
-            rs = run_full_extraction(pdf, dtype, use_paddle=True, use_llm=False)
+            # use_paddle=False: scanned pages are OCR'd via Tesseract in the spatial
+            # layer (fast); PaddleOCR 3.x on CPU is too slow for this path.
+            rs = run_full_extraction(pdf, dtype, use_paddle=False, use_llm=False)
             if role == "engagement":
                 rs = _overlay_engagement(rs, pdf, dtype)
             elif role == "appraisal":
                 rs = _overlay_comp_grid(rs, pdf, dtype)
+                rs = _overlay_photos(rs, pdf, dtype)
+            elif role == "contract":
+                rs = _overlay_contract(rs, pdf, dtype)
             sets[role] = rs
         except Exception as exc:
             logger.error("Extraction failed for %s/%s: %s", folder.name, role, exc)
@@ -85,6 +90,68 @@ def _overlay_comp_grid(rs, pdf, dtype):
         )
     merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
                                  total_pages=rs.total_pages, ocr_method="comp_grid+layered")
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def _overlay_photos(rs, pdf, dtype):
+    """Add photo-presence pseudo-fields (photo_front/_rear/_street/_left/_right
+    and photo_interior_rooms) from caption detection, so the PH rules can read
+    them without the rule engine touching the PDF (P-3)."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.photo_detector import detect_photos
+    try:
+        p = detect_photos(pdf)
+    except Exception as exc:
+        logger.warning("Photo detection failed for %s: %s", pdf.name, exc)
+        return rs
+    fields = {
+        "photo_front": str(p.has_front), "photo_rear": str(p.has_rear),
+        "photo_street": str(p.has_street), "photo_left": str(p.has_left),
+        "photo_right": str(p.has_right),
+        "photo_interior_rooms": ",".join(sorted(p.interior_rooms)),
+    }
+    existing = {name: r for name, r in rs}
+    for name, value in fields.items():
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=value,
+            raw_source_text=value, extraction_method="photo_caption",
+            confidence=0.8, source_page=0, normalization_applied=["photo_caption"],
+        )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def _overlay_contract(rs, pdf, dtype):
+    """Overlay best-effort contract price/date/concessions (Tesseract OCR for
+    scanned contracts). Only sets a field when confidently found, so an
+    unreadable contract leaves C-2/C-4 at VERIFY rather than a false mismatch."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.contract_extractor import extract_contract_fields
+    try:
+        fields = extract_contract_fields(pdf)
+    except Exception as exc:
+        logger.warning("Contract extraction failed for %s: %s", pdf.name, exc)
+        return rs
+    if not fields:
+        return rs
+    existing = {name: r for name, r in rs}
+    for name, value in fields.items():
+        if not value:
+            continue
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=str(value),
+            raw_source_text=str(value), extraction_method="contract_ocr",
+            confidence=0.82, source_page=1, normalization_applied=["contract_ocr"],
+        )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method="contract_ocr+layered")
     for r in existing.values():
         merged.add(r)
     merged.finalize()

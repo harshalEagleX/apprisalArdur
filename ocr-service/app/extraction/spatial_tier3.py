@@ -703,23 +703,11 @@ class SpatialTier3Extractor:
     def _ocr_scanned_page(page, page_num: int) -> SpatialWordMap:
         """Render a scanned page and build a SpatialWordMap of its words.
 
-        PaddleOCR is the primary engine — it handles form-style appraisal
-        layouts far better than Tesseract and returns word boxes already in
-        PDF points, so scanned pages share the digital pages' coordinate frame.
-        Tesseract is the fallback when PaddleOCR is unavailable or finds nothing.
-        Wiring this in is what lets Tier One (spatial label matching) see
-        scanned pages at all — see plan reconciliation note #2.
+        Tesseract is the primary engine: it is fast (~1-2 s/page) and reliable
+        here, and it is what lets Tier One spatial matching see scanned pages.
+        PaddleOCR 3.x is far slower on CPU (~40 s/page), so it is reserved for
+        an explicit/GPU path (orchestrator L3) rather than this hot path.
         """
-        # Primary: PaddleOCR (returns points-scaled (x0,y0,x1,y1,text,conf))
-        try:
-            from app.extraction.layers.l3_paddle_ocr import ocr_scanned_page_with_paddle
-            paddle_words = ocr_scanned_page_with_paddle(page, page_num)
-            if paddle_words:
-                return SpatialWordMap.from_paddle_words(paddle_words, page_num)
-        except Exception as exc:
-            logger.warning("PaddleOCR failed p%d, falling back to Tesseract: %s", page_num, exc)
-
-        # Fallback: Tesseract
         from PIL import Image
         mat = fitz.Matrix(300 / 72, 300 / 72)
         pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)

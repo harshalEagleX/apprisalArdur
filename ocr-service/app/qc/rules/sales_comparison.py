@@ -148,10 +148,14 @@ def sca5_data_source(ctx: QCContext):
 # ---- SCA-8 date of sale: contract (c) before sale (s) ---------------------
 
 def _parse_uad_date(tok: str):
-    """'s12/25;c11/25' → {'s': (25,12), 'c': (25,11)} as (yy, mm) for ordering."""
+    """'s06/14;c11/13' → {'s': (2014, 6), 'c': (2013, 11)} as (year, month) for
+    ordering. Two-digit years are normalized to 20xx."""
     res = {}
     for kind, mm, yy in re.findall(r"([sc])\s*(\d{1,2})/(\d{2,4})", tok or "", re.I):
-        res[kind.lower()] = (int(yy), int(mm))
+        year = int(yy)
+        if year < 100:
+            year += 2000
+        res[kind.lower()] = (year, int(mm))
     return res
 
 

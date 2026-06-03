@@ -45,6 +45,17 @@ app = FastAPI(
     version="0.2.0",
 )
 
+# Allow the Next.js dev frontend to call the QC endpoints directly (demo).
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.on_event("startup")
 async def startup():
@@ -354,3 +365,33 @@ async def qc_report(transaction_id: str):
     if report["rule_count"] == 0:
         raise HTTPException(status_code=404, detail="No QC results for this transaction.")
     return report
+
+
+@app.get("/qc/transactions")
+async def qc_transactions():
+    """List every transaction that has QC results, with its overall outcome —
+    for the reviewer dashboard transaction picker."""
+    from app.database import get_db
+    from app.models.db_models import ValidationResultRow
+    from app.qc.report import transaction_report
+
+    with get_db() as session:
+        rows = (session.query(ValidationResultRow.transaction_id)
+                .filter(ValidationResultRow.transaction_id.isnot(None))
+                .distinct().all())
+    out = []
+    for (tid,) in rows:
+        try:
+            rep = transaction_report(tid)
+        except Exception:
+            continue
+        if rep["rule_count"]:
+            out.append({
+                "transaction_id": tid,
+                "overall": rep["overall"],
+                "exception_count": rep["exception_count"],
+                "rule_count": rep["rule_count"],
+                "counts": rep["counts"],
+            })
+    out.sort(key=lambda r: r["transaction_id"])
+    return out

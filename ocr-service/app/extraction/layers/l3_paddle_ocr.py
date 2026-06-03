@@ -29,19 +29,21 @@ _paddle_ocr_instance = None
 
 
 def _get_paddle_ocr():
-    """Lazy-load PaddleOCR (avoids 3s startup cost when not needed)."""
+    """Lazy-load PaddleOCR. PaddleOCR 3.x changed the constructor — the old
+    use_gpu/show_log/use_angle_cls/enable_mkldnn args raise 'Unknown argument'
+    and made this silently unavailable (falling back to Tesseract). Use the 3.x
+    signature; disable the orientation/unwarp sub-models for CPU speed."""
     global _paddle_ocr_instance
     if _paddle_ocr_instance is None:
         try:
             from paddleocr import PaddleOCR
             _paddle_ocr_instance = PaddleOCR(
-                use_angle_cls=True,   # detect text rotation
                 lang="en",
-                use_gpu=False,        # CPU inference (M1 doesn't use CUDA)
-                show_log=False,
-                enable_mkldnn=False,  # avoid MKL issues on Mac
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
             )
-            logger.info("PaddleOCR loaded successfully")
+            logger.info("PaddleOCR (3.x) loaded successfully")
         except Exception as exc:
             logger.warning("PaddleOCR load failed: %s", exc)
             _paddle_ocr_instance = "unavailable"
@@ -72,25 +74,39 @@ def ocr_scanned_page_with_paddle(
 
     try:
         img = _page_to_image_array(page)
-        result = ocr.ocr(img, cls=True)
+        scale = 72.0 / 300.0   # 300 DPI pixels back to 72 DPI points
+
+        # PaddleOCR 3.x: predict() returns a list of dict-like OCRResult objects
+        # with rec_texts / rec_scores / rec_polys. Fall back to the legacy
+        # ocr(cls=True) [[box,(text,conf)],...] shape for older installs.
+        if hasattr(ocr, "predict"):
+            results = ocr.predict(img)
+            words = []
+            for res in results or []:
+                texts = res.get("rec_texts", [])
+                scores = res.get("rec_scores", [1.0] * len(texts))
+                polys = res.get("rec_polys", res.get("dt_polys", []))
+                for text, conf, poly in zip(texts, scores, polys):
+                    if not text or not str(text).strip():
+                        continue
+                    xs = [float(p[0]) for p in poly]
+                    ys = [float(p[1]) for p in poly]
+                    words.append((min(xs) * scale, min(ys) * scale,
+                                  max(xs) * scale, max(ys) * scale,
+                                  str(text).strip(), float(conf)))
+            return words
+
+        result = ocr.ocr(img)
         if not result or not result[0]:
             return []
-
-        # Scale from 300 DPI pixels back to 72 DPI points
-        scale = 72.0 / 300.0
         words = []
         for line in result[0]:
             box, (text, conf) = line
-            # box is [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]
             xs = [p[0] for p in box]
             ys = [p[1] for p in box]
-            x0 = min(xs) * scale
-            y0 = min(ys) * scale
-            x1 = max(xs) * scale
-            y1 = max(ys) * scale
             if text.strip():
-                words.append((x0, y0, x1, y1, text.strip(), float(conf)))
-
+                words.append((min(xs) * scale, min(ys) * scale,
+                              max(xs) * scale, max(ys) * scale, text.strip(), float(conf)))
         return words
 
     except Exception as exc:

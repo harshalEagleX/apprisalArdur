@@ -105,13 +105,15 @@ def find_label_for_checkbox(
     on the same horizontal row (±Y_TOLERANCE pixels).
     """
     cx, cy = checked_pos['x'], checked_pos['y']
-    # Words on the same row, to the right of the checkbox
+    # Words on the same row, to the right of the checkbox (the option label is
+    # almost always immediately to the right of its box). Allow a small leftward
+    # window too, since on tight multi-option rows (e.g. utilities Public/Other)
+    # the box can slightly overlap the start of its label.
     row_words = [
-        (w[0], w[4])  # (x0, text)
+        (w[0], w[4])
         for w in sorted_words
         if abs(w[1] - cy) < _LABEL_ROW_TOLERANCE
-        and w[0] > cx
-        and w[0] < cx + _LABEL_SEARCH_X_RANGE
+        and (cx - 4) < w[0] < cx + _LABEL_SEARCH_X_RANGE
     ]
     row_words.sort(key=lambda w: w[0])
 
@@ -122,16 +124,29 @@ def find_label_for_checkbox(
     return row_words[0][1].strip().rstrip(".,;:")
 
 
-def map_label_to_field(label: str, doc_type: str) -> Optional[Tuple[str, str]]:
+def map_label_to_field(label: str, doc_type: str,
+                       checkbox_x: Optional[float] = None) -> Optional[Tuple[str, str]]:
     """
     Map a checked label text to (canonical_field_name, canonical_value).
     Uses the field schema's allowed_values to find the matching field.
     Returns (field_name, value) or None if no match.
+
+    checkbox_x disambiguates options whose words appear in more than one field.
+    On the URAR neighborhood block the LEFT column (Location/Built-Up/Growth)
+    sits at x<~190 and the MIDDLE column (Property Values/Demand/Marketing) at
+    x>=~190 — e.g. "Stable" belongs to growth_rate on the left but to
+    property_values in the middle.
     """
     if not label:
         return None
 
     label_lower = label.lower().strip()
+
+    # Position-disambiguated options (word shared across two fields by column).
+    _MIDDLE_COL_X = 190
+    if label_lower == "stable" and checkbox_x is not None:
+        return (("property_values", "Stable") if checkbox_x >= _MIDDLE_COL_X
+                else ("growth_rate", "Stable"))
 
     # Mapping of known checkbox values to field names
     # Built from QC Checklist rules + real document observation
@@ -256,7 +271,7 @@ class CheckboxExtractor:
             if not label:
                 continue
 
-            mapping = map_label_to_field(label, document_type)
+            mapping = map_label_to_field(label, document_type, checkbox_x=cb.get('x'))
             if not mapping:
                 continue
 
