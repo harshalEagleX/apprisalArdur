@@ -109,7 +109,36 @@ COMPARABLE-GRID EXTRACTOR (2026-06-03, same session)
     on Camelot sale_price so blank template columns don't make phantom findings.
 [x] Validated on Fantail: SCA 6 PASS / 3 VERIFY (data source) / 1 SKIP. 46 rules.
 
+REVIEWER REPORT + API + CORPUS RUNNER (2026-06-03, same session)
+[x] SCA-16 (per-comp condition UAD rating). 54 rules registered.
+[x] app/qc/report.py::transaction_report(transaction_id) — reads persisted QC rows,
+    scopes to the LATEST run (3-min window, avoids stale findings), groups by section
+    (exceptions first), includes side-by-side evidence (doc/value/confidence/page).
+[x] main.py endpoints: POST /qc/transaction (run engine on a folder -> reviewer report),
+    GET /qc/report/{transaction_id} (persisted report). This is the dashboard data path.
+[x] scripts/run_qc_corpus.py — runs QC across all 15 transaction folders, persists,
+    prints per-transaction + aggregate (outcomes, totals, most-common exceptions).
+    [RUNNING in background ~5-6 min/txn; results pending.]
+[x] Verified report on Fantail: 58 rules, 38 PASS/1 FAIL/13 VERIFY, S-2 garbage gone.
+[x] render_report_text() + scripts/show_qc_report.py — readable per-transaction QC
+    document (overall, exceptions grouped by section w/ verbatim wording + evidence
+    side-by-side, auto-cleared list). Demo-ready artifact. Fantail renders cleanly:
+    R-1 FAIL (indicated 381000 vs SCA 380000), SIG-2 VERIFY (Riley C Freese vs riley
+    freese), C-2 VERIFY (contract scanned), 38 auto-cleared.
+
+FULL-CORPUS QC RESULTS (2026-06-03, same session)
+[x] Ran QC over all 15 transactions in 937s, all persisted. Outcomes: 14 FAIL, 1 HOLD
+    (condo sort/#2321525470 escalated correctly). Rule totals: 560 PASS / 27 FAIL /
+    209 VERIFY / 1 HOLD / 29 N/A / 48 SKIP. Only 27 hard FAILs across 15 docs.
+[x] DATA-DRIVEN NEXT PRIORITIES (most common exceptions, #txns):
+    SCA-5 comp data source(36); N-1 neighborhood checkboxes(34); N-5/R-2/CA-1/ST-7/
+    S-10b(15 each); SIG-2 appraiser name fuzzy(14); C-2a/b contract scanned(10/11);
+    R-1 value(9). => #1 lever = CHECKBOX/ENUM extraction (N-1, R-2, ST-7, occupancy,
+    property rights) converts many VERIFY->PASS. #2 = SCA-5 grid data-source column.
+    Outlier: sort/#2321525530 (1218 Alpine, 6-page non-standard form) F8/P15.
+
 WHAT'S LEFT (priority order)
+[ ] #1 CHECKBOX/ENUM extraction (visual_checkbox feeding N-1/R-2/ST-7/occupancy/rights).
 [ ] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
     grid extractor right-column capture; add SCA-16 condition consistency vs subject.
 [ ] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->

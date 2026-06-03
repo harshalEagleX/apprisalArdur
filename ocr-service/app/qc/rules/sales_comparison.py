@@ -176,6 +176,26 @@ def sca8_date_sequence(ctx: QCContext):
     return out
 
 
+# ---- SCA-16 condition rating present + UAD format (per comp) --------------
+
+@rule(id="SCA-16", num="68", section="sales_comparison", phase=3, name="Comp condition UAD rating")
+def sca16_condition(ctx: QCContext):
+    out = []
+    for i in _comp_indices(ctx):
+        val = (ctx.appraisal.value(f"comp_{i}_condition_rating") or "").upper()
+        ev = [ctx.appraisal.evidence(f"comp_{i}_condition_rating")]
+        if re.fullmatch(r"C[1-6]", val):
+            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_condition_rating"], evidence=ev))
+        else:
+            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-16-cond", comp=i),
+                                  fields_involved=[f"comp_{i}_condition_rating"], template_id="SCA-16-cond",
+                                  evidence=ev, confidence=0.65))
+    return out
+
+
 # ---- SCA-BR market value bracketed by adjusted sale prices ----------------
 
 @rule(id="SCA-BR", num="78", section="sales_comparison", phase=3, name="Value bracketed by adjusted prices")

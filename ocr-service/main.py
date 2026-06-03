@@ -309,3 +309,48 @@ async def list_amc_profiles():
     """Day 24: List all AMC profiles — for the operations dashboard."""
     from app.services.amc_profile_service import list_profiles
     return list_profiles()
+
+
+# ---------------------------------------------------------------------------
+# QC rule engine — transaction-level QC + reviewer report
+# ---------------------------------------------------------------------------
+
+class TransactionQCRequest(BaseModel):
+    folder: str                     # transaction folder with appraisal/engagement/contract
+    store_results: bool = True
+
+
+@app.post("/qc/transaction")
+async def qc_transaction(req: TransactionQCRequest):
+    """Run the full QC rule engine on a transaction folder (extract all docs,
+    run rules, persist). Returns the reviewer report."""
+    from app.qc.transaction import run_transaction_qc
+    from app.qc.report import transaction_report
+
+    folder = Path(req.folder)
+    if not folder.is_dir():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {req.folder}")
+    rep = run_transaction_qc(folder, persist=req.store_results)
+    if req.store_results:
+        return transaction_report(rep.transaction_id)
+    # not persisted → render in-memory
+    return {
+        "transaction_id": rep.transaction_id,
+        "overall": rep.overall.value,
+        "counts": rep.counts(),
+        "findings": [
+            {"rule_id": r.rule_id, "status": r.status.value, "section": r.section,
+             "message": r.message, "fields": r.fields_involved}
+            for r in rep.results if r.status.value in ("FAIL", "VERIFY", "HOLD")
+        ],
+    }
+
+
+@app.get("/qc/report/{transaction_id:path}")
+async def qc_report(transaction_id: str):
+    """Return the persisted reviewer QC report for a transaction."""
+    from app.qc.report import transaction_report
+    report = transaction_report(transaction_id)
+    if report["rule_count"] == 0:
+        raise HTTPException(status_code=404, detail="No QC results for this transaction.")
+    return report
