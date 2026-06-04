@@ -96,36 +96,62 @@ def find_checked_checkboxes(page: fitz.Page) -> List[Dict]:
     return checked
 
 
+_OPTION_WORD_GAP = 18.0   # stop collecting the label at a gap wider than this (next column)
+_OPTION_MAX_WORDS = 3     # multi-word options: "In Balance", "Under 3 mths"
+
+
 def find_label_for_checkbox(
     checked_pos: Dict,
     sorted_words: List,
 ) -> Optional[str]:
     """
-    Find the text label immediately to the right of a checked checkbox,
-    on the same horizontal row (±Y_TOLERANCE pixels).
+    Find the option label to the RIGHT of a checked checkbox, on the same row.
+
+    URAR options are often multi-word ("In Balance", "Over Supply", "Under 3
+    mths"), so collect up to _OPTION_MAX_WORDS consecutive words, stopping at a
+    wide x-gap (the next box/column). Returning only the first word lost these.
     """
     cx, cy = checked_pos['x'], checked_pos['y']
-    # Words on the same row, to the right of the checkbox (the option label is
-    # almost always immediately to the right of its box). Allow a small leftward
-    # window too, since on tight multi-option rows (e.g. utilities Public/Other)
-    # the box can slightly overlap the start of its label.
-    row_words = [
-        (w[0], w[4])
-        for w in sorted_words
-        if abs(w[1] - cy) < _LABEL_ROW_TOLERANCE
-        and (cx - 4) < w[0] < cx + _LABEL_SEARCH_X_RANGE
-    ]
-    row_words.sort(key=lambda w: w[0])
-
-    if not row_words:
+    row = sorted(
+        ((w[0], w[2], w[4]) for w in sorted_words
+         if abs(w[1] - cy) < _LABEL_ROW_TOLERANCE and (cx - 4) < w[0] < cx + _LABEL_SEARCH_X_RANGE),
+        key=lambda w: w[0])
+    if not row:
         return None
+    parts = [row[0][2]]
+    prev_x1 = row[0][1]
+    for x0, x1, txt in row[1:]:
+        if len(parts) >= _OPTION_MAX_WORDS or (x0 - prev_x1) > _OPTION_WORD_GAP:
+            break
+        parts.append(txt)
+        prev_x1 = x1
+    return " ".join(parts).strip().rstrip(".,;:")
 
-    # Return first word (the option label)
-    return row_words[0][1].strip().rstrip(".,;:")
+
+def find_row_label_left(checked_pos: Dict, sorted_words: List) -> Optional[str]:
+    """Nearest word to the LEFT of the box on the same row — the row label for
+    left-labelled rows (e.g. Utilities: "Electricity ☐ ☐")."""
+    cx, cy = checked_pos['x'], checked_pos['y']
+    left = [w for w in sorted_words
+            if abs(w[1] - cy) < _LABEL_ROW_TOLERANCE and w[0] < cx and (cx - w[0]) < 95]
+    if not left:
+        return None
+    left.sort(key=lambda w: -w[0])
+    return left[0][4].strip().rstrip(".,;:")
+
+
+# Left-labelled rows: the row label sits to the LEFT of its checked box.
+# Utilities (ST-7) — a checked Public/Other box on the row => utility present.
+_UTILITY_LEFT = {
+    "electricity": "utilities_electricity", "electric": "utilities_electricity",
+    "gas": "utilities_gas", "water": "utilities_water",
+    "sewer": "utilities_sewer", "sanitary": "utilities_sewer",
+}
 
 
 def map_label_to_field(label: str, doc_type: str,
-                       checkbox_x: Optional[float] = None) -> Optional[Tuple[str, str]]:
+                       checkbox_x: Optional[float] = None,
+                       left_label: Optional[str] = None) -> Optional[Tuple[str, str]]:
     """
     Map a checked label text to (canonical_field_name, canonical_value).
     Uses the field schema's allowed_values to find the matching field.
@@ -135,12 +161,13 @@ def map_label_to_field(label: str, doc_type: str,
     On the URAR neighborhood block the LEFT column (Location/Built-Up/Growth)
     sits at x<~190 and the MIDDLE column (Property Values/Demand/Marketing) at
     x>=~190 — e.g. "Stable" belongs to growth_rate on the left but to
-    property_values in the middle.
+    property_values in the middle. left_label carries the row label to the LEFT
+    of the box, used for left-labelled rows (utilities).
     """
-    if not label:
+    if not label and not left_label:
         return None
 
-    label_lower = label.lower().strip()
+    label_lower = (label or "").lower().strip()
 
     # Position-disambiguated options (word shared across two fields by column).
     _MIDDLE_COL_X = 190
@@ -229,11 +256,22 @@ def map_label_to_field(label: str, doc_type: str,
     if result is not None:
         return result
 
-    # Try partial matches
+    # Token-prefix match: a key whose words START the (possibly multi-word) label
+    # — "in balance"/"over supply"/"under 3 mths". Replaces the old substring
+    # fallback, which mis-matched short labels (e.g. "in" -> "de mINimis").
+    best = None
     for key, mapping in CHECKBOX_VALUE_TO_FIELD.items():
-        if mapping and (key in label_lower or label_lower in key):
-            if len(key) >= 3:  # avoid too-short partial matches
-                return mapping
+        if mapping and (label_lower == key or label_lower.startswith(key + " ")):
+            if best is None or len(key) > len(best[0]):
+                best = (key, mapping)
+    if best is not None:
+        return best[1]
+
+    # Left-labelled utility row: a checked Public/Other box => utility present.
+    if left_label:
+        util = _UTILITY_LEFT.get(left_label.lower().strip().rstrip(".,;:"))
+        if util:
+            return (util, "True")
 
     return None
 
@@ -268,10 +306,12 @@ class CheckboxExtractor:
 
         for cb in checked:
             label = find_label_for_checkbox(cb, sorted_words)
-            if not label:
+            left_label = find_row_label_left(cb, sorted_words)
+            if not label and not left_label:
                 continue
 
-            mapping = map_label_to_field(label, document_type, checkbox_x=cb.get('x'))
+            mapping = map_label_to_field(label, document_type,
+                                         checkbox_x=cb.get('x'), left_label=left_label)
             if not mapping:
                 continue
 
@@ -281,7 +321,7 @@ class CheckboxExtractor:
             if field_name in results and results[field_name].found:
                 continue
 
-            source_text = f"[Checkbox checked] {label}"
+            source_text = f"[Checkbox checked] {label or left_label or ''}".rstrip()
             results[field_name] = ExtractionResult(
                 canonical_name=field_name,
                 document_type=document_type,

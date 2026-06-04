@@ -349,9 +349,10 @@ FRONTEND REVIEWER POLISH (2026-06-03, same session)
     (grouped findings, verbatim rejection text, side-by-side evidence) -> submit -> Copy-All.
 
 WHAT'S LEFT (optional / deep tail)
-[ ] Checkbox detection primitives: extend find_checked_checkboxes beyond rect+2-diagonal
+[x] Checkbox detection primitives: extend find_checked_checkboxes beyond rect+2-diagonal
     (filled boxes / single-stroke checks) for demand_supply/electricity/gas misses.
-    miss on some docs) — extend find_checked_checkboxes X-mark primitives + spatial fallback.
+    DONE 2026-06-04 (Checkbox track) — root cause was LABEL mapping, not marks; +26
+    field-detections. See section below.
 [x] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
     grid extractor right-column capture; add SCA-16 condition consistency vs subject.
     DONE 2026-06-04 (SCA grid completion track) — see section below.
@@ -438,3 +439,27 @@ CONTRACT EXTRACTOR (OCR) TRACK — price label-anchored lookahead (measured)
     contract_date extracts blank ("noted as ;") — an appraisal subject/contract field
     gap, NOT the contract extractor. C-1/C-3 PASS, C-4 SKIPPED.
 [ ] NEXT (appraisal-side): extract appraisal contract_date so C-2b can be decisive.
+
+CHECKBOX DETECTION TRACK — label mapping fix (measured, no regressions)
+[x] BASELINE (checkbox_extractor over 7 appraisals, 13 enum fields): utilities_
+    electricity 0/7, utilities_gas 0/7, demand_supply 1/7, marketing_time 2/7,
+    water/sewer 2/7. Location/built_up/growth/property_values/property_rights fine.
+[x] ROOT CAUSE (P-2, drawings + word x-positions — NOT mark detection; boxes detect
+    fine, 44 on the Fantail URAR page): (1) find_label_for_checkbox returned only the
+    FIRST word, so multi-word options "In Balance"/"Over Supply"/"Under 3 mths" became
+    "In"/"Over"/"Under"; (2) the substring fallback then mis-matched "in" -> "de
+    mINimis" (property_rights), a WRONG map; (3) Utilities are LEFT-labelled (the
+    utility name sits to the LEFT of its Public/Other box) so the right-only search
+    returned None.
+[x] FIX (checkbox_extractor.py): find_label_for_checkbox now collects up to 3 words
+    with a gap-stop (multi-word options); map_label_to_field uses TOKEN-PREFIX matching
+    (key must start the label) instead of the unsafe substring fallback; new
+    find_row_label_left + _UTILITY_LEFT map a checked box whose LEFT row label is a
+    utility name -> utilities_<x>=True.
+[x] MEASURED (7 appraisals): demand_supply 1->6, marketing_time 2->6, utilities_
+    electricity 0->5, gas 0->3, water 2->6, sewer 2->6, zoning 5->6; ALL previously
+    working fields unchanged (no regression). +26 field-detections total. Values sane
+    (In Balance / Over Supply / Under 3 mths). Residual misses: MSL gas/elec, #2321525530
+    (the non-standard scanned form, 0 everywhere).
+[x] TESTS: tests/test_checkbox_extractor.py (6 cases incl the "In"->None regression
+    guard + utility left-label). 28 passed (6 + 5 contract + 17 engine).
