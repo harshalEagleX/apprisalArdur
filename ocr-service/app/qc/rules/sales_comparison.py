@@ -1,16 +1,20 @@
 """
 Sales Comparison Approach rules (SCA / checklist 53-88).
 
-Scope note: the per-comparable GRID CELLS (address, proximity, data source,
-date-of-sale, the "0 if no adjustment" line items) are not yet extracted
-reliably (comp_N_* template fields are noisy; comp_N_gla currently holds the
-adjustment, not GLA). So the grid-cell rules (SCA-3/4/5/6/7/8/9/11/12/...) are
-DEFERRED until comp-grid extraction improves — see TASK_HISTORY.txt.
+Two extraction sources feed these rules:
+  • Camelot indexed numeric columns — comp_{1..6}_sale_price / _net_adjustment /
+    _adjusted_sale_price (reliable, right-aligned currency).
+  • comp_grid_extractor descriptive cells — address, proximity, data/verification
+    source, date of sale, condition rating. The full-cell-width fix + positional
+    date handling made these reliable (corpus coverage ≥90%), so the per-comp
+    grid-cell rules below are now ACTIVE (see TASK_HISTORY.txt, SCA grid track).
 
-Implemented here are the SCA checks supported by the reliable Camelot indexed
-fields comp_{1..6}_sale_price / _net_adjustment / _adjusted_sale_price:
-  SCA-2  comparables required (count + value threshold)
-  SCA-NET  net adjustment must not exceed 15% of the comp sale price
+Rules:
+  SCA-2   comparables required (count + value threshold)
+  SCA-3   comp address present              SCA-4   comp proximity present
+  SCA-5   comp data source present          SCA-8   date-of-sale sequencing (c≤s)
+  SCA-16  comp condition UAD rating + consistency vs subject
+  SCA-NET net adjustment ≤ 15% of comp sale price
   SCA-BR  market value bracketed by adjusted sale prices
 """
 
@@ -104,6 +108,26 @@ def sca_net_adjustment(ctx: QCContext):
                       evidence=ev, confidence=0.65)
 
 
+# ---- SCA-3 address present (per comp, grid extractor) ---------------------
+
+@rule(id="SCA-3", num="55", section="sales_comparison", phase=3, name="Comp address present")
+def sca3_address(ctx: QCContext):
+    out = []
+    for i in _comp_indices(ctx):
+        val = str(ctx.appraisal.value(f"comp_{i}_address") or "").strip()
+        ev = [ctx.appraisal.evidence(f"comp_{i}_address")]
+        if len(val) > 3:
+            out.append(RuleResult(rule_id="SCA-3", checklist_num="55", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_address"], evidence=ev))
+        else:
+            out.append(RuleResult(rule_id="SCA-3", checklist_num="55", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-3-addr", comp=i),
+                                  fields_involved=[f"comp_{i}_address"], template_id="SCA-3-addr",
+                                  evidence=ev, confidence=0.7))
+    return out
+
+
 # ---- SCA-4 proximity present (per comp, grid extractor) -------------------
 
 @rule(id="SCA-4", num="56", section="sales_comparison", phase=3, name="Comp proximity present")
@@ -180,23 +204,37 @@ def sca8_date_sequence(ctx: QCContext):
     return out
 
 
-# ---- SCA-16 condition rating present + UAD format (per comp) --------------
+# ---- SCA-16 condition rating present + UAD format + consistency vs subject -
 
 @rule(id="SCA-16", num="68", section="sales_comparison", phase=3, name="Comp condition UAD rating")
 def sca16_condition(ctx: QCContext):
     out = []
+    subj = (ctx.appraisal.value("condition_rating") or "").upper()
+    subj_n = int(subj[1]) if re.fullmatch(r"C[1-6]", subj) else None
     for i in _comp_indices(ctx):
         val = (ctx.appraisal.value(f"comp_{i}_condition_rating") or "").upper()
         ev = [ctx.appraisal.evidence(f"comp_{i}_condition_rating")]
-        if re.fullmatch(r"C[1-6]", val):
-            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
-                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_condition_rating"], evidence=ev))
-        else:
+        if not re.fullmatch(r"C[1-6]", val):
             out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
                                   status=RuleStatus.VERIFY,
                                   message=qc_config.template("SCA-16-cond", comp=i),
                                   fields_involved=[f"comp_{i}_condition_rating"], template_id="SCA-16-cond",
                                   evidence=ev, confidence=0.65))
+            continue
+        # present + valid format → check consistency against the subject. A gap of
+        # 2+ UAD grades (e.g. subject C3 vs comp C5) should carry a condition adjustment.
+        comp_n = int(val[1])
+        if subj_n is not None and abs(comp_n - subj_n) >= 2:
+            ev = ev + [ctx.appraisal.evidence("condition_rating")]
+            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-16-consist", comp=i,
+                                                             comp_c=val, subj_c=subj, delta=abs(comp_n - subj_n)),
+                                  fields_involved=[f"comp_{i}_condition_rating", "condition_rating"],
+                                  template_id="SCA-16-consist", evidence=ev, confidence=0.7))
+        else:
+            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_condition_rating"], evidence=ev))
     return out
 
 

@@ -59,6 +59,8 @@ SCA-2-count:  "A minimum of 3 comparable sales is required (4 for values of $1,0
 SCA-4-prox:   "Please provide Proximity to Subject (distance in miles and direction) for comp {comp} under the sales grid section."
 SCA-5-ds:     "Please have a data source (MLS name, MLS #, DOM) for comp {comp} under the sales grid section."
 SCA-16-cond:  "Please provide a Condition rating (UAD C1-C6) for comp {comp} in the sales grid."
+SCA-3-addr:   "Please provide the property address for comparable sale {comp} under the sales grid section."
+SCA-16-consist: "Comp {comp} condition rating ({comp_c}) differs from the subject ({subj_c}) by {delta} ratings; please confirm a supporting condition adjustment is present."
 
 # ---- Reconciliation / Cost / Income ----
 R-1-mismatch: "In reconciliation section, Indicated Market Value does not match with indicated value by Sales Comparison Approach. Please revise."

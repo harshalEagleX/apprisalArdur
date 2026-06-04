@@ -157,6 +157,8 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
             for prefix, suffix in _FEATURES:
                 if suffix is None:
                     continue
+                if suffix == "sale_date":
+                    continue  # handled positionally below (glued adj+date tokens)
                 y = _row_words(words, prefix, comp_anchors)
                 if y is None:
                     continue
@@ -177,6 +179,22 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
                         m = re.search(r"[+\-]?\$?[\d,]+", adj)
                         if m:
                             out[f"comp_{ci}_{suffix}_adjustment"] = m.group(0).replace("$", "").replace(",", "")
+
+            # Date of Sale/Time: pdfplumber glues each comp's adjustment to the NEXT
+            # comp's UAD date ("+11,160s05/26;c04/26"), so band-binning drops comps.
+            # Scan the row left-to-right (comp region only) and assign the k-th UAD
+            # date token to comp k.
+            ydate = _row_words(words, "date of sale", comp_anchors)
+            if ydate is not None:
+                row_txt = " ".join(
+                    t["text"] for t in sorted(
+                        (w for w in words if abs(w["top"] - ydate) < _ROW_TOL and w["x0"] >= comp_anchors[0] - 12),
+                        key=lambda w: w["x0"]))
+                unit = r"(?:[sc]\d{2}/\d{2}|Active|Unk)"
+                dates = re.findall(unit + r"(?:;" + unit + r")?", row_txt)
+                for k in range(len(comp_anchors)):
+                    if k < len(dates):
+                        out[f"comp_{comp_base + k + 1}_sale_date"] = dates[k]
             comp_base += len(comp_anchors)
     finally:
         pdf.close()

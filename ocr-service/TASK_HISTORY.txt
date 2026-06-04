@@ -352,8 +352,9 @@ WHAT'S LEFT (optional / deep tail)
 [ ] Checkbox detection primitives: extend find_checked_checkboxes beyond rect+2-diagonal
     (filled boxes / single-stroke checks) for demand_supply/electricity/gas misses.
     miss on some docs) — extend find_checked_checkboxes X-mark primitives + spatial fallback.
-[ ] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
+[x] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
     grid extractor right-column capture; add SCA-16 condition consistency vs subject.
+    DONE 2026-06-04 (SCA grid completion track) — see section below.
 [ ] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->
     enables C-2 price/date + C-4 concessions to move from VERIFY to decisive.
 [ ] Finish Phase 1-2 rules (remaining subject/site/improvement presence, full signature
@@ -364,3 +365,47 @@ WHAT'S LEFT (optional / deep tail)
     presence (llava); Phase 7 external data (USPS/ASC.gov stubs); Phase 8 FHA/USDA overlays.
 [ ] Reviewer output surface (Next.js dashboard reading adaptive_validation_results w/ bbox).
 [ ] Orders/ (27 loose PDFs) auto-classify + QC.
+
+--------------------------------------------------------------------------------
+2026-06-04  — SESSION 2: demo reset + Playwright E2E + SCA GRID COMPLETION track
+--------------------------------------------------------------------------------
+
+DEMO INFRA (branch `demo`, pushed origin/demo)
+[x] Full DB reset documented + executed: DROP SCHEMA public CASCADE -> Python
+    manage_db.py recreate + seed-schema (12 adaptive_* tables, 253 field defs) ->
+    Java restart recreates 17 JPA tables + seeds admin. All 3 services verified
+    linked (Next 3000, Java 8080->/login 302, Python 5001 /live alive, admin login).
+[x] brain/src/runners/demo-e2e.spec.ts — fully UI-driven Playwright E2E (Chrome),
+    on-page HUD: Pause/Resume + Continue, per-step narration, manual-upload hold
+    (auto-detects the uploaded batch). Admin (client/reviewer/upload/run/assign) +
+    reviewer (read each finding -> Save Pass/Confirm Fail -> submit -> Copy-all)
+    all real clicks; no background API. Hardened: bounded innerText (no hang),
+    unique client code per run, status-poll loop.
+
+SCA GRID COMPLETION TRACK (visual + word-box analysis; measured)
+[x] BASELINE (extract_comp_grid over 7 distinct appraisals, 31 comps): data_source
+    truncated ("Co", "Realtor and/or CoT"), verification_source truncated, sale_date
+    glued/dropped (Fantail 2/6), view/date had leading-"0" adjustment bleed.
+[x] ROOT CAUSES (from rendered grid page + pdfplumber word x-positions):
+    (1) value band capped at 55% of the cell to split value|adjustment, but the
+        DESCRIPTIVE-ONLY rows (address, proximity, data_source, verification_source)
+        have NO adjustment column -> 55% truncated their text.
+    (2) Date-of-Sale: pdfplumber GLUES each comp's adjustment to the NEXT comp's UAD
+        date into one token ("+11,160s05/26;c04/26") -> band-binning drops comps.
+    (3) adjustment-column digit bleeds left into view/date value ("0N;Res;","0s06/25").
+[x] FIXES (comp_grid_extractor.py): _NO_ADJ={address,proximity,data_source,
+    verification_source} use FULL cell width; Date-of-Sale read POSITIONALLY (k-th
+    UAD date -> comp k via regex on the row text); _clean strips leading adj-digit
+    bleed on date/view/location.
+[x] MEASURED coverage (31 comps): address 100%, data_source 100%, verification 100%,
+    sale_date 31/31 100% (was 2/6 Fantail + glued elsewhere), proximity 96%,
+    condition_rating 90%. (residual: #427 comp3 proximity number, TestX121 comp2/3 +
+    #427 comp3 condition — last/edge comps, deep-deep tail.)
+[x] RULES: added SCA-3 (comp address present); enhanced SCA-16 to check condition
+    CONSISTENCY vs subject (>=2 UAD-grade gap -> VERIFY w/ supporting-adjustment
+    prompt) on top of present+format. Templates SCA-3-addr/SCA-16-consist added.
+    Module docstring updated — grid-cell rules SCA-3/4/5/8/16 now ACTIVE (were DEFERRED).
+[x] MEASURED on Fantail full QC (subject C3): SCA-3/4/5/8/16 all PASS across 3 comps
+    (17 SCA PASS, 1 SKIP). Unit tests: test_qc_engine 17 passed; comp_grid/sales test pass.
+[~] RESIDUAL deep-tail (not blocking): proximity 1-miss + condition 3-miss on edge
+    comps; #2321525530 grid pages not detected (non-standard/scanned 6-pg form).
