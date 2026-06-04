@@ -715,6 +715,42 @@ def _extract_contract_date(pdf_path: Path) -> Dict[str, str]:
     return results
 
 
+def _extract_signature_date(pdf_path: Path) -> Dict[str, str]:
+    """Appraiser "Date of Signature and Report <MM/DD/YYYY>" on the certification
+    page: the date token to the right of the label, in the APPRAISER (left) column
+    only — the SUPERVISORY column repeats the same label further right (x~311).
+    Returned as MM/DD/YYYY (consistent with effective_date comparisons in SIG-D)."""
+    import re
+    _APPRAISER_COL_X = 300        # supervisory column starts to the right of this
+    results: Dict[str, str] = {}
+    date_re = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$")
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        for page_idx in range(len(doc)):
+            words = doc[page_idx].get_text("words")
+            for i in range(2, len(words)):
+                if not (words[i][4] == "Signature" and words[i - 1][4] == "of"
+                        and words[i - 2][4] == "Date"):
+                    continue
+                ly = words[i][1]
+                cand = sorted(
+                    (w for w in words if abs(w[1] - ly) < 2 and w[0] > words[i][2]
+                     and w[0] < _APPRAISER_COL_X and date_re.match(w[4])),
+                    key=lambda z: z[0])
+                if cand:
+                    mm, dd, yy = cand[0][4].split("/")
+                    yy = "20" + yy if len(yy) == 2 else yy
+                    results["date_of_signature"] = f"{int(mm):02d}/{int(dd):02d}/{yy}"
+                    break
+            if "date_of_signature" in results:
+                break
+        doc.close()
+    except Exception as exc:
+        logger.debug("L5 signature_date extraction failed: %s", exc)
+    return results
+
+
 def _extract_neighborhood_name(pdf_path: Path) -> Dict[str, str]:
     """
     Extract Neighborhood Name value (the subdivision/area name).
@@ -942,6 +978,7 @@ def extract_with_uad_template(pdf_path: Path) -> Dict[str, str]:
         ("contract_price", _extract_contract_price_all_formats),
         ("lender_name", _extract_lender_name_clean),
         ("contract_date", _extract_contract_date),
+        ("signature_date", _extract_signature_date),
         ("neighborhood_name", _extract_neighborhood_name),
         ("land_use", _extract_land_use_percentages),
         ("pud_checked", _extract_pud_checked),

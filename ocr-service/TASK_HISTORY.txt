@@ -373,6 +373,19 @@ PHASE 1-2 PRESENCE — S-7 occupancy + S-11 property rights (strict)
 [x] Templates S-7-occupant / S-11-rights (verbatim subject-section prompts).
 [x] MEASURED (Fantail): occupant_status=Vacant -> S-7 PASS; property_rights=Fee Simple
     -> S-11 PASS. Rule total 74 -> 81. test_qc_engine 17 passed (rules register clean).
+
+SIGNATURE DATE (SIG-D) — positional extraction on the certification page
+[x] GAP: date_of_signature was NOT extracted -> SIG-D (sig date >= effective date)
+    always SKIPPED. The cert page (URAR p6) is a 2-column Appraiser|Supervisory block:
+    label "Date of Signature and Report" at x=27, value "05/12/2026" to its right at
+    x=155; the SUPERVISORY column repeats the same label at x~311.
+[x] FIX (l5_uad_template._extract_signature_date): take the date token right of the
+    "Date of Signature" label in the APPRAISER (left, x<300) column; MM/DD/YYYY.
+[x] MEASURED: date_of_signature 7/7 distinct appraisals (Fantail 05/12/2026 verified).
+    Fantail: SIG-D SKIPPED -> PASS (05/12 >= effective 05/11), SIG-1 PASS. (SIG-2 still
+    VERIFY = appraiser-name fuzzy match vs engagement, a separate name-norm issue.)
+[ ] STILL OPEN (signature cross-doc set): appraiser license # / state and supervisory
+    name are not yet extracted (license-state vs property-state rule needs them).
 [ ] Phase 3 intra-report consistency: grid<->improvements<->sketch, land-use=100%,
     net-adj 15%, bracketing, date sequencing in grid.
 [ ] Phase 4 checkbox-confidence rules; Phase 5 NLP commentary (mistral); Phase 6 photo
