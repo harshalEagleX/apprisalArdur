@@ -259,3 +259,78 @@ def sca_bracket(ctx: QCContext):
                       status=RuleStatus.VERIFY, message=qc_config.template("SCA-bracket"),
                       fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
                       template_id="SCA-bracket", evidence=ev, confidence=0.6)
+
+
+# ---------------------------------------------------------------------------
+# Per-comp presence / UAD-format rules (same PASS/VERIFY convention as SCA-4/5/16:
+# extraction may legitimately miss a cell, so a blank/invalid is VERIFY not FAIL).
+# ---------------------------------------------------------------------------
+
+def _per_comp_field(ctx, rule_id, num, field, template_id, ok_fn):
+    out = []
+    for i in _comp_indices(ctx):
+        val = str(ctx.appraisal.value(f"comp_{i}_{field}") or "").strip()
+        ev = [ctx.appraisal.evidence(f"comp_{i}_{field}")]
+        if ok_fn(val):
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+        else:
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template(template_id, comp=i),
+                                  fields_involved=[f"comp_{i}_{field}"], template_id=template_id,
+                                  evidence=ev, confidence=0.6))
+    return out
+
+
+@rule(id="SCA-6", num="58", section="sales_comparison", phase=3, name="Comp verification source present")
+def sca6_verification(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-6", "58", "verification_source", "SCA-6-verif",
+                           lambda v: len(v) > 2)
+
+
+@rule(id="SCA-9", num="61", section="sales_comparison", phase=3, name="Comp location UAD format")
+def sca9_location(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-9", "61", "location_rating", "SCA-9-loc",
+                           lambda v: ";" in v and bool(re.match(r"[A-Za-z]", v)))
+
+
+@rule(id="SCA-11", num="63", section="sales_comparison", phase=3, name="Comp site size has unit")
+def sca11_site(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-11", "63", "site_size", "SCA-11-site",
+                           lambda v: bool(re.search(r"\d", v)) and bool(re.search(r"(sf|ac|acre|sq)", v.lower())))
+
+
+@rule(id="SCA-12", num="64", section="sales_comparison", phase=3, name="Comp view UAD format")
+def sca12_view(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-12", "64", "view", "SCA-12-view",
+                           lambda v: ";" in v and bool(re.match(r"[A-Za-z]", v)))
+
+
+@rule(id="SCA-14", num="66", section="sales_comparison", phase=3, name="Comp quality UAD rating")
+def sca14_quality(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-14", "66", "quality_rating", "SCA-14-qual",
+                           lambda v: bool(re.fullmatch(r"Q[1-6]", v.upper())))
+
+
+@rule(id="SCA-10", num="62", section="sales_comparison", phase=3, name="Comp property rights present + consistent")
+def sca10_rights(ctx: QCContext):
+    subj = str(ctx.appraisal.value("property_rights") or "").lower()
+    subj_lease = "lease" in subj
+    out = []
+    for i in _comp_indices(ctx):
+        val = str(ctx.appraisal.value(f"comp_{i}_leasehold") or "").strip()
+        ev = [ctx.appraisal.evidence(f"comp_{i}_leasehold")]
+        if not val:
+            out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template("SCA-10-rights", comp=i),
+                                  fields_involved=[f"comp_{i}_leasehold"], template_id="SCA-10-rights",
+                                  evidence=ev, confidence=0.6))
+        elif subj_lease and "fee" in val.lower():
+            out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template("SCA-10-lease", comp=i),
+                                  fields_involved=[f"comp_{i}_leasehold", "property_rights"],
+                                  template_id="SCA-10-lease", evidence=ev, confidence=0.7))
+        else:
+            out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_leasehold"], evidence=ev))
+    return out

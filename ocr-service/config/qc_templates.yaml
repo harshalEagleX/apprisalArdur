@@ -62,6 +62,13 @@ SCA-4-prox:   "Please provide Proximity to Subject (distance in miles and direct
 SCA-5-ds:     "Please have a data source (MLS name, MLS #, DOM) for comp {comp} under the sales grid section."
 SCA-16-cond:  "Please provide a Condition rating (UAD C1-C6) for comp {comp} in the sales grid."
 SCA-3-addr:   "Please provide the property address for comparable sale {comp} under the sales grid section."
+SCA-6-verif:  "Please provide a specific verification source (e.g. county assessor / MLS sale data) for comp {comp} in the sales grid."
+SCA-9-loc:    "Please provide a UAD-compliant Location rating (Rating;type) for comp {comp} in the sales grid."
+SCA-10-rights: "Please provide the Leasehold/Fee Simple property rights for comp {comp} in the sales grid."
+SCA-10-lease: "The subject is Leasehold but comp {comp} is Fee Simple; please confirm leasehold comparables were unavailable and comment."
+SCA-11-site:  "Please provide the Site size with a unit (sf or ac) for comp {comp} in the sales grid."
+SCA-12-view:  "Please provide a UAD-compliant View rating (Rating;factor) for comp {comp} in the sales grid."
+SCA-14-qual:  "Please provide a UAD Quality rating (Q1-Q6) for comp {comp} in the sales grid."
 SCA-16-consist: "Comp {comp} condition rating ({comp_c}) differs from the subject ({subj_c}) by {delta} ratings; please confirm a supporting condition adjustment is present."
 
 # ---- Reconciliation / Cost / Income ----

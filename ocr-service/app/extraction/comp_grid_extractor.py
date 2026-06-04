@@ -195,6 +195,28 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
                 for k in range(len(comp_anchors)):
                     if k < len(dates):
                         out[f"comp_{comp_base + k + 1}_sale_date"] = dates[k]
+
+            # NB: Site size also suffers the glue (value "6,307 sf" sticks to the
+            # prior comp's adjustment) but, unlike dates, the adjustment digits have
+            # no delimiter to split on, so a positional scan yields WRONG numbers
+            # ("1,1006000 sf"). We keep band-based site extraction — a clean value
+            # where it lands cleanly, else bare "sf" -> SCA-11 VERIFY (a flagged
+            # review is correct; emitting a wrong size would be worse, P-6).
+
+            # Subject column (between the feature label and comp 1) — only on the
+            # first grid page; used for intra-report consistency checks (the grid's
+            # subject GLA/condition/quality must agree with the dedicated sections).
+            if comp_base == 0:
+                subj_hi = comp_anchors[0] - 12
+                for prefix, suffix in (("gross living area", "gla"),
+                                       ("condition", "condition_rating"),
+                                       ("quality of construction", "quality_rating")):
+                    ys = _row_words(words, prefix, comp_anchors)
+                    if ys is None:
+                        continue
+                    sval = _value_in_band(words, ys, _LABEL_X_MAX, subj_hi)
+                    if sval:
+                        out[f"subject_grid_{suffix}"] = _clean(suffix, sval)
             comp_base += len(comp_anchors)
     finally:
         pdf.close()

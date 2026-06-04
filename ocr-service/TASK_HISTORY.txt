@@ -565,3 +565,16 @@ APPRAISER CREDENTIALS + SIG-3 (license state vs property state)
     property state -> FAIL if mismatch (serious: appraiser not credentialed where the
     property is), SKIPPED if either unextracted. Template SIG-3-state.
 [x] MEASURED (Fantail): TX == TX -> SIG-3 PASS. Rule total 81 -> 82. 17 engine tests pass.
+
+SCA RULE EXPANSION (MIRA-aligned) — Batch 1: per-comp presence/format
+[x] Added SCA-6 (verification source present), SCA-9 (location UAD format), SCA-10
+    (leasehold present + fee-vs-leasehold subject consistency), SCA-11 (site has
+    unit), SCA-12 (view UAD format), SCA-14 (quality Q1-6). Same PASS/VERIFY
+    convention as SCA-4/5/16 (a missed cell is VERIFY, not FAIL). _per_comp_field
+    helper. Templates SCA-6/9/10/11/12/14.
+[x] MEASURED (Fantail, 3 comps): SCA-6/9/10/12/14 all PASS; SCA-11 1 PASS + 2 VERIFY.
+    The 2 VERIFY are honest: comp site "6,307 sf" GLUES to the prior comp's adjustment
+    (pdfplumber), and unlike dates the adjustment digits have no delimiter to split on
+    (a positional scan yields WRONG "1,1006000 sf"), so band-based stays -> bare "sf"
+    -> VERIFY. Emitting a wrong size would be worse (P-6). Rule total 82 -> 100.
+    17 engine tests pass.
