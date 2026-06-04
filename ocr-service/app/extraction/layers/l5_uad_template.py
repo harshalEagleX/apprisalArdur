@@ -624,6 +624,9 @@ def _extract_lender_name_clean(pdf_path: Path) -> Dict[str, str]:
         skipped because we require the capitalized form-label token.
       - Read the value between that label and the next column label
         "Address" on the same visual row (strict y-tolerance).
+      - The lender ADDRESS is the value AFTER that same "Address" label, to the
+        end of the row — the URAR row is
+        "Lender/Client <name> Address <street, city, ST zip>".
     """
     results: Dict[str, str] = {}
     try:
@@ -644,12 +647,71 @@ def _extract_lender_name_clean(pdf_path: Path) -> Dict[str, str]:
                            "supported", "subject", "summary")
                     if not any(kw in value.lower() for kw in bad):
                         results["lender_name"] = value
+                        addr = _lender_address_after(words, w)
+                        if addr:
+                            results["lender_address"] = addr
                         break
             if "lender_name" in results:
                 break
         doc.close()
     except Exception as exc:
         logger.debug("L5 lender extraction failed: %s", exc)
+    return results
+
+
+def _lender_address_after(words: list, lender_label: tuple, y_tol: float = 1.5) -> Optional[str]:
+    """The lender address = words after the lender row's "Address" label, to the
+    end of that same visual row (the row is "Lender/Client <name> Address <addr>")."""
+    ly = lender_label[1]
+    addr_label = next(
+        (nw for nw in words
+         if abs(nw[1] - ly) <= y_tol and nw[0] > lender_label[2]
+         and nw[4].strip().lower() == "address"),
+        None)
+    if addr_label is None:
+        return None
+    tail = sorted(
+        (nw for nw in words if abs(nw[1] - ly) <= y_tol and nw[0] > addr_label[2]),
+        key=lambda z: z[0])
+    addr = " ".join(t[4] for t in tail).strip().strip(",").strip()
+    # sanity: a real address carries a street number / zip; bound the length.
+    if addr and any(c.isdigit() for c in addr) and 5 <= len(addr) <= 120:
+        return addr
+    return None
+
+
+def _extract_contract_date(pdf_path: Path) -> Dict[str, str]:
+    """Appraisal "Date of Contract <MM/DD/YYYY>" — positional read of the value
+    immediately after the label. Returned as MM/DD/YYYY to match the contract
+    extractor's format so the C-2b cross-document compare is apples-to-apples."""
+    import re
+    results: Dict[str, str] = {}
+    date_re = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$")
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        for page_idx in range(min(3, len(doc))):
+            words = doc[page_idx].get_text("words")
+            for i in range(2, len(words)):
+                if not (words[i][4] == "Contract" and words[i - 1][4] == "of"
+                        and words[i - 2][4] == "Date"):
+                    continue
+                y, x1 = words[i][1], words[i][2]
+                row = sorted((w for w in words if abs(w[1] - y) < 2 and w[0] >= x1),
+                             key=lambda z: z[0])
+                for w in row:
+                    if date_re.match(w[4]):
+                        mm, dd, yy = w[4].split("/")
+                        yy = "20" + yy if len(yy) == 2 else yy
+                        results["contract_date"] = f"{int(mm):02d}/{int(dd):02d}/{yy}"
+                        break
+                if "contract_date" in results:
+                    break
+            if "contract_date" in results:
+                break
+        doc.close()
+    except Exception as exc:
+        logger.debug("L5 contract_date extraction failed: %s", exc)
     return results
 
 
@@ -879,6 +941,7 @@ def extract_with_uad_template(pdf_path: Path) -> Dict[str, str]:
         ("effective_date", _extract_effective_date_all_formats),
         ("contract_price", _extract_contract_price_all_formats),
         ("lender_name", _extract_lender_name_clean),
+        ("contract_date", _extract_contract_date),
         ("neighborhood_name", _extract_neighborhood_name),
         ("land_use", _extract_land_use_percentages),
         ("pud_checked", _extract_pud_checked),

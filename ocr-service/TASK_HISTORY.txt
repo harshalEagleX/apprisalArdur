@@ -438,7 +438,31 @@ CONTRACT EXTRACTOR (OCR) TRACK — price label-anchored lookahead (measured)
     C-2a PASS (decisive). C-2b still VERIFY but the cause is APPRAISAL-side: appraisal
     contract_date extracts blank ("noted as ;") — an appraisal subject/contract field
     gap, NOT the contract extractor. C-1/C-3 PASS, C-4 SKIPPED.
-[ ] NEXT (appraisal-side): extract appraisal contract_date so C-2b can be decisive.
+[x] NEXT (appraisal-side): extract appraisal contract_date so C-2b can be decisive.
+    DONE 2026-06-04 (see APPRAISAL LENDER/CONTRACT-DATE section below).
+
+APPRAISAL LENDER ADDRESS (S-10b) + CONTRACT DATE (C-2b) — positional reads
+[x] USER-REPORTED BUG: S-10b "Lender/Client Address" not extracted on the appraisal
+    (Champions Funding 365 East Germann Road, Suite 140, Gilbert AZ 85297).
+[x] DIAGNOSIS: engagement side was FINE (lender_address extracted). Appraisal side
+    lender_address = NOT_FOUND. The URAR row is one line: "Lender/Client <name>
+    Address <street, city ST zip>"; l5 _extract_lender_name_clean only captured the
+    NAME (between "Lender/Client" and "Address") — nothing read the value AFTER the
+    "Address" label. Same class of gap left appraisal contract_date blank (the value
+    sits right after "Date of Contract").
+[x] FIX (l5_uad_template.py): new _lender_address_after — words after the lender
+    row's "Address" label to end-of-row, sanity-gated (must carry a digit, len<=120);
+    set alongside lender_name. New _extract_contract_date — positional "Date of
+    Contract <MM/DD/YYYY>" returned in MM/DD/YYYY to match the contract extractor's
+    format (C-2b uses generic Jaro-Winkler, so formats must align).
+[x] MEASURED (Fantail full QC): appraisal lender_address = "365 East Germann Road,
+    Suite 140, Gilbert, AZ 85297" -> S-10b PASS (matches engagement "...Arizona...").
+    appraisal contract_date = 04/27/2026 -> C-2b PASS (was blank/VERIFY). S-10a/C-2a PASS.
+[x] TESTS: tests/test_lender_address.py (3 cases incl no-label + no-digit rejection).
+    31 passed (3 + 6 checkbox + 5 contract + 17 engine).
+[~] NOTE: C-2b uses generic string match; near-equal dates (04/27 vs 04/29) score as a
+    match under Jaro-Winkler — acceptable here but a date-aware comparator is a future
+    refinement.
 
 CHECKBOX DETECTION TRACK — label mapping fix (measured, no regressions)
 [x] BASELINE (checkbox_extractor over 7 appraisals, 13 enum fields): utilities_
