@@ -70,23 +70,57 @@ def _overlay_comp_grid(rs, pdf, dtype):
     condition, quality, real GLA, location, data source) parsed column-wise from
     the sales grid. Currency comp fields (sale_price/net/adjusted) are left to
     Camelot, which reads those right-aligned columns reliably."""
+    import re as _re
     from app.core.result import ExtractionResult, ExtractionResultSet
     from app.extraction.comp_grid_extractor import extract_comp_grid
+    from app.extraction.sca_grid_matrix import extract_sca_grid
     try:
         grid = extract_comp_grid(pdf)
     except Exception as exc:
         logger.warning("Comp-grid extraction failed for %s: %s", pdf.name, exc)
-        return rs
+        grid = {}
+    # Overlay the dedicated Camelot-lattice cell reads (glue-free) where they pass
+    # a per-field validator, so garbled cells (e.g. "1 C 1") are rejected and the
+    # pdfplumber band value is kept. Camelot fixes the pdfplumber glue (site/date).
+    try:
+        cam = extract_sca_grid(pdf)
+    except Exception as exc:
+        logger.debug("SCA lattice extraction failed for %s: %s", pdf.name, exc)
+        cam = {}
+    cam_acc = cam.pop("_sca_grid_accuracy", None)
+    _VALID = {
+        "site_size": lambda v: _re.search(r"\d", v) and _re.search(r"(sf|ac)", v.lower()),
+        "sale_date": lambda v: bool(_re.search(r"([sc]\d\d/\d\d|active|unk)", v.lower())),
+        "condition_rating": lambda v: bool(_re.fullmatch(r"C[1-6]", v.upper())),
+        "quality_rating": lambda v: bool(_re.fullmatch(r"Q[1-6]", v.upper())),
+        "location_rating": lambda v: ";" in v,
+        "view": lambda v: ";" in v,
+        "proximity": lambda v: bool(_re.search(r"\d+\.\d+", v)),
+    }
+    cam_fields = set()
+    for name, value in cam.items():
+        v = str(value).strip()
+        if not v:
+            continue
+        suffix = name.split("_", 2)[2] if name.startswith("comp_") and name[5].isdigit() else \
+            (name[len("subject_grid_"):] if name.startswith("subject_grid_") else name)
+        validator = _VALID.get(suffix)
+        if validator is None or validator(v):
+            grid[name] = v
+            cam_fields.add(name)
     if not grid:
         return rs
     existing = {name: r for name, r in rs}
     for name, value in grid.items():
         if not value or not str(value).strip():
             continue
+        from_cam = name in cam_fields
         existing[name] = ExtractionResult(
             canonical_name=name, document_type=dtype, value=str(value),
-            raw_source_text=str(value), extraction_method="comp_grid",
-            confidence=0.88, source_page=0, normalization_applied=["comp_grid"],
+            raw_source_text=str(value),
+            extraction_method="sca_lattice" if from_cam else "comp_grid",
+            confidence=0.92 if from_cam else 0.88, source_page=0,
+            normalization_applied=["sca_lattice" if from_cam else "comp_grid"],
         )
     merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
                                  total_pages=rs.total_pages, ocr_method="comp_grid+layered")

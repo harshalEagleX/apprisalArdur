@@ -578,3 +578,28 @@ SCA RULE EXPANSION (MIRA-aligned) — Batch 1: per-comp presence/format
     (a positional scan yields WRONG "1,1006000 sf"), so band-based stays -> bare "sf"
     -> VERIFY. Emitting a wrong size would be worse (P-6). Rule total 82 -> 100.
     17 engine tests pass.
+
+DEDICATED SCA GRID EXTRACTOR — Camelot lattice (true cell matrix, glue-free)
+[x] DECISION: the URAR sales grid is a bordered (lattice) table; reading it as a
+    real cell matrix (row label x column) instead of pdfplumber x-band binning
+    eliminates the "glue" artifacts (a comp value sticking to the prior comp's
+    adjustment) at the root. Camelot is already in-stack (no new hardware) — the
+    right local choice; PaddleOCR PP-Structure is the GPU/cloud upgrade (suppressed
+    on the 8GB M1, per extraction-pipeline-architecture).
+[x] SPIKE: Camelot lattice on the Fantail grid -> 69x13 matrix, ~87% accuracy, CLEAN
+    cells (date "s12/25;c12/25", site "6307 sf" both correct — no glue). Columns
+    detected from the header: comp values at the "COMPARABLE SALE" columns, subject
+    at comp1-2, each adjustment at value+2.
+[x] BUILT app/extraction/sca_grid_matrix.py::extract_sca_grid -> comp_<i>_<field>
+    [/_adjustment] + subject_grid_<field> + _sca_grid_accuracy. Returns {} on
+    scanned/unreadable pages -> caller falls back to pdfplumber (graceful degrade).
+[x] MEASURED standalone (7 distinct appraisals): site# 6/6 Fantail (was 1/6 glued),
+    Theon 3/3, Pearson 5/6, Merrily 8/9; dates clean; #530 scanned -> {} (fallback).
+[x] WIRED via _overlay_comp_grid VALIDATED MERGE: pdfplumber base, then prefer
+    Camelot cells ONLY where they pass a per-field validator (site digit+unit, date
+    UAD, condition C1-6, quality Q1-6, location/view ";", proximity decimal) so
+    garble like "1 C 1" is rejected and the band value kept. Camelot fields tagged
+    method "sca_lattice" conf 0.92.
+[x] MEASURED (Fantail full QC): SCA-11 2 VERIFY -> 6 PASS (site clean); all SCA
+    Batch-1 rules 6/6 PASS across all 6 comps. SCA spread 68 PASS / 1 SKIP / 0 VERIFY.
+    Rule total 100 -> 133 (per-comp rules now fire on all 6 comps). engine tests pass.
