@@ -433,6 +433,31 @@ def sca17_subject_consistency(ctx: QCContext):
     return out
 
 
+@rule(id="SCA-13", num="65", section="sales_comparison", phase=3, name="Comp design present")
+def sca13_design(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-13", "65", "design", "SCA-13-design", lambda v: len(v) > 1)
+
+
+@rule(id="SCA-19", num="71", section="sales_comparison", phase=3, name="Comp functional utility present")
+def sca19_functional(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-19", "71", "functional_utility", "SCA-19-func", lambda v: len(v) > 1)
+
+
+@rule(id="SCA-20", num="72", section="sales_comparison", phase=3, name="Comp heating/cooling present")
+def sca20_heating(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-20", "72", "heating_cooling", "SCA-20-heat", lambda v: len(v) > 1)
+
+
+@rule(id="SCA-21", num="74", section="sales_comparison", phase=3, name="Comp garage/carport present")
+def sca21_garage(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-21", "74", "garage_carport", "SCA-21-garage", lambda v: len(v) > 1)
+
+
+@rule(id="SCA-22", num="75", section="sales_comparison", phase=3, name="Comp porch/patio/deck present")
+def sca22_porch(ctx: QCContext):
+    return _per_comp_field(ctx, "SCA-22", "75", "porch_patio_deck", "SCA-22-porch", lambda v: len(v) > 1)
+
+
 @rule(id="SCA-10", num="62", section="sales_comparison", phase=3, name="Comp property rights present + consistent")
 def sca10_rights(ctx: QCContext):
     subj = str(ctx.appraisal.value("property_rights") or "").lower()

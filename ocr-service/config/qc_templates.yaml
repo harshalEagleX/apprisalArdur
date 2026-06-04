@@ -73,6 +73,11 @@ SCA-17-consist: "The subject {field} in the sales grid ({a}) does not match the 
 SCA-DC-old:   "Comp {comp} sold {months} months before the effective date (>12); please comment on why a more recent sale was unavailable."
 SCA-PR-bracket: "Comp {comp} sale price (${a}) is outside a reasonable bracket of the subject value (${b}); please confirm comparable selection."
 SCA-7-conc:   "Comp {comp} reports seller concessions (${a}) but the financing adjustment is not negative; concessions should adjust the sale price downward — please review."
+SCA-13-design: "Please provide the Design (Style) for comp {comp} in the sales grid."
+SCA-19-func:  "Please provide the Functional Utility for comp {comp} in the sales grid."
+SCA-20-heat:  "Please provide the Heating/Cooling for comp {comp} in the sales grid."
+SCA-21-garage: "Please provide the Garage/Carport for comp {comp} in the sales grid."
+SCA-22-porch: "Please provide the Porch/Patio/Deck for comp {comp} in the sales grid."
 SCA-16-consist: "Comp {comp} condition rating ({comp_c}) differs from the subject ({subj_c}) by {delta} ratings; please confirm a supporting condition adjustment is present."
 
 # ---- Reconciliation / Cost / Income ----

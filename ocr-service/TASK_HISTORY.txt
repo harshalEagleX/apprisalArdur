@@ -626,3 +626,13 @@ SCA Batch 3 — adjustment/selection gap rules (MIRA gaps)
     17,DC,PR,NET,BR + section-level HOLD. VERIFY-deferred (need vision/NLP/external,
     graceful degradation): SCA-1 (1004MC), SCA-16 image-condition, SCA-23 listing NLP,
     SCA-25 new-construction comps, SCA-27 comp photos.
+
+SCA Batch 4 — remaining per-comp presence rows (full grid coverage)
+[x] SCA-13 design, SCA-19 functional utility, SCA-20 heating/cooling, SCA-21 garage,
+    SCA-22 porch/patio/deck (presence, _per_comp_field PASS/VERIFY). All 6 PASS on
+    Fantail. SCA now emits 120 rule results (119 PASS/1 SKIP), every extracted grid
+    row covered. Overall 167 PASS / 6 VERIFY / 1 FAIL, 184 rules. 17 engine tests pass.
+[x] SCA EDGE-TO-EDGE (deterministic) COMPLETE: SCA-2,3,4,5,6,7,8,9,10,11,12,13,14,16,
+    17,19,20,21,22,DC,PR,NET,BR + section HOLD. Remaining are vision/NLP/external
+    (SCA-1 1004MC, SCA-15 age-vs-yearbuilt[needs comp year_built], SCA-16 image,
+    SCA-23 NLP, SCA-25, SCA-27 photos) -> VERIFY-deferred (hardware-suppressed).
