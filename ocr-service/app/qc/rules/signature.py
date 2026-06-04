@@ -64,6 +64,30 @@ def sig_date_sequence(ctx: QCContext):
                       template_id="SIG-date", evidence=ev)
 
 
+# ---- SIG-3 appraiser licensed in the property's state ---------------------
+
+@rule(id="SIG-3", num="102", section="signature", phase=2,
+      name="Appraiser licensed in property state")
+def sig3_license_state(ctx: QCContext):
+    lic = (ctx.appraisal.value("appraiser_license_state") or "").strip().upper()
+    prop = (ctx.appraisal.value("state") or "").strip().upper()
+    ev = [ctx.appraisal.evidence("appraiser_license_state"), ctx.appraisal.evidence("state")]
+    if not lic or not prop:
+        return RuleResult(rule_id="SIG-3", checklist_num="102", section="signature",
+                          status=RuleStatus.SKIPPED,
+                          message="appraiser license state or property state not extracted",
+                          fields_involved=["appraiser_license_state", "state"], evidence=ev)
+    if lic == prop:
+        return RuleResult(rule_id="SIG-3", checklist_num="102", section="signature",
+                          status=RuleStatus.PASS,
+                          fields_involved=["appraiser_license_state", "state"], evidence=ev)
+    return RuleResult(rule_id="SIG-3", checklist_num="102", section="signature",
+                      status=RuleStatus.FAIL,
+                      message=qc_config.template("SIG-3-state", a=lic, b=prop),
+                      fields_involved=["appraiser_license_state", "state"],
+                      template_id="SIG-3-state", evidence=ev)
+
+
 # ---- SIG-2 appraiser name matches engagement ------------------------------
 
 @rule(id="SIG-2", num="G", section="signature", phase=2,

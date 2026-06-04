@@ -73,6 +73,7 @@ CA-1-sitevalue: "Please provide an Opinion of site value in the report."
 SIG-1-missing: "The Appraiser Signatures are missing throughout the report, please sign in all the designated spaces."
 SIG-date:     "Please correct the \"Date of signature and report\" on the signature page. The signature date should be greater than or equal to the effective date."
 SIG-2-field:  "{field} on the signature page should match the engagement letter."
+SIG-3-state:  "The appraiser's license/certification state ({a}) does not match the subject property state ({b}). Please confirm the appraiser is credentialed in the state where the property is located."
 SIG-amc-missing: "In the signature card, please include the AMC name: {value}."
 SIG-amc-wrong: "In the signature card, please update the AMC name: {value}."
 

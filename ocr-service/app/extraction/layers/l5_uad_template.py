@@ -751,6 +751,55 @@ def _extract_signature_date(pdf_path: Path) -> Dict[str, str]:
     return results
 
 
+_US_STATES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL",
+    "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
+    "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+    "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
+}
+
+
+def _extract_appraiser_credentials(pdf_path: Path) -> Dict[str, str]:
+    """Appraiser certification page (left/Appraiser column, x<300):
+      - appraiser_license       : value after "State Certification #"/"State License #"
+      - appraiser_license_state : the standalone "State <XX>" 2-letter code line.
+    The license STATE drives the "appraiser licensed in the property's state" rule."""
+    import re
+    _COL = 300
+    lic_re = re.compile(r"^[A-Z]{0,3}-?\d{3,}[-A-Z]*$")
+    results: Dict[str, str] = {}
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        for page_idx in range(len(doc)):
+            words = doc[page_idx].get_text("words")
+            txt = " ".join(w[4] for w in words)
+            if "Certification" not in txt or "Expiration" not in txt:
+                continue  # not the cert page
+            for i, w in enumerate(words):
+                if w[0] >= _COL:
+                    continue
+                ly = w[1]
+                same_row = sorted((x for x in words if abs(x[1] - ly) < 2 and x[0] > w[2] and x[0] < _COL),
+                                  key=lambda z: z[0])
+                # license / certification number
+                if ("appraiser_license" not in results and w[4] in ("Certification", "License")
+                        and i > 0 and words[i - 1][4] == "State"):
+                    for nw in same_row:
+                        if lic_re.match(nw[4]) and any(c.isdigit() for c in nw[4]):
+                            results["appraiser_license"] = nw[4]
+                            break
+                # license state: "State <XX>"
+                if "appraiser_license_state" not in results and w[4] == "State" and same_row:
+                    if same_row[0][4] in _US_STATES:
+                        results["appraiser_license_state"] = same_row[0][4]
+            break  # only the cert page
+        doc.close()
+    except Exception as exc:
+        logger.debug("L5 appraiser credentials extraction failed: %s", exc)
+    return results
+
+
 def _extract_neighborhood_name(pdf_path: Path) -> Dict[str, str]:
     """
     Extract Neighborhood Name value (the subdivision/area name).
@@ -979,6 +1028,7 @@ def extract_with_uad_template(pdf_path: Path) -> Dict[str, str]:
         ("lender_name", _extract_lender_name_clean),
         ("contract_date", _extract_contract_date),
         ("signature_date", _extract_signature_date),
+        ("appraiser_credentials", _extract_appraiser_credentials),
         ("neighborhood_name", _extract_neighborhood_name),
         ("land_use", _extract_land_use_percentages),
         ("pud_checked", _extract_pud_checked),

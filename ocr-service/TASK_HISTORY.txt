@@ -553,3 +553,15 @@ CHECKBOX UTILITIES — right-label hijack fix (whole-corpus run, electricity 75-
 [x] NET: digital-URAR checkbox detection is now reliable corpus-wide (11/13 fields
     23/24=95%, property_rights 24/24, electricity 23/24); good enough for STRICT
     presence rules. Scanned-form checkbox = separate vision track.
+
+APPRAISER CREDENTIALS + SIG-3 (license state vs property state)
+[x] Extract from the certification page (appraiser/left column, x<300):
+    appraiser_license (State Certification/License #) and appraiser_license_state
+    (the standalone "State <XX>" 2-letter line, validated against a US-state set).
+[x] MEASURED: appraiser_license 7/7 distinct appraisals; appraiser_license_state 5/7
+    (Theon FL, Fantail TX, Baell GA, Pearson MI, Merrily FL — each MATCHES its
+    property state); 2 misses = 90 NE 32nd (layout variant) + #530 (scanned).
+[x] RULE SIG-3 (signature, num 102): appraiser_license_state must equal the subject
+    property state -> FAIL if mismatch (serious: appraiser not credentialed where the
+    property is), SKIPPED if either unextracted. Template SIG-3-state.
+[x] MEASURED (Fantail): TX == TX -> SIG-3 PASS. Rule total 81 -> 82. 17 engine tests pass.
