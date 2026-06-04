@@ -359,8 +359,20 @@ WHAT'S LEFT (optional / deep tail)
 [~] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->
     enables C-2 price/date + C-4 concessions to move from VERIFY to decisive.
     PARTIAL 2026-06-04 (Contract OCR track) — price 1/5 -> 2/5; see section below.
-[ ] Finish Phase 1-2 rules (remaining subject/site/improvement presence, full signature
+[~] Finish Phase 1-2 rules (remaining subject/site/improvement presence, full signature
     cross-doc set, SCA address/proximity/data-source presence).
+    PARTIAL 2026-06-04: SCA-3 address (done, SCA track); S-7 occupancy + S-11 property
+    rights added (strict, backed by hardened checkbox detection) — see section below.
+
+PHASE 1-2 PRESENCE — S-7 occupancy + S-11 property rights (strict)
+[x] Per user directive ("proper and perfect, do NOT soften rules"): only added these
+    after checkbox detection was made reliable corpus-wide (occupant 23/24, property_
+    rights 24/24). Rules use H.present -> strict FAIL on a genuine blank (no lenient
+    VERIFY-on-blank). occupant_status read from Owner/Tenant/Vacant checkbox; property_
+    rights from Fee Simple/Leasehold checkbox.
+[x] Templates S-7-occupant / S-11-rights (verbatim subject-section prompts).
+[x] MEASURED (Fantail): occupant_status=Vacant -> S-7 PASS; property_rights=Fee Simple
+    -> S-11 PASS. Rule total 74 -> 81. test_qc_engine 17 passed (rules register clean).
 [ ] Phase 3 intra-report consistency: grid<->improvements<->sketch, land-use=100%,
     net-adj 15%, bracketing, date sequencing in grid.
 [ ] Phase 4 checkbox-confidence rules; Phase 5 NLP commentary (mistral); Phase 6 photo

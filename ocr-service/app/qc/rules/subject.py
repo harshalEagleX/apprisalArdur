@@ -126,6 +126,24 @@ def s6_census(ctx):
                           r"\d{3,4}\.\d{2}", "S-6-census", label="Census Tract")
 
 
+# ---- S-7 Occupancy status marked (checkbox-derived) ------------------------
+
+@rule(id="S-7", num="9", section="subject", phase=1, name="Occupancy status marked")
+def s7_occupancy(ctx):
+    # occupant_status is read from the subject Owner/Tenant/Vacant checkbox
+    # (drawing detection, ~95% on digital URARs); blank => genuinely unmarked.
+    return H.present(ctx, "S-7", "9", "subject", "occupant_status",
+                     template_id="S-7-occupant", label="Occupancy")
+
+
+# ---- S-11 Property Rights Appraised marked (checkbox-derived) ---------------
+
+@rule(id="S-11", num="4", section="subject", phase=1, name="Property rights appraised present")
+def s11_rights(ctx):
+    return H.present(ctx, "S-11", "4", "subject", "property_rights",
+                     template_id="S-11-rights", label="Property Rights Appraised")
+
+
 # ---- S-8 Special assessments (blank not allowed; 0 if none) ----------------
 
 @rule(id="S-8", num="10", section="subject", phase=1, name="Special assessments not blank")

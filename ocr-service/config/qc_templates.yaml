@@ -19,6 +19,8 @@ S-6-census:   "Census Tract should be in the format XXXX.XX and must be provided
 S-7-occ-vacant: "The subject section indicates that the property is owner occupied however the photos appear to show the property is currently vacant. Please revise or comment."
 S-7-occ-occupied: "In subject section, occupancy is marked as vacant however as per photos subject property appears to be occupied, please revise or comment if it is a staged home."
 S-8-assessment: "In the subject section, please specify what the special assessment of ${value} is for."
+S-7-occupant: "In the subject section, please mark the Occupancy status (Owner, Tenant, or Vacant)."
+S-11-rights:  "In the subject section, please mark the Property Rights Appraised (Fee Simple or Leasehold)."
 S-9-pud:      "HOA dues are noted as \"${value}\" per year in the subject section however PUD box is not marked, please revise."
 S-10-lender:  "Please correct the lender's name so it reflects as: {value}"
 S-10-lender-addr: "Please correct the lender's address so it reflects as: {value}"
