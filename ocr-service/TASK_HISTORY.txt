@@ -504,3 +504,22 @@ CHECKBOX MARK DETECTION — split-rect grouping fix (occupant_status 4->6)
     one recovered box; no false-positive flood). Values sane (Vacant/Owner).
 [x] TESTS: tests/test_checkbox_detection.py (split-rect, bare-rect, filled, adjacent-
     not-merged). 27 passed.
+
+CHECKBOX UTILITIES — right-label hijack fix (whole-corpus run, electricity 75->95%)
+[x] USER: "carry checkbox detection on ALL appraisal reports in uploads." Ran the
+    extractor over all 24 appraisal PDFs (7 distinct properties x copies).
+[x] FINDING: electricity 18/24, gas 15/24 lagged. ROOT CAUSE (MSL/Georgia grid form):
+    utilities are a GRID where a box's RIGHT neighbour is the NEXT column's utility
+    name — the "Electricity" box (left label) sits just left of the "Water" column
+    header, so the right-label "Water" hijacked it to utilities_water (electricity
+    lost, water given a false source). Utility names are LEFT row labels, never
+    right-label options.
+[x] FIX: removed electricity/electric/gas/water/sewer/sanitary from the right-label
+    CHECKBOX_VALUE_TO_FIELD; utilities map ONLY via the LEFT row label (_UTILITY_LEFT).
+[x] MEASURED (all 24): electricity 18->23 (95%), gas 15->16; water/sewer 23/24 (now
+    from the correct box). The only broad miss is sort/#2321525530 (scanned image,
+    no vector layer -> vision OCR). gas absent only on the 2 Florida all-electric
+    homes (Theon, Merrily) -> CORRECT (no gas to mark). 27 tests pass.
+[x] NET: digital-URAR checkbox detection is now reliable corpus-wide (11/13 fields
+    23/24=95%, property_rights 24/24, electricity 23/24); good enough for STRICT
+    presence rules. Scanned-form checkbox = separate vision track.

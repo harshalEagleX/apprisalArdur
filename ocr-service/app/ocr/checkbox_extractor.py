@@ -241,13 +241,10 @@ def map_label_to_field(label: str, doc_type: str,
         "illegal": ("zoning_compliance", "Illegal"),
         # Highest and Best Use (ST-6)
         # HBU "yes" is checked = True (existing use = HBU)
-        # Utilities (ST-7)
-        "electricity": ("utilities_electricity", "True"),
-        "electric": ("utilities_electricity", "True"),
-        "gas": ("utilities_gas", "True"),
-        "water": ("utilities_water", "True"),
-        "sanitary sewer": ("utilities_sewer", "True"),
-        "sewer": ("utilities_sewer", "True"),
+        # Utilities (ST-7): handled ONLY via the LEFT row label (_UTILITY_LEFT).
+        # They are intentionally NOT right-label values — on grid-style forms a
+        # box's right neighbour is the NEXT utility column's name ("Electricity"
+        # box sits left of the "Water" column header), which would hijack the map.
         # FEMA (ST-8)
         "fema": None,  # context-dependent
         # Status (improvements)
