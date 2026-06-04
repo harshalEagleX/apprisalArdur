@@ -312,6 +312,38 @@ def sca14_quality(ctx: QCContext):
                            lambda v: bool(re.fullmatch(r"Q[1-6]", v.upper())))
 
 
+@rule(id="SCA-17", num="69", section="sales_comparison", phase=3,
+      name="Subject grid matches improvements (GLA/condition/quality)")
+def sca17_subject_consistency(ctx: QCContext):
+    """The subject column of the sales grid must agree with the dedicated sections
+    (a transcription discrepancy between the grid and Improvements/Site)."""
+    out = []
+    checks = [("subject_grid_gla", "gla", "GLA", True),
+              ("subject_grid_condition_rating", "condition_rating", "Condition", False),
+              ("subject_grid_quality_rating", "quality_rating", "Quality", False)]
+    for gfield, sfield, label, numeric in checks:
+        g = ctx.appraisal.value(gfield)
+        s = ctx.appraisal.value(sfield)
+        ev = [ctx.appraisal.evidence(gfield), ctx.appraisal.evidence(sfield)]
+        if not g or not s:
+            continue  # can only compare when both sides are present
+        if numeric:
+            gv, sv = normalize_currency(g), normalize_currency(s)
+            same = gv is not None and sv is not None and sv > 0 and abs(gv - sv) / sv <= 0.01
+        else:
+            same = str(g).strip().upper() == str(s).strip().upper()
+        if same:
+            out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[gfield, sfield], evidence=ev))
+        else:
+            out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-17-consist", field=label, a=g, b=s),
+                                  fields_involved=[gfield, sfield], template_id="SCA-17-consist",
+                                  evidence=ev, confidence=0.7))
+    return out
+
+
 @rule(id="SCA-10", num="62", section="sales_comparison", phase=3, name="Comp property rights present + consistent")
 def sca10_rights(ctx: QCContext):
     subj = str(ctx.appraisal.value("property_rights") or "").lower()

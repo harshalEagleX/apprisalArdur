@@ -64,7 +64,31 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
                 section=spec.section, status=RuleStatus.SKIPPED,
                 message=f"Rule execution error: {exc}",
             ))
+    _escalate_sections(report)
     return report
+
+
+# Sections that warrant a systematic-failure HOLD (data-grid heavy sections where
+# a cluster of failures signals a pattern, not isolated errors — MIRA's logic).
+_HOLD_FAIL_THRESHOLD = 2
+
+
+def _escalate_sections(report: QCReport) -> None:
+    """Section-level risk: when a section accumulates more than _HOLD_FAIL_THRESHOLD
+    FAILs, the section has systematic problems rather than isolated errors — add a
+    section-level HOLD so the whole section is routed to a full manual review."""
+    from collections import Counter
+    fails = Counter(r.section for r in report.results
+                    if r.status == RuleStatus.FAIL and r.section)
+    for section, n in fails.items():
+        if n > _HOLD_FAIL_THRESHOLD:
+            report.results.append(RuleResult(
+                rule_id=f"{section.upper()}-HOLD", checklist_num="",
+                section=section, status=RuleStatus.HOLD,
+                message=(f"{n} failures in the {section.replace('_', ' ')} section indicate "
+                         "systematic problems (not isolated errors); the section is placed on "
+                         "HOLD for a full manual review."),
+            ))
 
 
 def persist_report(report: QCReport, document_id: str) -> int:

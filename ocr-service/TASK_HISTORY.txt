@@ -603,3 +603,14 @@ DEDICATED SCA GRID EXTRACTOR — Camelot lattice (true cell matrix, glue-free)
 [x] MEASURED (Fantail full QC): SCA-11 2 VERIFY -> 6 PASS (site clean); all SCA
     Batch-1 rules 6/6 PASS across all 6 comps. SCA spread 68 PASS / 1 SKIP / 0 VERIFY.
     Rule total 100 -> 133 (per-comp rules now fire on all 6 comps). engine tests pass.
+
+SCA Batch 2 — grid<->section consistency (SCA-17) + section-level HOLD
+[x] SCA-17 (num 69): the sales-grid SUBJECT column (GLA/condition/quality, from
+    subject_grid_*) must agree with the dedicated Improvements section; mismatch ->
+    VERIFY with both values shown. Fantail: 2301==2301, C3==C3, Q3==Q3 -> 3 PASS.
+[x] SECTION-LEVEL HOLD (engine._escalate_sections, MIRA pattern logic): when a section
+    accumulates > 2 FAILs the failures are systematic, not isolated -> append a
+    "<SECTION>-HOLD" finding (HOLD) routing the whole section to manual review.
+    tests/test_section_hold.py (3-fails->HOLD, 2-fails->none, spread->none). 20 pass.
+[x] MEASURED (Fantail): spread 119 PASS / 6 VERIFY / 1 FAIL / 3 SKIP / 7 N/A, 136 rules;
+    1 FAIL so no HOLD (correct for a clean report).
