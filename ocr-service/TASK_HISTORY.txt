@@ -355,8 +355,9 @@ WHAT'S LEFT (optional / deep tail)
 [x] SCA data-source / verification-source extraction is weak (SCA-5 VERIFY) — refine
     grid extractor right-column capture; add SCA-16 condition consistency vs subject.
     DONE 2026-06-04 (SCA grid completion track) — see section below.
-[ ] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->
+[~] Contract extractor (OCR-based): TREC fully scanned, FL/Pearson blank-template ->
     enables C-2 price/date + C-4 concessions to move from VERIFY to decisive.
+    PARTIAL 2026-06-04 (Contract OCR track) — price 1/5 -> 2/5; see section below.
 [ ] Finish Phase 1-2 rules (remaining subject/site/improvement presence, full signature
     cross-doc set, SCA address/proximity/data-source presence).
 [ ] Phase 3 intra-report consistency: grid<->improvements<->sketch, land-use=100%,
@@ -409,3 +410,31 @@ SCA GRID COMPLETION TRACK (visual + word-box analysis; measured)
     (17 SCA PASS, 1 SKIP). Unit tests: test_qc_engine 17 passed; comp_grid/sales test pass.
 [~] RESIDUAL deep-tail (not blocking): proximity 1-miss + condition 3-miss on edge
     comps; #2321525530 grid pages not detected (non-standard/scanned 6-pg form).
+
+CONTRACT EXTRACTOR (OCR) TRACK — price label-anchored lookahead (measured)
+[x] BASELINE (extract_contract_fields over 5 distinct contracts): price 1/5, date 4/5
+    (quality suspect), concessions 0/5. Even DIGITAL contracts (741/756 emb words)
+    missed price — the format didn't match the same-line cash+loan / "sum" strategy.
+[x] READ THE DOCS (P-2): 3 distinct forms — (a) Georgia F201: label clause then the
+    value on the NEXT line "$ 263,000.00 Closing: $ 0.00"; (b) Michigan: "...for the
+    sum of $" with a BLANK fill-in; (c) Florida FAR/BAR: "PURCHASE PRICE (U.S.
+    currency):....." dotted BLANK. (b)/(c) have no price in the text layer at all.
+[x] FIX (contract_extractor.py): added Strategy 3 — a purchase-price DECLARATION
+    clause (anchored so prose "...towards the purchase price of the Property" does
+    NOT match) whose amount sits on the next line is read via _lead_amount (line that
+    LEADS with the $ value). TREC cash+loan + explicit-sum strategies unchanged.
+[x] MEASURED: price 1/5 -> 2/5 (MSL/Georgia 263000 recovered; #505 TREC 380000 kept,
+    no regression). The 3 misses are genuine BLANK fill-in templates -> correctly
+    return None so C-2a stays VERIFY (a wrong value is worse than NOT_FOUND, P-6).
+[x] TESTS: new tests/test_contract_extractor.py (5 cases: TREC cash+loan, explicit
+    sum, next-line declaration, blank-template->None, prose-no-false-match). 22 passed
+    (5 + 17 engine).
+[~] DEFERRED (honest): concessions stay 0/5 — on these forms the concession shares a
+    line with the price ("...Closing: $ 0.00"), so any next-line heuristic risks
+    grabbing the price as the concession; left as None -> C-4 SKIPPED (safe). Contract
+    DATE still uses latest-date heuristic (quality caveat; needs exec-date anchoring).
+[x] RULE-LEVEL MEASURE (Fantail full QC): contract_price 380000 == appraisal 380000 ->
+    C-2a PASS (decisive). C-2b still VERIFY but the cause is APPRAISAL-side: appraisal
+    contract_date extracts blank ("noted as ;") — an appraisal subject/contract field
+    gap, NOT the contract extractor. C-1/C-3 PASS, C-4 SKIPPED.
+[ ] NEXT (appraisal-side): extract appraisal contract_date so C-2b can be decisive.

@@ -84,18 +84,44 @@ def _line_amount(line: str, lo: float = 1000.0) -> Optional[float]:
     return best
 
 
+# A purchase-price *declaration* clause (not a prose mention of "purchase price").
+# Anchored so boilerplate like "applied towards the purchase price of the Property"
+# does not match: requires "to be paid"/"offers to buy ... sum of"/"(U.S. currency)"
+# right after the label, or a numbered clause heading.
+_PRICE_DECL = re.compile(
+    r"(purchase\s*price\s*(?:of\s*property)?\s*to\s*be\s*paid|"
+    r"offers?\s*to\s*buy.*for\s*the\s*sum\s*of|"
+    r"(?:purchase|sales?)\s*price\b[^.]*u\.?s\.?\s*currency|"
+    r"^\s*\d+\.?\s*(?:purchase|sales?)\s*price\b)", re.I)
+# A line that LEADS with a dollar amount (the value line under a declaration), e.g.
+# "$ 263,000.00 Closing: $ 0.00" — take the first amount as the price.
+_LEAD_AMOUNT = re.compile(r"^\s*\$?\s?([\d]{1,3}(?:,\d{3})+(?:\.\d{2})?|\d{5,})")
+
+
+def _lead_amount(line: str, lo: float = 10_000.0) -> Optional[float]:
+    """Amount when the line begins with it (value line under a label)."""
+    m = _LEAD_AMOUNT.match(line)
+    if not m:
+        return None
+    v = _to_amount(m.group(1))
+    return v if v is not None and lo <= v <= 50_000_000 else None
+
+
 def _contract_price(text: str) -> Optional[str]:
     """Targeted contract-price extraction (no noisy 'largest amount' fallback).
 
     Strategy 1 (TREC): Cash portion (A) + Loan/Financing (B) = Sales Price.
     Strategy 2: an explicit 'Sales/Purchase Price (Sum...)' or 'Total ... Price'
     line carrying an amount.
-    Returns None when neither is confidently found → the QC rule stays VERIFY.
+    Strategy 3: a purchase-price *declaration* clause whose amount sits on the
+    NEXT line (e.g. Georgia F201: label then "$ 263,000.00 Closing: $ 0.00").
+    Returns None when none is confidently found → the QC rule stays VERIFY.
     """
     lines = text.splitlines()
     cash = loan = None
     explicit = None
-    for ln in lines:
+    declared = None
+    for i, ln in enumerate(lines):
         low = ln.lower()
         if "cash portion" in low and cash is None:
             cash = _line_amount(ln)
@@ -106,12 +132,22 @@ def _contract_price(text: str) -> Optional[str]:
             amt = _line_amount(ln, lo=10_000)
             if amt:
                 explicit = amt
+        elif declared is None and _PRICE_DECL.search(ln):
+            amt = _line_amount(ln, lo=10_000)            # same-line amount?
+            if amt is None:                              # else look at next 2 lines
+                for nxt in (l for l in lines[i + 1:i + 3] if l.strip()):
+                    amt = _lead_amount(nxt)
+                    break
+            if amt is not None:
+                declared = amt
     if cash is not None and loan is not None:
         total = cash + loan
         if 10_000 <= total <= 50_000_000:
             return str(int(total))
     if explicit:
         return str(int(explicit))
+    if declared:
+        return str(int(declared))
     return None
 
 
