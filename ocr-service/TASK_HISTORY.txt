@@ -614,3 +614,15 @@ SCA Batch 2 — grid<->section consistency (SCA-17) + section-level HOLD
     tests/test_section_hold.py (3-fails->HOLD, 2-fails->none, spread->none). 20 pass.
 [x] MEASURED (Fantail): spread 119 PASS / 6 VERIFY / 1 FAIL / 3 SKIP / 7 N/A, 136 rules;
     1 FAIL so no HOLD (correct for a clean report).
+
+SCA Batch 3 — adjustment/selection gap rules (MIRA gaps)
+[x] SCA-DC (date currency, 60b): each comp sold within 12 months of effective_date;
+    older -> VERIFY w/ months. SCA-PR (79): comp sale price within +/-25% of the
+    subject opinion of value; outside -> VERIFY. SCA-7 (59): if a comp reports
+    concessions (>0) the financing adjustment must be negative (downward); else VERIFY.
+[x] MEASURED (Fantail): SCA-DC/PR/7 all 6 PASS. Overall 137 PASS / 6 VERIFY / 1 FAIL /
+    3 SKIP / 7 N/A, 154 rules. 17 engine tests pass.
+[x] SCA SECTION NOW COMPREHENSIVE (deterministic): SCA-2,3,4,5,6,7,8,9,10,11,12,14,16,
+    17,DC,PR,NET,BR + section-level HOLD. VERIFY-deferred (need vision/NLP/external,
+    graceful degradation): SCA-1 (1004MC), SCA-16 image-condition, SCA-23 listing NLP,
+    SCA-25 new-construction comps, SCA-27 comp photos.

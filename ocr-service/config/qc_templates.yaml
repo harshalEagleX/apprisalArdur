@@ -70,6 +70,9 @@ SCA-11-site:  "Please provide the Site size with a unit (sf or ac) for comp {com
 SCA-12-view:  "Please provide a UAD-compliant View rating (Rating;factor) for comp {comp} in the sales grid."
 SCA-14-qual:  "Please provide a UAD Quality rating (Q1-Q6) for comp {comp} in the sales grid."
 SCA-17-consist: "The subject {field} in the sales grid ({a}) does not match the improvements/site section ({b}); please reconcile."
+SCA-DC-old:   "Comp {comp} sold {months} months before the effective date (>12); please comment on why a more recent sale was unavailable."
+SCA-PR-bracket: "Comp {comp} sale price (${a}) is outside a reasonable bracket of the subject value (${b}); please confirm comparable selection."
+SCA-7-conc:   "Comp {comp} reports seller concessions (${a}) but the financing adjustment is not negative; concessions should adjust the sale price downward — please review."
 SCA-16-consist: "Comp {comp} condition rating ({comp_c}) differs from the subject ({subj_c}) by {delta} ratings; please confirm a supporting condition adjustment is present."
 
 # ---- Reconciliation / Cost / Income ----

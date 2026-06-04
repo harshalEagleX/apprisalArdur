@@ -312,6 +312,95 @@ def sca14_quality(ctx: QCContext):
                            lambda v: bool(re.fullmatch(r"Q[1-6]", v.upper())))
 
 
+def _effective_ym(ctx):
+    import datetime as _dt
+    s = str(ctx.appraisal.value("effective_date") or "").strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"):
+        try:
+            d = _dt.datetime.strptime(s, fmt)
+            return (d.year, d.month)
+        except ValueError:
+            continue
+    return None
+
+
+@rule(id="SCA-DC", num="60b", section="sales_comparison", phase=3, name="Comp sale within date currency window")
+def sca_date_currency(ctx: QCContext):
+    """Each comp should have sold within 12 months of the effective date; older
+    sales require commentary (VERIFY)."""
+    eff = _effective_ym(ctx)
+    out = []
+    if eff is None:
+        return out
+    for i in _comp_indices(ctx):
+        d = _parse_uad_date(ctx.appraisal.value(f"comp_{i}_sale_date") or "")
+        ym = d.get("s") or d.get("c")
+        ev = [ctx.appraisal.evidence(f"comp_{i}_sale_date")]
+        if not ym:
+            continue
+        months = (eff[0] - ym[0]) * 12 + (eff[1] - ym[1])
+        if months > 12:
+            out.append(RuleResult(rule_id="SCA-DC", checklist_num="60b", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-DC-old", comp=i, months=months),
+                                  fields_involved=[f"comp_{i}_sale_date"], template_id="SCA-DC-old",
+                                  evidence=ev, confidence=0.7))
+        else:
+            out.append(RuleResult(rule_id="SCA-DC", checklist_num="60b", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_sale_date"], evidence=ev))
+    return out
+
+
+@rule(id="SCA-PR", num="79", section="sales_comparison", phase=3, name="Comp sale price bracket vs subject value")
+def sca_price_bracket(ctx: QCContext):
+    """A comp whose (pre-adjustment) sale price is >25% above/below the subject's
+    opinion of value is a weak comparable regardless of adjustments."""
+    val = normalize_currency(ctx.appraisal.value("appraised_value"))
+    out = []
+    if not val or val <= 0:
+        return out
+    for i in _comp_indices(ctx):
+        sp = normalize_currency(ctx.appraisal.value(f"comp_{i}_sale_price"))
+        ev = [ctx.appraisal.evidence(f"comp_{i}_sale_price"), ctx.appraisal.evidence("appraised_value")]
+        if sp is None:
+            continue
+        if 0.75 <= sp / val <= 1.25:
+            out.append(RuleResult(rule_id="SCA-PR", checklist_num="79", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_sale_price"], evidence=ev))
+        else:
+            out.append(RuleResult(rule_id="SCA-PR", checklist_num="79", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-PR-bracket", comp=i, a=int(sp), b=int(val)),
+                                  fields_involved=[f"comp_{i}_sale_price"], template_id="SCA-PR-bracket",
+                                  evidence=ev, confidence=0.6))
+    return out
+
+
+@rule(id="SCA-7", num="59", section="sales_comparison", phase=3, name="Concession adjustment direction")
+def sca7_concessions(ctx: QCContext):
+    """If a comp reports seller concessions (>0), the financing adjustment should be
+    negative (concessions inflate the sale price; the adjustment corrects downward)."""
+    out = []
+    for i in _comp_indices(ctx):
+        fin = str(ctx.appraisal.value(f"comp_{i}_sale_financing") or "")
+        ev = [ctx.appraisal.evidence(f"comp_{i}_sale_financing")]
+        m = re.search(r";\s*([\d,]+)\s*$", fin.strip())
+        if not m:
+            continue
+        conc = int(m.group(1).replace(",", ""))
+        adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_sale_financing_adjustment"))
+        if conc > 0 and (adj is None or adj >= 0):
+            out.append(RuleResult(rule_id="SCA-7", checklist_num="59", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-7-conc", comp=i, a=conc),
+                                  fields_involved=[f"comp_{i}_sale_financing"], template_id="SCA-7-conc",
+                                  evidence=ev, confidence=0.65))
+        else:
+            out.append(RuleResult(rule_id="SCA-7", checklist_num="59", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_sale_financing"], evidence=ev))
+    return out
+
+
 @rule(id="SCA-17", num="69", section="sales_comparison", phase=3,
       name="Subject grid matches improvements (GLA/condition/quality)")
 def sca17_subject_consistency(ctx: QCContext):
