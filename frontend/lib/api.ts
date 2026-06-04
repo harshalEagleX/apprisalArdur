@@ -702,6 +702,7 @@ export interface QCRuleResult {
   id: number;
   ruleId: string;
   ruleName: string;
+  section?: string;
   status: string;
   message: string;
   actionItem?: string;

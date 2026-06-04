@@ -52,6 +52,13 @@ _FEATURES: List[Tuple[str, str]] = [
 _LABEL_X_MAX = 130     # label column ends ~here
 _ROW_TOL = 4.0         # words within this y are on the same grid row
 
+# Descriptive-only features: these four URAR rows carry NO +/- adjustment sub-column,
+# so their value uses the FULL cell width. Capping them at 55% (the value/adjustment
+# split used for adjustable rows) truncated long text — e.g. data/verification source.
+# NB: Sales/Financing, Date of Sale, Leasehold etc. DO have an adjustment column and
+# must keep the value/adjustment split, or they bleed into the adjustment / next comp.
+_NO_ADJ = {"address", "proximity", "data_source", "verification_source"}
+
 
 def _find_grid_pages(pdf) -> List[int]:
     pages = []
@@ -92,13 +99,17 @@ def _row_words(words, label_prefix: str, anchors=None):
     occurrence with the most words sitting in the comparable columns — that is
     the actual sales-grid row, not a same-named row elsewhere.
     """
+    import re
     from collections import defaultdict
     by_y = defaultdict(list)
     for w in words:
         if w["x0"] < _LABEL_X_MAX:
             by_y[round(w["top"] / _ROW_TOL) * _ROW_TOL].append(w)
+    # Word-boundary match on the label column so "Condition" matches the grid row
+    # label but NOT the certification prose ("conditions, and appraiser's ...").
+    pat = re.compile(re.escape(label_prefix) + r"\b")
     matches = [y for y, ws in by_y.items()
-               if " ".join(t["text"] for t in sorted(ws, key=lambda w: w["x0"])).lower().startswith(label_prefix)]
+               if pat.match(" ".join(t["text"] for t in sorted(ws, key=lambda w: w["x0"])).lower())]
     if not matches:
         return None
     if len(matches) == 1 or not anchors:
@@ -136,24 +147,32 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
             comp_anchors = _column_anchors(words)
             if len(comp_anchors) < 1:
                 continue
-            # column value band = [anchor-12, anchor+ ~half-column]; rest = adjustment
-            bounds = []
+            # Each comp cell spans [anchor_k, anchor_{k+1}). Adjustable features split
+            # the cell into value (left ~55%) + adjustment (right); descriptive-only
+            # features (_NO_ADJ) span the full cell so long text is not truncated.
+            cols = []
             for k, ax in enumerate(comp_anchors):
-                nxt = comp_anchors[k + 1] if k + 1 < len(comp_anchors) else ax + 130
-                half = ax + (nxt - ax) * 0.55
-                bounds.append((ax - 12, half, nxt - 8))   # (val_lo, val_hi, adj_hi)
+                nxt = comp_anchors[k + 1] if k + 1 < len(comp_anchors) else ax + 131
+                cols.append((ax, nxt))
             for prefix, suffix in _FEATURES:
                 if suffix is None:
                     continue
                 y = _row_words(words, prefix, comp_anchors)
                 if y is None:
                     continue
-                for k, (vlo, vhi, ahi) in enumerate(bounds):
+                no_adj = suffix in _NO_ADJ
+                for k, (ax, nxt) in enumerate(cols):
                     ci = comp_base + k + 1
-                    val = _value_in_band(words, y, vlo, vhi)
+                    if no_adj:
+                        val = _value_in_band(words, y, ax - 8, nxt - 6)
+                        if val:
+                            out[f"comp_{ci}_{suffix}"] = _clean(suffix, val)
+                        continue
+                    half = ax + (nxt - ax) * 0.55
+                    val = _value_in_band(words, y, ax - 12, half)
                     if val:
                         out[f"comp_{ci}_{suffix}"] = _clean(suffix, val)
-                    adj = _value_in_band(words, y, vhi, ahi)
+                    adj = _value_in_band(words, y, half, nxt - 8)
                     if adj and re.search(r"[+\-]?\$?\d", adj):
                         m = re.search(r"[+\-]?\$?[\d,]+", adj)
                         if m:
@@ -182,4 +201,10 @@ def _clean(suffix: str, val: str) -> str:
     if suffix == "proximity":
         m = re.search(r"\d+\.\d+\s*miles?.*", v)
         return m.group(0) if m else v
+    if suffix in ("sale_date", "sale_financing"):
+        # strip adjustment-column digit bleed before the UAD code ("0s06/25" -> "s06/25")
+        return re.sub(r"^\d+(?=[scA])", "", v).strip()
+    if suffix in ("view", "location_rating"):
+        # UAD codes start with a letter (N/B/A; …); a leading digit is bleed ("0N;Res;")
+        return re.sub(r"^\d+(?=[A-Za-z])", "", v).strip()
     return v

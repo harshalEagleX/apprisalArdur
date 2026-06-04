@@ -388,6 +388,7 @@ public class ReviewerApiController {
                 ruleMap.put("id",              rule.getId());
                 ruleMap.put("ruleId",          rule.getRuleId());
                 ruleMap.put("ruleName",        rule.getRuleName());
+                ruleMap.put("section",         sectionForRule(rule.getRuleId()));
                 ruleMap.put("status",          normalizeStatus(rule.getStatus()));
                 ruleMap.put("message",         rule.getMessage());
                 ruleMap.put("details",         rule.getDetails());
@@ -612,6 +613,35 @@ public class ReviewerApiController {
         if (user == null) return null;
         if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
         return user.getUsername();
+    }
+
+    /** Group rules in the reviewer UI by report section, derived from the rule id
+     * prefix (S-1 -> SUBJECT, SCA-5 -> SALES_COMPARISON, FHA-2 -> FHA, ...). */
+    private String sectionForRule(String ruleId) {
+        if (ruleId == null) return "OTHER";
+        String id = ruleId.toUpperCase();
+        if (id.startsWith("SCA")) return "SALES_COMPARISON";
+        if (id.startsWith("SIG")) return "SIGNATURE";
+        if (id.startsWith("ST")) return "SITE";
+        if (id.startsWith("FHA")) return "FHA";
+        if (id.startsWith("USDA")) return "USDA";
+        if (id.startsWith("ADD")) return "ADDENDUM";
+        if (id.startsWith("RECON")) return "RECONCILIATION";
+        if (id.startsWith("PH")) return "PHOTOS";
+        if (id.startsWith("CA")) return "COST_APPROACH";
+        if (id.startsWith("DOC")) return "DOCUMENTS";
+        if (id.startsWith("M-")) return "MAPS";
+        if (id.startsWith("SK")) return "SKETCH";
+        char c = id.charAt(0);
+        switch (c) {
+            case 'S': return "SUBJECT";
+            case 'C': return "CONTRACT";
+            case 'N': return "NEIGHBORHOOD";
+            case 'I': return "IMPROVEMENTS";
+            case 'R': return "RECONCILIATION";
+            case 'G': return "GLOBAL";
+            default:  return "OTHER";
+        }
     }
 
     private Map<String, Object> ruleHelp(String ruleId, String ruleName) {

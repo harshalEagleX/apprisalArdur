@@ -199,6 +199,53 @@ def _overlay_engagement(rs, pdf, dtype):
     return merged
 
 
+def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path=None,
+                             transaction_id: Optional[str] = None, persist: bool = True,
+                             progress=None):
+    """Run QC from explicit document paths (what the Java backend supplies via
+    the multipart /qc/process call) rather than a folder layout. `progress` is an
+    optional callable(stage:str, message:str, pct:float) for live updates.
+
+    Returns (QCReport, QCContext) so the caller can build the Java response shape."""
+    from app.extraction.layers.orchestrator import run_full_extraction
+
+    def _emit(stage, msg, pct):
+        if progress:
+            try:
+                progress(stage, msg, pct)
+            except Exception:
+                pass
+
+    transaction_id = transaction_id or str(Path(appraisal_path).stem)
+    sets = {}
+    _emit("extract_appraisal", "Extracting appraisal report", 10.0)
+    rs = run_full_extraction(Path(appraisal_path), "appraisal_report", use_paddle=False)
+    rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
+    rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
+    sets["appraisal"] = rs
+    if engagement_path:
+        _emit("extract_engagement", "Extracting engagement letter", 45.0)
+        eng = run_full_extraction(Path(engagement_path), "engagement_letter", use_paddle=False)
+        sets["engagement"] = _overlay_engagement(eng, Path(engagement_path), "engagement_letter")
+    if contract_path:
+        _emit("extract_contract", "Extracting sales contract", 65.0)
+        con = run_full_extraction(Path(contract_path), "sales_contract", use_paddle=False)
+        sets["contract"] = _overlay_contract(con, Path(contract_path), "sales_contract")
+
+    _emit("rules", "Evaluating QC rules", 85.0)
+    ctx = QCContext(
+        transaction_id=transaction_id,
+        appraisal=sets.get("appraisal"), engagement=sets.get("engagement"),
+        contract=sets.get("contract"),
+        structured_conf=qc_config.structured_conf, checkbox_conf=qc_config.checkbox_conf,
+    )
+    report = run_qc(ctx)
+    if persist:
+        persist_report(report, document_id=Path(appraisal_path).name)
+    _emit("done", "QC complete", 100.0)
+    return report, ctx
+
+
 def run_transaction_qc(folder, transaction_id: Optional[str] = None,
                        persist: bool = True, min_phase: Optional[int] = None) -> QCReport:
     """Full QC for one transaction folder."""

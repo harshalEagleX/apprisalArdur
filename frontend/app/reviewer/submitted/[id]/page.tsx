@@ -93,8 +93,16 @@ export default function SubmittedReviewPage() {
 
   const loadResults = useCallback(() => {
     setLoading(true);
+    // Java substitutes placeholder tokens (e.g. __NO_APPRAISAL_VALUE) for missing
+    // values; blank them so the summary and rejection language read cleanly.
+    const clean = (v?: string | null) =>
+      (!v || (v.startsWith("__NO_") && v.endsWith("_VALUE"))) ? undefined : v;
     getQCRules(qcResultId)
-      .then(data => setRules(data.map(r => ({ ...r, status: r.status.toLowerCase() }))))
+      .then(data => setRules(data.map(r => ({
+        ...r, status: r.status.toLowerCase(),
+        appraisalValue: clean(r.appraisalValue), engagementValue: clean(r.engagementValue),
+        extractedValue: clean(r.extractedValue), expectedValue: clean(r.expectedValue),
+      }))))
       .catch(() => setError("Could not load review results."))
       .finally(() => setLoading(false));
   }, [qcResultId]);

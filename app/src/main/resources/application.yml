@@ -30,7 +30,7 @@ spring:
       # Manual DB fixes stay manual; Python tables are reconciled separately
       # through ocr-service/manage_db.py update. Use update here because the
       # shared database is persistent across restarts, not disposable.
-      ddl-auto: create
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect

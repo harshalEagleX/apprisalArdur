@@ -249,7 +249,106 @@ OPTIONAL LLM COMMENTARY JUDGE (2026-06-03, same session)
     Ollama currently not serving -> returns None gracefully). Deterministic canned
     detection remains the always-on primary. To enable judgements: `ollama serve`.
 
-WHAT'S LEFT (priority order)
+FULL-CORPUS RE-RUN — MEASURED IMPROVEMENT (2026-06-03, same session)
+[x] 15 txns, 59-rule engine, 994s. BEFORE -> AFTER:
+    PASS 560 -> 674 (+114); FAIL 27 -> 31; VERIFY 209 -> 247 (new rules);
+    N/A 29 -> 109 (FHA/USDA loan-gating); HOLD 1 (condo sort/#2321525470).
+[x] Targeted fixes proven in exception drop: SCA-5 data source 36 -> 14 txns (-61%,
+    row-disambiguation); N-1 neighborhood checkboxes 34 -> 23 (property_values +
+    label-finder). New VERIFY drivers are NEW coverage: SCA-16 per-comp condition(42),
+    N-6/N-7 commentary(14/15), photos (mostly PASS). Dashboard data refreshed to 59 rules.
+[~] SCA-16 (42) now top exception — per-comp condition_rating not always C1-6 from grid;
+    candidate for grid-extraction refinement (advisory VERIFY, not a false fail).
+    Outlier remains sort/#2321525530 (1218 Alpine, 6-pg non-standard form) F8.
+
+SCA-16 COMP CONDITION FIX (#1 deep-tail) (2026-06-03, same session)
+[x] BUG: comp_grid_extractor._row_words matched the certification prose row
+    ("conditions, and appraiser's certification, my (our) opinion of the market
+    value...") for the "condition" feature because startswith("condition") also
+    matches "conditions," AND that full-width sentence outscored the real grid row
+    on the comp-column heuristic. comps 1/2/3 got garbage ("opinion of the market").
+[x] FIX: word-boundary label match (re ^prefix\b) — "conditions," no longer matches
+    "condition". MEASURED: comp condition_rating now C1-6 for ALL comps on Fantail/
+    Pearson/Baell (was prose for 1/2/3). Resolves SCA-16 (was top exception, 42).
+    General robustness win for the grid extractor. 17/17 unit tests still pass.
+
+JAVA INTEGRATION BRIDGE — Python /qc/process contract (2026-06-03, same session)
+[x] ANALYSIS: Java backend + Next.js frontend are ~90% ALREADY BUILT to the admin/
+    reviewer spec. Entities QCResult/QCRuleResult (status, message, actionItem,
+    appraisalValue/engagementValue, severity, expectedValue, rejectionText, evidence,
+    bbox, session-lock, override, acknowledgement), Batch/BatchStatus/BatchFile,
+    Client/User/Role. Controllers Admin/Reviewer/QC/Batch/Auth. Services QCProcessing/
+    PythonClient/Verification/OperatorSession(session locking). Frontend app/reviewer/
+    {queue,verify/[id],submitted} + app/admin/*. THE GAP was the Python contract.
+[x] Java PythonClientService POSTs multipart /qc/process (file=appraisal, engagement_
+    letter, contract_file, model params, progress_token) and expects PythonQCResponse
+    {total_rules,passed,failed,verify,rule_results[PythonRuleResult],extracted_fields,
+    missing_supporting_documents,...}; polls /qc/progress/{token} {stage,message,
+    sub_percent,elapsed_ms}. Adaptive main.py had replaced this with a JSON single-doc
+    endpoint -> new engine unreachable by Java.
+[x] BUILT the bridge: transaction.run_transaction_qc_paths(appraisal,eng,contract,progress);
+    qc/python_response.report_to_python_qc_response (maps QCReport->PythonQCResponse:
+    status->pass/fail/verify/hold/not_applicable, evidence->appraisal/engagement value,
+    message->rejection_text+action_item, severity by status, counts, missing docs);
+    main.py /qc/process now MULTIPART + /qc/progress/{token}.
+[x] VALIDATED via curl on Fantail transaction: PythonQCResponse with 74 rule_results,
+    51 pass/1 fail/10 verify, each rule carries rule_id/status/severity/appraisal_value/
+    engagement_value/rejection_text/review_required/source_page. /qc/progress returns
+    {stage,message,sub_percent,elapsed_ms}. Persisted to adaptive_validation_results.
+[x] CORS + service running on 127.0.0.1:5001 (Java OcrServiceConfig default).
+
+END-TO-END JAVA FLOW VALIDATED (2026-06-03, same session)
+[x] Built Java app (mvn -pl app -am package, exit 0, app-0.0.1-SNAPSHOT.jar). Java 21,
+    DB jdbc:postgresql://localhost:5432/ardurApprisal (harshalsmac/12345678, SAME db as
+    Python; ddl-auto:create makes only the JPA tables, adaptive_* untouched). ocr.url=
+    127.0.0.1:5001.
+[x] Started Java (port 8080, admin seeded dhoteharshal16@gmail.com/Admin123!). FULL FLOW:
+    login (POST /api/auth/authenticate {username,password}) -> create client
+    (POST /api/admin/clients) -> upload batch ZIP (POST /api/admin/batches/upload
+    file+clientId; ZIP needs appraisal/+engagement/ folders) -> run QC
+    (POST /api/qc/process/{batchId}).
+[x] FIX: Java liveness-checks GET /5001/live BEFORE QC (not /health, which is ~7s).
+    Python had no /live -> Java aborted "Python OCR service unavailable". Added @app.get
+    ("/live") -> {"status":"alive"}.
+[x] RESULT: batch QC_PROCESSING -> REVIEW_PENDING. Java wrote 1 qc_result
+    (decision TO_VERIFY, total 74, passed 51, failed 1, verify 10) + 74 qc_rule_result
+    rows with VERBATIM rejection text + comparison values (R-1 fail appraisal=381000;
+    C-2b verify engagement=04/29/2026 from contract extractor). status spread matches
+    Python exactly. THE NEW 59-RULE ENGINE NOW FEEDS THE EXISTING JAVA+FRONTEND.
+
+BATCH-DETAIL 500 FIX + REVIEWER FLOW VALIDATED (2026-06-03, same session)
+[x] FIX #1: GET /api/admin/batches/{id} 500 = LazyInitializationException on Client
+    (open-in-view:false). BatchRepository.findWithFilesById @EntityGraph now fetches
+    {"files","client"}. Batch detail returns 200 with files+client.
+[x] FIX: application.yml ddl-auto was 'create' (wiped data each restart) despite the
+    comment saying 'use update'. Changed to 'update' (CLAUDE.md policy) — data persists.
+[x] REVIEWER FLOW (#2) end-to-end: create reviewer (POST /api/admin/users role REVIEWER)
+    -> assign (POST /api/admin/batches/1/assign {reviewerId}) -> reviewer login ->
+    GET /api/reviewer/qc/results/pending (1 result, fail1/verify10/total74) -> POST
+    /qc/1/session/start (token) -> GET /qc/1/rules returns 74 rules with status, VERBATIM
+    actionItem/rejectionText, appraisalValue/engagementValue (R-1 fail 381000; C-2b
+    eng=04/29/2026; SIG-2 'Riley C Freese' vs 'riley freese'; S-10b lender addr).
+[x] FIX: rules DTO lacked a section -> added ReviewerApiController.sectionForRule(ruleId)
+    + section in /qc/{id}/rules so the reviewer UI can group by section (SUBJECT/CONTRACT/
+    NEIGHBORHOOD/SITE/IMPROVEMENTS/SALES_COMPARISON/RECONCILIATION/SIGNATURE/FHA/...).
+
+FRONTEND REVIEWER POLISH (2026-06-03, same session)
+[x] lib/api.ts QCRuleResult: added section?:string.
+[x] app/reviewer/verify/[id]/page.tsx: rule list now GROUPED BY SECTION with sticky
+    headers (SECTION_ORDER + sectionLabel; header shows 'N rules · M need attention').
+    cleanValue() strips Java's __NO_*_VALUE placeholders -> shows blank, not raw token.
+[x] app/reviewer/submitted/[id]/page.tsx: same placeholder cleaning. (Copy-All rejection
+    language already existed there, uses verbatim rule.rejectionText — confirmed.)
+[x] tsc --noEmit clean on both pages. Next.js dev :3000 Ready, /reviewer/verify/1
+    compiles (307 -> login without auth, as expected).
+[x] FULL STACK RUNNING: Python :5001 (59-rule engine + /qc/process,/qc/progress,/live),
+    Java :8080 (admin+reviewer APIs, qc_result/qc_rule_result populated), Next.js :3000.
+    Demo data: client 'Equity Solutions Demo', batch 28203 Fantail (REVIEW_PENDING, 74
+    rules), admin dhoteharshal16@gmail.com/Admin123!, reviewer reviewer1/Review123!.
+    EDGE-TO-EDGE DEMO COMPLETE: upload -> QC -> reviewer queue -> verification screen
+    (grouped findings, verbatim rejection text, side-by-side evidence) -> submit -> Copy-All.
+
+WHAT'S LEFT (optional / deep tail)
 [ ] Checkbox detection primitives: extend find_checked_checkboxes beyond rect+2-diagonal
     (filled boxes / single-stroke checks) for demand_supply/electricity/gas misses.
     miss on some docs) — extend find_checked_checkboxes X-mark primitives + spatial fallback.

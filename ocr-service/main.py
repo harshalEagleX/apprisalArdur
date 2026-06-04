@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -79,6 +79,13 @@ async def startup():
 # Health / schema endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/live")
+async def live():
+    """Instant liveness probe (no DB/Ollama checks) — the Java backend calls this
+    before each QC batch to confirm the OCR service is reachable."""
+    return {"status": "alive"}
+
+
 @app.get("/health")
 async def health():
     from app.extraction.llm_resilience import check_ollama_health
@@ -120,41 +127,97 @@ async def list_fields(section: Optional[str] = Query(None)):
 # Document processing endpoint
 # ---------------------------------------------------------------------------
 
-class ProcessRequest(BaseModel):
-    document_path: str
-    document_type: str  # appraisal_report | engagement_letter | sales_contract
-    amc_id: Optional[str] = None
-    store_results: bool = True
+# In-memory QC progress registry — the Java backend polls /qc/progress/{token}
+# during a /qc/process call. Lightweight {stage, message, sub_percent, elapsed_ms}.
+import time as _time
+import tempfile as _tempfile
+import uuid as _uuid
+
+_QC_PROGRESS: dict = {}
+
+
+def _save_upload(upload: Optional[UploadFile]) -> Optional[Path]:
+    if upload is None:
+        return None
+    suffix = Path(upload.filename or "doc.pdf").suffix or ".pdf"
+    fd, tmp = _tempfile.mkstemp(suffix=suffix)
+    import os as _os
+    with _os.fdopen(fd, "wb") as f:
+        f.write(upload.file.read())
+    return Path(tmp)
 
 
 @app.post("/qc/process")
-async def process_document(req: ProcessRequest):
+async def qc_process(
+    file: UploadFile = File(...),                       # appraisal report (required)
+    engagement_letter: Optional[UploadFile] = File(None),
+    contract_file: Optional[UploadFile] = File(None),
+    model_provider: str = Form("ollama"),
+    text_model: str = Form(""),
+    vision_model: str = Form(""),
+    progress_token: Optional[str] = Form(None),
+    batch_id: Optional[str] = Form(None),
+    batch_file_id: Optional[str] = Form(None),
+    qc_result_id: Optional[str] = Form(None),
+    source_hash: Optional[str] = Form(None),
+):
     """
-    Run the full pipeline on a document — classify, extract (strong layered
-    orchestrator), validate, route — and persist every stage to the DB.
-    Returns a summary of the document journey.
-
-    document_type may be passed explicitly or left to the classifier; an
-    explicit, recognised type is honoured, otherwise classification decides.
+    Run the full transaction QC (appraisal + engagement + contract) and return
+    the result in the shape the Java backend's PythonQCResponse expects. This is
+    the integration contract with QCProcessingService.
     """
-    from app.services.pipeline_runner import process_and_persist
+    import os as _os
+    from app.qc.transaction import run_transaction_qc_paths
+    from app.qc.python_response import report_to_python_qc_response
 
-    doc_path = Path(req.document_path)
-    if not doc_path.exists():
-        raise HTTPException(status_code=404, detail=f"Document not found: {req.document_path}")
+    appraisal = _save_upload(file)
+    engagement = _save_upload(engagement_letter)
+    contract = _save_upload(contract_file)
+    token = progress_token or str(_uuid.uuid4())
+    started = _time.time()
+    _QC_PROGRESS[token] = {"stage": "received", "message": "Document received",
+                           "sub_percent": 0.0, "elapsed_ms": 0}
 
-    valid_types = {"appraisal_report", "engagement_letter", "sales_contract", "qc_checklist"}
-    explicit_type = req.document_type if req.document_type in valid_types else None
+    def _progress(stage, message, pct):
+        _QC_PROGRESS[token] = {"stage": stage, "message": message,
+                               "sub_percent": float(pct),
+                               "elapsed_ms": int((_time.time() - started) * 1000)}
 
     try:
-        return process_and_persist(
-            doc_path,
-            document_type=explicit_type,
-            amc_id=req.amc_id,
-            store=req.store_results,
+        report, ctx = run_transaction_qc_paths(
+            appraisal, engagement, contract,
+            transaction_id=(file.filename or "transaction"),
+            persist=True, progress=_progress,
         )
-    except (FileNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        resp = report_to_python_qc_response(
+            report, ctx,
+            processing_time_ms=int((_time.time() - started) * 1000),
+            document_id=(file.filename or ""), job_id=token,
+            model_provider=model_provider, text_model=text_model, vision_model=vision_model,
+            file_hash=source_hash or "",
+        )
+        return resp
+    except Exception as exc:
+        logging.getLogger(__name__).exception("QC process failed")
+        raise HTTPException(status_code=500, detail=f"QC processing failed: {exc}")
+    finally:
+        for p in (appraisal, engagement, contract):
+            if p:
+                try:
+                    _os.remove(p)
+                except OSError:
+                    pass
+        # keep progress for a short grace period for late polls
+        _QC_PROGRESS.get(token, {})["stage"] = "done"
+
+
+@app.get("/qc/progress/{token}")
+async def qc_progress(token: str):
+    """Progress snapshot for an in-flight /qc/process call (polled by Java)."""
+    snap = _QC_PROGRESS.get(token)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Unknown progress token")
+    return snap
 
 
 # ---------------------------------------------------------------------------

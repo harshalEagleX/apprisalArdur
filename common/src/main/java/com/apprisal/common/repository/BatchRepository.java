@@ -49,7 +49,7 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
                                    @Param("search") String search,
                                    Pageable pageable);
 
-    @EntityGraph(attributePaths = {"files"})
+    @EntityGraph(attributePaths = {"files", "client"})
     Optional<Batch> findWithFilesById(Long id);
 
     List<Batch> findByClientId(Long clientId);

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
 import {
@@ -43,6 +43,29 @@ type DecisionEvent = {
 function ruleStatus(status: string) {
   const n = status.toLowerCase();
   return n === "manual_pass" ? "MANUAL_PASS" : n;
+}
+
+// The Java backend substitutes placeholder tokens when a rule has no specific
+// appraisal/engagement value. Treat those as empty so the UI shows "—", not the raw token.
+function cleanValue(v?: string | null): string | undefined {
+  if (!v) return undefined;
+  if (v.startsWith("__NO_") && v.endsWith("_VALUE")) return undefined;
+  return v;
+}
+
+// Reviewer rule groups, in report order, with a friendly label.
+const SECTION_ORDER = [
+  "SUBJECT", "CONTRACT", "NEIGHBORHOOD", "SITE", "IMPROVEMENTS",
+  "SALES_COMPARISON", "RECONCILIATION", "COST_APPROACH", "INCOME",
+  "SIGNATURE", "ADDENDUM", "PHOTOS", "SKETCH", "MAPS", "DOCUMENTS",
+  "FHA", "USDA", "GLOBAL", "OTHER",
+];
+function sectionRank(s?: string): number {
+  const i = SECTION_ORDER.indexOf(s ?? "OTHER");
+  return i < 0 ? SECTION_ORDER.length : i;
+}
+function sectionLabel(s?: string): string {
+  return (s ?? "OTHER").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function isReviewLikeStatus(status: string) {
@@ -184,7 +207,13 @@ export default function VerifyFilePage() {
     setLoading(true);
     try {
       const [rulesData, prog] = await Promise.all([getQCRules(qcResultId), getQCProgress(qcResultId)]);
-      setRules(rulesData.map(r => ({ ...r, status: ruleStatus(r.status) })));
+      setRules(rulesData.map(r => ({
+        ...r, status: ruleStatus(r.status),
+        appraisalValue: cleanValue(r.appraisalValue),
+        engagementValue: cleanValue(r.engagementValue),
+        extractedValue: cleanValue(r.extractedValue),
+        expectedValue: cleanValue(r.expectedValue),
+      })));
       setProgress(prog);
       const dec: Record<number, Decision> = {}; const com: Record<number, string> = {};
       for (const r of rulesData) {
@@ -722,25 +751,39 @@ export default function VerifyFilePage() {
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {loading ? <PageSpinner label="Loading rules…" /> : filtered.length === 0 ? (
                 <div className="text-center text-slate-500 py-10 text-sm">No rules match this filter</div>
-              ) : filtered.map(rule => (
-                <RuleCard
-                  key={rule.id}
-                  rule={rule}
-                  decision={decisions[rule.id]}
-                  comment={comments[rule.id] ?? ""}
-                  saving={saving === rule.id}
-                  savedNow={saved.has(rule.id)}
-                  offline={offline}
-                  sessionReady={Boolean(sessionToken)}
-                  acknowledged={Boolean(acknowledged[rule.id])}
-                  active={activeRule?.id === rule.id}
-                  onSelect={() => focusRule(rule)}
-                  onDecision={d => void handleDecision(rule, d)}
-                  onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
-                  onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
-                  commentRef={node => { commentRefs.current[rule.id] = node; }}
-                />
-              ))}
+              ) : [...filtered].sort((a, b) => sectionRank(a.section) - sectionRank(b.section)).map((rule, i, arr) => {
+                const showHeader = i === 0 || arr[i - 1].section !== rule.section;
+                const secRules = arr.filter(r => r.section === rule.section);
+                const need = secRules.filter(r => r.status === "fail" || isReviewLikeStatus(r.status)).length;
+                return (
+                  <Fragment key={rule.id}>
+                    {showHeader && (
+                      <div className="sticky -top-3 z-10 -mx-3 mb-1 flex items-center justify-between border-y border-white/5 bg-[#0B0F14]/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur">
+                        <span>{sectionLabel(rule.section)}</span>
+                        <span className="font-normal normal-case text-slate-600">
+                          {secRules.length} rules{need ? ` · ${need} need attention` : ""}
+                        </span>
+                      </div>
+                    )}
+                    <RuleCard
+                      rule={rule}
+                      decision={decisions[rule.id]}
+                      comment={comments[rule.id] ?? ""}
+                      saving={saving === rule.id}
+                      savedNow={saved.has(rule.id)}
+                      offline={offline}
+                      sessionReady={Boolean(sessionToken)}
+                      acknowledged={Boolean(acknowledged[rule.id])}
+                      active={activeRule?.id === rule.id}
+                      onSelect={() => focusRule(rule)}
+                      onDecision={d => void handleDecision(rule, d)}
+                      onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
+                      onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
+                      commentRef={node => { commentRefs.current[rule.id] = node; }}
+                    />
+                  </Fragment>
+                );
+              })}
             </div>
           </div>
         </div>
