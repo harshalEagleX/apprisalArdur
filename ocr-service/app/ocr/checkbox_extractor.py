@@ -60,38 +60,52 @@ def find_checked_checkboxes(page: fitz.Page) -> List[Dict]:
 
     A checked checkbox = a small rect + two diagonal crossing lines inside it.
     """
-    drawings = page.get_drawings()
+    return _checked_from_drawings(page.get_drawings())
 
-    # Group drawings by position (rounded to 1dp)
-    pos_groups: Dict[Tuple, List] = defaultdict(list)
+
+def _checked_from_drawings(drawings: List[Dict]) -> List[Dict]:
+    """Cluster checkbox-sized drawings by position with a small TOLERANCE and
+    decide which are checked. Separated from the page for unit testing.
+
+    Why tolerance-clustering: the box border rect and its X-mark lines are emitted
+    as separate drawings whose x0/y0 differ by a fraction of a pixel (e.g. 145.4
+    vs 145.3). Rounding to 1dp split them into different groups, so the rect and
+    its diagonals were never counted together and a CHECKED box read as unchecked.
+    """
+    clusters: List[Dict] = []
     for d in drawings:
         r = d.get('rect')
         if r is None:
             continue
-        w, h = r.width, r.height
-        if not (_CHECKBOX_SIZE_MIN <= w <= _CHECKBOX_SIZE_MAX and
-                _CHECKBOX_SIZE_MIN <= h <= _CHECKBOX_SIZE_MAX):
+        if not (_CHECKBOX_SIZE_MIN <= r.width <= _CHECKBOX_SIZE_MAX and
+                _CHECKBOX_SIZE_MIN <= r.height <= _CHECKBOX_SIZE_MAX):
             continue
-        key = (round(r.x0, 1), round(r.y0, 1))
-        pos_groups[key].append(d)
+        g = next((c for c in clusters
+                  if abs(c['x'] - r.x0) <= _DIAGONAL_TOLERANCE
+                  and abs(c['y'] - r.y0) <= _DIAGONAL_TOLERANCE), None)
+        if g is None:
+            g = {'x': r.x0, 'y': r.y0, 'rect': False, 'diag': 0, 'lines': 0, 'fill': False}
+            clusters.append(g)
+        if d.get('fill') is not None and d.get('type') in ('f', 'fs'):
+            g['fill'] = True
+        for item in d.get('items', []):
+            if item[0] == 're':
+                g['rect'] = True
+            elif item[0] == 'l':
+                g['lines'] += 1
+                if _is_diagonal_line(item):
+                    g['diag'] += 1
 
     checked: List[Dict] = []
-    for (x0, y0), draws in pos_groups.items():
-        # Count: rectangles and diagonal lines
-        has_rect = False
-        diagonal_count = 0
-        for d in draws:
-            items = d.get('items', [])
-            for item in items:
-                if item[0] == 're':
-                    has_rect = True
-                elif _is_diagonal_line(item):
-                    diagonal_count += 1
-
-        if has_rect and diagonal_count >= 2:
-            # This checkbox has an X mark → CHECKED
-            checked.append({'x': x0, 'y': y0})
-            logger.debug("Checked checkbox at (%.1f, %.1f)", x0, y0)
+    for g in clusters:
+        if not g['rect']:
+            continue
+        # CHECKED when the box carries a mark: an X (>=2 diagonals), any check
+        # stroke (>=1 line inside the box), or a solid fill. An empty box is the
+        # bare rectangle with no lines and no fill.
+        if g['diag'] >= 2 or g['lines'] >= 1 or g['fill']:
+            checked.append({'x': g['x'], 'y': g['y']})
+            logger.debug("Checked checkbox at (%.1f, %.1f)", g['x'], g['y'])
 
     return checked
 

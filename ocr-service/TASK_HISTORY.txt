@@ -487,3 +487,20 @@ CHECKBOX DETECTION TRACK — label mapping fix (measured, no regressions)
     (the non-standard scanned form, 0 everywhere).
 [x] TESTS: tests/test_checkbox_extractor.py (6 cases incl the "In"->None regression
     guard + utility left-label). 28 passed (6 + 5 contract + 17 engine).
+
+CHECKBOX MARK DETECTION — split-rect grouping fix (occupant_status 4->6)
+[x] FOLLOW-UP (user: "must be able to detect checkbox — proper and perfect"; do NOT
+    soften rules to hide extraction gaps). occupant_status was 4/7.
+[x] ROOT CAUSE (P-2, drawings dump): find_checked_checkboxes grouped drawings by
+    round(x0,1). A CHECKED box's border rect (x0=145.4) and its two X-mark lines
+    (x0=145.3) landed in DIFFERENT groups, so "rect AND >=2 diagonals" was never true
+    for that box -> read as unchecked (Fantail "Vacant").
+[x] FIX (checkbox_extractor.py): _checked_from_drawings (pure, testable) clusters
+    checkbox-sized drawings by a 2px TOLERANCE instead of exact rounding; a box is
+    CHECKED on X (>=2 diagonals), any check stroke (>=1 line in-box), or solid fill.
+[x] MEASURED: occupant_status 4->6 (the 7th is #2321525530, a scanned image form with
+    NO vector checkbox layer -> needs vision OCR, separate). property_rights 7/7,
+    all other fields unchanged. Total checked boxes on Fantail p1: 44 -> 45 (only the
+    one recovered box; no false-positive flood). Values sane (Vacant/Owner).
+[x] TESTS: tests/test_checkbox_detection.py (split-rect, bare-rect, filled, adjacent-
+    not-merged). 27 passed.
