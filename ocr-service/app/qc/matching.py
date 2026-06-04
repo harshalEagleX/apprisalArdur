@@ -53,8 +53,13 @@ def normalize_address(text: str) -> str:
 
 
 def normalize_name(text: str) -> str:
-    """Normalize a person name: drop suffixes/titles, sort tokens (order-insensitive)."""
-    tokens = [t for t in normalize_basic(text).split() if t not in _NAME_NOISE]
+    """Normalize a person name: drop suffixes/titles and single-letter MIDDLE
+    INITIALS, then sort tokens (order-insensitive). Dropping initials makes
+    "Riley C Freese" == "Riley Freese" — the same party is routinely recorded
+    with/without a middle initial across documents (two different people sharing
+    a first+last name within one transaction is not a realistic case here)."""
+    tokens = [t for t in normalize_basic(text).split()
+              if t not in _NAME_NOISE and len(t) > 1]
     return " ".join(sorted(tokens))
 
 

@@ -384,6 +384,11 @@ SIGNATURE DATE (SIG-D) — positional extraction on the certification page
 [x] MEASURED: date_of_signature 7/7 distinct appraisals (Fantail 05/12/2026 verified).
     Fantail: SIG-D SKIPPED -> PASS (05/12 >= effective 05/11), SIG-1 PASS. (SIG-2 still
     VERIFY = appraiser-name fuzzy match vs engagement, a separate name-norm issue.)
+[x] SIG-2 (appraiser name vs engagement) VERIFY -> PASS: pure middle-initial diff
+    ("Riley C Freese" vs "riley freese" normalized to "c freese riley" vs "freese
+    riley", Jaro-Winkler 0.869 = review band). FIX: normalize_name now drops single-
+    letter middle initials -> 1.0 match. Also strengthens S-2 borrower / S-10a lender
+    name. tests/test_name_match.py (4 cases incl different-surname mismatch guard).
 [ ] STILL OPEN (signature cross-doc set): appraiser license # / state and supervisory
     name are not yet extracted (license-state vs property-state rule needs them).
 [ ] Phase 3 intra-report consistency: grid<->improvements<->sketch, land-use=100%,
