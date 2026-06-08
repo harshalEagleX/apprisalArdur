@@ -32,6 +32,25 @@ from app.qc.result import RuleResult, RuleStatus
 _MAX_COMPS = 6
 
 
+def _pct(val) -> "float | None":
+    """Parse a printed reconciliation percentage ('38.6', '14.1') to a float."""
+    if val is None:
+        return None
+    m = re.search(r"\d+(?:\.\d+)?", str(val))
+    return float(m.group(0)) if m else None
+
+
+def _parse_full_date(val) -> "tuple | None":
+    """'02/09/2026' → (2026, 2) as (year, month). Two-digit years → 20xx."""
+    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", str(val or ""))
+    if not m:
+        return None
+    mm, _dd, yy = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if yy < 100:
+        yy += 2000
+    return (yy, mm)
+
+
 def _comp_indices(ctx: QCContext) -> List[int]:
     """Real comparable columns — gated on the Camelot sale_price (reliable), so
     blank grid-template columns (comps 4-6 on an unused second page) don't
@@ -89,9 +108,16 @@ def sca_net_adjustment(ctx: QCContext):
     cap = qc_config.semantic("net_adjustment_pct", 15.0)
     over = []
     for r in rows:
-        if r["net"] is None or not r["sale_price"]:
+        # Prefer the appraiser's PRINTED "Net Adj. %" (authoritative — it is the
+        # ratio over ALL line adjustments); fall back to the dollar-derived estimate
+        # (net total / sale price) only when the printed value was not extracted.
+        printed = _pct(ctx.appraisal.value(f"comp_{r['i']}_net_adj_pct"))
+        if printed is not None:
+            pct = printed
+        elif r["net"] is not None and r["sale_price"]:
+            pct = abs(r["net"]) / r["sale_price"] * 100.0
+        else:
             continue
-        pct = abs(r["net"]) / r["sale_price"] * 100.0
         if pct > cap:
             over.append(r["i"])
     ev = [ctx.appraisal.evidence(f"comp_{i}_net_adjustment") for i in range(1, 4)]
@@ -106,6 +132,39 @@ def sca_net_adjustment(ctx: QCContext):
                       message=qc_config.template("SCA-net15", value=", ".join(map(str, over))),
                       fields_involved=["comp_N_net_adjustment"], template_id="SCA-net15",
                       evidence=ev, confidence=0.65)
+
+
+# ---- SCA-GROSS gross adjustment <= 25% of sale price ----------------------
+
+@rule(id="SCA-GROSS", num="77b", section="sales_comparison", phase=3, name="Gross adjustment within 25%")
+def sca_gross_adjustment(ctx: QCContext):
+    """Industry-standard comp-reliability gate: a comparable whose GROSS adjustment
+    (sum of the absolute value of every line adjustment, as the appraiser's printed
+    "Gross Adj. %") exceeds 25% of its sale price is a weak comparable and should
+    carry commentary. Uses the authoritative printed percentage from the grid."""
+    cap = qc_config.semantic("gross_adjustment_pct", 25.0)
+    over = []
+    seen = []
+    for i in _comp_indices(ctx):
+        gross = _pct(ctx.appraisal.value(f"comp_{i}_gross_adj_pct"))
+        if gross is None:
+            continue
+        seen.append(i)
+        if gross > cap:
+            over.append(i)
+    ev = [ctx.appraisal.evidence(f"comp_{i}_gross_adj_pct") for i in seen[:3]]
+    if not seen:
+        return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
+                          status=RuleStatus.SKIPPED,
+                          message="gross adjustment % not extracted", evidence=ev)
+    if not over:
+        return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["comp_N_gross_adj_pct"], evidence=ev)
+    return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
+                      status=RuleStatus.VERIFY,
+                      message=qc_config.template("SCA-gross25", value=", ".join(map(str, over))),
+                      fields_involved=["comp_N_gross_adj_pct"], template_id="SCA-gross25",
+                      evidence=ev, confidence=0.7)
 
 
 # ---- SCA-3 address present (per comp, grid extractor) ---------------------
@@ -480,3 +539,200 @@ def sca10_rights(ctx: QCContext):
             out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_leasehold"], evidence=ev))
     return out
+
+
+# ---- SCA-PSH subject prior sale/transfer must be analyzed -----------------
+
+@rule(id="SCA-PSH", num="80", section="sales_comparison", phase=3, name="Subject prior sale analyzed")
+def sca_subject_prior_sale(ctx: QCContext):
+    """A prior sale/transfer of the SUBJECT within the look-back window (36 months)
+    must be analyzed and reconciled with the opinion of value (UAD/Fannie/FHA). A
+    recent prior transfer near the effective date is a value-support red flag."""
+    window = int(qc_config.semantic("comp_resale_window_months", 36))
+    eff = _effective_ym(ctx)
+    d = _parse_full_date(ctx.appraisal.value("subject_grid_prior_sale_date"))
+    ev = [ctx.appraisal.evidence("subject_grid_prior_sale_date"), ctx.appraisal.evidence("effective_date")]
+    if d is None:
+        # No prior sale/transfer recorded → nothing to reconcile (clean).
+        return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["subject_grid_prior_sale_date"], evidence=ev)
+    if eff is None:
+        return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
+                          status=RuleStatus.SKIPPED,
+                          message="effective date not extracted to age the prior sale", evidence=ev)
+    months = (eff[0] - d[0]) * 12 + (eff[1] - d[1])
+    if 0 <= months <= window:
+        return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
+                          status=RuleStatus.VERIFY,
+                          message=qc_config.template("SCA-PSH-subj", months=months),
+                          fields_involved=["subject_grid_prior_sale_date"], template_id="SCA-PSH-subj",
+                          evidence=ev, confidence=0.7)
+    return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
+                      status=RuleStatus.PASS, fields_involved=["subject_grid_prior_sale_date"], evidence=ev)
+
+
+# ---- SCA-FLIP comparable resale within 36 months (non-arm's-length flag) ---
+
+@rule(id="SCA-FLIP", num="80b", section="sales_comparison", phase=3, name="Comp rapid resale flag")
+def sca_comp_resale(ctx: QCContext):
+    """A comparable that itself resold within 36 months of its own sale date may be a
+    flip / non-arm's-length transaction and warrants explanation (MIRA gap)."""
+    window = int(qc_config.semantic("comp_resale_window_months", 36))
+    flagged = []
+    out = []
+    idx = _comp_indices(ctx)
+    for i in idx:
+        prior = _parse_full_date(ctx.appraisal.value(f"comp_{i}_prior_sale_date"))
+        if prior is None:
+            continue  # no prior sale → arm's-length, fine
+        sd = _parse_uad_date(ctx.appraisal.value(f"comp_{i}_sale_date") or "")
+        cur = sd.get("s") or sd.get("c") or _effective_ym(ctx)
+        if cur is None:
+            continue
+        months = (cur[0] - prior[0]) * 12 + (cur[1] - prior[1])
+        if 0 <= months <= window:
+            ev = [ctx.appraisal.evidence(f"comp_{i}_prior_sale_date"),
+                  ctx.appraisal.evidence(f"comp_{i}_sale_date")]
+            flagged.append(i)
+            out.append(RuleResult(rule_id="SCA-FLIP", checklist_num="80b", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-FLIP-comp", comp=i, months=months),
+                                  fields_involved=[f"comp_{i}_prior_sale_date"], template_id="SCA-FLIP-comp",
+                                  evidence=ev, confidence=0.7))
+    # One PASS for observability when comps exist and none resold within the window.
+    if idx and not flagged:
+        out.append(RuleResult(rule_id="SCA-FLIP", checklist_num="80b", section="sales_comparison",
+                              status=RuleStatus.PASS, fields_involved=["comp_N_prior_sale_date"],
+                              evidence=[ctx.appraisal.evidence(f"comp_{idx[0]}_prior_sale_date")]))
+    return out
+
+
+# ---- SCA-25 new construction needs a competing-development comp -----------
+
+def _is_new_construction(ctx: QCContext) -> bool:
+    """Subject reads as new construction: year built within 1 year of the effective
+    date, OR a C1 (new) condition rating, OR an explicit Proposed/Under Const status."""
+    status = str(ctx.appraisal.value("property_status") or ctx.appraisal.value("status") or "").lower()
+    if "proposed" in status or "under const" in status or "new const" in status:
+        return True
+    if str(ctx.appraisal.value("condition_rating") or "").upper() == "C1":
+        return True
+    eff = _effective_ym(ctx)
+    yb = normalize_currency(ctx.appraisal.value("year_built"))
+    if eff and yb and 0 <= eff[0] - int(yb) <= 1:
+        return True
+    return False
+
+
+@rule(id="SCA-25", num="81", section="sales_comparison", phase=3, name="New construction competing comp")
+def sca25_new_construction(ctx: QCContext):
+    """When the subject is new construction, at least one comparable should come from a
+    competing development. Subdivision identity cannot be matched deterministically from
+    the grid, so a confirmed new-construction subject routes to VERIFY for the reviewer
+    to confirm a competing-development comp (or the dated-sale exception)."""
+    if not _is_new_construction(ctx):
+        return RuleResult(rule_id="SCA-25", checklist_num="81", section="sales_comparison",
+                          status=RuleStatus.NOT_APPLICABLE,
+                          message="subject is not new construction", fields_involved=["year_built"])
+    ev = [ctx.appraisal.evidence("year_built"), ctx.appraisal.evidence("condition_rating")]
+    return RuleResult(rule_id="SCA-25", checklist_num="81", section="sales_comparison",
+                      status=RuleStatus.VERIFY, message=qc_config.template("SCA-25-newconst"),
+                      fields_involved=["year_built", "condition_rating"],
+                      template_id="SCA-25-newconst", evidence=ev, confidence=0.6)
+
+
+# ---- SCA-26 subject GLA bracketed by the comparable GLAs ------------------
+
+def _subject_gla(ctx: QCContext):
+    return normalize_currency(ctx.appraisal.value("subject_grid_gla") or ctx.appraisal.value("gla"))
+
+
+@rule(id="SCA-26", num="82", section="sales_comparison", phase=3, name="Subject GLA bracketed by comps")
+def sca26_gla_bracket(ctx: QCContext):
+    """Sound square-footage methodology brackets the subject's GLA with comparables of
+    both larger and smaller GLA. A subject GLA outside the comps' GLA range signals the
+    comps may not support the size (or a below-grade/area methodology issue) — VERIFY."""
+    subj = _subject_gla(ctx)
+    glas = [normalize_currency(ctx.appraisal.value(f"comp_{i}_gla")) for i in _comp_indices(ctx)]
+    glas = [g for g in glas if g and g > 0]
+    ev = [ctx.appraisal.evidence("gla")] + \
+         [ctx.appraisal.evidence(f"comp_{i}_gla") for i in _comp_indices(ctx)[:3]]
+    if subj is None or len(glas) < 2:
+        return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
+                          status=RuleStatus.SKIPPED,
+                          message="insufficient GLA values to test bracketing", evidence=ev)
+    if min(glas) <= subj <= max(glas):
+        return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["gla", "comp_N_gla"], evidence=ev)
+    return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
+                      status=RuleStatus.VERIFY,
+                      message=qc_config.template("SCA-26-gla", subj=int(subj),
+                                                 lo=int(min(glas)), hi=int(max(glas))),
+                      fields_involved=["gla", "comp_N_gla"], template_id="SCA-26-gla",
+                      evidence=ev, confidence=0.6)
+
+
+# ---------------------------------------------------------------------------
+# Vision-backed comparable-photo rules (Google Cloud Vision). The imagery is
+# annotated in extraction (_overlay_comp_photos) into pseudo-fields; these rules
+# only read them (P-3). When vision is not configured they degrade to VERIFY/
+# SKIPPED — never a false PASS (P-6).
+# ---------------------------------------------------------------------------
+
+def _flag(ctx: QCContext, name: str) -> bool:
+    return str(ctx.appraisal.value(name) or "").strip().lower() in ("true", "yes", "1")
+
+
+@rule(id="SCA-27", num="126", section="sales_comparison", phase=3, name="Comparable photos present + type")
+def sca27_comp_photos(ctx: QCContext):
+    """Comparable photos must be present; for FHA they must be the appraiser's own
+    drive-by photos (not MLS listing photos). With Cloud Vision we confirm the page
+    depicts buildings and detect MLS/realtor watermark text on FHA loans."""
+    try:
+        pages = int(str(ctx.appraisal.value("comp_photo_pages") or "0").strip() or "0")
+    except ValueError:
+        pages = 0
+    ev = [ctx.appraisal.evidence("comp_photo_pages")]
+    if pages == 0:
+        return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
+                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-missing"),
+                          fields_involved=["comp_photo_pages"], template_id="SCA-27-missing",
+                          evidence=ev, confidence=0.55)
+    if not _flag(ctx, "vision_enabled"):
+        # Photos exist but the drive-by/MLS judgement needs imagery review.
+        return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
+                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-defer", pages=pages),
+                          fields_involved=["comp_photo_pages"], template_id="SCA-27-defer",
+                          evidence=ev, confidence=0.5)
+    if not _flag(ctx, "comp_photo_building"):
+        return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
+                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-nobuilding"),
+                          fields_involved=["comp_photo_building"], template_id="SCA-27-nobuilding",
+                          evidence=ev, confidence=0.6)
+    if ctx.loan_type == "fha" and _flag(ctx, "comp_photo_mls_text"):
+        return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
+                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-mls"),
+                          fields_involved=["comp_photo_mls_text"], template_id="SCA-27-mls",
+                          evidence=[ctx.appraisal.evidence("comp_photo_mls_text")], confidence=0.65)
+    return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
+                      status=RuleStatus.PASS, fields_involved=["comp_photo_pages", "comp_photo_building"],
+                      evidence=ev)
+
+
+@rule(id="SCA-16V", num="68b", section="sales_comparison", phase=3, name="Comp photo condition cross-check")
+def sca16v_photo_condition(ctx: QCContext):
+    """Vision cross-check on the comparable photos: distress imagery (boarded-up,
+    tarped, derelict, demolition) contradicting the reported condition ratings is
+    surfaced for review. SKIPPED when Cloud Vision is not configured (the grid
+    SCA-16 still covers the UAD rating)."""
+    if not _flag(ctx, "vision_enabled"):
+        return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
+                          status=RuleStatus.SKIPPED, message="vision not configured for photo condition")
+    ev = [ctx.appraisal.evidence("comp_photo_distress")]
+    if _flag(ctx, "comp_photo_distress"):
+        return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
+                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-16V-distress"),
+                          fields_involved=["comp_photo_distress"], template_id="SCA-16V-distress",
+                          evidence=ev, confidence=0.6)
+    return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
+                      status=RuleStatus.PASS, fields_involved=["comp_photo_distress"], evidence=ev)

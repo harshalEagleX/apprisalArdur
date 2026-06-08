@@ -21,5 +21,7 @@ semantic:
   predominant_price_pct: 10.0      # market value vs predominant price comment band
   listing_price_pct: 3.0           # listing vs opinion of value comment band
   net_adjustment_pct: 15.0         # comp net adjustment cap
+  gross_adjustment_pct: 25.0       # comp gross adjustment cap (sum of abs line adjustments)
+  comp_resale_window_months: 36    # subject/comp prior-sale look-back (resale/flip flag)
   comp_sale_window_months: 12      # comparable sale recency
   remaining_economic_life_min: 30  # FHA/VA minimum years

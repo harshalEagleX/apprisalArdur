@@ -160,3 +160,253 @@ class TestEngine:
             land_use_one_unit="80", land_use_2_4_unit="10", land_use_commercial="10"))
         n4 = [r for r in run_qc(ctx).results if r.rule_id == "N-4"]
         assert n4 and n4[0].status == RuleStatus.PASS
+
+
+# ---------------------------------------------------------------------------
+# SCA adjustment-percentage rules (SCA-GROSS + SCA-NET printed-% path)
+# ---------------------------------------------------------------------------
+
+class TestSCAAdjustmentPct:
+    def test_pct_helper(self):
+        from app.qc.rules.sales_comparison import _pct
+        assert _pct("38.6") == 38.6
+        assert _pct("14.1 %") == 14.1
+        assert _pct(None) is None
+        assert _pct("n/a") is None
+
+    def test_gross_over_25_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_gross_adjustment
+        from app.qc.result import RuleStatus
+        # comp 1 gross 38.6% (> 25 cap) → VERIFY naming comp 1; comps 2/3 within cap.
+        ctx = QCContext("t", appraisal=_appraisal(
+            comp_1_sale_price="1700000", comp_1_gross_adj_pct="38.6",
+            comp_2_sale_price="1700000", comp_2_gross_adj_pct="14.1",
+            comp_3_sale_price="1700000", comp_3_gross_adj_pct="17.3"))
+        r = sca_gross_adjustment(ctx)
+        assert r.status == RuleStatus.VERIFY and "1" in r.message
+
+    def test_gross_all_within_cap_pass(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_gross_adjustment
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            comp_1_sale_price="500000", comp_1_gross_adj_pct="12.0",
+            comp_2_sale_price="500000", comp_2_gross_adj_pct="9.5"))
+        assert sca_gross_adjustment(ctx).status == RuleStatus.PASS
+
+    def test_gross_skipped_when_unextracted(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_gross_adjustment
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(comp_1_sale_price="500000"))
+        assert sca_gross_adjustment(ctx).status == RuleStatus.SKIPPED
+
+    def test_net_prefers_printed_pct(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_net_adjustment
+        from app.qc.result import RuleStatus
+        # printed net 34.2% (> 15 cap) drives VERIFY even though the dollar net is tiny.
+        ctx = QCContext("t", appraisal=_appraisal(
+            comp_1_sale_price="1700000", comp_1_net_adjustment="1000", comp_1_net_adj_pct="34.2"))
+        r = sca_net_adjustment(ctx)
+        assert r.status == RuleStatus.VERIFY and "1" in r.message
+
+
+# ---------------------------------------------------------------------------
+# SCA prior-sale rules (SCA-PSH subject + SCA-FLIP comp resale)
+# ---------------------------------------------------------------------------
+
+class TestSCAPriorSale:
+    def test_full_date_parse(self):
+        from app.qc.rules.sales_comparison import _parse_full_date
+        assert _parse_full_date("02/09/2026") == (2026, 2)
+        assert _parse_full_date("10/8/24") == (2024, 10)
+        assert _parse_full_date("") is None
+
+    def test_subject_prior_within_window_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_subject_prior_sale
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            effective_date="2026-03-15", subject_grid_prior_sale_date="02/09/2026"))
+        r = sca_subject_prior_sale(ctx)
+        assert r.status == RuleStatus.VERIFY and "1" in r.message  # 1 month
+
+    def test_subject_prior_outside_window_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_subject_prior_sale
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            effective_date="2026-03-15", subject_grid_prior_sale_date="01/01/2020"))
+        assert sca_subject_prior_sale(ctx).status == RuleStatus.PASS
+
+    def test_subject_no_prior_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_subject_prior_sale
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(effective_date="2026-03-15"))
+        assert sca_subject_prior_sale(ctx).status == RuleStatus.PASS
+
+    def test_subject_prior_skipped_without_effective_date(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_subject_prior_sale
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(subject_grid_prior_sale_date="02/09/2026"))
+        assert sca_subject_prior_sale(ctx).status == RuleStatus.SKIPPED
+
+    def test_comp_resale_within_window_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_comp_resale
+        from app.qc.result import RuleStatus
+        # comp sold s06/25 and had a prior sale 02/2024 → ~16 months → flip flag.
+        ctx = QCContext("t", appraisal=_appraisal(
+            comp_1_sale_price="400000", comp_1_sale_date="s06/25;c05/25",
+            comp_1_prior_sale_date="02/15/2024"))
+        rs = sca_comp_resale(ctx)
+        assert any(r.status == RuleStatus.VERIFY for r in rs)
+
+    def test_comp_no_resale_one_pass(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_comp_resale
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(comp_1_sale_price="400000"))
+        rs = sca_comp_resale(ctx)
+        assert len(rs) == 1 and rs[0].status == RuleStatus.PASS
+
+
+# ---------------------------------------------------------------------------
+# SCA-25 new construction + SCA-26 GLA bracketing
+# ---------------------------------------------------------------------------
+
+class TestSCANewConstAndGLA:
+    def test_new_construction_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca25_new_construction
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(year_built="2025", effective_date="2026-03-15"))
+        assert sca25_new_construction(ctx).status == RuleStatus.VERIFY
+
+    def test_established_not_applicable(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca25_new_construction
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(year_built="1990", effective_date="2026-03-15",
+                                                  condition_rating="C3"))
+        assert sca25_new_construction(ctx).status == RuleStatus.NOT_APPLICABLE
+
+    def test_gla_bracketed_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca26_gla_bracket
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            gla="2000", comp_1_sale_price="1", comp_1_gla="1800",
+            comp_2_sale_price="1", comp_2_gla="2200"))
+        assert sca26_gla_bracket(ctx).status == RuleStatus.PASS
+
+    def test_gla_outside_range_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca26_gla_bracket
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            gla="2600", comp_1_sale_price="1", comp_1_gla="1800",
+            comp_2_sale_price="1", comp_2_gla="2200"))
+        r = sca26_gla_bracket(ctx)
+        assert r.status == RuleStatus.VERIFY and "2600" in r.message
+
+
+# ---------------------------------------------------------------------------
+# Vision client + photo rules (SCA-27 / SCA-16V) — pseudo-field driven (P-3)
+# ---------------------------------------------------------------------------
+
+class TestVisionClient:
+    def test_unavailable_when_disabled(self, monkeypatch):
+        # VISION_ENABLED off → no analyzer, no crash, no cost (regardless of keys).
+        from app import config
+        from app.vision import analyzer_available, get_photo_analyzer
+        monkeypatch.setattr(config, "VISION_ENABLED", False)
+        assert analyzer_available() is False
+        assert get_photo_analyzer() is None
+
+    def test_gemini_backend_selected_when_keyed(self, monkeypatch):
+        from app import config
+        from app.vision import analyzer_available, get_photo_analyzer
+        monkeypatch.setattr(config, "VISION_ENABLED", True)
+        monkeypatch.setattr(config, "VISION_BACKEND", "gemini")
+        monkeypatch.setattr(config, "GEMINI_API_KEY", "test-key")
+        assert analyzer_available() is True
+        a = get_photo_analyzer()
+        assert a is not None and a.backend == "gemini"
+
+    def test_gemini_signal_parse(self):
+        from app.vision.analyzer import _parse_signals
+        s = _parse_signals('{"is_building": true, "mls_watermark": false, '
+                            '"distress": false, "condition": "C3"}')
+        assert s.building and s.condition == "C3"
+        assert s.mls_text is False and s.distress is False
+
+    def test_gemini_signal_parse_unknown_condition(self):
+        from app.vision.analyzer import _parse_signals
+        s = _parse_signals('{"is_building": true, "distress": true, "condition": "unknown"}')
+        assert s.building and s.distress and s.condition is None
+
+    def test_annotation_helpers(self):
+        from app.vision import VisionAnnotation
+        a = VisionAnnotation(labels=[("House", 0.97), ("Roof", 0.8)], text="MLS #123", objects=["Building"])
+        assert a.has_label("house", min_score=0.9)
+        assert a.any_label_contains("roof")
+        assert not a.any_label_contains("pool")
+
+
+class TestSCAPhotoRules:
+    def _appr(self, **f):
+        return _appraisal(**f)
+
+    def test_sca27_no_pages_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca27_comp_photos
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(comp_photo_pages="0"))
+        assert sca27_comp_photos(ctx).status == RuleStatus.VERIFY
+
+    def test_sca27_defers_when_vision_off(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca27_comp_photos
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(comp_photo_pages="2", vision_enabled="False"))
+        r = sca27_comp_photos(ctx)
+        assert r.status == RuleStatus.VERIFY and "2" in r.message
+
+    def test_sca27_passes_with_building_conventional(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca27_comp_photos
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t",
+                        appraisal=self._appr(comp_photo_pages="2", vision_enabled="True",
+                                             comp_photo_building="True", comp_photo_mls_text="True"),
+                        engagement=_appraisal(loan_type="Conventional"))
+        assert sca27_comp_photos(ctx).status == RuleStatus.PASS
+
+    def test_sca27_fha_mls_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca27_comp_photos
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t",
+                        appraisal=self._appr(comp_photo_pages="2", vision_enabled="True",
+                                             comp_photo_building="True", comp_photo_mls_text="True"),
+                        engagement=_appraisal(loan_type="FHA"))
+        assert sca27_comp_photos(ctx).status == RuleStatus.VERIFY
+
+    def test_sca16v_skipped_when_vision_off(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16v_photo_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(vision_enabled="False"))
+        assert sca16v_photo_condition(ctx).status == RuleStatus.SKIPPED
+
+    def test_sca16v_distress_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16v_photo_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(vision_enabled="True", comp_photo_distress="True"))
+        assert sca16v_photo_condition(ctx).status == RuleStatus.VERIFY

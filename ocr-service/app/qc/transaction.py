@@ -57,6 +57,7 @@ def extract_documents(folder: Path) -> Dict[str, object]:
             elif role == "appraisal":
                 rs = _overlay_comp_grid(rs, pdf, dtype)
                 rs = _overlay_photos(rs, pdf, dtype)
+                rs = _overlay_comp_photos(rs, pdf, dtype)
             elif role == "contract":
                 rs = _overlay_contract(rs, pdf, dtype)
             sets[role] = rs
@@ -96,6 +97,9 @@ def _overlay_comp_grid(rs, pdf, dtype):
         "location_rating": lambda v: ";" in v,
         "view": lambda v: ";" in v,
         "proximity": lambda v: bool(_re.search(r"\d+\.\d+", v)),
+        "net_adj_pct": lambda v: bool(_re.fullmatch(r"\d+(?:\.\d+)?", v)),
+        "gross_adj_pct": lambda v: bool(_re.fullmatch(r"\d+(?:\.\d+)?", v)),
+        "prior_sale_date": lambda v: bool(_re.search(r"\d{1,2}/\d{1,2}/\d{2,4}", v)),
     }
     cam_fields = set()
     for name, value in cam.items():
@@ -153,6 +157,33 @@ def _overlay_photos(rs, pdf, dtype):
             canonical_name=name, document_type=dtype, value=value,
             raw_source_text=value, extraction_method="photo_caption",
             confidence=0.8, source_page=0, normalization_applied=["photo_caption"],
+        )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def _overlay_comp_photos(rs, pdf, dtype):
+    """Add comparable-photo pseudo-fields (page count + Cloud Vision signals when
+    configured) so SCA-27 / SCA-16V read them without touching the PDF (P-3)."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.comp_photo_extractor import extract_comp_photo_signals
+    try:
+        fields = extract_comp_photo_signals(pdf)
+    except Exception as exc:
+        logger.warning("Comp-photo signals failed for %s: %s", pdf.name, exc)
+        return rs
+    if not fields:
+        return rs
+    existing = {name: r for name, r in rs}
+    for name, value in fields.items():
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=str(value),
+            raw_source_text=str(value), extraction_method="comp_photo_vision",
+            confidence=0.8, source_page=0, normalization_applied=["comp_photo_vision"],
         )
     merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
                                  total_pages=rs.total_pages, ocr_method=rs.ocr_method)
@@ -256,6 +287,7 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     rs = run_full_extraction(Path(appraisal_path), "appraisal_report", use_paddle=False)
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
+    rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")
     sets["appraisal"] = rs
     if engagement_path:
         _emit("extract_engagement", "Extracting engagement letter", 45.0)

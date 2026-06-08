@@ -128,6 +128,44 @@ def extract_sca_grid(pdf_path) -> Dict[str, str]:
         subj_col = comp_cols[0] - 2
 
         for r in range(df.shape[0]):
+            label = re.sub(r"\s+", " ", (df.iat[r, 1] if df.shape[1] > 1 else "")).strip().lower()
+            # "Adjusted Sale Price of Comparables" row carries the printed
+            # "Net Adj. X%  Gross Adj. Y%" per comp. These are the authoritative
+            # reconciliation percentages (vs our dollar-derived estimate). Per comp,
+            # the % text sits in the comp's header column (cc) and the next column
+            # (cc+1); the adjusted-price $ is right-aligned into cc+2 (excluded so we
+            # never mistake a dollar amount for a percent). The two decimals appear
+            # in order [net%, gross%].
+            if label.startswith("adjusted sale price"):
+                for k, cc in enumerate(comp_cols):
+                    ci = comp_base + k + 1
+                    region = " ".join(df.iat[r, c] for c in (cc, cc + 1) if 
+                    0 <= c < df.shape[1])
+                    nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", region)]
+                    nums = [n for n in nums if 0 <= n <= 200]  # plausible percentages
+                    if len(nums) >= 2:
+                        out[f"comp_{ci}_net_adj_pct"] = str(nums[0])
+                        out[f"comp_{ci}_gross_adj_pct"] = str(nums[1])
+                continue
+            # "Date of Prior Sale/Transfer" row → MM/DD/YYYY per column. The subject's
+            # prior-sale date sits anywhere in the subject region (between the label and
+            # comp 1 — its exact sub-cell varies by form), each comp's in its own column.
+            # A full date (with /YYYY) here is distinct from the UAD grid date code
+            # ("s06/14;c11/13"), so a plain date regex is unambiguous.
+            if label.startswith("date of prior sale") and comp_cols:
+                _DATE = r"\d{1,2}/\d{1,2}/\d{2,4}"
+                if comp_base == 0:
+                    subj_region = " ".join(df.iat[r, c] for c in range(2, comp_cols[0]))
+                    m = re.search(_DATE, subj_region)
+                    if m:
+                        out["subject_grid_prior_sale_date"] = m.group(0)
+                for k, cc in enumerate(comp_cols):
+                    ci = comp_base + k + 1
+                    region = " ".join(df.iat[r, c] for c in (cc, cc + 1) if 0 <= c < df.shape[1])
+                    m = re.search(_DATE, region)
+                    if m:
+                        out[f"comp_{ci}_prior_sale_date"] = m.group(0)
+                continue
             suffix = _field_for_label(df.iat[r, 1] if df.shape[1] > 1 else "")
             if not suffix:
                 continue
