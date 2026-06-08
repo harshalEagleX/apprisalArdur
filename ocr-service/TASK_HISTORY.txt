@@ -844,3 +844,20 @@ Batch 9 — extraction-blocked gaps revisited (SCA-15 + SCA-ZF; SCA-1/24 deferre
     parseable), SCA-24 (unique-design comps — needs reliable comp room/bed counts,
     which the lattice does not yield). Free-text "different + no adj" direction needs
     fuzzy-equality + commentary NLP before it can flag without false positives.
+
+EXTRACTION FIX — merged-row adjustment mis-attribution (SCA-14/16 false positives)
+[x] ROOT CAUSE (P-2, Fantail p8): Camelot lattice MERGED the Quality/Actual-Age/
+    Condition rows (missing horizontal grid lines) -> label "Quality of Construction
+    Actual Age Condition", cell "Q3 18". The +/- column held the AGE adjustment
+    (comp age 10 vs subject 18 -> -4,000) but was attributed to QUALITY -> the false
+    "Q3 matches subject but a $-4000 quality adjustment" SCA-14 VERIFYs.
+[x] FIX (sca_grid_matrix): a discrete-code cell ("Q3"/"C3") that carried extra tokens
+    (e.g. "Q3 18") signals a row-merge, so its +/- value is ambiguous -> DON'T emit
+    comp_<i>_{quality,condition}_rating_adjustment for that cell. Clean cells keep
+    their adjustment. Added _value_ok: drops non-numeric room_count ("Total Bdrms.
+    Baths" header bleed) and non-code discrete values (bled "Quality of Construction").
+[x] MEASURED both directions (Orders+sort sweep): SUSPECT same-grade adjustments
+    remaining 0 (were the source of the false VERIFYs); LEGIT diff-grade adjustments
+    preserved 11 (e.g. 1640 Peninsula comp1 Q4 vs Q3 $207,500; 8527 Elaine C3 $-30000).
+    Fantail SCA-14 6 VERIFY-noise -> 6 PASS. 90 NE 32nd no longer emits label-text as
+    a rating. 62 engine tests pass. No rule changes — purely an extraction correctness fix.

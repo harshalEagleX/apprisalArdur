@@ -57,6 +57,25 @@ _ROW_FIELDS: List = [
 # Descriptive rows that have NO +/- adjustment column.
 _NO_ADJ = {"address", "proximity", "data_source", "verification_source", "room_count"}
 
+# Discrete UAD-code rows whose cell should hold ONLY the code (Q1-6 / C1-6). Extra
+# tokens in the cell signal a Camelot row-merge, making the +/- column ambiguous.
+_DISCRETE = {"quality_rating", "condition_rating"}
+
+
+def _value_ok(suffix: str, cleaned: str) -> bool:
+    """Reject obvious extraction garbage so it never reaches the rules:
+      • Room Count bleeds its sub-header ("Total Bdrms. Baths") on a row-merge — real
+        counts are numeric, so drop non-numeric ones.
+      • A discrete-grade cell must clean to a bare code (Q1-6 / C1-6); anything else
+        (e.g. the bled label "Quality of Construction") is a merge artifact, not a rating."""
+    if suffix == "room_count":
+        return bool(re.search(r"\d", cleaned))
+    if suffix == "quality_rating":
+        return bool(re.fullmatch(r"Q[1-6]", cleaned.upper()))
+    if suffix == "condition_rating":
+        return bool(re.fullmatch(r"C[1-6]", cleaned.upper()))
+    return True
+
 
 def _field_for_label(label: str) -> Optional[str]:
     low = re.sub(r"\s+", " ", label or "").strip().lower()
@@ -171,14 +190,22 @@ def extract_sca_grid(pdf_path) -> Dict[str, str]:
                 continue
             if comp_base == 0 and 0 <= subj_col < df.shape[1]:
                 sv = df.iat[r, subj_col].strip()
-                if sv:
-                    out[f"subject_grid_{suffix}"] = _clean(suffix, sv)
+                cleaned = _clean(suffix, sv)
+                if sv and _value_ok(suffix, cleaned):
+                    out[f"subject_grid_{suffix}"] = cleaned
             for k, cc in enumerate(comp_cols):
                 ci = comp_base + k + 1
                 val = df.iat[r, cc].strip() if cc < df.shape[1] else ""
-                if val:
-                    out[f"comp_{ci}_{suffix}"] = _clean(suffix, val)
+                cleaned = _clean(suffix, val)
+                if val and _value_ok(suffix, cleaned):
+                    out[f"comp_{ci}_{suffix}"] = cleaned
                 if suffix in _NO_ADJ:
+                    continue
+                # A discrete-code cell that carried extra tokens (e.g. "Q3 18") means
+                # Camelot merged adjacent rows (missing grid lines), so the value in the
+                # +/- column belongs to one of the OTHER merged rows, not this field —
+                # don't attribute it here (was the source of false zero-adj findings).
+                if suffix in _DISCRETE and re.sub(r"\s+", "", val).upper() != cleaned.upper():
                     continue
                 adj_col = cc + 2
                 if adj_col < df.shape[1]:
