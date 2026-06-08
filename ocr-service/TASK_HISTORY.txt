@@ -823,3 +823,24 @@ VISION ROBUSTNESS + Batch 8 SCA strengthening (toward MIRA depth)
     Q3==subject Q3 yet adjustments $-4000/$500/$-2500 (#505); SCA-16V flagged photos
     a worse condition than rated (#470); SCA-18 caught 3 blank basements. SCA-6 all
     PASS (sources specific). Grand total 385 PASS / 12 FAIL / 59 VERIFY / 2 HOLD.
+
+Batch 9 — extraction-blocked gaps revisited (SCA-15 + SCA-ZF; SCA-1/24 deferred)
+[x] FEASIBILITY-FIRST (P-8): probed the corpus. SCA-15 subject Actual Age vs year
+    built is reliable (subject_grid_actual_age + year_built + effective_date all
+    extract: 1640 Peninsula 25 == 2026-2001). SCA-1 neighborhood comparable-count
+    line parses in only 1/20 docs (the counts are form fields, not flowing text) ->
+    genuinely extraction-blocked, left deferred (honest, not a fragile 1/20 rule).
+[x] NEW SCA-15 (num 67): subject Actual Age must equal (effective year - year built)
+    within 2yr; gap -> VERIFY; missing inputs -> SKIPPED. Comp year-built is not on
+    the URAR grid, so this is subject-level (honest scope). Template SCA-15-age.
+[x] NEW SCA-ZF (num 76b): zero-adjustment consistency for the FREE-TEXT grid rows
+    (location/site/view/design/heating/garage/porch) — HIGH-PRECISION only: comp
+    feature identical to subject (or "Similar") yet a non-zero adjustment applied ->
+    VERIFY. The fuzzy "different + no adjustment" direction is intentionally NOT
+    flagged (free-text equality unsafe to assert, P-6). Template SCA-zf-same.
+[x] MEASURED (full pipeline, 1640 Peninsula): SCA-15 PASS (25==25), SCA-ZF PASS
+    (no adjust-without-difference). SCA total 32 -> 34. 62 engine tests pass.
+[x] STILL DEFERRED (honest, extraction/NLP-blocked): SCA-1 (1004MC counts, 1/20
+    parseable), SCA-24 (unique-design comps — needs reliable comp room/bed counts,
+    which the lattice does not yield). Free-text "different + no adj" direction needs
+    fuzzy-equality + commentary NLP before it can flag without false positives.

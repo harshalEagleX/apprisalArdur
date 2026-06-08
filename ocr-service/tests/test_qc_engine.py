@@ -511,3 +511,40 @@ class TestSCAStrengthened:
         from app.qc.result import RuleStatus
         ctx = QCContext("t", appraisal=_appraisal(comp_1_sale_price="1", comp_1_sale_date="s06/25;c05/25"))
         assert sca23_listing_adjustment(ctx).status == RuleStatus.NOT_APPLICABLE
+
+    def test_actual_age_matches_year_built_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca15_actual_age
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            subject_grid_actual_age="25", year_built="2001", effective_date="2026-05-07"))
+        assert sca15_actual_age(ctx).status == RuleStatus.PASS
+
+    def test_actual_age_mismatch_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca15_actual_age
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            subject_grid_actual_age="10", year_built="2001", effective_date="2026-05-07"))
+        r = sca15_actual_age(ctx)
+        assert r.status == RuleStatus.VERIFY and "2001" in r.message
+
+    def test_zf_same_feature_with_adjustment_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_zf_consistency
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            subject_grid_view="B;Lake;", comp_1_sale_price="1",
+            comp_1_view="B;Lake;", comp_1_view_adjustment="5000"))
+        rs = sca_zf_consistency(ctx)
+        assert any(r.status == RuleStatus.VERIFY for r in rs)
+
+    def test_zf_different_feature_not_flagged(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca_zf_consistency
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            subject_grid_view="B;Lake;", comp_1_sale_price="1",
+            comp_1_view="N;Res;", comp_1_view_adjustment="5000"))
+        rs = sca_zf_consistency(ctx)
+        assert all(r.status != RuleStatus.VERIFY for r in rs)

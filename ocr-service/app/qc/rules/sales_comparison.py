@@ -752,6 +752,80 @@ def sca18_basement(ctx: QCContext):
                            lambda v: bool(re.search(r"\d", v)) or v.lower() in ("none", "0", "nobsmt"))
 
 
+# ---- SCA-15 subject actual age consistent with year built -----------------
+
+@rule(id="SCA-15", num="67", section="sales_comparison", phase=3, name="Subject actual age vs year built")
+def sca15_actual_age(ctx: QCContext):
+    """The subject's Actual Age in the grid must agree with (effective year - year
+    built), within a 2-year tolerance for mid-year effective dates. A large gap is a
+    data-entry/OCR error (MIRA SCA-15). Comp year-built is not on the URAR grid, so
+    this is a subject-level check."""
+    age = normalize_currency(ctx.appraisal.value("subject_grid_actual_age"))
+    yb = normalize_currency(ctx.appraisal.value("year_built"))
+    eff = _effective_ym(ctx)
+    ev = [ctx.appraisal.evidence("subject_grid_actual_age"), ctx.appraisal.evidence("year_built")]
+    if age is None or yb is None or eff is None or yb < 1700:
+        return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
+                          status=RuleStatus.SKIPPED,
+                          message="age / year built / effective date not all extracted", evidence=ev)
+    expected = eff[0] - int(yb)
+    if abs(int(age) - expected) <= 2:
+        return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["subject_grid_actual_age", "year_built"], evidence=ev)
+    return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
+                      status=RuleStatus.VERIFY,
+                      message=qc_config.template("SCA-15-age", age=int(age), exp=expected, yb=int(yb)),
+                      fields_involved=["subject_grid_actual_age", "year_built"],
+                      template_id="SCA-15-age", evidence=ev, confidence=0.7)
+
+
+# ---- SCA-ZF free-text grid feature: adjustment without a difference --------
+
+# (field suffix, display label) for the adjustable descriptive rows. The discrete
+# graded rows (condition/quality) are handled by SCA-16/SCA-14; here we only flag the
+# HIGH-PRECISION direction — comp value identical to the subject (or "Similar") yet a
+# non-zero adjustment was applied. The opposite direction (different + no adjustment)
+# is intentionally NOT flagged: free-text equality is too fuzzy to assert safely (P-6).
+_ZF_FIELDS = [("location_rating", "Location"), ("site_size", "Site"), ("view", "View"),
+              ("design", "Design"), ("heating_cooling", "Heating/Cooling"),
+              ("garage_carport", "Garage"), ("porch_patio_deck", "Porch/Patio")]
+
+
+def _norm_feat(v) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(v or "").lower())
+
+
+@rule(id="SCA-ZF", num="76b", section="sales_comparison", phase=3, name="Feature adjustment without difference")
+def sca_zf_consistency(ctx: QCContext):
+    """Zero-adjustment consistency for the free-text grid rows (MIRA): when a comp's
+    feature is identical to the subject (or marked 'Similar') yet a dollar adjustment
+    was applied, surface it for review. High-precision (exact match only)."""
+    out = []
+    checked = False
+    for field, label in _ZF_FIELDS:
+        subj = _norm_feat(ctx.appraisal.value(f"subject_grid_{field}"))
+        if not subj:
+            continue
+        for i in _comp_indices(ctx):
+            cv = _norm_feat(ctx.appraisal.value(f"comp_{i}_{field}"))
+            adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_{field}_adjustment"))
+            if not cv or adj is None or adj == 0:
+                continue
+            checked = True
+            if cv == subj or cv in ("similar", "sim"):
+                ev = [ctx.appraisal.evidence(f"comp_{i}_{field}"),
+                      ctx.appraisal.evidence(f"comp_{i}_{field}_adjustment")]
+                out.append(RuleResult(rule_id="SCA-ZF", checklist_num="76b", section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-zf-same", comp=i, field=label, a=int(adj)),
+                                      fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                      template_id="SCA-zf-same", evidence=ev, confidence=0.6))
+    if checked and not out:
+        out.append(RuleResult(rule_id="SCA-ZF", checklist_num="76b", section="sales_comparison",
+                              status=RuleStatus.PASS, fields_involved=["comp_N_*_adjustment"]))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Vision-backed comparable-photo rules (Google Cloud Vision). The imagery is
 # annotated in extraction (_overlay_comp_photos) into pseudo-fields; these rules
