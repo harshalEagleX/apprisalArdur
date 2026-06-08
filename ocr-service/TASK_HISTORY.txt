@@ -773,7 +773,53 @@ VISION TRACK pt.2 — Gemini (AI Studio) backend, LIVE
     Overall 111 PASS / 2 FAIL / 10 VERIFY.
 [x] TESTS: TestVisionClient now deterministic (monkeypatch config) + Gemini backend
     selection + JSON signal parse (valid + unknown-condition). 47 passed.
-[ ] FOLLOW-UP: comp_photo_condition came back None on this doc (Gemini returned
-    non-C/unknown for the aggregated pages) — advisory only, SCA-16V uses distress.
-    Could later cross-check comp_photo_condition vs the grid condition for a richer
-    SCA-16V. Optional: enable VISION_DETECT_MLS / wire loan_type for the FHA path.
+[x] DONE (next section): SCA-16V now cross-checks comp_photo_condition vs the grid
+    condition. Still optional: enable VISION_DETECT_MLS / wire loan_type for FHA MLS.
+
+INTEGRATION PROOF + full uploads/sort test
+[x] USER: prove SCA runs inside the real "Run QC" flow (not a standalone module) +
+    full test on uploads/sort (4 multi-doc transactions), SCA prioritized.
+[x] TRACED: frontend Run QC (zip) -> Java -> POST /qc/process (main.py:150) ->
+    run_transaction_qc_paths -> run_qc (ALL registered rules incl. sales_comparison,
+    imported in app/qc/rules/__init__.py) -> report_to_python_qc_response (serializes
+    EVERY rule, no section filter) -> PythonQCResponse. _overlay_comp_grid +
+    _overlay_comp_photos wired into BOTH entry points. SCA is fully integrated.
+[x] scripts/test_sca_corpus.py: runs run_transaction_qc per folder, prints overall
+    counts + every SCA result (non-PASS first) + vision fields. Reusable.
+[x] MEASURED (uploads/sort, 4 txns): 248 SCA results fired inside the full run.
+    Real flags: SCA-PSH (13mo prior sale), SCA-DC (35/29mo-old comps), SCA-25 (new
+    construction), SCA-17 (grid<->improvements), SCA-GROSS/NET. Scanned Alpine doc
+    degraded gracefully (SKIP). Grand total ~379 PASS / 12 FAIL / 54 VERIFY.
+
+VISION ROBUSTNESS + Batch 8 SCA strengthening (toward MIRA depth)
+[x] SCA-27 root cause: on the first sort run, "building=false" was TRANSIENT Gemini
+    503s (model overloaded), NOT the prompt — a failure was being read as "not a
+    building". FIX: analyzer retries 429/500/503 with backoff; extractor tracks
+    comp_photo_analyzed and emits comp_photo_vision_error when ALL pages fail, so a
+    vision outage DEFERS (SCA-27 VERIFY / SCA-16V SKIPPED) instead of a false negative.
+[x] MODEL: gemini-flash-latest (=3.5) was 503/429-flaky under burst; gemini-2.5-flash
+    measured 3/3 stable AND returns a condition grade -> switched default + .env.
+[x] SCA-16V upgraded to a REAL image-vs-grid condition cross-check (MIRA SCA-16 vision
+    layer): distress imagery OR photo condition >=2 UAD grades worse than every rated
+    condition -> VERIFY; SKIPPED on vision outage. comp_photo_condition now annotated.
+[x] ZERO-ADJUSTMENT CONSISTENCY (MIRA's core grid cross-check) on the reliable
+    discrete-grade rows: _grade_consistency_rule drives SCA-16 (condition) + SCA-14
+    (quality) — comp matches subject grade + nonzero adjustment -> VERIFY; differs +
+    no adjustment -> VERIFY; else PASS. (Free-text rows view/location/garage left as
+    presence checks — equality there is too fuzzy to flag safely, P-6.)
+[x] SCA-6 upgraded to SPECIFICITY (MIRA): bare "public records"/"county records"/etc.
+    -> VERIFY; a named source -> PASS.
+[x] NEW SCA-23 (listing comp adjustment): an Active/listing comp with no net
+    adjustment -> VERIFY (list-to-sale); no listings -> NOT_APPLICABLE. NEW SCA-18
+    (basement presence per comp). SCA total 30 -> 32.
+[x] AUDIT vs MIRA: 32 SCA rules. STRONG: 4,6,7,10,14,16,16V,19,22,27 + 7 gap rules
+    MIRA itself flagged missing (NET,GROSS,BR,DC,PR,FLIP,PSH) + section-HOLD.
+    Remaining MISSING (extraction-blocked): SCA-1 (1004MC), SCA-15 (comp year_built),
+    SCA-24 (unique design). PARTIAL free-text rows are presence-only by design.
+[x] TESTS: TestSCAStrengthened + vision-error/condition tests. 58 passed.
+[x] MEASURED (uploads/sort, final run, gemini-2.5-flash): SCA-27 -> PASS on all 3
+    DIGITAL docs (was VERIFY on the 503 run); scanned Alpine correctly VERIFY
+    ("not detected"). New flags surfaced: SCA-14 zero-adj caught comps 4/5/6 with
+    Q3==subject Q3 yet adjustments $-4000/$500/$-2500 (#505); SCA-16V flagged photos
+    a worse condition than rated (#470); SCA-18 caught 3 blank basements. SCA-6 all
+    PASS (sources specific). Grand total 385 PASS / 12 FAIL / 59 VERIFY / 2 HOLD.

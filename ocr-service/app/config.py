@@ -47,5 +47,5 @@ VISION_DETECT_MLS: bool = os.getenv("VISION_DETECT_MLS", "false").lower() in ("1
 # multimodal model — one call returns building/MLS/distress/condition as JSON.
 VISION_BACKEND: str = os.getenv("VISION_BACKEND", "auto")
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_TIMEOUT: int = int(os.getenv("GEMINI_TIMEOUT", "40"))

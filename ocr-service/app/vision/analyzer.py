@@ -76,6 +76,8 @@ class GeminiPhotoAnalyzer:
         key = hashlib.sha256(image_bytes).hexdigest()
         if key in _SIGNAL_CACHE:
             return _SIGNAL_CACHE[key]
+        import time
+
         import requests
         body = {
             "contents": [{"parts": [
@@ -85,23 +87,31 @@ class GeminiPhotoAnalyzer:
             ]}],
             "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
         }
-        try:
-            resp = requests.post(
-                self._url,
-                headers={"Content-Type": "application/json", "X-goog-api-key": self._key},
-                json=body, timeout=config.GEMINI_TIMEOUT)
-            if resp.status_code != 200:
-                logger.warning("Gemini vision HTTP %s: %s", resp.status_code, resp.text[:200])
-                return None
-            parts = resp.json()["candidates"][0]["content"]["parts"]
-            text = next((p["text"] for p in reversed(parts) if "text" in p), "")
-            sig = _parse_signals(text)
-            if sig and len(_SIGNAL_CACHE) < _CACHE_MAX:
-                _SIGNAL_CACHE[key] = sig
-            return sig
-        except Exception as exc:  # never break the pipeline (P-6)
-            logger.warning("Gemini vision failed: %s", exc)
-            return None
+        # Retry transient capacity errors (503 overloaded / 429 rate-limited) with
+        # backoff; a cached SUCCESS is what we want, never a cached transient failure.
+        for attempt in range(3):
+            try:
+                resp = requests.post(
+                    self._url,
+                    headers={"Content-Type": "application/json", "X-goog-api-key": self._key},
+                    json=body, timeout=config.GEMINI_TIMEOUT)
+                if resp.status_code in (429, 500, 503) and attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                if resp.status_code != 200:
+                    logger.warning("Gemini vision HTTP %s: %s", resp.status_code, resp.text[:200])
+                    return None
+                parts = resp.json()["candidates"][0]["content"]["parts"]
+                text = next((p["text"] for p in reversed(parts) if "text" in p), "")
+                sig = _parse_signals(text)
+                if sig and len(_SIGNAL_CACHE) < _CACHE_MAX:
+                    _SIGNAL_CACHE[key] = sig
+                return sig
+            except Exception as exc:  # never break the pipeline (P-6)
+                logger.warning("Gemini vision attempt %d failed: %s", attempt + 1, exc)
+                if attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+        return None
 
 
 class GoogleVisionPhotoAnalyzer:

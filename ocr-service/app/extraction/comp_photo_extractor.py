@@ -71,18 +71,20 @@ def extract_comp_photo_signals(pdf_path) -> Dict[str, str]:
         # (Cloud Vision bills per feature — Gemini returns all signals in one call).
         want_text = config.VISION_DETECT_MLS
         pages = pages[: max(0, config.VISION_MAX_PAGES)]
+        analyzed = 0
         building = distress = False
         mls: Optional[bool] = None
         worst_cond = 0
         for pi in pages:
             try:
-                img_bytes = pdf.load_page(pi).get_pixmap(dpi=120).tobytes("png")
+                img_bytes = pdf.load_page(pi).get_pixmap(dpi=150).tobytes("png")
             except Exception as exc:
                 logger.debug("render comp-photo page %d failed: %s", pi, exc)
                 continue
             sig = analyzer.analyze(img_bytes, want_text=want_text)
             if sig is None:
-                continue
+                continue  # transient API failure — don't let it imply "not a building"
+            analyzed += 1
             building = building or sig.building
             distress = distress or sig.distress
             if sig.mls_text:
@@ -91,6 +93,13 @@ def extract_comp_photo_signals(pdf_path) -> Dict[str, str]:
                 mls = False
             if sig.condition and sig.condition[1:].isdigit():
                 worst_cond = max(worst_cond, int(sig.condition[1:]))  # keep the worst (highest C#)
+        out["comp_photo_analyzed"] = str(analyzed)
+        # Only ASSERT the visual signals when at least one page was actually analyzed,
+        # so a vision outage degrades to "could not verify" (VERIFY) rather than a
+        # false "not a building" negative.
+        if analyzed == 0:
+            out["comp_photo_vision_error"] = "True"
+            return out
         out["comp_photo_building"] = str(building)
         out["comp_photo_distress"] = str(distress)
         if mls is not None:

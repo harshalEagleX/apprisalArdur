@@ -265,36 +265,58 @@ def sca8_date_sequence(ctx: QCContext):
 
 # ---- SCA-16 condition rating present + UAD format + consistency vs subject -
 
-@rule(id="SCA-16", num="68", section="sales_comparison", phase=3, name="Comp condition UAD rating")
-def sca16_condition(ctx: QCContext):
+def _grade(val, letter: str) -> "int | None":
+    m = re.fullmatch(rf"{letter}([1-6])", str(val or "").strip().upper())
+    return int(m.group(1)) if m else None
+
+
+def _grade_consistency_rule(ctx, rule_id, num, field, letter, label, fmt_template):
+    """Format check + zero-adjustment consistency for a discrete UAD-grade row
+    (condition C1-6 / quality Q1-6). MIRA's core cross-check: if the comp matches the
+    subject grade, no adjustment should be applied; if it differs, an adjustment (or
+    commentary) is expected. Reliable because the grade codes and the per-field
+    adjustment column both extract cleanly."""
+    subj_n = _grade(ctx.appraisal.value(field) or ctx.appraisal.value(f"subject_grid_{field}"), letter)
     out = []
-    subj = (ctx.appraisal.value("condition_rating") or "").upper()
-    subj_n = int(subj[1]) if re.fullmatch(r"C[1-6]", subj) else None
     for i in _comp_indices(ctx):
-        val = (ctx.appraisal.value(f"comp_{i}_condition_rating") or "").upper()
-        ev = [ctx.appraisal.evidence(f"comp_{i}_condition_rating")]
-        if not re.fullmatch(r"C[1-6]", val):
-            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-16-cond", comp=i),
-                                  fields_involved=[f"comp_{i}_condition_rating"], template_id="SCA-16-cond",
+        val = (ctx.appraisal.value(f"comp_{i}_{field}") or "").upper()
+        adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_{field}_adjustment"))
+        ev = [ctx.appraisal.evidence(f"comp_{i}_{field}")]
+        comp_n = _grade(val, letter)
+        if comp_n is None:
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template(fmt_template, comp=i),
+                                  fields_involved=[f"comp_{i}_{field}"], template_id=fmt_template,
                                   evidence=ev, confidence=0.65))
             continue
-        # present + valid format → check consistency against the subject. A gap of
-        # 2+ UAD grades (e.g. subject C3 vs comp C5) should carry a condition adjustment.
-        comp_n = int(val[1])
-        if subj_n is not None and abs(comp_n - subj_n) >= 2:
-            ev = ev + [ctx.appraisal.evidence("condition_rating")]
-            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
+        if subj_n is None:
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            continue
+        ev = ev + [ctx.appraisal.evidence(field), ctx.appraisal.evidence(f"comp_{i}_{field}_adjustment")]
+        if comp_n == subj_n and adj not in (None, 0):
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
                                   status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-16-consist", comp=i,
-                                                             comp_c=val, subj_c=subj, delta=abs(comp_n - subj_n)),
-                                  fields_involved=[f"comp_{i}_condition_rating", "condition_rating"],
-                                  template_id="SCA-16-consist", evidence=ev, confidence=0.7))
+                                  message=qc_config.template("SCA-zadj-same", comp=i, field=label,
+                                                             v=f"{letter}{comp_n}", a=int(adj)),
+                                  fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                  template_id="SCA-zadj-same", evidence=ev, confidence=0.65))
+        elif comp_n != subj_n and (adj is None or adj == 0):
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-zadj-diff", comp=i, field=label,
+                                                             cv=f"{letter}{comp_n}", sv=f"{letter}{subj_n}"),
+                                  fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                  template_id="SCA-zadj-diff", evidence=ev, confidence=0.6))
         else:
-            out.append(RuleResult(rule_id="SCA-16", checklist_num="68", section="sales_comparison",
-                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_condition_rating"], evidence=ev))
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
     return out
+
+
+@rule(id="SCA-16", num="68", section="sales_comparison", phase=3, name="Comp condition UAD rating + zero-adj")
+def sca16_condition(ctx: QCContext):
+    return _grade_consistency_rule(ctx, "SCA-16", "68", "condition_rating", "C", "condition", "SCA-16-cond")
 
 
 # ---- SCA-BR market value bracketed by adjusted sale prices ----------------
@@ -341,10 +363,28 @@ def _per_comp_field(ctx, rule_id, num, field, template_id, ok_fn):
     return out
 
 
-@rule(id="SCA-6", num="58", section="sales_comparison", phase=3, name="Comp verification source present")
+_VAGUE_SOURCES = {"public records", "public record", "county records", "county record",
+                  "public", "records", "tax records", "assessor", "appraisal files", "mls"}
+
+
+@rule(id="SCA-6", num="58", section="sales_comparison", phase=3, name="Comp verification source specific")
 def sca6_verification(ctx: QCContext):
-    return _per_comp_field(ctx, "SCA-6", "58", "verification_source", "SCA-6-verif",
-                           lambda v: len(v) > 2)
+    """Presence + SPECIFICITY (MIRA): UAD wants a named source (e.g. 'Orange County
+    Assessor', 'MIRMLS sale data'), not a bare 'public records'. Vague sources VERIFY."""
+    out = []
+    for i in _comp_indices(ctx):
+        val = str(ctx.appraisal.value(f"comp_{i}_verification_source") or "").strip()
+        ev = [ctx.appraisal.evidence(f"comp_{i}_verification_source")]
+        low = re.sub(r"[^a-z ]", "", val.lower()).strip()
+        if len(val) <= 2 or low in _VAGUE_SOURCES:
+            out.append(RuleResult(rule_id="SCA-6", checklist_num="58", section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template("SCA-6-verif", comp=i),
+                                  fields_involved=[f"comp_{i}_verification_source"], template_id="SCA-6-verif",
+                                  evidence=ev, confidence=0.6))
+        else:
+            out.append(RuleResult(rule_id="SCA-6", checklist_num="58", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_verification_source"], evidence=ev))
+    return out
 
 
 @rule(id="SCA-9", num="61", section="sales_comparison", phase=3, name="Comp location UAD format")
@@ -365,10 +405,9 @@ def sca12_view(ctx: QCContext):
                            lambda v: ";" in v and bool(re.match(r"[A-Za-z]", v)))
 
 
-@rule(id="SCA-14", num="66", section="sales_comparison", phase=3, name="Comp quality UAD rating")
+@rule(id="SCA-14", num="66", section="sales_comparison", phase=3, name="Comp quality UAD rating + zero-adj")
 def sca14_quality(ctx: QCContext):
-    return _per_comp_field(ctx, "SCA-14", "66", "quality_rating", "SCA-14-qual",
-                           lambda v: bool(re.fullmatch(r"Q[1-6]", v.upper())))
+    return _grade_consistency_rule(ctx, "SCA-14", "66", "quality_rating", "Q", "quality", "SCA-14-qual")
 
 
 def _effective_ym(ctx):
@@ -672,6 +711,47 @@ def sca26_gla_bracket(ctx: QCContext):
                       evidence=ev, confidence=0.6)
 
 
+# ---- SCA-23 listing comparables should carry a list-to-sale adjustment -----
+
+@rule(id="SCA-23", num="83", section="sales_comparison", phase=3, name="Listing comp adjustment")
+def sca23_listing_adjustment(ctx: QCContext):
+    """A listing/active comparable (UAD 'Active' in Date of Sale) is priced at LIST,
+    which typically exceeds the eventual sale price — so it should carry a downward
+    adjustment (or commentary). A listing comp with no net adjustment -> VERIFY."""
+    out = []
+    any_listing = False
+    for i in _comp_indices(ctx):
+        sd = str(ctx.appraisal.value(f"comp_{i}_sale_date") or "")
+        if "active" not in sd.lower():
+            continue  # closed sale — not a listing
+        any_listing = True
+        net = normalize_currency(ctx.appraisal.value(f"comp_{i}_net_adjustment"))
+        ev = [ctx.appraisal.evidence(f"comp_{i}_sale_date"),
+              ctx.appraisal.evidence(f"comp_{i}_net_adjustment")]
+        if net is None or net == 0:
+            out.append(RuleResult(rule_id="SCA-23", checklist_num="83", section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template("SCA-23-listing", comp=i),
+                                  fields_involved=[f"comp_{i}_net_adjustment"], template_id="SCA-23-listing",
+                                  evidence=ev, confidence=0.6))
+        else:
+            out.append(RuleResult(rule_id="SCA-23", checklist_num="83", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_net_adjustment"], evidence=ev))
+    if not any_listing:
+        return RuleResult(rule_id="SCA-23", checklist_num="83", section="sales_comparison",
+                          status=RuleStatus.NOT_APPLICABLE, message="no listing/active comparables")
+    return out
+
+
+# ---- SCA-18 basement present (per comp, UAD format) ------------------------
+
+@rule(id="SCA-18", num="70", section="sales_comparison", phase=3, name="Comp basement present")
+def sca18_basement(ctx: QCContext):
+    """The Basement & Finished Rooms Below Grade row must be populated for each comp
+    (UAD: finished sqft + components, or '0sf'/'None'). Blank -> VERIFY."""
+    return _per_comp_field(ctx, "SCA-18", "70", "basement", "SCA-18-bsmt",
+                           lambda v: bool(re.search(r"\d", v)) or v.lower() in ("none", "0", "nobsmt"))
+
+
 # ---------------------------------------------------------------------------
 # Vision-backed comparable-photo rules (Google Cloud Vision). The imagery is
 # annotated in extraction (_overlay_comp_photos) into pseudo-fields; these rules
@@ -698,8 +778,9 @@ def sca27_comp_photos(ctx: QCContext):
                           status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-missing"),
                           fields_involved=["comp_photo_pages"], template_id="SCA-27-missing",
                           evidence=ev, confidence=0.55)
-    if not _flag(ctx, "vision_enabled"):
-        # Photos exist but the drive-by/MLS judgement needs imagery review.
+    if not _flag(ctx, "vision_enabled") or _flag(ctx, "comp_photo_vision_error"):
+        # Photos exist but the imagery could not be analyzed (vision off or a
+        # transient outage) — route the drive-by/MLS/building judgement to a reviewer.
         return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
                           status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-defer", pages=pages),
                           fields_involved=["comp_photo_pages"], template_id="SCA-27-defer",
@@ -719,20 +800,42 @@ def sca27_comp_photos(ctx: QCContext):
                       evidence=ev)
 
 
+def _cond_num(v) -> "int | None":
+    m = re.fullmatch(r"C([1-6])", str(v or "").strip().upper())
+    return int(m.group(1)) if m else None
+
+
 @rule(id="SCA-16V", num="68b", section="sales_comparison", phase=3, name="Comp photo condition cross-check")
 def sca16v_photo_condition(ctx: QCContext):
-    """Vision cross-check on the comparable photos: distress imagery (boarded-up,
-    tarped, derelict, demolition) contradicting the reported condition ratings is
-    surfaced for review. SKIPPED when Cloud Vision is not configured (the grid
-    SCA-16 still covers the UAD rating)."""
-    if not _flag(ctx, "vision_enabled"):
+    """Vision cross-check on the comparable photos (MIRA SCA-16 image layer):
+      • distress imagery (boarded-up, tarped, derelict, demolition) -> VERIFY;
+      • the apparent condition read from the photos materially WORSE (>=2 UAD grades)
+        than every reported grid condition -> VERIFY (the imagery contradicts the
+        ratings).
+    SKIPPED when vision is off or the imagery could not be analyzed (the grid SCA-16
+    still covers the UAD rating)."""
+    if not _flag(ctx, "vision_enabled") or _flag(ctx, "comp_photo_vision_error"):
         return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
-                          status=RuleStatus.SKIPPED, message="vision not configured for photo condition")
-    ev = [ctx.appraisal.evidence("comp_photo_distress")]
+                          status=RuleStatus.SKIPPED, message="vision unavailable for photo condition")
+    ev = [ctx.appraisal.evidence("comp_photo_distress"), ctx.appraisal.evidence("comp_photo_condition")]
     if _flag(ctx, "comp_photo_distress"):
         return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
                           status=RuleStatus.VERIFY, message=qc_config.template("SCA-16V-distress"),
                           fields_involved=["comp_photo_distress"], template_id="SCA-16V-distress",
                           evidence=ev, confidence=0.6)
+    vis = _cond_num(ctx.appraisal.value("comp_photo_condition"))
+    if vis is not None:
+        rated = [_cond_num(ctx.appraisal.value(f"comp_{i}_condition_rating")) for i in _comp_indices(ctx)]
+        rated.append(_cond_num(ctx.appraisal.value("condition_rating")))
+        rated = [c for c in rated if c is not None]
+        # vision condition is the WORST seen on the page; flag only if it is worse than
+        # the worst RATED condition by >=2 grades (a real imagery-vs-rating conflict).
+        if rated and vis - max(rated) >= 2:
+            return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
+                              status=RuleStatus.VERIFY,
+                              message=qc_config.template("SCA-16V-cond", vis=f"C{vis}", rated=f"C{max(rated)}"),
+                              fields_involved=["comp_photo_condition", "comp_N_condition_rating"],
+                              template_id="SCA-16V-cond", evidence=ev, confidence=0.6)
     return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
-                      status=RuleStatus.PASS, fields_involved=["comp_photo_distress"], evidence=ev)
+                      status=RuleStatus.PASS, fields_involved=["comp_photo_distress", "comp_photo_condition"],
+                      evidence=ev)

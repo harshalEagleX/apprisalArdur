@@ -410,3 +410,104 @@ class TestSCAPhotoRules:
         from app.qc.result import RuleStatus
         ctx = QCContext("t", appraisal=self._appr(vision_enabled="True", comp_photo_distress="True"))
         assert sca16v_photo_condition(ctx).status == RuleStatus.VERIFY
+
+    def test_sca27_defers_on_vision_error(self):
+        # A transient vision outage must DEFER (VERIFY), never assert "not a building".
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca27_comp_photos
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(comp_photo_pages="2", vision_enabled="True",
+                                                  comp_photo_vision_error="True"))
+        assert sca27_comp_photos(ctx).status == RuleStatus.VERIFY
+
+    def test_sca16v_condition_conflict_verifies(self):
+        # Photos look C5 but every rated condition is C3 (>=2 grades worse) -> VERIFY.
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16v_photo_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(
+            vision_enabled="True", comp_photo_distress="False", comp_photo_condition="C5",
+            comp_1_sale_price="1", comp_1_condition_rating="C3", condition_rating="C3"))
+        r = sca16v_photo_condition(ctx)
+        assert r.status == RuleStatus.VERIFY and "C5" in r.message
+
+    def test_sca16v_condition_consistent_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16v_photo_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(
+            vision_enabled="True", comp_photo_distress="False", comp_photo_condition="C3",
+            comp_1_sale_price="1", comp_1_condition_rating="C3"))
+        assert sca16v_photo_condition(ctx).status == RuleStatus.PASS
+
+    def test_sca16v_skipped_on_vision_error(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16v_photo_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=self._appr(vision_enabled="True", comp_photo_vision_error="True"))
+        assert sca16v_photo_condition(ctx).status == RuleStatus.SKIPPED
+
+
+# ---------------------------------------------------------------------------
+# Batch 8 — strengthened SCA rules (zero-adj consistency, specificity, listing, basement)
+# ---------------------------------------------------------------------------
+
+class TestSCAStrengthened:
+    def test_condition_same_grade_with_adjustment_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            condition_rating="C3", comp_1_sale_price="1",
+            comp_1_condition_rating="C3", comp_1_condition_rating_adjustment="5000"))
+        assert sca16_condition(ctx)[0].status == RuleStatus.VERIFY
+
+    def test_condition_diff_grade_no_adjustment_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            condition_rating="C3", comp_1_sale_price="1", comp_1_condition_rating="C5"))
+        assert sca16_condition(ctx)[0].status == RuleStatus.VERIFY
+
+    def test_condition_consistent_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca16_condition
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            condition_rating="C3", comp_1_sale_price="1", comp_1_condition_rating="C3"))
+        assert sca16_condition(ctx)[0].status == RuleStatus.PASS
+
+    def test_quality_diff_with_adjustment_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca14_quality
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(
+            quality_rating="Q3", comp_1_sale_price="1",
+            comp_1_quality_rating="Q4", comp_1_quality_rating_adjustment="207500"))
+        assert sca14_quality(ctx)[0].status == RuleStatus.PASS
+
+    def test_verification_vague_verifies_specific_passes(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca6_verification
+        from app.qc.result import RuleStatus
+        vague = QCContext("t", appraisal=_appraisal(comp_1_sale_price="1",
+                                                    comp_1_verification_source="Public Records"))
+        spec = QCContext("t", appraisal=_appraisal(comp_1_sale_price="1",
+                                                   comp_1_verification_source="Lake County Assessor"))
+        assert sca6_verification(vague)[0].status == RuleStatus.VERIFY
+        assert sca6_verification(spec)[0].status == RuleStatus.PASS
+
+    def test_listing_without_adjustment_verifies(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca23_listing_adjustment
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(comp_1_sale_price="1", comp_1_sale_date="Active"))
+        assert sca23_listing_adjustment(ctx)[0].status == RuleStatus.VERIFY
+
+    def test_no_listings_not_applicable(self):
+        from app.qc.context import QCContext
+        from app.qc.rules.sales_comparison import sca23_listing_adjustment
+        from app.qc.result import RuleStatus
+        ctx = QCContext("t", appraisal=_appraisal(comp_1_sale_price="1", comp_1_sale_date="s06/25;c05/25"))
+        assert sca23_listing_adjustment(ctx).status == RuleStatus.NOT_APPLICABLE
