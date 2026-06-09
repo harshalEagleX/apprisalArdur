@@ -56,6 +56,7 @@ export function cleanRuleValue(v?: string | null): string | undefined {
 export interface EvidenceSource {
   document: string; // raw token: appraisal | engagement | contract | ...
   label: string; // human-readable document name
+  comparable?: string; // "Comp 1" | "Subject" — which property this value is for
   value: string;
   confidence?: number; // 0..1
   page?: number;
@@ -106,6 +107,7 @@ function coerceSource(entry: unknown): EvidenceSource | null {
     return {
       document: doc.trim().toLowerCase(),
       label: documentLabel(doc),
+      comparable: typeof o.comparable === "string" && o.comparable ? o.comparable : undefined,
       value,
       confidence: typeof o.confidence === "number" ? o.confidence : undefined,
       page: typeof o.page === "number" ? o.page : undefined,
@@ -142,10 +144,12 @@ export function parseEvidence(rule: QCRuleResult): EvidenceSource[] {
     .map(coerceSource)
     .filter((s): s is EvidenceSource => s != null);
 
-  // De-dup identical document+value pairs so repeated evidence doesn't double-render.
+  // De-dup identical entries so repeated evidence doesn't double-render — but key
+  // on the comparable too, so two different comps that happen to share a value
+  // (e.g. two comps both "6000 sf") are NOT collapsed into one.
   const seen = new Set<string>();
   const sources = parsed.filter(s => {
-    const k = `${s.document}::${s.value}`;
+    const k = `${s.comparable ?? ""}::${s.document}::${s.value}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;

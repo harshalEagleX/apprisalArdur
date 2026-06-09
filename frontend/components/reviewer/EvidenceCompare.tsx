@@ -31,8 +31,15 @@ function EvidencePanel({
   return (
     <div className="rounded-lg border border-white/10 bg-[#11161C]/80 p-2.5">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-          {source.label}
+        <span className="flex items-baseline gap-1.5 min-w-0">
+          {source.comparable && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-200 flex-shrink-0">
+              {source.comparable}
+            </span>
+          )}
+          <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 truncate">
+            {source.label}
+          </span>
         </span>
         {showMeta && (
           <span className="text-[10px] font-mono text-slate-600">

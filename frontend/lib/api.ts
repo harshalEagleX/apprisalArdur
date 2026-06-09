@@ -747,6 +747,7 @@ export interface QCRuleResult {
 
 export interface RuleEvidenceEntry {
   document?: string;
+  comparable?: string | null;   // "Comp 1" | "Subject" | null — which property
   value?: string;
   confidence?: number | null;
   page?: number | null;

@@ -30,6 +30,14 @@ const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
 type Decision = "PASS" | "FAIL";
 type Filter = "all" | "fail" | "verify" | "pass";
 const FILTERS: Filter[] = ["all", "fail", "verify", "pass"];
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 1.8;
+const ZOOM_STEP = 0.1;
+const VIEWER_SCROLL_KEYS = new Set(["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "PageDown", "PageUp"]);
+
+function clampZoom(value: number) {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 10) / 10));
+}
 
 type RuleFocus = {
   ruleId: string; page: number; documentType: string; note: string;
@@ -212,6 +220,7 @@ export default function VerifyFilePage() {
   const inFlightDecisionIds = useRef<Set<number>>(new Set());
   const commentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const focusModeRef = useRef(false);
+  const viewerPointerInsideRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
 
@@ -431,6 +440,53 @@ export default function VerifyFilePage() {
     setActiveDocumentId(next.id); setPageCount(null); setPdfError(false); setActiveFocus(null); setActivePage(1);
   }
 
+  function setViewerZoom(nextZoom: number | ((current: number) => number), anchor?: { clientX: number; clientY: number }) {
+    const el = viewerRef.current;
+    const anchorPoint = el ? (() => {
+      const rect = el.getBoundingClientRect();
+      return {
+        x: anchor ? anchor.clientX - rect.left : el.clientWidth / 2,
+        y: anchor ? anchor.clientY - rect.top : el.clientHeight / 2,
+      };
+    })() : null;
+
+    setZoom(prev => {
+      const next = clampZoom(typeof nextZoom === "function" ? nextZoom(prev) : nextZoom);
+      if (next !== prev && el && anchorPoint) {
+        const ratio = next / prev;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            el.scrollLeft = (el.scrollLeft + anchorPoint.x) * ratio - anchorPoint.x;
+            el.scrollTop = (el.scrollTop + anchorPoint.y) * ratio - anchorPoint.y;
+          });
+        });
+      }
+      return next;
+    });
+  }
+
+  function zoomBy(delta: number, anchor?: { clientX: number; clientY: number }) {
+    setViewerZoom(current => current + delta, anchor);
+  }
+
+  function documentViewerOwnsKeyboard(target: HTMLElement | null) {
+    const el = viewerRef.current;
+    return Boolean(el && (viewerPointerInsideRef.current || document.activeElement === el || (target && el.contains(target))));
+  }
+
+  function scrollViewerByKey(key: string, shiftKey = false) {
+    const el = viewerRef.current;
+    if (!el) return false;
+    const step = shiftKey ? 200 : 80;
+    if (key === "ArrowDown")  el.scrollTop  += step;
+    if (key === "ArrowUp")    el.scrollTop  -= step;
+    if (key === "ArrowRight") el.scrollLeft += step;
+    if (key === "ArrowLeft")  el.scrollLeft -= step;
+    if (key === "PageDown")   el.scrollTop  += el.clientHeight * 0.9;
+    if (key === "PageUp")     el.scrollTop  -= el.clientHeight * 0.9;
+    return VIEWER_SCROLL_KEYS.has(key);
+  }
+
   function keyboardDecisionAllowed(rule: QCRuleResult, decision: Decision): string | null {
     const s = ruleStatus(rule.status);
     if (!rule.reviewRequired) return "This rule does not need a manual decision.";
@@ -560,6 +616,9 @@ export default function VerifyFilePage() {
     if (!inTextField && event.key === "2") { event.preventDefault(); setFilter("fail"); setSelectedRuleId(null); return; }
     if (!inTextField && event.key === "3") { event.preventDefault(); setFilter("verify"); setSelectedRuleId(null); return; }
     if (!inTextField && event.key === "4") { event.preventDefault(); setFilter("pass"); setSelectedRuleId(null); return; }
+    if (!inTextField && VIEWER_SCROLL_KEYS.has(event.key) && documentViewerOwnsKeyboard(target)) {
+      event.preventDefault(); scrollViewerByKey(event.key, event.shiftKey); return;
+    }
     if (!inTextField && (event.key.toLowerCase() === "j" || event.key === "ArrowDown")) { event.preventDefault(); moveActiveRule(1); return; }
     if (!inTextField && (event.key.toLowerCase() === "k" || event.key === "ArrowUp")) { event.preventDefault(); moveActiveRule(-1); return; }
     if (!inTextField && event.key === "Enter" && kb.activeRule) {
@@ -575,9 +634,9 @@ export default function VerifyFilePage() {
     if (!inTextField && event.key.toLowerCase() === "x") { event.preventDefault(); void toggleFocusMode(); return; }
     if (!inTextField && event.key === "[") { event.preventDefault(); cycleDocument(-1); return; }
     if (!inTextField && event.key === "]") { event.preventDefault(); cycleDocument(1); return; }
-    if (!inTextField && (event.key === "+" || event.key === "=")) { event.preventDefault(); setZoom(v => Math.min(1.8, Math.round((v + 0.1) * 10) / 10)); return; }
-    if (!inTextField && event.key === "-") { event.preventDefault(); setZoom(v => Math.max(0.6, Math.round((v - 0.1) * 10) / 10)); return; }
-    if (!inTextField && event.key === "0") { event.preventDefault(); setZoom(1); return; }
+    if (!inTextField && (event.key === "+" || event.key === "=")) { event.preventDefault(); zoomBy(ZOOM_STEP); return; }
+    if (!inTextField && event.key === "-") { event.preventDefault(); zoomBy(-ZOOM_STEP); return; }
+    if (!inTextField && event.key === "0") { event.preventDefault(); setViewerZoom(1); return; }
     if (!inTextField && kb.activeRule && (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "f")) {
       const decision: Decision = event.key.toLowerCase() === "p" ? "PASS" : "FAIL";
       const blocked = keyboardDecisionAllowed(kb.activeRule, decision);
@@ -592,6 +651,7 @@ export default function VerifyFilePage() {
     if (e.button !== 0) return;
     const el = viewerRef.current;
     if (!el) return;
+    el.focus({ preventScroll: true });
     dragStartRef.current = { x: e.clientX, y: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
     setIsDragging(true);
     e.preventDefault();
@@ -610,16 +670,17 @@ export default function VerifyFilePage() {
     dragStartRef.current = null;
   }
 
+  function onViewerWheel(e: React.WheelEvent<HTMLDivElement>) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    if (e.deltaY === 0) return;
+    zoomBy(e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP, { clientX: e.clientX, clientY: e.clientY });
+  }
+
   function onViewerKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    const el = viewerRef.current;
-    if (!el) return;
-    const step = e.shiftKey ? 200 : 80;
-    if (e.key === "ArrowDown")  { e.preventDefault(); el.scrollTop  += step; }
-    if (e.key === "ArrowUp")    { e.preventDefault(); el.scrollTop  -= step; }
-    if (e.key === "ArrowRight") { e.preventDefault(); el.scrollLeft += step; }
-    if (e.key === "ArrowLeft")  { e.preventDefault(); el.scrollLeft -= step; }
-    if (e.key === "PageDown")   { e.preventDefault(); el.scrollTop  += el.clientHeight * 0.9; }
-    if (e.key === "PageUp")     { e.preventDefault(); el.scrollTop  -= el.clientHeight * 0.9; }
+    if (!scrollViewerByKey(e.key, e.shiftKey)) return;
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -772,9 +833,9 @@ export default function VerifyFilePage() {
               {activeDocument && (
                 <div className="ml-auto flex items-center gap-1 text-[11px] text-slate-500">
                   {pageCount != null && <span className="mr-1 hidden font-mono text-slate-600 lg:inline">{activePage}/{pageCount}</span>}
-                  <button onClick={() => setZoom(v => Math.max(0.6, Math.round((v - 0.1) * 10) / 10))} disabled={zoom <= 0.6} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom out" aria-keyshortcuts="-"><ZoomOut size={13} /></button>
-                  <button onClick={() => setZoom(1)} className="h-7 min-w-12 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 font-mono text-slate-400 hover:bg-white/[0.04] hover:text-white" title="Reset zoom" aria-keyshortcuts="0">{Math.round(zoom * 100)}%</button>
-                  <button onClick={() => setZoom(v => Math.min(1.8, Math.round((v + 0.1) * 10) / 10))} disabled={zoom >= 1.8} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom in" aria-keyshortcuts="+"><ZoomIn size={13} /></button>
+                  <button onClick={() => zoomBy(-ZOOM_STEP)} disabled={zoom <= ZOOM_MIN} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom out" aria-keyshortcuts="-"><ZoomOut size={13} /></button>
+                  <button onClick={() => setViewerZoom(1)} className="h-7 min-w-12 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 font-mono text-slate-400 hover:bg-white/[0.04] hover:text-white" title="Reset zoom" aria-keyshortcuts="0">{Math.round(zoom * 100)}%</button>
+                  <button onClick={() => zoomBy(ZOOM_STEP)} disabled={zoom >= ZOOM_MAX} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom in" aria-keyshortcuts="+"><ZoomIn size={13} /></button>
                 </div>
               )}
             </div>
@@ -786,11 +847,14 @@ export default function VerifyFilePage() {
                 onMouseDown={onViewerMouseDown}
                 onMouseMove={onViewerMouseMove}
                 onMouseUp={onViewerMouseUp}
-                onMouseLeave={onViewerMouseUp}
+                onMouseEnter={() => { viewerPointerInsideRef.current = true; }}
+                onMouseLeave={() => { viewerPointerInsideRef.current = false; onViewerMouseUp(); }}
+                onWheel={onViewerWheel}
                 onKeyDown={onViewerKeyDown}
+                title="Scroll to move. Pinch or Ctrl-wheel to zoom."
               >
-                <div className="min-h-full flex justify-center px-4 py-12">
-                  <div className="relative">
+                <div className="min-h-full min-w-full px-4 py-12">
+                  <div className="relative mx-auto w-max">
                     <PdfDocumentViewer key={activeDocument.id} fileUrl={activeDocumentUrl}
                       targetPage={activePage} targetBox={activeFocus?.bbox ?? null}
                       width={Math.round(viewerWidth * zoom)} highlighting={highlighting}

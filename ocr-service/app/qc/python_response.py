@@ -10,6 +10,7 @@ common/dto/python/PythonQCResponse.java and PythonRuleResult.java exactly.
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional
 
 from app.qc.context import QCContext
@@ -63,6 +64,22 @@ def _doc_value(r: RuleResult, doc: str) -> Optional[str]:
     return None
 
 
+_COMP_FIELD = re.compile(r"(?:^|_)comp_(\d+)_")
+
+
+def _comparable_label(field: Optional[str], document: str) -> Optional[str]:
+    """Which property a piece of evidence belongs to, for the reviewer panel:
+    "Comp N" for a comparable field, "Subject" for a non-comp appraisal field,
+    and None for contract/engagement evidence (the document label is enough)."""
+    if field:
+        m = _COMP_FIELD.search(field)
+        if m:
+            return f"Comp {int(m.group(1))}"
+    if document == "appraisal":
+        return "Subject"
+    return None
+
+
 def _rule_to_json(r: RuleResult) -> Dict:
     appraisal_value = _doc_value(r, "appraisal")
     engagement_value = _doc_value(r, "engagement") or _doc_value(r, "contract")
@@ -75,6 +92,7 @@ def _rule_to_json(r: RuleResult) -> Dict:
     evidence: List[Dict] = [
         {
             "document": e.document,
+            "comparable": _comparable_label(e.field, e.document),
             "value": e.value,
             "confidence": round(e.confidence, 3),
             "page": e.page,

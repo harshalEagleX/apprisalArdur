@@ -74,6 +74,7 @@ export function PdfDocumentViewer({
                 />
               )}
               <Page
+                key={`${pageNumber}-${width}`}
                 pageNumber={pageNumber}
                 width={width}
                 loading={<PageSpinner label="Loading page..." />}

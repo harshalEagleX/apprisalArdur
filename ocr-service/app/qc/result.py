@@ -50,6 +50,8 @@ class Evidence:
     page: Optional[int] = None
     bbox: Optional[Dict[str, float]] = None   # {x,y,w,h} when available
     method: Optional[str] = None
+    field: Optional[str] = None         # canonical field name (e.g. comp_1_sale_price)
+                                        # — lets the UI label which comparable / the subject
 
 
 @dataclass

@@ -60,13 +60,14 @@ class DocView:
     def evidence(self, field_name: str) -> Evidence:
         r = self.result(field_name)
         if not r:
-            return Evidence(document=self.label, value=None, confidence=0.0)
+            return Evidence(document=self.label, value=None, confidence=0.0, field=field_name)
         return Evidence(
             document=self.label,
             value=r.value,
             confidence=r.effective_confidence,
             page=r.source_page,
             method=r.extraction_method,
+            field=field_name,
         )
 
 
