@@ -206,12 +206,16 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
 
             # Subject column (between the feature label and comp 1) — only on the
             # first grid page; used for intra-report consistency checks (the grid's
-            # subject GLA/condition/quality must agree with the dedicated sections).
+            # subject GLA/condition/quality must agree with the dedicated sections)
+            # and for the location/view zero-adjustment checks (subject "Corner" etc.
+            # vs comps that lack it — SCA-9/SCA-12).
             if comp_base == 0:
                 subj_hi = comp_anchors[0] - 12
                 for prefix, suffix in (("gross living area", "gla"),
                                        ("condition", "condition_rating"),
-                                       ("quality of construction", "quality_rating")):
+                                       ("quality of construction", "quality_rating"),
+                                       ("location", "location_rating"),
+                                       ("view", "view")):
                     ys = _row_words(words, prefix, comp_anchors)
                     if ys is None:
                         continue

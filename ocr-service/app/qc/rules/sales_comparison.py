@@ -410,10 +410,52 @@ def sca6_verification(ctx: QCContext):
     return out
 
 
+def _uad_factors(value) -> set:
+    """UAD location/view qualifier tokens beyond the rating + land-use type
+    (tokens at index >= 2). 'N;Res;Corner' -> {'corner'}; 'N;Res;' -> set().
+    These are the factors (Corner, Busy road, Power lines, water view, ...) that
+    should drive an adjustment when the subject has one a comp lacks."""
+    toks = [t.strip().lower() for t in str(value or "").split(";") if t.strip()]
+    return set(toks[2:])
+
+
+def _per_comp_descriptor_zeroadj(ctx, rule_id, num, field, subj_field,
+                                 fmt_template, zeroadj_template):
+    """Per-comp UAD format check PLUS a zero-adjustment check: when the subject
+    carries a location/view factor (e.g. Corner) that a comp lacks, yet that
+    comp shows no adjustment for the field, surface VERIFY (either no market
+    premium — needs commentary — or the adjustment was missed). High precision:
+    only fires on subject factors the comp is missing, never the reverse (P-6)."""
+    subj_factors = _uad_factors(ctx.appraisal.value(subj_field))
+    out = []
+    for i in _comp_indices(ctx):
+        val = str(ctx.appraisal.value(f"comp_{i}_{field}") or "").strip()
+        ev = [ctx.appraisal.evidence(f"comp_{i}_{field}")]
+        if not (";" in val and re.match(r"[A-Za-z]", val)):
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.VERIFY, message=qc_config.template(fmt_template, comp=i),
+                                  fields_involved=[f"comp_{i}_{field}"], template_id=fmt_template,
+                                  evidence=ev, confidence=0.6))
+            continue
+        missing = subj_factors - _uad_factors(val)
+        adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_{field}_adjustment"))
+        if subj_factors and missing and not adj:
+            desc = ", ".join(sorted(missing)).title()
+            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template(zeroadj_template, comp=i, desc=desc),
+                                  fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                  template_id=zeroadj_template, evidence=ev, confidence=0.6))
+            continue
+        out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                              status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+    return out
+
+
 @rule(id="SCA-9", num="61", section="sales_comparison", phase=3, name="Comp location UAD format")
 def sca9_location(ctx: QCContext):
-    return _per_comp_field(ctx, "SCA-9", "61", "location_rating", "SCA-9-loc",
-                           lambda v: ";" in v and bool(re.match(r"[A-Za-z]", v)))
+    return _per_comp_descriptor_zeroadj(ctx, "SCA-9", "61", "location_rating",
+                                        "subject_grid_location_rating", "SCA-9-loc", "SCA-9-zeroadj")
 
 
 @rule(id="SCA-11", num="63", section="sales_comparison", phase=3, name="Comp site size has unit")
@@ -424,8 +466,8 @@ def sca11_site(ctx: QCContext):
 
 @rule(id="SCA-12", num="64", section="sales_comparison", phase=3, name="Comp view UAD format")
 def sca12_view(ctx: QCContext):
-    return _per_comp_field(ctx, "SCA-12", "64", "view", "SCA-12-view",
-                           lambda v: ";" in v and bool(re.match(r"[A-Za-z]", v)))
+    return _per_comp_descriptor_zeroadj(ctx, "SCA-12", "64", "view",
+                                        "subject_grid_view", "SCA-12-view", "SCA-12-zeroadj")
 
 
 @rule(id="SCA-14", num="66", section="sales_comparison", phase=3, name="Comp quality UAD rating + zero-adj")
