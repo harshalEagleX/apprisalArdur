@@ -941,7 +941,25 @@ SCA-5 DOM vs MARKETING TIME + new SCA-AC CONSISTENCY
     Template SCA-ac-inconsistent. MEASURED (mock, Fantail garage): comps 5,6 (2ga2dw,
     no adj) VERIFY vs comps 1,2,4 (+$5000).
 
+EXTRACTION v0.1.15 — CRITICAL: SCA-LLM overlay wired into the ACTIVE path
+[x] BUG: _overlay_sca_llm was only in the folder-based path, NOT in
+    run_transaction_qc_paths (the multipart /qc/process path the Java backend calls)
+    — so the whole v0.1.12 SCA adjusted-price fix was DEAD CODE in production, and the
+    reviewer UI still showed SCA-BR with the wrong cost-approach value. FIX: call
+    _overlay_sca_llm after _overlay_comp_grid in run_transaction_qc_paths; overlay now
+    always runs when LLM enabled (validates adjusted==sale+net, only overwrites
+    confidently). Added granular progress stages (sca_grid/sca_llm/photos).
+[x] MEASURED end-to-end on the ACTIVE path (28203 Fantail): 6/6 adjusted prices correct
+    (380360..446399); SCA-BR now PASS (381,000 within 374,614-446,399). Vision=gemini.
+
+FRONTEND (done this session, see frontend/task.txt)
+[x] RuleCard: stop printing the same finding text 3x (header + EvidenceCompare why +
+    action-item; engine echoes message into action_item). One finding text per card.
+[x] RuleGroup: per-comparable duplicate rule cards grouped into one accordion per ruleId
+    with friendly labels + status roll-up; attention groups open by default.
+
 [ ] NEXT:
-    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP (new
-      capability; do after extraction increments are stable).
-    - Frontend: group per-comp duplicate rule cards into one accordion (SCA-4 x6, etc.).
+    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP. DEFERRED
+      deliberately: would fire on nearly every report (quality usually matches) → reviewer
+      noise unless commentary detection is reliable; measure first (P-8) before building.
+    - Re-run real QC through the UI on Fantail to confirm the full chain end-to-end.
