@@ -158,9 +158,12 @@ def _overlay_sca_llm(rs, pdf, dtype):
         except Exception:
             return None
 
-    # Decide whether to invoke the LLM: too few adjusted prices, or an adjusted
-    # price that contradicts its comp's sale price by >25% (the classic
-    # "cost-approach / opinion-of-value leaked into the adjusted row" failure).
+    # The SCA currency grid is the known-weak spot for the deterministic readers
+    # (cost-approach / opinion-of-value frequently leaks into the adjusted row),
+    # so run the LLM brain whenever it is available — it validates
+    # adjusted == sale + net and only overwrites the comps it confidently reads,
+    # so a correct deterministic value is simply confirmed. adj_vals/suspect are
+    # computed for the log (visibility into why a repair was needed).
     adj_vals, suspect = [], False
     for name, r in existing.items():
         if name.startswith("comp_") and name.endswith("_adjusted_sale_price"):
@@ -173,9 +176,6 @@ def _overlay_sca_llm(rs, pdf, dtype):
             s = _num(sp.value) if sp else None
             if s and s > 0 and abs(a - s) / s > 0.25:
                 suspect = True
-
-    if not (config.SCA_LLM_ALWAYS or len(adj_vals) < 2 or suspect):
-        return rs
 
     try:
         llm = extract_sca_grid_llm(pdf)
@@ -361,9 +361,13 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
 
     transaction_id = transaction_id or str(Path(appraisal_path).stem)
     sets = {}
-    _emit("extract_appraisal", "Extracting appraisal report", 10.0)
+    _emit("extract_appraisal", "Reading appraisal report (OCR + fields)", 10.0)
     rs = run_full_extraction(Path(appraisal_path), "appraisal_report", use_paddle=False)
+    _emit("sca_grid", "Reading the sales comparison grid", 28.0)
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
+    _emit("sca_llm", "Confirming comparable adjustments (LLM)", 36.0)
+    rs = _overlay_sca_llm(rs, Path(appraisal_path), "appraisal_report")
+    _emit("photos", "Analyzing report photographs", 42.0)
     rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")
     sets["appraisal"] = rs

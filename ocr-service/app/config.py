@@ -53,7 +53,7 @@ GEMINI_TIMEOUT: int = int(os.getenv("GEMINI_TIMEOUT", "40"))
 # ---------------------------------------------------------------------------
 # Extraction layer version — bump on every extraction-behaviour change so
 # results stay traceable to the logic that produced them (P-5/P-11 lineage).
-EXTRACTION_LAYER_VERSION: str = os.getenv("EXTRACTION_LAYER_VERSION", "0.1.14")
+EXTRACTION_LAYER_VERSION: str = os.getenv("EXTRACTION_LAYER_VERSION", "0.1.15")
 
 # Groq LLM — the structured-extraction "brain" (NOT OCR). OCR stays the "eyes";
 # this reads OCR text and returns structured fields. Used today to read the SCA
