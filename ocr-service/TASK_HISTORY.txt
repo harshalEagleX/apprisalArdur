@@ -929,10 +929,19 @@ EXTRACTION v0.1.14 + SCA-9/SCA-12 CORNER ZERO-ADJ
     MEASURED (mock, Fantail values): SCA-12 VERIFY comps 1,2,4,5,6 / PASS comp 3;
     SCA-9 all PASS. Also feeds SCA-17 (subject view now available to cross-check).
 
-[ ] NEXT — incomplete SCA rules (priority order):
-    - SCA-5 DOM vs stated marketing time VERIFY — small: marketing-time scalar on page 1,
-      neighborhood extractor already nearby.
-    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP (new capability).
-    - SCA-ZF comps 5/6 — adjustment-application CONSISTENCY across comps (new rule:
-      same feature on several comps but the premium applied to some, not all).
+SCA-5 DOM vs MARKETING TIME + new SCA-AC CONSISTENCY
+[x] SCA-5: kept data-source presence/format; added DOM vs neighborhood marketing time
+    — parse "DOM N" from comp_N_data_source, map marketing_time enum to a day bound
+    (Under 3 mths=90, 3-6 mths=180), VERIFY a comp whose DOM exceeds it. Skips when
+    marketing_time absent/"Over 6 mths". Template SCA-5-dom. MEASURED (mock, Fantail):
+    comp 1 (DOM 112>90) VERIFY, comps 2-6 PASS.
+[x] NEW SCA-AC (num 76c): cross-comp adjustment CONSISTENCY (inverse of SCA-ZF) — comps
+    sharing the same feature value where some got a $ adjustment and others did not ->
+    VERIFY the ones missing it, naming comp/feature/value/peer-amount. SCA 34 -> 35.
+    Template SCA-ac-inconsistent. MEASURED (mock, Fantail garage): comps 5,6 (2ga2dw,
+    no adj) VERIFY vs comps 1,2,4 (+$5000).
+
+[ ] NEXT:
+    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP (new
+      capability; do after extraction increments are stable).
     - Frontend: group per-comp duplicate rule cards into one accordion (SCA-4 x6, etc.).
