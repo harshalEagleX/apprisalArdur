@@ -973,9 +973,23 @@ EXTRACTION v0.1.16 — comparable identity + SCA-17 GLA-vs-sketch cross-check
     sketch GLA across sort — Fantail 2301 (OCR), Theon 1559 (OCR), 90 NE 32nd 425 (vision),
     Alpine none (-> VERIFY). condition/quality no longer mis-attributed to SCA-17.
 
-[ ] NEXT:
-    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP. DEFERRED
-      (would fire on nearly every report; measure first, P-8).
-    - Sketch finder: broaden page detection (Alpine had no "Building Sketch" header → none);
-      condo (90 NE 32nd) vision read 425 looks low — review the condo sketch layout.
-    - Re-run QC through the UI to confirm the full chain end-to-end on real data.
+SCA-14 QUALITY-COMMENTARY SAFEGUARD (LLM-evaluated)
+[x] When quality matches across all comps with no quality adjustment (per-comp checks
+    all PASS), add one subject-level check: does the report commentary support the
+    equivalent quality? commentary.quality_addressed() = keyword fast-path
+    (quality/construction/Qn) then llm_groq.assess_text() yes/no (evaluative LLM use).
+    Substantive commentary addressing quality -> PASS; omitting it -> VERIFY; blank/stub
+    (<40 chars) -> SKIP so a commentary-extraction gap isn't a per-report noise VERIFY.
+    Per-comp quality consistency unchanged. Template SCA-14-comment.
+[x] MEASURED on Fantail: sales_comparison_summary extracted a stub ("Deineko 28203
+    Fantail", 21 chars) -> commentary check SKIPS (no false VERIFY); 6 per-comp PASS.
+
+[ ] NEXT (per-doc test on uploads/sort surfaced these):
+    - Form-1073 CONDO grid extraction (90 NE 32nd): subject+comps GLA all read ~425
+      (1073 layout differs from 1004) -> SCA-17 correctly FAILs the grid-vs-improvements
+      (635) disagreement, but root cause is condo grid extraction.
+    - DOC-TYPE gating: 1218 E Alpine is a 1004D Appraisal Update (no SCA grid) -> SCA
+      rules should be NOT_APPLICABLE, not VERIFY/empty.
+    - sales_comparison_summary / commentary field extraction is weak -> SCA-14 skips
+      instead of confirming; improving it turns skips into PASSes.
+    - Sketch finder: broaden beyond the "Building Sketch" header (Alpine had none).
