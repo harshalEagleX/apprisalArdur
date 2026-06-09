@@ -101,8 +101,9 @@ def c4_concessions(ctx: QCContext):
           ctx.contract.evidence("concessions_amount")]
     if contract_amt is None:
         return RuleResult(rule_id="C-4", checklist_num="18", section="contract",
-                          status=RuleStatus.SKIPPED, message="concession not extracted from contract",
-                          fields_involved=["concessions_amount"], evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The concession amount could not be read from the contract; please verify it matches the appraisal.",
+                          fields_involved=["concessions_amount"], evidence=ev, confidence=0.5)
     from app.qc import matching
     mr = matching.match_currency(report_amt, contract_amt)
     if mr.verdict == "match":

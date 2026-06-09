@@ -122,8 +122,11 @@ def sca_net_adjustment(ctx: QCContext):
             over.append(r["i"])
     ev = [ctx.appraisal.evidence(f"comp_{i}_net_adjustment") for i in range(1, 4)]
     if not rows:
+        # Couldn't read the net-adjustment row → don't SKIP (reads as a pass); verify.
         return RuleResult(rule_id="SCA-NET", checklist_num="77", section="sales_comparison",
-                          status=RuleStatus.SKIPPED, message="comp adjustments not extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Net adjustment values could not be read from the grid; please verify the comparable net adjustments.",
+                          fields_involved=["comp_N_net_adjustment"], evidence=ev, confidence=0.5)
     if not over:
         return RuleResult(rule_id="SCA-NET", checklist_num="77", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["comp_N_net_adjustment"], evidence=ev)
@@ -155,8 +158,9 @@ def sca_gross_adjustment(ctx: QCContext):
     ev = [ctx.appraisal.evidence(f"comp_{i}_gross_adj_pct") for i in seen[:3]]
     if not seen:
         return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
-                          status=RuleStatus.SKIPPED,
-                          message="gross adjustment % not extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Gross adjustment % could not be read from the grid; please verify the comparable gross adjustments.",
+                          fields_involved=["comp_N_gross_adj_pct"], evidence=ev, confidence=0.5)
     if not over:
         return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["comp_N_gross_adj_pct"], evidence=ev)
@@ -327,11 +331,16 @@ def sca_bracket(ctx: QCContext):
     adj = [r["adjusted"] for r in rows if r["adjusted"] is not None]
     val = normalize_currency(ctx.appraisal.value("appraised_value"))
     ev = [ctx.appraisal.evidence("appraised_value")] + \
-         [ctx.appraisal.evidence(f"comp_{i}_adjusted_sale_price") for i in range(1, 4)]
+         [ctx.appraisal.evidence(f"comp_{i}_adjusted_sale_price") for i in _comp_indices(ctx)]
     if val is None or len(adj) < 2:
+        # Cannot run the check — the "Adjusted Sale Price of Comparable" grid row
+        # was not read reliably (fewer than two adjusted prices). Do NOT SKIP:
+        # SKIPPED renders as a benign pass and hides the extraction gap. Route to
+        # VERIFY so a reviewer confirms bracketing from the grid manually.
         return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
-                          status=RuleStatus.SKIPPED,
-                          message="insufficient adjusted prices to test bracketing", evidence=ev)
+                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-bracket-na"),
+                          fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
+                          template_id="SCA-bracket-na", evidence=ev, confidence=0.5)
     if min(adj) <= val <= max(adj):
         return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["appraised_value"], evidence=ev)
@@ -597,8 +606,9 @@ def sca_subject_prior_sale(ctx: QCContext):
                           status=RuleStatus.PASS, fields_involved=["subject_grid_prior_sale_date"], evidence=ev)
     if eff is None:
         return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
-                          status=RuleStatus.SKIPPED,
-                          message="effective date not extracted to age the prior sale", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The effective date could not be read to age the subject's prior sale; please verify the prior-sale recency.",
+                          fields_involved=["subject_grid_prior_sale_date", "effective_date"], evidence=ev, confidence=0.5)
     months = (eff[0] - d[0]) * 12 + (eff[1] - d[1])
     if 0 <= months <= window:
         return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
@@ -697,9 +707,11 @@ def sca26_gla_bracket(ctx: QCContext):
     ev = [ctx.appraisal.evidence("gla")] + \
          [ctx.appraisal.evidence(f"comp_{i}_gla") for i in _comp_indices(ctx)[:3]]
     if subj is None or len(glas) < 2:
+        # Same rationale as SCA-BR: can't test bracketing without the grid GLAs.
         return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
-                          status=RuleStatus.SKIPPED,
-                          message="insufficient GLA values to test bracketing", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Comparable GLA values could not be read to test bracketing; please verify the subject GLA falls within the range of the comparable GLAs.",
+                          fields_involved=["gla", "comp_N_gla"], evidence=ev, confidence=0.5)
     if min(glas) <= subj <= max(glas):
         return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["gla", "comp_N_gla"], evidence=ev)
@@ -766,8 +778,9 @@ def sca15_actual_age(ctx: QCContext):
     ev = [ctx.appraisal.evidence("subject_grid_actual_age"), ctx.appraisal.evidence("year_built")]
     if age is None or yb is None or eff is None or yb < 1700:
         return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
-                          status=RuleStatus.SKIPPED,
-                          message="age / year built / effective date not all extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Actual age, year built, or effective date could not all be read; please verify the subject age against the year built.",
+                          fields_involved=["subject_grid_actual_age", "year_built"], evidence=ev, confidence=0.5)
     expected = eff[0] - int(yb)
     if abs(int(age) - expected) <= 2:
         return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",

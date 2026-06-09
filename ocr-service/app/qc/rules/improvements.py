@@ -68,7 +68,9 @@ def i11_conform(ctx: QCContext):
     ev = [ctx.appraisal.evidence("conforms_to_neighborhood")]
     if val is None:
         return RuleResult(rule_id="I-11", checklist_num="52", section="improvements",
-                          status=RuleStatus.SKIPPED, message="conformity not extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Conformity to the neighborhood could not be read; please verify the improvements conform.",
+                          fields_involved=["conforms_to_neighborhood"], evidence=ev, confidence=0.5)
     truthy = str(val).strip().lower() in {"true", "yes", "1", "x"}
     if truthy:
         return RuleResult(rule_id="I-11", checklist_num="52", section="improvements",

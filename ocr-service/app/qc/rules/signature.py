@@ -51,8 +51,9 @@ def sig_date_sequence(ctx: QCContext):
     ev = [ctx.appraisal.evidence("date_of_signature"), ctx.appraisal.evidence("effective_date")]
     if sig is None or eff is None:
         return RuleResult(rule_id="SIG-D", checklist_num="101", section="signature",
-                          status=RuleStatus.SKIPPED, message="signature/effective date not parseable",
-                          fields_involved=["date_of_signature", "effective_date"], evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The signature date or effective date could not be read; please verify the signature date is on or after the effective date.",
+                          fields_involved=["date_of_signature", "effective_date"], evidence=ev, confidence=0.5)
     if sig >= eff:
         return RuleResult(rule_id="SIG-D", checklist_num="101", section="signature",
                           status=RuleStatus.PASS,
@@ -74,9 +75,9 @@ def sig3_license_state(ctx: QCContext):
     ev = [ctx.appraisal.evidence("appraiser_license_state"), ctx.appraisal.evidence("state")]
     if not lic or not prop:
         return RuleResult(rule_id="SIG-3", checklist_num="102", section="signature",
-                          status=RuleStatus.SKIPPED,
-                          message="appraiser license state or property state not extracted",
-                          fields_involved=["appraiser_license_state", "state"], evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The appraiser license state or property state could not be read; please verify the appraiser is licensed in the property's state.",
+                          fields_involved=["appraiser_license_state", "state"], evidence=ev, confidence=0.5)
     if lic == prop:
         return RuleResult(rule_id="SIG-3", checklist_num="102", section="signature",
                           status=RuleStatus.PASS,

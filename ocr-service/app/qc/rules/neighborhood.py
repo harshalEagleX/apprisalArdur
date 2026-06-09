@@ -52,8 +52,9 @@ def n3_range(ctx: QCContext):
     ev = [ctx.appraisal.evidence("price_low"), ctx.appraisal.evidence("price_high")]
     if lo is None or hi is None:
         return RuleResult(rule_id="N-3", checklist_num="21", section="neighborhood",
-                          status=RuleStatus.SKIPPED, message="price range not extracted",
-                          fields_involved=["price_low", "price_high"], evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The neighborhood price range could not be read; please verify the low and high prices.",
+                          fields_involved=["price_low", "price_high"], evidence=ev, confidence=0.5)
     if lo <= hi:
         return RuleResult(rule_id="N-3", checklist_num="21", section="neighborhood",
                           status=RuleStatus.PASS, fields_involved=["price_low", "price_high"], evidence=ev)
@@ -72,8 +73,9 @@ def n4_landuse(ctx: QCContext):
     ev = [ctx.appraisal.evidence(f) for f in present]
     if len(present) < 2:
         return RuleResult(rule_id="N-4", checklist_num="22", section="neighborhood",
-                          status=RuleStatus.SKIPPED, message="land-use percentages not extracted",
-                          fields_involved=list(present), evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The present land-use percentages could not be read; please verify they sum to 100%.",
+                          fields_involved=list(present), evidence=ev, confidence=0.5)
     total = sum(present.values())
     if abs(total - 100.0) <= 1.0:
         return RuleResult(rule_id="N-4", checklist_num="22", section="neighborhood",

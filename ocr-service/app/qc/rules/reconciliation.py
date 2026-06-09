@@ -20,8 +20,9 @@ def r1_value_match(ctx: QCContext):
     ev = [ctx.appraisal.evidence("indicated_value_sca"), ctx.appraisal.evidence("appraised_value")]
     if not sca or not final:
         return RuleResult(rule_id="R-1", checklist_num="89", section="reconciliation",
-                          status=RuleStatus.SKIPPED, message="SCA or final value not extracted",
-                          fields_involved=["indicated_value_sca", "appraised_value"], evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The indicated value (sales comparison) or final opinion of value could not be read; please verify they reconcile.",
+                          fields_involved=["indicated_value_sca", "appraised_value"], evidence=ev, confidence=0.5)
     mr = match_currency(sca, final)
     if mr.verdict == "match":
         return RuleResult(rule_id="R-1", checklist_num="89", section="reconciliation",
@@ -81,8 +82,9 @@ def ca2_econ_life(ctx: QCContext):
     minimum = qc_config.semantic("remaining_economic_life_min", 30)
     if val is None:
         return RuleResult(rule_id="CA-2", checklist_num="93", section="cost_approach",
-                          status=RuleStatus.SKIPPED, message="remaining economic life not extracted",
-                          evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The remaining economic life could not be read; please verify it meets the FHA/USDA/VA minimum.",
+                          fields_involved=["remaining_economic_life"], evidence=ev, confidence=0.5)
     if val >= minimum:
         return RuleResult(rule_id="CA-2", checklist_num="93", section="cost_approach",
                           status=RuleStatus.PASS, fields_involved=["remaining_economic_life"], evidence=ev)

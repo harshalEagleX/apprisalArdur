@@ -184,9 +184,18 @@ def s10_lender_name(ctx):
 
 @rule(id="S-10b", num="F", section="subject", phase=2, name="Lender address matches order form")
 def s10_lender_addr(ctx):
+    # Genuinely N/A only when the order/engagement document is absent. If the
+    # document IS present but the lender address couldn't be read, that's an
+    # extraction gap → VERIFY (not a silent SKIPPED that reads as a pass).
+    if not ctx.has_engagement:
+        return RuleResult(rule_id="S-10b", checklist_num="F", section="subject",
+                          status=RuleStatus.SKIPPED, message="engagement/order not available")
     if not ctx.engagement.value("lender_address"):
         return RuleResult(rule_id="S-10b", checklist_num="F", section="subject",
-                          status=RuleStatus.SKIPPED, message="lender address not on engagement")
+                          status=RuleStatus.VERIFY,
+                          message="The lender/client address could not be read from the order; please verify it matches the appraisal.",
+                          fields_involved=["lender_address"],
+                          evidence=[ctx.engagement.evidence("lender_address")], confidence=0.5)
     return H.cross_doc_match(ctx, "S-10b", "F", "subject", "lender_address", "S-10-lender-addr",
                              authority="engagement", kind="address", label="lender address")
 

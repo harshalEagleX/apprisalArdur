@@ -20,7 +20,9 @@ def st2_area(ctx: QCContext):
     ev = [ctx.appraisal.evidence("site_area"), ctx.appraisal.evidence("site_area_unit")]
     if not area:
         return RuleResult(rule_id="ST-2", checklist_num="27", section="site",
-                          status=RuleStatus.SKIPPED, message="site area not extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="The site area could not be read; please verify the site size and unit in the report.",
+                          fields_involved=["site_area", "site_area_unit"], evidence=ev, confidence=0.5)
     blob = f"{area} {unit or ''}".lower()
     if "sf" in blob or "ac" in blob or "sq" in blob or "acre" in blob:
         return RuleResult(rule_id="ST-2", checklist_num="27", section="site",
@@ -56,7 +58,9 @@ def st5_zoning(ctx: QCContext):
     ev = [ctx.appraisal.evidence("zoning_compliance")]
     if not comp:
         return RuleResult(rule_id="ST-5", checklist_num="30", section="site",
-                          status=RuleStatus.SKIPPED, message="zoning compliance not extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Zoning compliance could not be read; please verify the zoning classification and compliance in the report.",
+                          fields_involved=["zoning_compliance"], evidence=ev, confidence=0.5)
     if "illegal" in comp:
         return RuleResult(rule_id="ST-5", checklist_num="30", section="site",
                           status=RuleStatus.HOLD,
@@ -86,7 +90,9 @@ def st6_hbu(ctx: QCContext):
     ev = [ctx.appraisal.evidence("highest_and_best_use")]
     if not val:
         return RuleResult(rule_id="ST-6", checklist_num="31", section="site",
-                          status=RuleStatus.SKIPPED, message="H&BU not extracted", evidence=ev)
+                          status=RuleStatus.VERIFY,
+                          message="Highest & best use could not be read; please verify it is marked Yes (as-improved).",
+                          fields_involved=["highest_and_best_use"], evidence=ev, confidence=0.5)
     if "yes" in val or val in {"true", "1", "x"}:
         return RuleResult(rule_id="ST-6", checklist_num="31", section="site",
                           status=RuleStatus.PASS, fields_involved=["highest_and_best_use"], evidence=ev)
