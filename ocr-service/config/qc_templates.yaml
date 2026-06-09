@@ -79,6 +79,7 @@ SCA-2-count:  "A minimum of {required} comparable sales is required for this val
 SCA-2-listings: "Only {have} active/listing comparable(s) were identified ({sales} closed sales found); a minimum of {need} active listing(s) is required. Add the required listing comparables or document why none are available."
 SCA-4-prox:   "Please provide Proximity to Subject (distance in miles and direction) for comp {comp} under the sales grid section."
 SCA-5-ds:     "Please have a data source (MLS name, MLS #, DOM) for comp {comp} under the sales grid section."
+SCA-5-dom:    "Comp {comp} days-on-market ({dom}) exceeds the neighborhood marketing time ({mt}); confirm the longer marketing period is addressed or the comparable remains appropriate."
 SCA-16-cond:  "Please provide a Condition rating (UAD C1-C6) for comp {comp} in the sales grid."
 SCA-3-addr:   "Please provide the property address for comparable sale {comp} under the sales grid section."
 SCA-6-verif:  "Please provide a specific verification source (e.g. county assessor / MLS sale data) for comp {comp} in the sales grid."

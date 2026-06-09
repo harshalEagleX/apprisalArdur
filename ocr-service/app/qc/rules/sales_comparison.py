@@ -228,21 +228,47 @@ def sca4_proximity(ctx: QCContext):
 
 # ---- SCA-5 data source present (per comp) ---------------------------------
 
+def _marketing_time_days(value) -> Optional[int]:
+    """Upper-bound days for the UAD neighborhood Marketing Time enum. None when
+    not stated or 'Over 6 mths' (no enforceable upper bound)."""
+    s = str(value or "").lower()
+    if not s:
+        return None
+    if "under 3" in s or "less than 3" in s or "<3" in s or "< 3" in s:
+        return 90
+    if "3-6" in s or "3 - 6" in s or "3–6" in s:
+        return 180
+    return None
+
+
 @rule(id="SCA-5", num="57", section="sales_comparison", phase=3, name="Comp data source present")
 def sca5_data_source(ctx: QCContext):
+    mt = ctx.appraisal.value("marketing_time")
+    mt_days = _marketing_time_days(mt)
     out = []
     for i in _comp_indices(ctx):
         val = ctx.appraisal.value(f"comp_{i}_data_source")
         ev = [ctx.appraisal.evidence(f"comp_{i}_data_source")]
-        if val and re.search(r"(mls|#|dom|\d)", val.lower()):
-            out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
-                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_data_source"], evidence=ev))
-        else:
+        # presence/format check
+        if not (val and re.search(r"(mls|#|dom|\d)", val.lower())):
             out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
                                   status=RuleStatus.VERIFY,
                                   message=qc_config.template("SCA-5-ds", comp=i),
                                   fields_involved=[f"comp_{i}_data_source"], template_id="SCA-5-ds",
                                   evidence=ev, confidence=0.6))
+            continue
+        # DOM vs the neighborhood's stated marketing time — a comp that took longer
+        # to sell than the typical marketing time is an outlier needing commentary.
+        m = re.search(r"dom\s*(\d+)", val.lower())
+        if mt_days is not None and m and int(m.group(1)) > mt_days:
+            out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-5-dom", comp=i, dom=int(m.group(1)), mt=mt),
+                                  fields_involved=[f"comp_{i}_data_source", "marketing_time"],
+                                  template_id="SCA-5-dom", evidence=ev, confidence=0.6))
+            continue
+        out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
+                              status=RuleStatus.PASS, fields_involved=[f"comp_{i}_data_source"], evidence=ev))
     return out
 
 
