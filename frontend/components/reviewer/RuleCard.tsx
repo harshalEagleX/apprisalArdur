@@ -102,6 +102,19 @@ export const RuleCard = memo(function RuleCard({
   const isVerify = isReviewLikeStatus(normalizedStatus);
   const isFail = normalizedStatus === "fail";
   const evidenceModel = buildEvidenceModel(rule);
+  // EvidenceCompare carries the full finding text (its "why" box). Show evidence
+  // whenever there's something to explain so we don't repeat the same sentence.
+  const showEvidence = evidenceModel.mode !== "none" || isFail || isVerify;
+  // The Python engine echoes `message` into `action_item` for review rules, so the
+  // action-item box is almost always a duplicate of the finding. Only show it when
+  // it is a genuinely distinct instruction.
+  const actionItemText = (rule.actionItem ?? "").trim();
+  const showActionItem =
+    actionItemText.length > 0 &&
+    actionItemText.toLowerCase() !== "no reviewer action required." &&
+    actionItemText !== (rule.message ?? "").trim() &&
+    actionItemText !== (rule.verifyQuestion ?? "").trim() &&
+    actionItemText !== (rule.rejectionText ?? "").trim();
   const isBlockingVerify = isVerify && sev === "BLOCKING";
 
   const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : 0;
@@ -214,13 +227,15 @@ export const RuleCard = memo(function RuleCard({
                 </span>
               )}
             </div>
-            <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>
-              {isVerify && rule.verifyQuestion
-                ? rule.verifyQuestion
-                : isFail
-                  ? failRejectionLanguage(rule).text
-                  : rule.message}
-            </p>
+            {!(expanded && showEvidence) && (
+              <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>
+                {isVerify && rule.verifyQuestion
+                  ? rule.verifyQuestion
+                  : isFail
+                    ? failRejectionLanguage(rule).text
+                    : rule.message}
+              </p>
+            )}
           </div>
           <div className="flex-shrink-0 text-slate-600">
             {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -230,14 +245,12 @@ export const RuleCard = memo(function RuleCard({
 
       {expanded && (
         <div className="mt-3 space-y-2.5">
-          {(evidenceModel.mode !== "none" || isFail || isVerify) && (
-            <EvidenceCompare rule={rule} status={normalizedStatus} />
-          )}
+          {showEvidence && <EvidenceCompare rule={rule} status={normalizedStatus} />}
 
-          {rule.actionItem && (
+          {showActionItem && (
             <div className="flex items-start gap-2 bg-amber-950/18 border border-amber-500/25 rounded-lg p-2.5 text-xs text-amber-200">
               <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{rule.actionItem}</span>
+              <span className="leading-relaxed">{actionItemText}</span>
             </div>
           )}
 

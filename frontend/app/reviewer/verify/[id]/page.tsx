@@ -13,6 +13,7 @@ import {
 import { PageSpinner } from "@/components/shared/Spinner";
 import DeviceGate from "@/components/shared/DeviceGate";
 import { RuleCard } from "@/components/reviewer/RuleCard";
+import { RuleGroup } from "@/components/reviewer/RuleGroup";
 import { SignOffDialog } from "@/components/reviewer/SignOffDialog";
 import { cleanRuleValue, evidenceText } from "@/lib/ruleEvidence";
 import { useReviewSession } from "@/hooks/useReviewSession";
@@ -73,6 +74,63 @@ function isReviewLikeStatus(status: string) {
     "cross_doc_mismatch",
   ].includes(ruleStatus(status));
 }
+
+const SCA_GROUP_LABELS: Record<string, string> = {
+  "SCA-3": "Comp address",
+  "SCA-4": "Proximity",
+  "SCA-5": "Data source",
+  "SCA-6": "Verification source",
+  "SCA-7": "Concession adjustment",
+  "SCA-8": "Date of sale",
+  "SCA-9": "Location",
+  "SCA-10": "Property rights",
+  "SCA-11": "Site size",
+  "SCA-12": "View",
+  "SCA-13": "Design / style",
+  "SCA-14": "Quality rating",
+  "SCA-16": "Condition rating",
+  "SCA-17": "Room count & GLA",
+  "SCA-18": "Basement",
+  "SCA-19": "Functional utility",
+  "SCA-20": "Heating / cooling",
+  "SCA-21": "Garage / carport",
+  "SCA-22": "Porch/patio/deck",
+  "SCA-23": "Listing adjustment",
+  "SCA-24": "Unique design",
+  "SCA-25": "New construction comp",
+  "SCA-26": "GLA bracketing",
+  "SCA-NET": "Net adjustment %",
+  "SCA-GROSS": "Gross adjustment %",
+  "SCA-ZF": "Zero-difference adjustment",
+  "SCA-AC": "Adjustment consistency",
+  "SCA-DC": "Date currency",
+  "SCA-FLIP": "Comp resale window",
+  "SCA-PR": "Sale price bracket",
+};
+
+function ruleGroupKey(rule: QCRuleResult) {
+  return `${rule.section ?? "OTHER"}::${rule.ruleId}`;
+}
+
+function shouldGroupRule(rule: QCRuleResult, count: number) {
+  return count > 1 && rule.ruleId.toUpperCase().startsWith("SCA-");
+}
+
+function groupLabelForRule(rule: QCRuleResult) {
+  const id = rule.ruleId.toUpperCase();
+  const configured = SCA_GROUP_LABELS[id];
+  if (configured) return configured;
+  const name = rule.ruleName?.trim();
+  if (!name || name.toUpperCase().endsWith(id)) return "Comparable check";
+  return name.replace(/^Sales Comparison\s+[—-]\s*/i, "");
+}
+
+type RuleRenderItem = {
+  key: string;
+  section?: string;
+  rules: QCRuleResult[];
+  grouped: boolean;
+};
 
 function focusForRule(rule: QCRuleResult): RuleFocus {
   const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
@@ -565,6 +623,46 @@ export default function VerifyFilePage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  const sortedFiltered = [...filtered].sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
+  const rulesByGroupKey = new Map<string, QCRuleResult[]>();
+  for (const rule of sortedFiltered) {
+    const key = ruleGroupKey(rule);
+    rulesByGroupKey.set(key, [...(rulesByGroupKey.get(key) ?? []), rule]);
+  }
+  const emittedGroups = new Set<string>();
+  const renderItems: RuleRenderItem[] = [];
+  for (const rule of sortedFiltered) {
+    const key = ruleGroupKey(rule);
+    const groupedRules = rulesByGroupKey.get(key) ?? [rule];
+    if (shouldGroupRule(rule, groupedRules.length)) {
+      if (emittedGroups.has(key)) continue;
+      emittedGroups.add(key);
+      renderItems.push({ key: `group-${key}`, section: rule.section, rules: groupedRules, grouped: true });
+    } else {
+      renderItems.push({ key: `rule-${rule.id}`, section: rule.section, rules: [rule], grouped: false });
+    }
+  }
+
+  const renderRuleCard = (rule: QCRuleResult) => (
+    <RuleCard
+      key={rule.id}
+      rule={rule}
+      decision={decisions[rule.id]}
+      comment={comments[rule.id] ?? ""}
+      saving={saving === rule.id}
+      savedNow={saved.has(rule.id)}
+      offline={offline}
+      sessionReady={Boolean(sessionToken)}
+      acknowledged={Boolean(acknowledged[rule.id])}
+      active={activeRule?.id === rule.id}
+      onSelect={() => focusRule(rule)}
+      onDecision={d => void handleDecision(rule, d)}
+      onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
+      onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
+      commentRef={node => { commentRefs.current[rule.id] = node; }}
+    />
+  );
+
   return (
     <DeviceGate minWidth={1024} title="Document review needs a laptop or desktop width"
       message="The PDF comparison and rule decision workspace needs side-by-side document and data panels. Please use a laptop, desktop, or a tablet in landscape mode."
@@ -745,36 +843,37 @@ export default function VerifyFilePage() {
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {loading ? <PageSpinner label="Loading rules…" /> : filtered.length === 0 ? (
                 <div className="text-center text-slate-500 py-10 text-sm">No rules match this filter</div>
-              ) : [...filtered].sort((a, b) => sectionRank(a.section) - sectionRank(b.section)).map((rule, i, arr) => {
-                const showHeader = i === 0 || arr[i - 1].section !== rule.section;
-                const secRules = arr.filter(r => r.section === rule.section);
+              ) : renderItems.map((item, i, arr) => {
+                const showHeader = i === 0 || arr[i - 1].section !== item.section;
+                const secRules = filtered.filter(r => r.section === item.section);
                 const need = secRules.filter(r => r.status === "fail" || isReviewLikeStatus(r.status)).length;
+                const firstRule = item.rules[0];
+                const fail = item.rules.filter(r => r.status === "fail").length;
+                const review = item.rules.filter(r => isReviewLikeStatus(r.status)).length;
+                const pass = item.rules.filter(r => r.status === "pass" || r.status === "MANUAL_PASS").length;
                 return (
-                  <Fragment key={rule.id}>
+                  <Fragment key={item.key}>
                     {showHeader && (
                       <div className="sticky -top-3 z-10 -mx-3 mb-1 flex items-center justify-between border-y border-white/5 bg-[#0B0F14]/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur">
-                        <span>{sectionLabel(rule.section)}</span>
+                        <span>{sectionLabel(item.section)}</span>
                         <span className="font-normal normal-case text-slate-600">
                           {secRules.length} rules{need ? ` · ${need} need attention` : ""}
                         </span>
                       </div>
                     )}
-                    <RuleCard
-                      rule={rule}
-                      decision={decisions[rule.id]}
-                      comment={comments[rule.id] ?? ""}
-                      saving={saving === rule.id}
-                      savedNow={saved.has(rule.id)}
-                      offline={offline}
-                      sessionReady={Boolean(sessionToken)}
-                      acknowledged={Boolean(acknowledged[rule.id])}
-                      active={activeRule?.id === rule.id}
-                      onSelect={() => focusRule(rule)}
-                      onDecision={d => void handleDecision(rule, d)}
-                      onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
-                      onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
-                      commentRef={node => { commentRefs.current[rule.id] = node; }}
-                    />
+                    {item.grouped ? (
+                      <RuleGroup
+                        ruleId={firstRule.ruleId}
+                        ruleName={groupLabelForRule(firstRule)}
+                        count={item.rules.length}
+                        fail={fail}
+                        review={review}
+                        pass={pass}
+                        defaultOpen={fail + review > 0 || item.rules.some(r => activeRule?.id === r.id)}
+                      >
+                        {item.rules.map(renderRuleCard)}
+                      </RuleGroup>
+                    ) : renderRuleCard(firstRule)}
                   </Fragment>
                 );
               })}

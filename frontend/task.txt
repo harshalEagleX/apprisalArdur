@@ -20,7 +20,7 @@ Branch: demo | Updated each work session. [x] done [~] partial [ ] todo
 [x] Submitted page: source chip + rejection language use real evidence documents.
 
 [ ] NEXT
-[ ] Group per-comparable duplicate rule cards into ONE accordion per rule
+[x] Group per-comparable duplicate rule cards into ONE accordion per rule
     (e.g. "SCA-4 — Proximity (6 comparables)") with per-comp sub-rows, instead of
     6 separate identical-titled cards. Engine correctly fires once per comp; this
     is purely a frontend grouping/presentation change.
