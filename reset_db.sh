@@ -21,16 +21,25 @@ OCR_DIR="$SCRIPT_DIR/ocr-service"
 OCR_ENV="$OCR_DIR/.env"
 ROOT_ENV="$SCRIPT_DIR/.env"
 
-set -a
-if [[ -f "$OCR_ENV" ]]; then
-    # shellcheck disable=SC1090
-    source <(grep -v '^\s*#' "$OCR_ENV" | grep -v '^\s*$')
-fi
-if [[ -f "$ROOT_ENV" ]]; then
-    # shellcheck disable=SC1090
-    source <(grep -v '^\s*#' "$ROOT_ENV" | grep -v '^\s*$')
-fi
-set +a
+# Parse each KEY=VALUE line directly. NOTE: do NOT use `source <(grep ...)` here —
+# macOS ships bash 3.2, where process-substitution sourcing silently drops the
+# assignments under `set -euo pipefail`. A plain `while read` over the file works
+# everywhere and keeps values (URLs with //, slashes, dashes) literal.
+load_env() {
+    local file="$1" line key val
+    [[ -f "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line#"${line%%[![:space:]]*}"}"   # strip leading whitespace
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        [[ "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        key="${key//[[:space:]]/}"                 # trim spaces around the key
+        export "$key=$val"
+    done < "$file"
+}
+load_env "$OCR_ENV"
+load_env "$ROOT_ENV"
 
 # ── Resolve psql-compatible URL ───────────────────────────────────────────────
 # DATABASE_URL from ocr-service/.env uses postgresql+psycopg2:// — strip the driver
@@ -83,14 +92,10 @@ else
     cd "$OCR_DIR"
     printf 'yes\n' | $PYTHON manage_db.py recreate
     echo ""
-    echo "  → Seeding rules_config (146 rules)..."
-    $PYTHON -c "
-from dotenv import load_dotenv; load_dotenv()
-from app.rule_engine.rules_db import seed_rules_config, load_rule_configs
-seed_rules_config()
-n = len(load_rule_configs())
-print(f'  ✓ rules_config seeded — {n} rules.')
-"
+    echo "  → Seeding field schema log (field lineage)..."
+    $PYTHON manage_db.py seed-schema
+    # NOTE: the product QC engine lives in app/qc (rules are code, not a seeded
+    # rules_config table). The old app.rule_engine.rules_db seeding was removed.
     cd "$SCRIPT_DIR"
 fi
 

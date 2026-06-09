@@ -13,7 +13,26 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from app.qc.context import QCContext
+from app.qc.registry import all_rules
 from app.qc.result import QCReport, RuleResult, RuleStatus
+
+# rule_id -> the engine's human-readable rule name (the @rule(name=...) label),
+# built lazily once the rule registry is populated. The reviewer UI shows this as
+# the rule's title, so it must be a real description, not "Section — ID".
+_RULE_NAMES: Dict[str, str] = {}
+
+
+def _rule_display_name(rule_id: str, section: str) -> str:
+    if not _RULE_NAMES:
+        for spec in all_rules():
+            _RULE_NAMES[spec.rule_id] = spec.name or ""
+    name = _RULE_NAMES.get(rule_id, "")
+    # Use the engine's descriptive label when it's a real human phrase (has a
+    # space and isn't just the function name); else fall back to "Section — ID".
+    if name and " " in name:
+        return name
+    return section.replace("_", " ").title() + f" — {rule_id}"
+
 
 # our 5-state status -> the lowercase status string Java normalizes/stores
 _STATUS = {
@@ -66,7 +85,7 @@ def _rule_to_json(r: RuleResult) -> Dict:
     is_review = r.status in _REVIEW
     return {
         "rule_id": r.rule_id,
-        "rule_name": r.section.replace("_", " ").title() + f" — {r.rule_id}",
+        "rule_name": _rule_display_name(r.rule_id, r.section),
         # Authoritative section from the engine (UI groups on this). Sent as an
         # explicit field so Java/UI never re-derive it from the rule-id prefix.
         "section": r.section.upper(),
