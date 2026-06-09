@@ -919,13 +919,20 @@ EXTRACTION v0.1.13 + SCA-2 LISTINGS
     default 2). Too few closed sales -> VERIFY (extraction may miss); enough sales but
     too few listings -> FAIL with the actual counts. Templates SCA-2-count/SCA-2-listings.
 
-[ ] NEXT — incomplete SCA rules (per the rule-by-rule review):
-    - SCA-9/SCA-12 corner zero-adj VERIFY — BLOCKED: subject_grid captures only
-      gla/condition/quality, not location/view. Must add subject location/view to
-      comp_grid_extractor first, then flag subject "Corner" vs non-corner comps with a
-      zero location/view adjustment.
-    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP.
+EXTRACTION v0.1.14 + SCA-9/SCA-12 CORNER ZERO-ADJ
+[x] comp_grid_extractor: read the subject column's Location and View rows (was only
+    gla/condition/quality). Verified subject view = "N;Res;Corner" on Fantail.
+[x] SCA-9/SCA-12: kept the UAD format check, added a descriptor zero-adjustment check
+    — subject carries a location/view factor (Corner, etc.) a comp lacks yet that comp
+    shows no adjustment -> VERIFY, naming the comp # and factor. High precision (only
+    subject factors the comp is missing). Templates SCA-9-zeroadj/SCA-12-zeroadj.
+    MEASURED (mock, Fantail values): SCA-12 VERIFY comps 1,2,4,5,6 / PASS comp 3;
+    SCA-9 all PASS. Also feeds SCA-17 (subject view now available to cross-check).
+
+[ ] NEXT — incomplete SCA rules (priority order):
+    - SCA-5 DOM vs stated marketing time VERIFY — small: marketing-time scalar on page 1,
+      neighborhood extractor already nearby.
+    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP (new capability).
     - SCA-ZF comps 5/6 — adjustment-application CONSISTENCY across comps (new rule:
       same feature on several comps but the premium applied to some, not all).
-    - SCA-5 DOM vs stated marketing time VERIFY — needs the neighborhood marketing-time field.
     - Frontend: group per-comp duplicate rule cards into one accordion (SCA-4 x6, etc.).
