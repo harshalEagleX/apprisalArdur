@@ -73,6 +73,7 @@ SCA-23-listing: "Comp {comp} is an active listing but shows no net adjustment; l
 SCA-18-bsmt: "Please provide the Basement & Finished Rooms Below Grade for comp {comp} in the sales grid (finished sf + components, or None)."
 SCA-15-age: "The subject Actual Age ({age}) does not match the year built ({yb}, ~{exp} years from the effective date); please reconcile the age and year built."
 SCA-zf-same: "Comp {comp} {field} matches the subject but a {field} adjustment (${a}) was applied; please confirm the adjustment is warranted."
+SCA-ac-inconsistent: "Comp {comp} {field} ({value}) matches other comparables that received a ${a} {field} adjustment, but no adjustment was applied here; confirm adjustments are applied consistently or explain the difference."
 SCA-bracket:  "Market Value is not bracketed by the adjusted sale prices of the comps. Please revise accordingly."
 SCA-bracket-na: "Adjusted sale prices could not be confirmed from the sales comparison grid, so bracketing could not be tested automatically. Please verify the opinion of value falls within the range of the adjusted comparable sale prices shown in the grid."
 SCA-2-count:  "A minimum of {required} comparable sales is required for this value. Only {value} closed comparable sale(s) were identified in the grid; please verify the remaining comparables were extracted."

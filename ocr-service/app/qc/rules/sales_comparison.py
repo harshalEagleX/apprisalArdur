@@ -921,6 +921,46 @@ def sca_zf_consistency(ctx: QCContext):
     return out
 
 
+# ---- SCA-AC adjustment applied consistently across comparables -------------
+
+@rule(id="SCA-AC", num="76c", section="sales_comparison", phase=3,
+      name="Adjustment applied consistently across comps")
+def sca_adjustment_consistency(ctx: QCContext):
+    """Cross-comp consistency (the inverse of SCA-ZF): when several comparables
+    share the SAME value for a feature but a dollar adjustment was applied to some
+    and not others, flag the comps that are MISSING the adjustment — the appraiser
+    must apply adjustments consistently or explain the difference. High precision:
+    only same-value groups where at least one peer carries a non-zero adjustment."""
+    out = []
+    for field, label in _ZF_FIELDS:
+        groups: Dict[str, list] = {}
+        for i in _comp_indices(ctx):
+            cv = _norm_feat(ctx.appraisal.value(f"comp_{i}_{field}"))
+            if not cv:
+                continue
+            adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_{field}_adjustment"))
+            groups.setdefault(cv, []).append((i, adj))
+        for members in groups.values():
+            if len(members) < 2:
+                continue
+            adjusted = [(i, a) for i, a in members if a]   # carries a non-zero adjustment
+            unadjusted = [i for i, a in members if not a]  # zero / not applied
+            if not adjusted or not unadjusted:
+                continue
+            peer_adj = int(adjusted[0][1])
+            for i in unadjusted:
+                ev = [ctx.appraisal.evidence(f"comp_{i}_{field}"),
+                      ctx.appraisal.evidence(f"comp_{i}_{field}_adjustment")]
+                out.append(RuleResult(rule_id="SCA-AC", checklist_num="76c", section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-ac-inconsistent", comp=i, field=label,
+                                                                 value=ctx.appraisal.value(f"comp_{i}_{field}"),
+                                                                 a=peer_adj),
+                                      fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                      template_id="SCA-ac-inconsistent", evidence=ev, confidence=0.6))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Vision-backed comparable-photo rules (Google Cloud Vision). The imagery is
 # annotated in extraction (_overlay_comp_photos) into pseudo-fields; these rules
