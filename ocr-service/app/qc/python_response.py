@@ -66,12 +66,23 @@ def _doc_value(r: RuleResult, doc: str) -> Optional[str]:
 
 _COMP_FIELD = re.compile(r"(?:^|_)comp_(\d+)_")
 
+# Fields that name a specific SOURCE of an otherwise-subject value, so a
+# cross-source check (e.g. SCA-17 GLA) shows which source each value came from.
+_SOURCE_LABELS = {
+    "subject_grid_gla": "SCA grid",
+    "gla": "Improvements",
+    "sketch_living_area": "Sketch",
+}
+
 
 def _comparable_label(field: Optional[str], document: str) -> Optional[str]:
-    """Which property a piece of evidence belongs to, for the reviewer panel:
-    "Comp N" for a comparable field, "Subject" for a non-comp appraisal field,
-    and None for contract/engagement evidence (the document label is enough)."""
+    """Which property/source a piece of evidence belongs to, for the reviewer
+    panel: a named source for known cross-source fields, "Comp N" for a
+    comparable field, "Subject" for any other appraisal field, and None for
+    contract/engagement evidence (the document label is enough)."""
     if field:
+        if field in _SOURCE_LABELS:
+            return _SOURCE_LABELS[field]
         m = _COMP_FIELD.search(field)
         if m:
             return f"Comp {int(m.group(1))}"

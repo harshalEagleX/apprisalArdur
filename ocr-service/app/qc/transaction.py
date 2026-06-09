@@ -212,6 +212,39 @@ def _overlay_sca_llm(rs, pdf, dtype):
     return merged
 
 
+def _overlay_sketch(rs, pdf, dtype):
+    """Overlay the Building Sketch's Total Living Area (OCR, vision fallback) as
+    `sketch_living_area`, so SCA-17 can cross-check the grid/improvements GLA
+    against the sketch. No-op when the sketch GLA can't be read (P-6)."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.sketch_extractor import extract_sketch_gla
+    try:
+        fields = extract_sketch_gla(pdf)
+    except Exception as exc:
+        logger.warning("Sketch overlay failed for %s: %s", pdf.name, exc)
+        return rs
+    val = fields.get("sketch_living_area")
+    if not val:
+        return rs
+    try:
+        page = int(fields.get("_sketch_page", 0) or 0)
+    except (TypeError, ValueError):
+        page = 0
+    method = fields.get("_sketch_method", "sketch_ocr")
+    existing = {name: r for name, r in rs}
+    existing["sketch_living_area"] = ExtractionResult(
+        canonical_name="sketch_living_area", document_type=dtype, value=str(val),
+        raw_source_text=str(val), extraction_method=method,
+        confidence=0.85, source_page=page, normalization_applied=[method],
+    )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
 def _overlay_photos(rs, pdf, dtype):
     """Add photo-presence pseudo-fields (photo_front/_rear/_street/_left/_right
     and photo_interior_rooms) from caption detection, so the PH rules can read
@@ -367,6 +400,8 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
     _emit("sca_llm", "Confirming comparable adjustments (LLM)", 36.0)
     rs = _overlay_sca_llm(rs, Path(appraisal_path), "appraisal_report")
+    _emit("sketch", "Reading the building sketch GLA", 40.0)
+    rs = _overlay_sketch(rs, Path(appraisal_path), "appraisal_report")
     _emit("photos", "Analyzing report photographs", 42.0)
     rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")

@@ -591,34 +591,71 @@ def sca7_concessions(ctx: QCContext):
 
 
 @rule(id="SCA-17", num="69", section="sales_comparison", phase=3,
-      name="Subject grid matches improvements (GLA/condition/quality)")
+      name="Above-grade GLA matches grid, improvements & sketch")
 def sca17_subject_consistency(ctx: QCContext):
-    """The subject column of the sales grid must agree with the dedicated sections
-    (a transcription discrepancy between the grid and Improvements/Site)."""
+    """Subject above-grade GLA must agree across the three sources that report it:
+    the SCA grid subject column, the Improvements section, and the Building Sketch
+    total living area. Condition and quality consistency are SCA-16 and SCA-14's
+    job, not this rule's. Also verifies each comparable's GLA is present and
+    plausible (no external source exists to cross-check comp GLA against)."""
     out = []
-    checks = [("subject_grid_gla", "gla", "GLA", True),
-              ("subject_grid_condition_rating", "condition_rating", "Condition", False),
-              ("subject_grid_quality_rating", "quality_rating", "Quality", False)]
-    for gfield, sfield, label, numeric in checks:
-        g = ctx.appraisal.value(gfield)
-        s = ctx.appraisal.value(sfield)
-        ev = [ctx.appraisal.evidence(gfield), ctx.appraisal.evidence(sfield)]
-        if not g or not s:
-            continue  # can only compare when both sides are present
-        if numeric:
-            gv, sv = normalize_currency(g), normalize_currency(s)
-            same = gv is not None and sv is not None and sv > 0 and abs(gv - sv) / sv <= 0.01
-        else:
-            same = str(g).strip().upper() == str(s).strip().upper()
-        if same:
+    grid = normalize_currency(ctx.appraisal.value("subject_grid_gla"))
+    impr = normalize_currency(ctx.appraisal.value("gla"))
+    sketch = normalize_currency(ctx.appraisal.value("sketch_living_area"))
+    ev = [ctx.appraisal.evidence("subject_grid_gla"),
+          ctx.appraisal.evidence("gla"),
+          ctx.appraisal.evidence("sketch_living_area")]
+    present = [v for v in (grid, impr, sketch) if v is not None]
+
+    def _fmt(v):
+        return str(int(v)) if v is not None else "n/a"
+
+    srcs = f"SCA grid {_fmt(grid)}, improvements {_fmt(impr)}, sketch {_fmt(sketch)} sf"
+    gla_fields = ["subject_grid_gla", "gla", "sketch_living_area"]
+
+    if len(present) >= 2:
+        delta = max(present) - min(present)
+        if delta > 50:        # always an error, never rounding
             out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
-                                  status=RuleStatus.PASS, fields_involved=[gfield, sfield], evidence=ev))
+                                  status=RuleStatus.FAIL,
+                                  message=qc_config.template("SCA-17-gla", srcs=srcs, delta=int(delta)),
+                                  fields_involved=gla_fields, template_id="SCA-17-gla", evidence=ev))
+        elif delta > 1:
+            out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-17-gla", srcs=srcs, delta=int(delta)),
+                                  fields_involved=gla_fields, template_id="SCA-17-gla",
+                                  evidence=ev, confidence=0.6))
+        elif sketch is None:  # grid & improvements agree, but the sketch wasn't read
+            out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-17-nosketch", srcs=srcs),
+                                  fields_involved=gla_fields, template_id="SCA-17-nosketch",
+                                  evidence=ev, confidence=0.5))
+        else:                 # all available sources agree within 1 sf
+            out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=gla_fields, evidence=ev))
+    elif len(present) == 1:
+        # only one GLA source — can't cross-check; surface rather than silently pass.
+        out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                              status=RuleStatus.VERIFY,
+                              message=qc_config.template("SCA-17-nosketch", srcs=srcs),
+                              fields_involved=gla_fields, template_id="SCA-17-nosketch",
+                              evidence=ev, confidence=0.5))
+
+    # Per-comp GLA presence + plausibility (one result per comp; UI groups them).
+    for i in _comp_indices(ctx):
+        g = normalize_currency(ctx.appraisal.value(f"comp_{i}_gla"))
+        cev = [ctx.appraisal.evidence(f"comp_{i}_gla")]
+        if g is not None and 200 <= g <= 20000:
+            out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=[f"comp_{i}_gla"], evidence=cev))
         else:
             out.append(RuleResult(rule_id="SCA-17", checklist_num="69", section="sales_comparison",
                                   status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-17-consist", field=label, a=g, b=s),
-                                  fields_involved=[gfield, sfield], template_id="SCA-17-consist",
-                                  evidence=ev, confidence=0.7))
+                                  message=qc_config.template("SCA-17-comp-gla", comp=i),
+                                  fields_involved=[f"comp_{i}_gla"], template_id="SCA-17-comp-gla",
+                                  evidence=cev, confidence=0.6))
     return out
 
 
