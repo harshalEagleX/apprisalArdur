@@ -14,6 +14,7 @@ import { PageSpinner } from "@/components/shared/Spinner";
 import DeviceGate from "@/components/shared/DeviceGate";
 import { RuleCard } from "@/components/reviewer/RuleCard";
 import { SignOffDialog } from "@/components/reviewer/SignOffDialog";
+import { cleanRuleValue, evidenceText } from "@/lib/ruleEvidence";
 import { useReviewSession } from "@/hooks/useReviewSession";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -45,14 +46,6 @@ function ruleStatus(status: string) {
   return n === "manual_pass" ? "MANUAL_PASS" : n;
 }
 
-// The Java backend substitutes placeholder tokens when a rule has no specific
-// appraisal/engagement value. Treat those as empty so the UI shows "—", not the raw token.
-function cleanValue(v?: string | null): string | undefined {
-  if (!v) return undefined;
-  if (v.startsWith("__NO_") && v.endsWith("_VALUE")) return undefined;
-  return v;
-}
-
 // Reviewer rule groups, in report order, with a friendly label.
 const SECTION_ORDER = [
   "SUBJECT", "CONTRACT", "NEIGHBORHOOD", "SITE", "IMPROVEMENTS",
@@ -72,6 +65,7 @@ function isReviewLikeStatus(status: string) {
   return [
     "verify",
     "review",
+    "hold",
     "extraction_failed",
     "ocr_low_confidence",
     "source_missing",
@@ -209,10 +203,10 @@ export default function VerifyFilePage() {
       const [rulesData, prog] = await Promise.all([getQCRules(qcResultId), getQCProgress(qcResultId)]);
       setRules(rulesData.map(r => ({
         ...r, status: ruleStatus(r.status),
-        appraisalValue: cleanValue(r.appraisalValue),
-        engagementValue: cleanValue(r.engagementValue),
-        extractedValue: cleanValue(r.extractedValue),
-        expectedValue: cleanValue(r.expectedValue),
+        appraisalValue: cleanRuleValue(r.appraisalValue),
+        engagementValue: cleanRuleValue(r.engagementValue),
+        extractedValue: cleanRuleValue(r.extractedValue),
+        expectedValue: cleanRuleValue(r.expectedValue),
       })));
       setProgress(prog);
       const dec: Record<number, Decision> = {}; const com: Record<number, string> = {};
@@ -318,7 +312,7 @@ export default function VerifyFilePage() {
   }).filter(r => {
     const q = ruleQuery.trim().toLowerCase();
     if (!q) return true;
-    return [r.ruleId, r.ruleName, r.message, r.verifyQuestion, r.rejectionText, r.appraisalValue, r.engagementValue, r.evidence]
+    return [r.ruleId, r.ruleName, r.message, r.verifyQuestion, r.rejectionText, r.appraisalValue, r.engagementValue, evidenceText(r)]
       .some(v => String(v ?? "").toLowerCase().includes(q));
   });
 

@@ -12,6 +12,7 @@ import com.apprisal.common.realtime.RealtimeEventPublisher;
 import com.apprisal.common.service.AuditLogService;
 import com.apprisal.common.entity.AuditLog;
 import com.apprisal.qc.service.VerificationService;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,19 +49,22 @@ public class ReviewerApiController {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final AuditLogService auditLogService;
     private final AuditLogRepository auditLogRepository;
+    private final ObjectMapper objectMapper;
 
     public ReviewerApiController(VerificationService verificationService,
                                  QCResultRepository qcResultRepository,
                                  QCRuleResultRepository qcRuleResultRepository,
                                  RealtimeEventPublisher realtimeEventPublisher,
                                  AuditLogService auditLogService,
-                                 AuditLogRepository auditLogRepository) {
+                                 AuditLogRepository auditLogRepository,
+                                 ObjectMapper objectMapper) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.auditLogService = auditLogService;
         this.auditLogRepository = auditLogRepository;
+        this.objectMapper = objectMapper;
     }
 
     // ── Submitted queue (recently completed by this reviewer) ─────────────────
@@ -388,7 +392,9 @@ public class ReviewerApiController {
                 ruleMap.put("id",              rule.getId());
                 ruleMap.put("ruleId",          rule.getRuleId());
                 ruleMap.put("ruleName",        rule.getRuleName());
-                ruleMap.put("section",         sectionForRule(rule.getRuleId()));
+                ruleMap.put("section",         rule.getSection() != null && !rule.getSection().isBlank()
+                                                   ? rule.getSection()
+                                                   : sectionForRule(rule.getRuleId()));
                 ruleMap.put("status",          normalizeStatus(rule.getStatus()));
                 ruleMap.put("message",         rule.getMessage());
                 ruleMap.put("details",         rule.getDetails());
@@ -401,7 +407,7 @@ public class ReviewerApiController {
                 ruleMap.put("expectedValue",   rule.getExpectedValue());
                 ruleMap.put("verifyQuestion",  rule.getVerifyQuestion());
                 ruleMap.put("rejectionText",   rule.getRejectionText());
-                ruleMap.put("evidence",        rule.getEvidence());
+                ruleMap.put("evidence",        parseEvidenceJson(rule.getEvidence()));
                 ruleMap.put("help",            ruleHelp(rule.getRuleId(), rule.getRuleName()));
                 ruleMap.put("reviewerVerified",rule.getReviewerVerified());
                 ruleMap.put("reviewerComment", rule.getReviewerComment());
@@ -427,6 +433,24 @@ public class ReviewerApiController {
         } catch (Exception e) {
             log.error("Failed to get rules for qcResultId={}: {}", qcResultId, e.getMessage(), e);
             return ResponseEntity.badRequest().body(List.of());
+        }
+    }
+
+    /**
+     * Deserialize the stored evidence JSON into a real list so the API emits
+     * structured evidence (a list of document-tagged objects) rather than a
+     * stringified blob the client must re-parse. Tolerates legacy rows that
+     * stored a list of plain strings, and returns an empty list on any problem.
+     */
+    private Object parseEvidenceJson(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, List.class);
+        } catch (Exception e) {
+            log.warn("Could not parse rule evidence JSON; returning empty list: {}", e.getMessage());
+            return List.of();
         }
     }
 

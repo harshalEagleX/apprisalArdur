@@ -713,7 +713,11 @@ export interface QCRuleResult {
   expectedValue?: string | null;
   verifyQuestion?: string | null;
   rejectionText?: string | null;
-  evidence?: string | null;
+  // Document-tagged evidence from the QC pipeline: which document each value was
+  // read from. The API returns this as a structured array (objects), but legacy
+  // rows may surface as plain strings, and older callers may still see a JSON
+  // string — ruleEvidence.ts normalizes all three shapes.
+  evidence?: RuleEvidenceEntry[] | string | null;
   sourceDocuments?: string[] | null;
   comparedFields?: string[] | null;
   comparedValues?: Record<string, unknown> | null;
@@ -739,6 +743,14 @@ export interface QCRuleResult {
   bboxY?: number | null;
   bboxW?: number | null;
   bboxH?: number | null;
+}
+
+export interface RuleEvidenceEntry {
+  document?: string;
+  value?: string;
+  confidence?: number | null;
+  page?: number | null;
+  method?: string | null;
 }
 
 export interface RuleHelp {

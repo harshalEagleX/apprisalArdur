@@ -1,6 +1,8 @@
 "use client";
 import React from "react";
 import type { QCRuleResult } from "@/lib/api";
+import { buildEvidenceModel, type EvidenceSource } from "@/lib/ruleEvidence";
+import { failRejectionLanguage } from "@/lib/ruleLanguage";
 
 function tokenize(value: string): string[] {
   return value.split(/(\s+|[,;:()[\]{}]+)/).filter(token => token.length > 0);
@@ -10,46 +12,54 @@ function normalizeToken(value: string): string {
   return value.trim().toLowerCase().replace(/^[^\w.%-]+|[^\w.%-]+$/g, "");
 }
 
-function EvidenceValue({
-  title,
-  value,
+/**
+ * One document's value. `compareTo` is the set of normalized tokens found in the
+ * *other* documents being compared — tokens absent there are highlighted so the
+ * reviewer's eye lands on the difference. In single-document mode `compareTo` is
+ * empty, so nothing is highlighted (there is nothing to differ from).
+ */
+function EvidencePanel({
+  source,
   compareTo,
-  tone,
+  showMeta,
 }: {
-  title: string;
-  value: string;
-  compareTo: string;
-  tone: "found" | "expected";
+  source: EvidenceSource;
+  compareTo: Set<string>;
+  showMeta: boolean;
 }) {
-  const compareTokens = new Set(tokenize(compareTo).map(normalizeToken).filter(Boolean));
-  const titleColor = tone === "found" ? "text-slate-500" : "text-slate-400";
-  const valueColor = tone === "found" ? "text-slate-300" : "text-slate-200";
+  const conf = source.confidence != null ? Math.round(source.confidence * 100) : null;
   return (
-    <div
-      className={`rounded-lg p-2.5 ${tone === "found" ? "border border-white/10 bg-[#11161C]/80" : "border border-slate-500/25 bg-slate-950/25"}`}
-    >
-      <div className={`mb-1 text-[10px] font-semibold uppercase tracking-wide ${titleColor}`}>
-        {title}
-      </div>
-      <div className={`font-mono text-xs leading-relaxed ${valueColor}`}>
-        {value ? (
-          tokenize(value).map((token, index) => {
-            const normalized = normalizeToken(token);
-            const mismatch = Boolean(normalized) && !compareTokens.has(normalized);
-            return (
-              <span
-                key={`${token}-${index}`}
-                className={
-                  mismatch ? "rounded bg-amber-400/18 px-0.5 text-amber-200 ring-1 ring-amber-400/20" : undefined
-                }
-              >
-                {token}
-              </span>
-            );
-          })
-        ) : (
-          <span className="text-slate-600">No value extracted</span>
+    <div className="rounded-lg border border-white/10 bg-[#11161C]/80 p-2.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          {source.label}
+        </span>
+        {showMeta && (
+          <span className="text-[10px] font-mono text-slate-600">
+            {source.page ? `p${source.page}` : ""}
+            {source.page && conf != null ? " · " : ""}
+            {conf != null ? `${conf}%` : ""}
+          </span>
         )}
+      </div>
+      <div className="font-mono text-xs leading-relaxed text-slate-200">
+        {tokenize(source.value).map((token, index) => {
+          const normalized = normalizeToken(token);
+          const mismatch =
+            compareTo.size > 0 && Boolean(normalized) && !compareTo.has(normalized);
+          return (
+            <span
+              key={`${token}-${index}`}
+              className={
+                mismatch
+                  ? "rounded bg-amber-400/18 px-0.5 text-amber-200 ring-1 ring-amber-400/20"
+                  : undefined
+              }
+            >
+              {token}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -61,27 +71,56 @@ export interface EvidenceCompareProps {
 }
 
 export function EvidenceCompare({ rule, status }: EvidenceCompareProps) {
-  const found = rule.appraisalValue ?? rule.extractedValue ?? "";
-  const expected = rule.engagementValue ?? rule.expectedValue ?? "";
-  const pageLabel =
-    typeof rule.pdfPage === "number" && rule.pdfPage > 0
-      ? `Page ${rule.pdfPage}`
-      : "Page not located";
+  const model = buildEvidenceModel(rule);
+
   const reviewLike = [
     "verify",
     "review",
+    "hold",
     "extraction_failed",
     "ocr_low_confidence",
     "source_missing",
     "system_error",
     "cross_doc_mismatch",
   ].includes(status);
+
   const why =
     status === "fail"
-      ? rule.rejectionText || rule.message || "The extracted report value does not satisfy this rule."
+      ? failRejectionLanguage(rule).text
       : reviewLike
         ? rule.verifyQuestion || rule.message || "This rule needs a reviewer decision."
         : rule.message || "The rule evidence is shown for traceability.";
+
+  // Nothing was located — show only the explanation, no empty comparison grid.
+  if (model.mode === "none") {
+    return (
+      <div className="rounded-lg border border-white/10 bg-[#0B0F14]/45 p-2.5">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="rounded border border-white/10 bg-[#11161C] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+            Evidence
+          </span>
+          <span className="text-[10px] text-slate-500">No value located for this rule</span>
+        </div>
+        <div className="rounded-md border border-amber-500/25 bg-amber-950/15 px-2.5 py-2 text-xs leading-relaxed text-amber-200">
+          {why}
+        </div>
+      </div>
+    );
+  }
+
+  // For each source, the tokens to compare against = the union of all *other*
+  // sources' tokens. Single-document mode yields empty sets (no highlighting).
+  const tokenSets = model.sources.map(
+    s => new Set(tokenize(s.value).map(normalizeToken).filter(Boolean))
+  );
+  const compareSets = model.sources.map((_, i) => {
+    if (model.mode !== "compare") return new Set<string>();
+    const union = new Set<string>();
+    tokenSets.forEach((set, j) => {
+      if (j !== i) set.forEach(t => union.add(t));
+    });
+    return union;
+  });
 
   return (
     <div className="rounded-lg border border-white/10 bg-[#0B0F14]/45 p-2.5">
@@ -89,24 +128,20 @@ export function EvidenceCompare({ rule, status }: EvidenceCompareProps) {
         <span className="rounded border border-white/10 bg-[#11161C] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
           Evidence
         </span>
-        <span className="rounded border border-slate-500/25 bg-slate-950/30 px-1.5 py-0.5 text-[10px] text-slate-200">
-          {pageLabel}
-        </span>
-        {rule.confidence != null && (
-          <span className="rounded border border-white/10 bg-[#11161C] px-1.5 py-0.5 text-[10px] text-slate-400">
-            Confidence {Math.round(Number(rule.confidence) * 100)}%
-          </span>
-        )}
+        <span className="text-[10px] text-slate-400">{model.headline}</span>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <EvidenceValue title="Found in report" value={found} compareTo={expected} tone="found" />
-        <EvidenceValue
-          title="Expected from order"
-          value={expected}
-          compareTo={found}
-          tone="expected"
-        />
+
+      <div className={`grid gap-2 ${model.sources.length >= 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {model.sources.map((source, i) => (
+          <EvidencePanel
+            key={`${source.document}-${i}`}
+            source={source}
+            compareTo={compareSets[i]}
+            showMeta={source.page != null || source.confidence != null}
+          />
+        ))}
       </div>
+
       <div className="mt-2 rounded-md border border-amber-500/25 bg-amber-950/15 px-2.5 py-2 text-xs leading-relaxed text-amber-200">
         {why}
       </div>

@@ -13,6 +13,7 @@ import java.util.Map;
 public record PythonRuleResult(
         @JsonProperty("rule_id")       String ruleId,
         @JsonProperty("rule_name")     String ruleName,
+        @JsonProperty("section")       String section,
         String status,
         String message,
         @JsonProperty("severity")      String severity,
@@ -25,7 +26,7 @@ public record PythonRuleResult(
         @JsonProperty("expected_value")   Object expectedValue,
         @JsonProperty("verify_question")  String verifyQuestion,
         @JsonProperty("rejection_text")   String rejectionText,
-        @JsonProperty("evidence")         java.util.List<String> evidence,
+        @JsonProperty("evidence")         java.util.List<PythonEvidence> evidence,
         @JsonProperty("review_required")  boolean reviewRequired,
         @JsonProperty("target_field")     String targetField,
         @JsonProperty("source_page")      Integer sourcePage,

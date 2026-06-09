@@ -6,72 +6,23 @@ import {
   RefreshCw, Send, ClipboardList, BookOpen, ChevronDown,
 } from "lucide-react";
 import { getQCRules, type QCRuleResult } from "@/lib/api";
+import { buildEvidenceModel, cleanRuleValue, evidenceText, parseEvidence } from "@/lib/ruleEvidence";
+import { failRejectionLanguage } from "@/lib/ruleLanguage";
 import { PageSpinner } from "@/components/shared/Spinner";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 type TransactionType = "PURCHASE" | "REFINANCE" | "UNKNOWN";
-type SourceType = "APPRAISAL" | "ENGAGEMENT" | "CONTRACT";
 
-// ── Rejection Language Generator ─────────────────────────────────────────────
-function generateRejectionLanguage(rule: QCRuleResult, txType: TransactionType): string {
-  const prefix = (rule.ruleId ?? "").split("-")[0].toUpperCase();
-
-  // Contract section: Refinance must be blank
-  if (prefix === "C" && txType === "REFINANCE") {
-    return "Assignment is meant for a refinance transaction; per UAD requirements, the contract section should be left blank.";
-  }
-
-  // Use backend-provided rejection text first
-  if (rule.rejectionText?.trim()) return rule.rejectionText.trim();
-
-  const page = rule.pdfPage ? ` (page ${rule.pdfPage})` : "";
-  const sourceLabel = buildSourceLabel(rule);
-
-  switch (prefix) {
-    case "S":
-      return `Subject property information does not match. ${rule.message} Please verify ${sourceLabel}${page} and correct the discrepancy.`;
-    case "C":
-      return `Contract section issue detected. ${rule.message} Please review the contract documentation${page} and ensure all required fields are completed accurately.`;
-    case "N":
-      return `Neighborhood analysis issue. ${rule.message} The appraisal report${page} requires correction or additional supporting commentary.`;
-    case "SCA":
-      return `Sales comparison issue. ${rule.message} Please review the comparable sales in the appraisal report${page}.`;
-    case "FHA":
-      return `FHA requirement not met. ${rule.message} Please review the appraisal report${page} to ensure FHA compliance.`;
-    case "COM":
-      return `Commentary is insufficient. ${rule.message} The appraisal report${page} must provide specific, property-referenced analysis rather than generic language.`;
-    case "ADD":
-      return `Addendum issue detected. ${rule.message} Please review ${sourceLabel}${page} for the required information.`;
-    default:
-      return `${rule.ruleName}: ${rule.message}${sourceLabel ? ` Please verify ${sourceLabel}${page}.` : ""}`;
-  }
-}
-
-function buildSourceLabel(rule: QCRuleResult): string {
-  if (rule.appraisalValue && rule.engagementValue) return "the appraisal report and the engagement letter/order form";
-  if (rule.appraisalValue) return "the appraisal report";
-  if (rule.engagementValue) return "the engagement letter/order form";
-  return "";
-}
 
 function detectTransactionType(rules: QCRuleResult[]): TransactionType {
   for (const r of rules) {
-    const text = [r.message, r.evidence, r.appraisalValue, r.engagementValue]
+    const text = [r.message, evidenceText(r), r.appraisalValue, r.engagementValue]
       .join(" ").toLowerCase();
     if (text.includes("refinance")) return "REFINANCE";
     if (text.includes("purchase")) return "PURCHASE";
   }
   return "UNKNOWN";
-}
-
-function sourceIcon(type: SourceType) {
-  const icons: Record<SourceType, string> = {
-    APPRAISAL: "Report",
-    ENGAGEMENT: "Order",
-    CONTRACT: "Contract",
-  };
-  return icons[type] ?? "Doc";
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -93,15 +44,11 @@ export default function SubmittedReviewPage() {
 
   const loadResults = useCallback(() => {
     setLoading(true);
-    // Java substitutes placeholder tokens (e.g. __NO_APPRAISAL_VALUE) for missing
-    // values; blank them so the summary and rejection language read cleanly.
-    const clean = (v?: string | null) =>
-      (!v || (v.startsWith("__NO_") && v.endsWith("_VALUE"))) ? undefined : v;
     getQCRules(qcResultId)
       .then(data => setRules(data.map(r => ({
         ...r, status: r.status.toLowerCase(),
-        appraisalValue: clean(r.appraisalValue), engagementValue: clean(r.engagementValue),
-        extractedValue: clean(r.extractedValue), expectedValue: clean(r.expectedValue),
+        appraisalValue: cleanRuleValue(r.appraisalValue), engagementValue: cleanRuleValue(r.engagementValue),
+        extractedValue: cleanRuleValue(r.extractedValue), expectedValue: cleanRuleValue(r.expectedValue),
       }))))
       .catch(() => setError("Could not load review results."))
       .finally(() => setLoading(false));
@@ -120,9 +67,12 @@ export default function SubmittedReviewPage() {
   const rejectionBlocks = useMemo(() =>
     failRules.map(r => ({
       rule: r,
-      language: generateRejectionLanguage(r, txType),
+      // Engine rejectionText wins; the shared dev fallback (also used by the
+      // active review card) runs only when the engine supplied none, so the
+      // same rule reads identically on both screens.
+      language: failRejectionLanguage(r).text,
     })),
-    [failRules, txType]
+    [failRules]
   );
 
   const passCount = rules.filter(r =>
@@ -331,8 +281,9 @@ export default function SubmittedReviewPage() {
 // ── Rejection Block ───────────────────────────────────────────────────────────
 function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: string }) {
   const [copied, setCopied] = useState(false);
-  const prefix = (rule.ruleId ?? "").split("-")[0].toUpperCase();
-  const sourceType = getSourceType(prefix);
+  // The document(s) this rule actually drew values from, from real evidence —
+  // not guessed from the rule-id prefix.
+  const sourceLabels = Array.from(new Set(parseEvidence(rule).map(s => s.label)));
   const page = rule.pdfPage ? rule.pdfPage : null;
 
   async function copy() {
@@ -352,9 +303,9 @@ function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: stri
           {rule.ruleName}
         </span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {sourceType && (
+          {sourceLabels.length > 0 && (
             <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-slate-500/25 bg-slate-950/40 text-slate-400">
-              <BookOpen size={9} /> {sourceIcon(sourceType)}
+              <BookOpen size={9} /> {sourceLabels.join(" · ")}
             </span>
           )}
           {page && (
@@ -371,31 +322,34 @@ function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: stri
         </div>
       </div>
 
-      {/* Evidence comparison (if available) */}
-      {(rule.appraisalValue || rule.engagementValue) && (
-        <div className="grid grid-cols-2 gap-px bg-white/5 border-b border-white/5">
-          {rule.appraisalValue && (
-            <div className="px-3 py-2 bg-[#11161C]">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                Found in report
-              </div>
-              <div className="font-mono text-xs text-slate-300 leading-relaxed">
-                {rule.appraisalValue}
-              </div>
+      {/* Evidence — labelled by the document each value actually came from, and
+          only shown as a side-by-side comparison when the rule compared two
+          documents. Single-document checks render one panel. */}
+      {(() => {
+        const model = buildEvidenceModel(rule);
+        if (model.mode === "none") return null;
+        return (
+          <div className="border-b border-white/5">
+            {model.headline && (
+              <div className="px-3 pt-2 text-[10px] text-slate-500">{model.headline}</div>
+            )}
+            <div
+              className={`grid gap-px bg-white/5 ${model.sources.length >= 2 ? "grid-cols-2" : "grid-cols-1"} ${model.headline ? "mt-2" : ""}`}
+            >
+              {model.sources.map((source, i) => (
+                <div key={`${source.document}-${i}`} className="px-3 py-2 bg-[#11161C]">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                    {source.label}
+                  </div>
+                  <div className="font-mono text-xs text-slate-200 leading-relaxed">
+                    {source.value}
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-          {rule.engagementValue && (
-            <div className="px-3 py-2 bg-[#11161C]">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
-                Expected from order
-              </div>
-              <div className="font-mono text-xs text-slate-200 leading-relaxed">
-                {rule.engagementValue}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* Rejection language */}
       <div className="px-3 py-3">
@@ -454,8 +408,3 @@ function ReviewQuestionRow({ rule }: { rule: QCRuleResult }) {
   );
 }
 
-function getSourceType(prefix: string): SourceType | null {
-  if (["S", "N", "SCA", "COM", "FHA", "ADD", "XF"].includes(prefix)) return "APPRAISAL";
-  if (prefix === "C") return "CONTRACT";
-  return null;
-}

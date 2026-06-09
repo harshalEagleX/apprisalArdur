@@ -24,10 +24,15 @@ _STATUS = {
     RuleStatus.NOT_APPLICABLE: "not_applicable",
     RuleStatus.SKIPPED: "skipped",
 }
+# Severity vocabulary MUST match what the reviewer UI styles: BLOCKING |
+# STANDARD | ADVISORY. Emitting anything else (e.g. HIGH/MEDIUM) makes the badge
+# render the raw token with fallback styling and breaks the BLOCKING-gated
+# acknowledgement flow. HOLD = escalate = BLOCKING; everything else is STANDARD
+# until severity becomes a real per-rule attribute rather than status-derived.
 _SEVERITY = {
     RuleStatus.HOLD: "BLOCKING",
-    RuleStatus.FAIL: "HIGH",
-    RuleStatus.VERIFY: "MEDIUM",
+    RuleStatus.FAIL: "STANDARD",
+    RuleStatus.VERIFY: "STANDARD",
 }
 _REVIEW = {RuleStatus.FAIL, RuleStatus.VERIFY, RuleStatus.HOLD}
 
@@ -43,15 +48,28 @@ def _rule_to_json(r: RuleResult) -> Dict:
     appraisal_value = _doc_value(r, "appraisal")
     engagement_value = _doc_value(r, "engagement") or _doc_value(r, "contract")
     page = next((e.page for e in r.evidence if e.page), 0)
-    evidence_strs: List[str] = [
-        f"{e.document}: {e.value}"
-        f" ({e.confidence * 100:.0f}%{', p' + str(e.page) if e.page else ''})"
+    # Structured, document-tagged evidence. This is the authoritative record of
+    # WHICH document each value came from (appraisal | engagement | contract |
+    # ...). The flattened appraisal_value/engagement_value fields below collapse
+    # engagement and contract into one slot and lose that attribution; the
+    # reviewer UI must use this list, not those, to label sources correctly.
+    evidence: List[Dict] = [
+        {
+            "document": e.document,
+            "value": e.value,
+            "confidence": round(e.confidence, 3),
+            "page": e.page,
+            "method": e.method,
+        }
         for e in r.evidence if e.value
     ]
     is_review = r.status in _REVIEW
     return {
         "rule_id": r.rule_id,
         "rule_name": r.section.replace("_", " ").title() + f" — {r.rule_id}",
+        # Authoritative section from the engine (UI groups on this). Sent as an
+        # explicit field so Java/UI never re-derive it from the rule-id prefix.
+        "section": r.section.upper(),
         "status": _STATUS.get(r.status, "skipped"),
         "message": r.message or r.status.value,
         "severity": _SEVERITY.get(r.status, "STANDARD"),
@@ -65,7 +83,7 @@ def _rule_to_json(r: RuleResult) -> Dict:
         "expected_value": engagement_value,
         "verify_question": r.message if r.status == RuleStatus.VERIFY else "",
         "rejection_text": r.message if is_review else "",
-        "evidence": evidence_strs,
+        "evidence": evidence,
         "review_required": is_review,
         "target_field": r.fields_involved[0] if r.fields_involved else None,
         "source_page": page,

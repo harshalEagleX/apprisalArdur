@@ -11,22 +11,26 @@ import {
 } from "lucide-react";
 import type { QCRuleResult } from "@/lib/api";
 import { EvidenceCompare } from "./EvidenceCompare";
+import { buildEvidenceModel } from "@/lib/ruleEvidence";
+import { failRejectionLanguage } from "@/lib/ruleLanguage";
 
 type Decision = "PASS" | "FAIL";
 
 const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
-  pass:        { border: "border-green-500/25",  bg: "bg-green-950/18",  text: "text-green-200" },
-  fail:        { border: "border-red-500/25",    bg: "bg-red-950/18",    text: "text-red-200" },
-  verify:      { border: "border-amber-500/25",  bg: "bg-amber-950/18",  text: "text-amber-200" },
-  review:      { border: "border-amber-500/25",  bg: "bg-amber-950/18",  text: "text-amber-200" },
-  extraction_failed: { border: "border-amber-500/25", bg: "bg-amber-950/18", text: "text-amber-200" },
-  ocr_low_confidence: { border: "border-amber-500/25", bg: "bg-amber-950/18", text: "text-amber-200" },
-  source_missing: { border: "border-amber-500/25", bg: "bg-amber-950/18", text: "text-amber-200" },
-  system_error: { border: "border-red-500/25", bg: "bg-red-950/18", text: "text-red-200" },
-  cross_doc_mismatch: { border: "border-red-500/25", bg: "bg-red-950/18", text: "text-red-200" },
-  not_executed: { border: "border-white/10", bg: "bg-[#161B22]", text: "text-slate-400" },
-  not_applicable: { border: "border-white/10", bg: "bg-[#161B22]", text: "text-slate-400" },
-  MANUAL_PASS: { border: "border-green-500/25",  bg: "bg-green-950/18",  text: "text-green-200" },
+  pass:        { border: "border-green-500/20",  bg: "bg-green-950/10",  text: "text-green-200" },
+  fail:        { border: "border-red-500/20",    bg: "bg-red-950/10",    text: "text-red-200" },
+  verify:      { border: "border-amber-500/20",  bg: "bg-amber-950/5",  text: "text-amber-200" },
+  review:      { border: "border-amber-500/20",  bg: "bg-amber-950/10",  text: "text-amber-200" },
+  extraction_failed: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
+  ocr_low_confidence: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
+  source_missing: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
+  system_error: { border: "border-red-500/20", bg: "bg-red-950/10", text: "text-red-200" },
+  cross_doc_mismatch: { border: "border-red-500/20", bg: "bg-red-950/10", text: "text-red-200" },
+  hold: { border: "border-red-500/30", bg: "bg-red-950/15", text: "text-red-200" },
+  skipped: { border: "border-white/8", bg: "bg-white/[0.03]", text: "text-slate-400" },
+  not_executed: { border: "border-white/8", bg: "bg-white/[0.03]", text: "text-slate-400" },
+  not_applicable: { border: "border-white/8", bg: "bg-white/[0.03]", text: "text-slate-400" },
+  MANUAL_PASS: { border: "border-green-500/20",  bg: "bg-green-950/10",  text: "text-green-200" },
 };
 
 const SEV_STYLE: Record<string, string> = {
@@ -44,6 +48,7 @@ function isReviewLikeStatus(status: string): boolean {
   return [
     "verify",
     "review",
+    "hold",
     "extraction_failed",
     "ocr_low_confidence",
     "source_missing",
@@ -96,6 +101,7 @@ export const RuleCard = memo(function RuleCard({
   const sev = rule.severity ?? "STANDARD";
   const isVerify = isReviewLikeStatus(normalizedStatus);
   const isFail = normalizedStatus === "fail";
+  const evidenceModel = buildEvidenceModel(rule);
   const isBlockingVerify = isVerify && sev === "BLOCKING";
 
   const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : 0;
@@ -150,7 +156,7 @@ export const RuleCard = memo(function RuleCard({
   return (
     <div
       id={`rule-${rule.id}`}
-      className={`rounded-lg border p-3 shadow-[0_10px_24px_rgba(0,0,0,0.12)] ${s.border} ${s.bg} ${active ? "ring-1 ring-slate-500/60" : ""}`}
+      className={`rounded-lg border p-3 backdrop-blur-md backdrop-saturate-150 shadow-[0_10px_24px_rgba(0,0,0,0.12)] ${s.border} ${s.bg} ${active ? "ring-1 ring-slate-500/50" : ""}`}
     >
       <button
         onClick={() => {
@@ -211,8 +217,8 @@ export const RuleCard = memo(function RuleCard({
             <p className={`text-xs mt-0.5 leading-relaxed ${s.text} opacity-80 line-clamp-2`}>
               {isVerify && rule.verifyQuestion
                 ? rule.verifyQuestion
-                : normalizedStatus === "fail" && rule.rejectionText
-                  ? rule.rejectionText
+                : isFail
+                  ? failRejectionLanguage(rule).text
                   : rule.message}
             </p>
           </div>
@@ -224,10 +230,9 @@ export const RuleCard = memo(function RuleCard({
 
       {expanded && (
         <div className="mt-3 space-y-2.5">
-          {(rule.appraisalValue ||
-            rule.engagementValue ||
-            rule.extractedValue ||
-            rule.expectedValue) && <EvidenceCompare rule={rule} status={normalizedStatus} />}
+          {(evidenceModel.mode !== "none" || isFail || isVerify) && (
+            <EvidenceCompare rule={rule} status={normalizedStatus} />
+          )}
 
           {rule.actionItem && (
             <div className="flex items-start gap-2 bg-amber-950/18 border border-amber-500/25 rounded-lg p-2.5 text-xs text-amber-200">

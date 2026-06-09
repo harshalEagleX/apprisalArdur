@@ -726,6 +726,7 @@ public class QCProcessingService {
                 QCRuleResult ruleResult = QCRuleResult.builder()
                         .ruleId(textOr(pr.ruleId(), "UNKNOWN_RULE"))
                         .ruleName(textOr(pr.ruleName(), textOr(pr.ruleId(), "UNKNOWN_RULE")))
+                        .section(pr.section())
                         .status(normalizedStatus)
                         .message(textOr(pr.message(), "No rule message provided."))
                         .severity(pr.severity() != null ? pr.severity() : "STANDARD")

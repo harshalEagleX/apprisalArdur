@@ -44,6 +44,12 @@ public class QCRuleResult {
     @Column(name = "rule_name")
     private String ruleName;
 
+    // Authoritative report section from the Python engine (SUBJECT, CONTRACT,
+    // SALES_COMPARISON, ...). Nullable for legacy rows; the API falls back to
+    // deriving it from the rule-id prefix when absent.
+    @Column(name = "section")
+    private String section;
+
     @Column(nullable = false)
     private String status;
 
@@ -243,6 +249,14 @@ public class QCRuleResult {
 
     public void setRuleName(String ruleName) {
         this.ruleName = ruleName;
+    }
+
+    public String getSection() {
+        return section;
+    }
+
+    public void setSection(String section) {
+        this.section = section;
     }
 
     public String getStatus() {
@@ -525,6 +539,7 @@ public class QCRuleResult {
         private QCResult qcResult;
         private String ruleId;
         private String ruleName;
+        private String section;
         private String status;
         private String message;
         private String details;
@@ -559,6 +574,11 @@ public class QCRuleResult {
 
         public QCRuleResultBuilder ruleName(String ruleName) {
             this.ruleName = ruleName;
+            return this;
+        }
+
+        public QCRuleResultBuilder section(String section) {
+            this.section = section;
             return this;
         }
 
@@ -672,6 +692,7 @@ public class QCRuleResult {
             result.qcResult = this.qcResult;
             result.ruleId = this.ruleId;
             result.ruleName = this.ruleName;
+            result.section = this.section;
             result.status = this.status;
             result.message = this.message;
             result.details = this.details;
