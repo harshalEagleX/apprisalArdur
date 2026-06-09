@@ -958,8 +958,24 @@ FRONTEND (done this session, see frontend/task.txt)
 [x] RuleGroup: per-comparable duplicate rule cards grouped into one accordion per ruleId
     with friendly labels + status roll-up; attention groups open by default.
 
+EXTRACTION v0.1.16 — comparable identity + SCA-17 GLA-vs-sketch cross-check
+[x] Comparable identity on evidence: Evidence carries `field`; python_response emits a
+    `comparable` label (Comp N / Subject / named source SCA grid|Improvements|Sketch).
+    Frontend shows it per panel; dedup keys on it. Applies to ALL per-comp rules.
+[x] sketch_extractor.py: finds the "Building Sketch" page, reads "Total Living Area
+    (Rounded)" — Tesseract OCR first, then VISION (Gemini -> Groq llama-4-scout) fallback.
+    Overlaid as sketch_living_area in the active path (_overlay_sketch).
+[x] SCA-17 rewritten: was conflating GLA+condition+quality (condition/quality are
+    SCA-16/SCA-14) and never read the sketch. Now cross-checks subject GLA across SCA
+    grid / improvements / sketch (<=1sf PASS, >1 VERIFY, >50 FAIL; missing source ->
+    VERIFY not silent pass) + per-comp GLA presence. Templates SCA-17-gla/-nosketch/-comp-gla.
+[x] MEASURED: Fantail SCA-17 PASS (grid/impr/sketch all 2301), 6 comp GLAs present;
+    sketch GLA across sort — Fantail 2301 (OCR), Theon 1559 (OCR), 90 NE 32nd 425 (vision),
+    Alpine none (-> VERIFY). condition/quality no longer mis-attributed to SCA-17.
+
 [ ] NEXT:
     - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP. DEFERRED
-      deliberately: would fire on nearly every report (quality usually matches) → reviewer
-      noise unless commentary detection is reliable; measure first (P-8) before building.
-    - Re-run real QC through the UI on Fantail to confirm the full chain end-to-end.
+      (would fire on nearly every report; measure first, P-8).
+    - Sketch finder: broaden page detection (Alpine had no "Building Sketch" header → none);
+      condo (90 NE 32nd) vision read 425 looks low — review the condo sketch layout.
+    - Re-run QC through the UI to confirm the full chain end-to-end on real data.
