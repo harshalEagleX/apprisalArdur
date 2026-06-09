@@ -861,3 +861,71 @@ EXTRACTION FIX — merged-row adjustment mis-attribution (SCA-14/16 false positi
     preserved 11 (e.g. 1640 Peninsula comp1 Q4 vs Q3 $207,500; 8527 Elaine C3 $-30000).
     Fantail SCA-14 6 VERIFY-noise -> 6 PASS. 90 NE 32nd no longer emits label-text as
     a rating. 62 engine tests pass. No rule changes — purely an extraction correctness fix.
+
+================================================================================
+2026-06-09 — Reviewer UI faithfulness, engine-owned language, LLM extraction brain
+Branch: demo
+================================================================================
+
+REVIEWER EVIDENCE ATTRIBUTION (full stack)
+[x] Structured, document-tagged evidence Python->Java->frontend. python_response
+    emits evidence objects {document,value,confidence,page,method} (was strings that
+    collapsed engagement+contract into one slot). New PythonEvidence DTO;
+    PythonRuleResult.evidence = List<PythonEvidence>; ReviewerApiController returns a
+    real JSON array (legacy string rows tolerated).
+[x] frontend ruleEvidence.ts derives which docs a rule compared from the real
+    evidence; EvidenceCompare renders dynamic per-document panels (compare/single/
+    none) — no more hardcoded "Found in report"/"Expected from order".
+[x] Authoritative `section` plumbed Python->Java (new qc_rule_result.section column)
+    ->API (falls back to rule-id prefix for legacy rows). Fixed sentinel cleaning
+    (__NO_*_VALUE__) shared via cleanRuleValue.
+
+ENGINE OWNS RULE LANGUAGE
+[x] ruleLanguage.ts is the single fallback used by RuleCard, EvidenceCompare and the
+    submitted page; engine rejectionText always wins; dev fallback logs which rule ids
+    still need engine text. Removed the per-screen generateRejectionLanguage so the
+    active and submitted screens never drift.
+[x] Severity vocab aligned to BLOCKING/STANDARD (was HIGH/MEDIUM the UI couldn't
+    style; isBlockingVerify was dead). Five-state completeness: hold/skipped now
+    styled + actionable in the UI.
+
+SKIPPED -> VERIFY (never render a can't-evaluate rule as a pass)
+[x] ~17 "X not extracted / insufficient" SKIPPEDs across sales_comparison/recon/site/
+    neighborhood/improvements/signature/contract/subject converted to VERIFY (conf 0.5,
+    reviewer-instruction message). SKIPPED reserved for genuinely N/A (document or
+    capability absent). S-10b keeps a has_engagement guard.
+[x] SCA-BR: insufficient adjusted prices -> VERIFY (was SKIPPED, which the UI rendered
+    as a benign pass). Template SCA-bracket-na.
+
+EXTRACTION LLM "BRAIN" — layer v0.1.12 (Groq; OCR stays non-LLM)
+[x] llm_groq.py: OpenAI-compatible Groq client (gpt-oss-120b reasoning model, JSON
+    mode + reasoning_effort, 429/5xx backoff, 400 json-validate fallback, rolling 6k
+    TPM throttle). Keys in .env only (gitignored).
+[x] sca_llm_extractor.py: SCA grid via SPATIAL reconstruction (cluster words by row-y,
+    sort by x) so flattened cell numbers reassociate with labels; per-page extraction
+    numbered sequentially across the 2-page grid (some forms restart the printed comp
+    #); validates adjusted == sale + net. MEASURED 6/6 adjusted prices on 28203
+    Fantail, 3/3 on 1718 Theon. Overlay _overlay_sca_llm repairs the currency grid when
+    the deterministic reads are insufficient/implausible (adjusted vs sale >25%).
+[x] vision/analyzer.py: Groq llama-4-scout photo analyzer as a fallback after Gemini;
+    logs which provider produced each comp-photo signal.
+
+EXTRACTION v0.1.13 + SCA-2 LISTINGS
+[x] comp_grid_extractor: added "Basement & Finished Rooms Below Grade" to _FEATURES
+    (was unmapped -> comp_N_basement always None -> SCA-18 false-failed every comp).
+    0sf now reads for all 6 comps (Fantail). Bump EXTRACTION_LAYER_VERSION 0.1.12->0.1.13.
+[x] SCA-2: counts active/listing comparables (is_listing from UAD "Active" in Date of
+    Sale, which closed sales never carry) and requires a minimum (sca2_min_listings cfg,
+    default 2). Too few closed sales -> VERIFY (extraction may miss); enough sales but
+    too few listings -> FAIL with the actual counts. Templates SCA-2-count/SCA-2-listings.
+
+[ ] NEXT — incomplete SCA rules (per the rule-by-rule review):
+    - SCA-9/SCA-12 corner zero-adj VERIFY — BLOCKED: subject_grid captures only
+      gla/condition/quality, not location/view. Must add subject location/view to
+      comp_grid_extractor first, then flag subject "Corner" vs non-corner comps with a
+      zero location/view adjustment.
+    - SCA-14 zero quality-adjustment commentary VERIFY — needs commentary NLP.
+    - SCA-ZF comps 5/6 — adjustment-application CONSISTENCY across comps (new rule:
+      same feature on several comps but the premium applied to some, not all).
+    - SCA-5 DOM vs stated marketing time VERIFY — needs the neighborhood marketing-time field.
+    - Frontend: group per-comp duplicate rule cards into one accordion (SCA-4 x6, etc.).

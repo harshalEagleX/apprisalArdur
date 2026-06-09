@@ -1,2 +1,32 @@
-The critical question about Day 4:
+================================================================================
+APPRISAL FRONTEND — TASK LIST
+Branch: demo | Updated each work session. [x] done [~] partial [ ] todo
+================================================================================
 
+2026-06-09 — Reviewer rule panel made faithful to the QC engine
+[x] EvidenceCompare: dynamic, document-aware. Shows which document(s) a rule
+    actually compared (Appraisal report / Sales contract / Engagement letter),
+    derived from rule.evidence — not hardcoded "Found in report"/"Expected from
+    order". Modes: compare (>=2 docs) / single (1 doc) / none.
+[x] lib/ruleEvidence.ts: parses structured evidence array (objects) from the API,
+    with backward-compat for the legacy string format; cleanRuleValue strips the
+    __NO_*_VALUE__ sentinels (fixed the endsWith bug).
+[x] lib/ruleLanguage.ts: SINGLE source of the finding/rejection sentence, used by
+    RuleCard + EvidenceCompare + submitted page. Engine rejectionText always wins;
+    dev fallback console.warns which rule ids still lack engine text. Removed the
+    submitted page's own generateRejectionLanguage (no more drift between screens).
+[x] Five-state completeness: "hold" and "skipped" now have STATUS_STYLE; "hold" is
+    review-like (actionable). Severity chips use BLOCKING/STANDARD/ADVISORY only.
+[x] Submitted page: source chip + rejection language use real evidence documents.
+
+[ ] NEXT
+[ ] Group per-comparable duplicate rule cards into ONE accordion per rule
+    (e.g. "SCA-4 — Proximity (6 comparables)") with per-comp sub-rows, instead of
+    6 separate identical-titled cards. Engine correctly fires once per comp; this
+    is purely a frontend grouping/presentation change.
+[ ] QC progress bar: show the real per-stage status from /qc/progress (currently
+    coarse). Display exactly what is running (OCR page N, extraction, rules).
+[ ] PDF bounding-box highlight: ensure the highest-visibility rules (contract
+    price, borrower name, signature date, GLA) jump to the exact field.
+[ ] Keep rule language specific-not-generic: it must always come from the engine
+    templates (with comp #/values), never be generated in the frontend.
