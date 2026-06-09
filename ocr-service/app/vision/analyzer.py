@@ -145,6 +145,46 @@ class GoogleVisionPhotoAnalyzer:
         return sig
 
 
+class GroqPhotoAnalyzer:
+    """Groq multimodal backend (llama-4-scout). Vision fallback used when Gemini
+    fails or is rate-limited; same JSON contract as Gemini."""
+
+    backend = "groq"
+
+    def analyze(self, image_bytes: bytes, want_text: bool = False) -> Optional[PhotoSignals]:
+        key = hashlib.sha256(image_bytes).hexdigest()
+        if key in _SIGNAL_CACHE:
+            return _SIGNAL_CACHE[key]
+        from app.extraction import llm_groq
+        data = llm_groq.vision_chat_json(image_bytes, _PROMPT)
+        if not data:
+            return None
+        sig = _parse_signals(json.dumps(data))
+        if sig and len(_SIGNAL_CACHE) < _CACHE_MAX:
+            _SIGNAL_CACHE[key] = sig
+        return sig
+
+
+class _FallbackPhotoAnalyzer:
+    """Try each backend in order; the first to return a signal wins. Logs which
+    provider produced the result so every comp-photo read is attributable
+    (audit: "identified by gemini / groq")."""
+
+    backend = "fallback"
+
+    def __init__(self, analyzers):
+        self._analyzers = analyzers
+
+    def analyze(self, image_bytes: bytes, want_text: bool = False) -> Optional[PhotoSignals]:
+        for a in self._analyzers:
+            sig = a.analyze(image_bytes, want_text=want_text)
+            if sig is not None:
+                logger.info("comp-photo analysed by backend=%s", a.backend)
+                return sig
+            logger.info("comp-photo backend=%s yielded no signal; trying fallback", a.backend)
+        return None
+
+
 def _parse_signals(text: str) -> Optional[PhotoSignals]:
     try:
         m = re.search(r"\{.*\}", text, re.S)
@@ -169,19 +209,31 @@ def analyzer_available() -> bool:
         return True
     if backend in ("auto", "google_vision"):
         from app.vision.vision_client import vision_available
-        return vision_available()
+        if vision_available():
+            return True
+    if backend in ("auto", "gemini", "groq") and config.GROQ_VISION_API_KEY:
+        return True
     return False
 
 
 def get_photo_analyzer():
-    """Return the configured PhotoSignals analyzer, or None (rules then VERIFY)."""
+    """Return the configured PhotoSignals analyzer, or None (rules then VERIFY).
+
+    Builds a fallback chain: Gemini first (preferred), then Groq vision as the
+    resilience backstop when Gemini fails / is rate-limited. The chain logs which
+    provider produced each result."""
     if not config.VISION_ENABLED:
         return None
     backend = (config.VISION_BACKEND or "auto").lower()
+    chain = []
     if backend in ("auto", "gemini") and config.GEMINI_API_KEY:
-        return GeminiPhotoAnalyzer()
+        chain.append(GeminiPhotoAnalyzer())
     if backend in ("auto", "google_vision"):
         from app.vision.vision_client import vision_available
         if vision_available():
-            return GoogleVisionPhotoAnalyzer()
-    return None
+            chain.append(GoogleVisionPhotoAnalyzer())
+    if backend in ("auto", "gemini", "groq") and config.GROQ_VISION_API_KEY:
+        chain.append(GroqPhotoAnalyzer())
+    if not chain:
+        return None
+    return chain[0] if len(chain) == 1 else _FallbackPhotoAnalyzer(chain)

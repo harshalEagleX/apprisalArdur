@@ -49,3 +49,34 @@ VISION_BACKEND: str = os.getenv("VISION_BACKEND", "auto")
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_TIMEOUT: int = int(os.getenv("GEMINI_TIMEOUT", "40"))
+
+# ---------------------------------------------------------------------------
+# Extraction layer version — bump on every extraction-behaviour change so
+# results stay traceable to the logic that produced them (P-5/P-11 lineage).
+EXTRACTION_LAYER_VERSION: str = os.getenv("EXTRACTION_LAYER_VERSION", "0.1.12")
+
+# Groq LLM — the structured-extraction "brain" (NOT OCR). OCR stays the "eyes";
+# this reads OCR text and returns structured fields. Used today to read the SCA
+# comparable-sales grid when the deterministic table readers are unreliable.
+# OpenAI-compatible API. gpt-oss-120b is a reasoning model → force JSON output
+# with a low reasoning effort. Keys live in .env (gitignored), never in code.
+LLM_EXTRACTION_ENABLED: bool = os.getenv("LLM_EXTRACTION_ENABLED", "true").lower() in ("1", "true", "yes")
+GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_TIMEOUT: int = int(os.getenv("GROQ_TIMEOUT", "45"))
+GROQ_REASONING_EFFORT: str = os.getenv("GROQ_REASONING_EFFORT", "low")
+# Client-side tokens-per-minute budget for the extraction model (Groq free tier
+# limit is 8000 TPM; stay under it). When a call would exceed the rolling-60s
+# budget the client waits — so a multi-page grid is processed in steps rather
+# than 429-failing. Tune to your plan.
+GROQ_TPM_LIMIT: int = int(os.getenv("GROQ_TPM_LIMIT", "6000"))
+# Force the SCA LLM extractor to run even when deterministic extraction looks ok
+# (A/B measurement). Default off → LLM runs only as a repair/fallback.
+SCA_LLM_ALWAYS: bool = os.getenv("SCA_LLM_ALWAYS", "false").lower() in ("1", "true", "yes")
+
+# Groq vision — fallback for comparable-photo analysis when Gemini fails or is
+# rate-limited. Separate key/model (llama-4-scout multimodal). Image OCR/vision
+# still prefers Gemini; Groq is the resilience backstop.
+GROQ_VISION_API_KEY: str = os.getenv("GROQ_VISION_API_KEY", "")
+GROQ_VISION_MODEL: str = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")

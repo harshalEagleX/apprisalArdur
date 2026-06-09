@@ -56,6 +56,7 @@ def extract_documents(folder: Path) -> Dict[str, object]:
                 rs = _overlay_engagement(rs, pdf, dtype)
             elif role == "appraisal":
                 rs = _overlay_comp_grid(rs, pdf, dtype)
+                rs = _overlay_sca_llm(rs, pdf, dtype)
                 rs = _overlay_photos(rs, pdf, dtype)
                 rs = _overlay_comp_photos(rs, pdf, dtype)
             elif role == "contract":
@@ -128,6 +129,83 @@ def _overlay_comp_grid(rs, pdf, dtype):
         )
     merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
                                  total_pages=rs.total_pages, ocr_method="comp_grid+layered")
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def _overlay_sca_llm(rs, pdf, dtype):
+    """Repair the SCA currency grid with the LLM "brain" (extraction layer
+    v0.1.12) when the deterministic table readers look insufficient or
+    implausible. The LLM reads the grid TEXT only (no OCR, no images) and its
+    identity-validated currency/GLA values win for the comps they cover; every
+    other field is left untouched. No-op when LLM extraction is disabled (P-6)."""
+    from app import config
+    if not config.LLM_EXTRACTION_ENABLED:
+        return rs
+    from app.extraction import llm_groq
+    if not llm_groq.groq_extraction_available():
+        return rs
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.sca_llm_extractor import SCA_LLM_VERSION, extract_sca_grid_llm
+
+    existing = {name: r for name, r in rs}
+
+    def _num(v):
+        try:
+            return float(str(v).replace(",", "").replace("$", "").strip())
+        except Exception:
+            return None
+
+    # Decide whether to invoke the LLM: too few adjusted prices, or an adjusted
+    # price that contradicts its comp's sale price by >25% (the classic
+    # "cost-approach / opinion-of-value leaked into the adjusted row" failure).
+    adj_vals, suspect = [], False
+    for name, r in existing.items():
+        if name.startswith("comp_") and name.endswith("_adjusted_sale_price"):
+            a = _num(r.value)
+            if a is None:
+                continue
+            adj_vals.append(a)
+            comp = name[: -len("_adjusted_sale_price")]
+            sp = existing.get(f"{comp}_sale_price")
+            s = _num(sp.value) if sp else None
+            if s and s > 0 and abs(a - s) / s > 0.25:
+                suspect = True
+
+    if not (config.SCA_LLM_ALWAYS or len(adj_vals) < 2 or suspect):
+        return rs
+
+    try:
+        llm = extract_sca_grid_llm(pdf)
+    except Exception as exc:
+        logger.warning("SCA-LLM overlay failed for %s: %s", pdf.name, exc)
+        return rs
+    if not llm:
+        return rs
+
+    replaced = 0
+    for name, value in llm.items():
+        prev = existing.get(name)
+        if prev is not None and str(prev.value) == str(value):
+            continue
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=str(value),
+            raw_source_text=str(value), extraction_method="sca_llm",
+            confidence=0.9, source_page=0,
+            normalization_applied=[f"sca_llm:{SCA_LLM_VERSION}"],
+        )
+        replaced += 1
+    logger.info(
+        "SCA-LLM overlay (v%s, groq:%s): set/replaced %d currency-grid fields for %s "
+        "(deterministic adjusted=%d, suspect=%s)",
+        SCA_LLM_VERSION, config.GROQ_MODEL, replaced, pdf.name, len(adj_vals), suspect,
+    )
+    if replaced == 0:
+        return rs
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
     for r in existing.values():
         merged.add(r)
     merged.finalize()
