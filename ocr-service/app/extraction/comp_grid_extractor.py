@@ -43,6 +43,7 @@ _FEATURES: List[Tuple[str, str]] = [
     ("actual age", "actual_age"),
     ("condition", "condition_rating"),
     ("gross living area", "gla"),
+    ("basement", "basement"),
     ("functional utility", "functional_utility"),
     ("heating/cooling", "heating_cooling"),
     ("garage/carport", "garage_carport"),

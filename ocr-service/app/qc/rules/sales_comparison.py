@@ -74,7 +74,11 @@ def _comp_rows(ctx: QCContext) -> List[Dict[str, float]]:
             "sale_price": sp,
             "net": normalize_currency(ctx.appraisal.value(f"comp_{i}_net_adjustment")),
             "adjusted": normalize_currency(ctx.appraisal.value(f"comp_{i}_adjusted_sale_price")),
-            "is_listing": str(ctx.appraisal.value(f"comp_{i}_is_listing") or "").lower()
+            # A comparable is a listing/active offering when its Date of Sale is
+            # UAD "Active" (closed sales carry "s.../c..." dates). Fall back to an
+            # explicit is_listing flag if extraction ever sets one.
+            "is_listing": "active" in str(ctx.appraisal.value(f"comp_{i}_sale_date") or "").lower()
+                          or str(ctx.appraisal.value(f"comp_{i}_is_listing") or "").lower()
                           in {"true", "yes", "1"},
         })
     return rows
@@ -86,18 +90,28 @@ def _comp_rows(ctx: QCContext) -> List[Dict[str, float]]:
 def sca2_required(ctx: QCContext):
     rows = _comp_rows(ctx)
     sales = [r for r in rows if not r["is_listing"]]
+    listings = [r for r in rows if r["is_listing"]]
     val = normalize_currency(ctx.appraisal.value("appraised_value")) or 0
     required = 4 if val >= 1_000_000 else 3
+    min_listings = int(qc_config.semantic("sca2_min_listings", 2))
     ev = [ctx.appraisal.evidence(f"comp_{i}_sale_price") for i in range(1, 4)]
-    if len(sales) >= required:
+    # Too few closed sales — extraction may have missed comps, so VERIFY not FAIL.
+    if len(sales) < required:
         return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
-                          status=RuleStatus.PASS, fields_involved=["comp_N_sale_price"], evidence=ev)
-    # extraction may miss comps → VERIFY, not hard FAIL
+                          status=RuleStatus.VERIFY,
+                          message=qc_config.template("SCA-2-count", value=len(sales), required=required),
+                          fields_involved=["comp_N_sale_price"], template_id="SCA-2-count",
+                          evidence=ev, confidence=0.6)
+    # Enough closed sales but too few active/listing comparables — a determinate
+    # deficiency (the grid is well-extracted since the sales are all present).
+    if min_listings > 0 and len(listings) < min_listings:
+        return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
+                          status=RuleStatus.FAIL,
+                          message=qc_config.template("SCA-2-listings", have=len(listings),
+                                                     need=min_listings, sales=len(sales)),
+                          fields_involved=["comp_N_sale_price"], template_id="SCA-2-listings", evidence=ev)
     return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
-                      status=RuleStatus.VERIFY,
-                      message=qc_config.template("SCA-2-count", value=len(sales)),
-                      fields_involved=["comp_N_sale_price"], template_id="SCA-2-count",
-                      evidence=ev, confidence=0.6)
+                      status=RuleStatus.PASS, fields_involved=["comp_N_sale_price"], evidence=ev)
 
 
 # ---- SCA-NET net adjustment <= 15% of sale price --------------------------
