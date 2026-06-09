@@ -498,7 +498,33 @@ def sca12_view(ctx: QCContext):
 
 @rule(id="SCA-14", num="66", section="sales_comparison", phase=3, name="Comp quality UAD rating + zero-adj")
 def sca14_quality(ctx: QCContext):
-    return _grade_consistency_rule(ctx, "SCA-14", "66", "quality_rating", "Q", "quality", "SCA-14-qual")
+    out = _grade_consistency_rule(ctx, "SCA-14", "66", "quality_rating", "Q", "quality", "SCA-14-qual")
+    # Commentary safeguard: when quality matches across every comp with no quality
+    # adjustment (all per-comp checks passed), USPAP expects the report commentary
+    # to support the equivalent quality. Confirm it does — keyword fast-path, then
+    # an LLM evaluative read (a missing/silent commentary is a VERIFY, not a pass).
+    if out and all(r.status == RuleStatus.PASS for r in out):
+        from app.qc import commentary as _com
+        text = " ".join(
+            s for s in (
+                str(ctx.appraisal.value("sales_comparison_summary") or ""),
+                str(ctx.appraisal.value("final_reconciliation_comment") or ""),
+            ) if s
+        ).strip()
+        ev = [ctx.appraisal.evidence("sales_comparison_summary")]
+        addressed = _com.quality_addressed(text)
+        # None = no substantive commentary extracted to judge → skip (don't emit a
+        # noise VERIFY for what is really a commentary-extraction gap).
+        if addressed is True:
+            out.append(RuleResult(rule_id="SCA-14", checklist_num="66", section="sales_comparison",
+                                  status=RuleStatus.PASS, fields_involved=["sales_comparison_summary"], evidence=ev))
+        elif addressed is False:
+            out.append(RuleResult(rule_id="SCA-14", checklist_num="66", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-14-comment"),
+                                  fields_involved=["sales_comparison_summary"], template_id="SCA-14-comment",
+                                  evidence=ev, confidence=0.5))
+    return out
 
 
 def _effective_ym(ctx):

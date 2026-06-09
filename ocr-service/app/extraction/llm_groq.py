@@ -153,6 +153,29 @@ def chat_json(
     return None
 
 
+def assess_text(text: str, question: str) -> Optional[bool]:
+    """Yes/no evaluation of free text by the LLM — the legitimate *evaluative*
+    use of the model (NOT structured extraction). Returns True/False, or None
+    when the model is unavailable or the answer can't be parsed (caller decides
+    the conservative default)."""
+    if not groq_extraction_available() or not (text or "").strip():
+        return None
+    data = chat_json(
+        [
+            {"role": "system", "content": 'Answer with ONLY a JSON object {"answer": true|false}.'},
+            {"role": "user", "content": f"{question}\n\nTEXT:\n{text[:6000]}"},
+        ],
+        reasoning_effort="low",
+        max_tokens=800,
+    )
+    if not data or "answer" not in data:
+        return None
+    a = data["answer"]
+    if isinstance(a, bool):
+        return a
+    return str(a).strip().lower() in ("true", "yes", "1")
+
+
 def vision_chat_json(image_bytes: bytes, prompt: str) -> Optional[dict]:
     """Analyse one image with the Groq vision model, returning parsed JSON.
 

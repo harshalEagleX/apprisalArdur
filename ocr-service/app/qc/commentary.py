@@ -11,11 +11,40 @@ fast, deterministic signals are computed here: presence of known canned phrases,
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import yaml
+
+# Quality-related terms whose presence in the sales-comparison commentary is a
+# fast PASS for the SCA-14 quality-commentary check (avoids an LLM call).
+_QUALITY_TERMS = re.compile(r"\b(quality|construction|workmanship|q[1-6]|finishes?|materials?)\b", re.I)
+
+
+def quality_addressed(text) -> Optional[bool]:
+    """True when the commentary plausibly addresses comparable construction
+    QUALITY. Keyword fast-path first; otherwise an LLM evaluative check catches
+    paraphrases ("comparables are similar in construction"). Returns None when
+    there is no SUBSTANTIVE commentary to judge (blank or a stub header) — the
+    caller skips rather than emitting a noise VERIFY for an extraction gap."""
+    s = (text or "").strip()
+    if len(s) < 40:
+        return None
+    if _QUALITY_TERMS.search(s):
+        return True
+    try:
+        from app.extraction.llm_groq import assess_text
+        res = assess_text(
+            s,
+            "Does this appraisal sales-comparison commentary address or justify the "
+            "CONSTRUCTION QUALITY of the comparables — e.g. that they are similar in "
+            "quality to the subject, or why no quality adjustment was warranted?",
+        )
+    except Exception:
+        res = None
+    return bool(res)
 
 _CONFIG = Path(__file__).resolve().parent.parent.parent / "config" / "qc_canned_phrases.yaml"
 
