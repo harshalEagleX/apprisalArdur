@@ -287,6 +287,39 @@ def _overlay_sketch(rs, pdf, dtype):
     return merged
 
 
+def _overlay_narrative(rs, pdf, dtype):
+    """Overlay the appraiser's sales-comparison narrative as `sales_comparison_summary`,
+    read positionally from the sales-comparison page's prose blocks (the form text
+    layer otherwise yields only a one-line header stub). Powers the SCA-14
+    quality-commentary safeguard. No-op when no prose is found (P-6)."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.narrative_extractor import extract_sca_narrative
+    try:
+        fields = extract_sca_narrative(pdf)
+    except Exception as exc:
+        logger.warning("Narrative overlay failed for %s: %s", pdf.name, exc)
+        return rs
+    text = fields.get("sales_comparison_summary")
+    if not text:
+        return rs
+    try:
+        page = int(fields.get("_narrative_page", 0) or 0)
+    except (TypeError, ValueError):
+        page = 0
+    existing = {name: r for name, r in rs}
+    existing["sales_comparison_summary"] = ExtractionResult(
+        canonical_name="sales_comparison_summary", document_type=dtype, value=text,
+        raw_source_text=text, extraction_method="positional_narrative",
+        confidence=0.85, source_page=page, normalization_applied=["positional_narrative"],
+    )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
 def _overlay_photos(rs, pdf, dtype):
     """Add photo-presence pseudo-fields (photo_front/_rear/_street/_left/_right
     and photo_interior_rooms) from caption detection, so the PH rules can read
@@ -445,6 +478,7 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     rs = _overlay_sca_llm(rs, Path(appraisal_path), "appraisal_report")
     _emit("sketch", "Reading the building sketch GLA", 40.0)
     rs = _overlay_sketch(rs, Path(appraisal_path), "appraisal_report")
+    rs = _overlay_narrative(rs, Path(appraisal_path), "appraisal_report")
     _emit("photos", "Analyzing report photographs", 42.0)
     rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")
