@@ -134,3 +134,16 @@ class QCContext:
                or self.appraisal.value("form_type") or "")
         m = re.search(r"\b(1004mc|1004|1073|1025|1007|216)\b", raw.lower())
         return m.group(1) if m else "unknown"
+
+    @property
+    def is_update_report(self) -> bool:
+        """True for a 1004D Appraisal Update / Completion report (no sales grid),
+        set by the form-type overlay from the report's first-page markers."""
+        return str(self.appraisal.value("is_update_report") or "").lower() in ("true", "1", "yes")
+
+    @property
+    def has_sca_grid(self) -> bool:
+        """Whether this report form has a sales-comparison grid. Defaults True;
+        only an explicit no-grid form (update/completion) turns it off — so a
+        normal 1004 with a comp-extraction failure still runs SCA and flags it."""
+        return not self.is_update_report

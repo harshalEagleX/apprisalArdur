@@ -67,6 +67,48 @@ def extract_documents(folder: Path) -> Dict[str, object]:
     return sets
 
 
+# First-page title markers that identify a 1004D Appraisal Update / Completion
+# report — a form with NO sales-comparison grid. A normal 1004 reads "Uniform
+# Residential Appraisal Report" and never matches these, so gating on this signal
+# never hides a real 1004's comp-extraction failure (engine._SECTION_GATE).
+_UPDATE_FORM_MARKERS = (
+    "appraisal update",
+    "completion report",
+    "1004d",
+    "summary appraisal update",
+)
+
+
+def _overlay_form_type(rs, pdf, dtype):
+    """Mark `is_update_report` when the report's first pages identify it as a 1004D
+    Appraisal Update / Completion form (no sales-comparison grid). No-op otherwise,
+    so a normal full appraisal keeps the grid-present default (P-6)."""
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    try:
+        import fitz
+        doc = fitz.open(str(pdf))
+        text = " ".join(doc[i].get_text() for i in range(min(3, doc.page_count))).lower()
+        doc.close()
+    except Exception as exc:
+        logger.warning("Form-type detection failed for %s: %s", pdf.name, exc)
+        return rs
+    if not any(m in text for m in _UPDATE_FORM_MARKERS):
+        return rs
+    logger.info("Form-type: %s detected as 1004D update/completion (no SCA grid)", pdf.name)
+    existing = {name: r for name, r in rs}
+    existing["is_update_report"] = ExtractionResult(
+        canonical_name="is_update_report", document_type=dtype, value="true",
+        raw_source_text="true", extraction_method="form_marker",
+        confidence=0.9, source_page=0, normalization_applied=["form_marker"],
+    )
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
 def _overlay_comp_grid(rs, pdf, dtype):
     """Overlay per-comparable DESCRIPTIVE grid fields (address, proximity, date,
     condition, quality, real GLA, location, data source) parsed column-wise from
@@ -396,6 +438,7 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     sets = {}
     _emit("extract_appraisal", "Reading appraisal report (OCR + fields)", 10.0)
     rs = run_full_extraction(Path(appraisal_path), "appraisal_report", use_paddle=False)
+    rs = _overlay_form_type(rs, Path(appraisal_path), "appraisal_report")
     _emit("sca_grid", "Reading the sales comparison grid", 28.0)
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
     _emit("sca_llm", "Confirming comparable adjustments (LLM)", 36.0)

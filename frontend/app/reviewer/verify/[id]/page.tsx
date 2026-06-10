@@ -138,7 +138,12 @@ type RuleRenderItem = {
   section?: string;
   rules: QCRuleResult[];
   grouped: boolean;
+  label?: string;   // override group title (e.g. a whole section collapsed as N/A)
 };
+
+function isNotApplicable(rule: QCRuleResult) {
+  return rule.status?.toLowerCase() === "not_applicable";
+}
 
 function focusForRule(rule: QCRuleResult): RuleFocus {
   const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
@@ -690,9 +695,34 @@ export default function VerifyFilePage() {
     const key = ruleGroupKey(rule);
     rulesByGroupKey.set(key, [...(rulesByGroupKey.get(key) ?? []), rule]);
   }
+  // A section every one of whose rules is Not Applicable (e.g. SCA on a 1004D
+  // update form with no sales-comparison grid) collapses to ONE summary row, so
+  // 35 N/A cards don't flood the list. Single-rule N/A sections are left as-is.
+  const naOnlySections = new Set<string>();
+  const bySection = new Map<string, QCRuleResult[]>();
+  for (const rule of sortedFiltered) {
+    const sec = rule.section ?? "OTHER";
+    bySection.set(sec, [...(bySection.get(sec) ?? []), rule]);
+  }
+  for (const [sec, secRules] of bySection) {
+    if (secRules.length > 1 && secRules.every(isNotApplicable)) naOnlySections.add(sec);
+  }
+
   const emittedGroups = new Set<string>();
+  const emittedNaSections = new Set<string>();
   const renderItems: RuleRenderItem[] = [];
   for (const rule of sortedFiltered) {
+    const sec = rule.section ?? "OTHER";
+    if (naOnlySections.has(sec)) {
+      if (emittedNaSections.has(sec)) continue;
+      emittedNaSections.add(sec);
+      renderItems.push({
+        key: `na-section-${sec}`, section: rule.section, grouped: true,
+        rules: bySection.get(sec) ?? [rule],
+        label: "Not applicable to this report form",
+      });
+      continue;
+    }
     const key = ruleGroupKey(rule);
     const groupedRules = rulesByGroupKey.get(key) ?? [rule];
     if (shouldGroupRule(rule, groupedRules.length)) {
@@ -928,7 +958,7 @@ export default function VerifyFilePage() {
                     {item.grouped ? (
                       <RuleGroup
                         ruleId={firstRule.ruleId}
-                        ruleName={groupLabelForRule(firstRule)}
+                        ruleName={item.label ?? groupLabelForRule(firstRule)}
                         count={item.rules.length}
                         fail={fail}
                         review={review}

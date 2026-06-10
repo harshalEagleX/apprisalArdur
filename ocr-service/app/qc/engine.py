@@ -38,6 +38,17 @@ def _normalize(out, spec: RuleSpec) -> List[RuleResult]:
     return results
 
 
+# Sections that only exist on certain report forms. A 1004D Appraisal Update /
+# Completion report has NO sales-comparison grid, so every SCA rule is genuinely
+# Not Applicable rather than a "couldn't find comps" VERIFY. The predicate
+# defaults to True (normal full appraisal) and only an explicit no-grid form turns
+# it off — so a normal 1004 whose comp extraction failed still runs SCA and flags
+# the gap, never silently hides it.
+_SECTION_GATE = {
+    "sales_comparison": lambda ctx: ctx.has_sca_grid,
+}
+
+
 def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
            min_phase: Optional[int] = None) -> QCReport:
     """Run all registered rules (optionally filtered by phase) on the context."""
@@ -46,6 +57,14 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
         if only_phase is not None and spec.phase != only_phase:
             continue
         if min_phase is not None and spec.phase > min_phase:
+            continue
+        gate = _SECTION_GATE.get(spec.section)
+        if gate is not None and not gate(ctx):
+            report.results.append(RuleResult(
+                rule_id=spec.rule_id, checklist_num=spec.checklist_num,
+                section=spec.section, status=RuleStatus.NOT_APPLICABLE,
+                message="No sales-comparison grid on this report form (e.g. appraisal update / completion report).",
+            ))
             continue
         if not spec.applicable(ctx):
             report.results.append(RuleResult(
