@@ -230,7 +230,10 @@ def _extract_subject_table(df) -> Dict[str, str]:
         (r"Tax Year\s+(\d{4})", "tax_year"),
         (r"HOA \$\s*([\d,]+)", "hoa_dues"),
         (r"Census Tract\s+([\d.]+)", "census_tract"),
-        (r"Map Reference\s+(\S+)", "map_reference"),
+        # the captured token must contain a digit — in the flat cell join the
+        # label is often followed by the NEXT label ("Map Reference Census ..."),
+        # which produced a junk non-numeric map_reference
+        (r"Map Reference\s+(\S*\d\S*)", "map_reference"),
         (r"Neighborhood Name\s+([^\n]+)", "neighborhood_name"),
     ]
 

@@ -57,6 +57,7 @@ def extract_documents(folder: Path) -> Dict[str, object]:
             elif role == "appraisal":
                 rs = _overlay_comp_grid(rs, pdf, dtype)
                 rs = _overlay_sca_llm(rs, pdf, dtype)
+                rs = _overlay_subject_llm(rs, pdf, dtype)
                 rs = _overlay_photos(rs, pdf, dtype)
                 rs = _overlay_comp_photos(rs, pdf, dtype)
             elif role == "contract":
@@ -246,6 +247,51 @@ def _overlay_sca_llm(rs, pdf, dtype):
     )
     if replaced == 0:
         return rs
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
+def _overlay_subject_llm(rs, pdf, dtype):
+    """Gap-fill page-1 subject/contract-section fields with the LLM "brain"
+    (extraction layer v0.1.17). Strictly additive: only fields the deterministic
+    layers did NOT find are requested, every answer is verbatim-validated against
+    the page text, and enum/checkbox answers come back below the structured
+    confidence cutoff so rules treat them as VERIFY-grade. No-op when LLM
+    extraction is disabled or nothing is missing (P-6)."""
+    from app import config
+    if not config.LLM_EXTRACTION_ENABLED:
+        return rs
+    from app.extraction import llm_groq
+    if not llm_groq.groq_extraction_available():
+        return rs
+    from app.core.result import ExtractionResult, ExtractionResultSet
+    from app.extraction.subject_llm_extractor import (
+        GAP_FIELDS, SUBJECT_LLM_VERSION, extract_subject_contract_llm)
+
+    existing = {name: r for name, r in rs}
+    missing = [f for f in GAP_FIELDS
+               if f not in existing or not existing[f].found
+               or not str(existing[f].value or "").strip()]
+    if not missing:
+        return rs
+    try:
+        filled = extract_subject_contract_llm(pdf, missing)
+    except Exception as exc:
+        logger.warning("Subject-LLM overlay failed for %s: %s", pdf.name, exc)
+        return rs
+    if not filled:
+        return rs
+    for name, (value, conf) in filled.items():
+        existing[name] = ExtractionResult(
+            canonical_name=name, document_type=dtype, value=str(value),
+            raw_source_text=str(value), extraction_method="subject_llm",
+            confidence=conf, source_page=1,
+            normalization_applied=[f"subject_llm:{SUBJECT_LLM_VERSION}"],
+        )
     merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
                                  total_pages=rs.total_pages, ocr_method=rs.ocr_method)
     for r in existing.values():
@@ -476,6 +522,8 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
     _emit("sca_llm", "Confirming comparable adjustments (LLM)", 36.0)
     rs = _overlay_sca_llm(rs, Path(appraisal_path), "appraisal_report")
+    _emit("subject_llm", "Completing subject/contract fields (LLM)", 38.0)
+    rs = _overlay_subject_llm(rs, Path(appraisal_path), "appraisal_report")
     _emit("sketch", "Reading the building sketch GLA", 40.0)
     rs = _overlay_sketch(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_narrative(rs, Path(appraisal_path), "appraisal_report")

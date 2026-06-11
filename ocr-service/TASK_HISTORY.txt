@@ -993,3 +993,93 @@ SCA-14 QUALITY-COMMENTARY SAFEGUARD (LLM-evaluated)
     - sales_comparison_summary / commentary field extraction is weak -> SCA-14 skips
       instead of confirming; improving it turns skips into PASSes.
     - Sketch finder: broaden beyond the "Building Sketch" header (Alpine had none).
+
+--------------------------------------------------------------------------------
+2026-06-11  — SESSION: Subject + Contract section deep pass (extraction v0.1.17)
+--------------------------------------------------------------------------------
+
+EXTRACTION v0.1.17 — Groq gap-fill of the page-1 SUBJECT + CONTRACT sections
+[x] NEW subject_llm_extractor.py: same "brain" pattern as the SCA-LLM layer — reads
+    the spatially-reconstructed page-1 text, requests ONLY the fields the
+    deterministic layers missed (23-field whitelist), verbatim-validates every
+    free-text/number answer against the page (substring / digit-run containment)
+    so hallucination cannot pass; enum/checkbox answers come back at conf 0.70
+    (below structured cutoff) so rules can only VERIFY on them, never auto-FAIL.
+    Wired as _overlay_subject_llm in BOTH paths (folder + /qc/process multipart).
+[x] MEASURED (Fantail): 16/23 missing fields gap-filled, all verbatim-correct
+    (APN 3105-04-001-0170-914, taxes 8555, tax_year 2025, census 6732.01, ...).
+[x] contract_extractor.py: Groq fallback for contract_price / last-signature
+    contract_date / concessions_amount when the regex strategies miss — the LLM
+    only SELECTS among values printed in the text (digit-run / regex-date
+    containment), it can never invent one. + deterministic personal-property scan
+    (chattel keywords near a "personal property" context line) emitted as
+    personal_property_items for C-5.
+[x] l4_camelot.py map_reference pattern required a digit in the captured token —
+    the flat cell join made it capture the NEXT label ("Census"), which produced
+    a junk non-numeric map_reference on 3 of 4 sort docs (false S-6b FAILs).
+    After fix the gap-fill reads the true values (42700 / 53-41-25 / 26420).
+
+SUBJECT RULES (MIRA spec; USPS intentionally NOT used)
+[x] S-1: + STATE component (full names normalized to 2-letter codes) → 5
+    independent address components (street/city/zip/state/county).
+[x] S-2: token-CONTAINMENT borrower match (every order-form name token must
+    appear in the appraisal field; per-token Jaro-Winkler; suffix-only diff =
+    VERIFY). Handles "DEINEKO, ANTON & DOMANSKA, VIKTORIIA" formats.
+[x] S-4a legal description: <10 chars or "see attached/addenda" placeholder →
+    VERIFY (was a silent PASS on deferrals).
+[x] S-4b APN: per-state format regexes in qc_thresholds.yaml (TX/CA/FL seeded);
+    non-match → VERIFY (county-level variation makes FAIL unsafe).
+[x] S-4c taxes: + reasonableness band ($0 or > tax_amount_max → VERIFY).
+[x] NEW S-4d tax year: within semantic.tax_year_window (2y) of the effective
+    date, never future → FAIL (S-4-taxyear).
+[x] S-5: + "not applicable" blocked, <3 chars FAIL, generic single words
+    (subject.neighborhood_generic config) → VERIFY.
+[x] S-6: 11-digit FIPS census codes normalized to XXXX.XX before format check.
+[x] NEW S-6b map reference: numeric-content format check (S-6-mapref template
+    existed with no rule).
+[x] S-7: + tenant cascade (lease_dates/rental_amount else VERIFY) + vacant
+    cascade (utilities_on else VERIFY).
+[x] S-8: amount > 0 without special_assessments_comment → VERIFY w/ amount.
+[x] S-10a lender name: "company" normalizer (Inc/LLC/Corp/NA designators
+    stripped before Jaro-Winkler).
+[x] S-12: offered=Yes → MLS # + DOM required else VERIFY (S-12-listing).
+
+CONTRACT RULES (MIRA spec)
+[x] C-1 purchase: proper C-1-analyze template (was wrongly reusing C-1-refi-blank);
+    + sale-type identification (field or UAD keyword in commentary; commentary
+    present w/o sale type = FAIL, nothing extracted = VERIFY); + appraised value
+    vs contract price variance > semantic.value_contract_comment_pct (5%) → VERIFY.
+[x] C-3: + seller-not-owner-of-record → commentary required else VERIFY.
+[x] C-4 rewritten: blank checkbox → VERIFY; No + amount > 0 → FAIL (logical
+    contradiction); Yes → amount (FAIL if missing) + description (VERIFY);
+    contract w/o concession + report w/o claim → PASS (was a per-doc noise
+    VERIFY "could not be read"); contract absent → honest SKIPPED.
+[x] NEW C-5 personal property: contract chattel scan + LLM evaluative check of
+    the contract-analysis commentary (assess_text); addressed → PASS, present
+    but silent → VERIFY, no commentary extracted → VERIFY (never FAIL on an
+    extraction gap).
+
+MEASURED — 4 uploads/sort transactions, HEAD baseline vs new (same docs):
+    aggregate P385 F15 V94 → P448 F19 V106 (F+4 = 3 false S-6b map-ref FAILs,
+    fixed above, + 1 legitimate new finding; PASS +63 from gap-filled fields).
+    #2321525470: C-2a VERIFY("could not read contract") → PASS (LLM read the
+    contract price); C-4 noise VERIFY → PASS; NEW C-1 variance caught appraised
+    $587,000 vs contract $459,900 (27.6%!) — previously invisible.
+    #2321525427: S-4a caught "See attached addenda" placeholder; S-4b flagged
+    FL APN format; refi C-1/S-2-refi-owner unchanged-correct.
+    #2321525505: C-4 noise VERIFY → PASS; S-7 vacant-utilities cascade fired.
+    #2321525530 (weak scan): unchanged honest FAILs; C-4 now honest
+    VERIFY(checkbox blank)+SKIPPED(no contract doc) instead of misleading text.
+[x] tests/test_subject_contract_rules.py: 39 unit tests (token containment,
+    company/state normalizers, S-1 state, S-4 windows, census FIPS, cascades,
+    C-1/C-4/C-5 routing, personal-property scan). Full suite: no new failures
+    (pre-existing: SCA gross-skip test + week1 criteria + gemini-key tests).
+
+[ ] NEXT:
+    - Sort the non-conforming uploads folders (ABS/AERS/ASMS/BCCCC/DS/LV/NAM/XO/
+      OneDrive/Orders) into appraisal|engagement|contract layout to grow the corpus.
+    - Enum/checkbox gap-fill (occupant_status, property_rights, did_analyze) needs
+      a drawing/vision pass — text-layer LLM reads were conservatively dropped.
+    - contract_analysis_comment narrative extraction is weak → C-1 sale-type and
+      C-5 mostly route to VERIFY instead of PASS/FAIL; positional narrative
+      extraction (like SCA-14) would sharpen both.

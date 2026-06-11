@@ -33,6 +33,16 @@ _STREET_ABBR = {
 
 _NAME_NOISE = {"jr", "sr", "ii", "iii", "iv", "mr", "mrs", "ms", "dr"}
 
+# Generational suffixes are special: omitting one across documents is routine
+# appraiser practice, not a different party — token matching treats a
+# suffix-only difference as "review", never "mismatch".
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+
+# Corporate designators that vary freely across documents ("Champions Funding"
+# vs "Champions Funding, LLC") — stripped before comparing lender/client names.
+_COMPANY_NOISE = {"inc", "llc", "corp", "corporation", "co", "company", "na",
+                  "lp", "llp", "ltd", "pllc", "pc", "fsb", "isaoa", "atima"}
+
 
 def _collapse_ws(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
@@ -61,6 +71,39 @@ def normalize_name(text: str) -> str:
     tokens = [t for t in normalize_basic(text).split()
               if t not in _NAME_NOISE and len(t) > 1]
     return " ".join(sorted(tokens))
+
+
+STATE_CODES = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+    "wisconsin": "WI", "wyoming": "WY", "district of columbia": "DC",
+}
+
+
+def normalize_state(text: str) -> str:
+    """Two-letter state code from either a code or a full state name; ''
+    when unrecognizable."""
+    s = normalize_basic(text)
+    if len(s) == 2 and s.upper() in STATE_CODES.values():
+        return s.upper()
+    return STATE_CODES.get(s, "")
+
+
+def normalize_company(text: str) -> str:
+    """Normalize an organization name: basic clean + drop corporate designators,
+    so "Champions Funding, LLC" == "Champions Funding"."""
+    tokens = [t for t in normalize_basic(text).split() if t not in _COMPANY_NOISE]
+    return " ".join(tokens)
 
 
 def normalize_currency(text) -> Optional[float]:
@@ -154,6 +197,8 @@ def match_text(
         na, nb = normalize_address(a), normalize_address(b)
     elif kind == "name":
         na, nb = normalize_name(a), normalize_name(b)
+    elif kind == "company":
+        na, nb = normalize_company(a), normalize_company(b)
     else:
         na, nb = normalize_basic(a), normalize_basic(b)
     if not na or not nb:
@@ -161,6 +206,48 @@ def match_text(
         return MatchResult(0.0, "review", na, nb)
     score = jaro_winkler(na, nb)
     return MatchResult(round(score, 4), _verdict(score, match_th, review_th), na, nb)
+
+
+def name_tokens(text: str) -> list:
+    """Individual name tokens from any format ("DEINEKO, ANTON", "A & B Smith"):
+    split on commas/ampersands/'and'/semicolons + whitespace, drop titles and
+    single-letter initials, keep generational suffixes (handled separately)."""
+    s = re.sub(r"[&;]|\band\b", " ", (text or "").lower())
+    s = re.sub(r"[^\w\s]", " ", s)
+    return [t for t in s.split()
+            if (t in _NAME_SUFFIXES) or (t not in _NAME_NOISE and len(t) > 1)]
+
+
+def match_name_containment(
+    required: str, candidate: str,
+    match_th: float = MATCH_THRESHOLD, review_th: float = REVIEW_THRESHOLD,
+) -> MatchResult:
+    """Does `candidate` contain every name token of `required`?
+
+    The engagement letter is the lender-accepted borrower identity: every token
+    it carries must appear in the appraisal's borrower field (the reverse is not
+    required — the appraisal may list extra parties). Per-token Jaro-Winkler
+    absorbs OCR noise; a missing generational suffix alone is "review" (commonly
+    omitted by appraisers), any other missing token is "mismatch".
+    """
+    req, cand = name_tokens(required), name_tokens(candidate)
+    if not req or not cand:
+        return MatchResult(0.0, "review", " ".join(req), " ".join(cand))
+    missing, suffix_only = [], True
+    scores = []
+    for t in req:
+        best = max((jaro_winkler(t, c) for c in cand), default=0.0)
+        scores.append(best)
+        if best < match_th:
+            missing.append(t)
+            if t not in _NAME_SUFFIXES:
+                suffix_only = False
+    score = round(sum(scores) / len(scores), 4)
+    if not missing:
+        return MatchResult(score, "match", " ".join(req), " ".join(cand))
+    if suffix_only:
+        return MatchResult(score, "review", " ".join(req), " ".join(cand))
+    return MatchResult(score, "mismatch", " ".join(req), " ".join(cand))
 
 
 def match_currency(a, b, tolerance: float = 0.0) -> MatchResult:

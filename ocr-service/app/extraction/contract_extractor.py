@@ -176,6 +176,95 @@ def _concessions(text: str) -> Optional[str]:
     return None
 
 
+# Non-realty items a purchase contract may convey. When any appear in a
+# personal-property context the appraiser must address contributory value
+# (rule C-5), so they are surfaced as a pseudo-field for the rule engine.
+_PERSONAL_ITEMS = re.compile(
+    r"\b(refrigerator|washer|dryer|freezer|furniture|furnishings|hot tub|"
+    r"spa|pool table|playset|play set|shed|trampoline|riding mower|tractor|"
+    r"golf cart|boat|trailer|atv)\b", re.I)
+_PERSONAL_CTX = re.compile(r"(personal property|non-?realty|chattel|items? (that )?"
+                           r"(will|shall|to) (convey|remain|be included))", re.I)
+
+
+def _personal_property(text: str) -> Optional[str]:
+    """Comma list of personal-property items the contract conveys, or None.
+
+    Items count only when they appear near a personal-property context line —
+    a bare appliance mention in the inclusions boilerplate is normal realty
+    fixture language, not chattel."""
+    lines = text.splitlines()
+    found = []
+    for i, ln in enumerate(lines):
+        if not _PERSONAL_CTX.search(ln):
+            continue
+        window = " ".join(lines[max(0, i - 1):i + 4])
+        for m in _PERSONAL_ITEMS.finditer(window):
+            item = m.group(1).lower()
+            if item not in found:
+                found.append(item)
+    return ", ".join(found) if found else None
+
+
+def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
+    """Groq fallback for contract fields the regex strategies missed.
+
+    Same trust rule as the other LLM "brain" layers: a price/concession answer
+    must literally appear on the page (digit-run containment) and a date answer
+    must be one of the dates already seen by the regex scan — the LLM only
+    *selects* among printed values, it can never invent one. Empty dict when the
+    LLM is unavailable (P-6)."""
+    try:
+        from app.extraction import llm_groq
+        if not llm_groq.groq_extraction_available():
+            return {}
+        wanted = {
+            "contract_price": "total purchase/sales price of the property (digits only)",
+            "contract_date": "the date the contract became fully executed — the LATEST "
+                             "signature date (MM/DD/YYYY)",
+            "concessions_amount": "total seller-paid concessions/contributions toward "
+                                  "buyer costs (digits only); omit if none",
+        }
+        asks = {f: wanted[f] for f in missing if f in wanted}
+        if not asks:
+            return {}
+        lines = "\n".join(f'- "{k}": {v}' for k, v in asks.items())
+        data = llm_groq.chat_json(
+            [
+                {"role": "system",
+                 "content": "You read residential real-estate purchase contracts. "
+                            "Output ONLY one valid JSON object."},
+                {"role": "user",
+                 "content": "Extract ONLY these fields from the contract text below. "
+                            "OMIT any field not actually present — never guess.\n"
+                            f"{lines}\n\nCONTRACT TEXT:\n{text[:11000]}"},
+            ],
+            reasoning_effort="low", max_tokens=1024,
+        )
+        if not isinstance(data, dict):
+            return {}
+        out: Dict[str, str] = {}
+        digit_runs = set(re.findall(r"\d+", re.sub(r"[,$]", "", text)))
+        valid_dates = {f"{int(m):02d}/{int(d):02d}/{int(y) + 2000 if int(y) < 100 else int(y)}"
+                       for m, d, y in _DATE.findall(text)}
+        for f in ("contract_price", "concessions_amount"):
+            v = re.sub(r"[^\d]", "", str(data.get(f, "") or ""))
+            if v and v in digit_runs and 0 < float(v) <= 50_000_000:
+                out[f] = v
+        dv = str(data.get("contract_date", "") or "").strip()
+        m = _DATE.search(dv)
+        if m:
+            mm, dd, yy = (int(x) for x in m.groups())
+            yy = yy + 2000 if yy < 100 else yy
+            cand = f"{mm:02d}/{dd:02d}/{yy}"
+            if cand in valid_dates:
+                out["contract_date"] = cand
+        return out
+    except Exception as exc:
+        logger.warning("Contract LLM gap-fill failed: %s", exc)
+        return {}
+
+
 def extract_contract_fields(pdf_path, max_pages: int = 4) -> Dict[str, str]:
     """Return {canonical_field: value} from the sales contract (best effort)."""
     pdf_path = Path(pdf_path)
@@ -204,4 +293,13 @@ def extract_contract_fields(pdf_path, max_pages: int = 4) -> Dict[str, str]:
     conc = _concessions(text)
     if conc:
         out["concessions_amount"] = conc
+    items = _personal_property(text)
+    if items:
+        out["personal_property_items"] = items
+    # LLM fallback for whatever the regex strategies could not find — answers
+    # are validated against the printed text, so a wrong pick cannot pass.
+    missing = [f for f in ("contract_price", "contract_date", "concessions_amount")
+               if f not in out]
+    if missing:
+        out.update(_llm_gap_fill(text, missing))
     return out

@@ -1,20 +1,33 @@
 """
 Subject section rules (S-1 .. S-12 / checklist C,D,E,F,1-13).
 
-Phase 1 (presence/format) and Phase 2 (cross-document match vs engagement
-letter). Authority for address/borrower/lender is the engagement letter.
+Phase 1 (presence/format/content) and Phase 2 (cross-document match vs the
+engagement letter — the authority for address/borrower/lender). Address and
+borrower comparisons are component/token level, never whole-string equality.
+USPS address verification is intentionally NOT used.
 """
 
 from __future__ import annotations
 
+import re
+
 from app.qc import helpers as H
+from app.qc import matching
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.registry import rule
 from app.qc.result import RuleResult, RuleStatus
 
 
-# ---- S-1 Property address (cross-document, 4 components) -------------------
+def _res(rule_id, num, status, message="", fields=None, evidence=None,
+         template_id=None, confidence=1.0) -> RuleResult:
+    return RuleResult(rule_id=rule_id, checklist_num=num, section="subject",
+                      status=status, message=message, fields_involved=fields or [],
+                      evidence=evidence or [], template_id=template_id,
+                      confidence=confidence)
+
+
+# ---- S-1 Property address (cross-document, 5 components) -------------------
 
 @rule(id="S-1", num="C", section="subject", phase=2, name="Property address matches order form")
 def s1_address(ctx: QCContext):
@@ -26,6 +39,21 @@ def s1_address(ctx: QCContext):
         H.cross_doc_match(ctx, "S-1", "C", "subject", "zip_code", "S-1-zip",
                           authority="engagement", kind="generic", label="zip"),
     ]
+    # state: exact two-letter code match (full names normalized to codes first)
+    a_state, e_state = ctx.appraisal.value("state"), ctx.engagement.value("state")
+    if ctx.has_engagement and a_state and e_state:
+        na, ne = matching.normalize_state(a_state), matching.normalize_state(e_state)
+        ev = [ctx.appraisal.evidence("state"), ctx.engagement.evidence("state")]
+        if na and ne:
+            ok = na == ne
+            status = RuleStatus.PASS if ok else RuleStatus.FAIL
+            if not ok and min(ctx.appraisal.confidence("state"),
+                              ctx.engagement.confidence("state")) < ctx.structured_conf:
+                status = RuleStatus.VERIFY
+            out.append(_res("S-1", "C", status,
+                            message="" if ok else qc_config.template("S-1-state"),
+                            fields=["state"], evidence=ev,
+                            template_id=None if ok else "S-1-state"))
     # county is optional but checked when present on both
     if ctx.engagement.value("county") and ctx.appraisal.value("county"):
         out.append(H.cross_doc_match(ctx, "S-1", "C", "subject", "county", "S-1-county",
@@ -33,107 +61,235 @@ def s1_address(ctx: QCContext):
     return out
 
 
-# ---- S-2 Borrower (cross-document + co-borrower + refi/owner) --------------
+# ---- S-2 Borrower (token containment + co-borrower + refi/owner) ------------
 
 @rule(id="S-2", num="D", section="subject", phase=2, name="Borrower matches order form")
 def s2_borrower(ctx: QCContext):
-    out = [H.cross_doc_match(ctx, "S-2", "D", "subject", "borrower_name", "S-2-coborrower",
-                             authority="engagement", kind="name", label="borrower")]
+    out = []
+    eng_name = ctx.engagement.value("borrower_name")
+    appr_name = ctx.appraisal.value("borrower_name")
+    ev = [ctx.appraisal.evidence("borrower_name"), ctx.engagement.evidence("borrower_name")]
+    if not ctx.has_engagement:
+        out.append(_res("S-2", "D", RuleStatus.SKIPPED,
+                        message="engagement/order not available", fields=["borrower_name"]))
+    elif not eng_name or not appr_name:
+        out.append(_res("S-2", "D", RuleStatus.VERIFY,
+                        message=qc_config.template("S-2-coborrower", value=eng_name or appr_name or ""),
+                        fields=["borrower_name"], evidence=ev,
+                        template_id="S-2-coborrower", confidence=0.5))
+    else:
+        # every order-form name token must appear in the appraisal borrower field;
+        # a missing generational suffix alone is review-grade, not a mismatch
+        mr = matching.match_name_containment(eng_name, appr_name,
+                                             match_th=qc_config.match_threshold,
+                                             review_th=qc_config.review_threshold)
+        status = {"match": RuleStatus.PASS, "review": RuleStatus.VERIFY,
+                  "mismatch": RuleStatus.FAIL}[mr.verdict]
+        if status == RuleStatus.FAIL and min(ctx.appraisal.confidence("borrower_name"),
+                                             ctx.engagement.confidence("borrower_name")) < ctx.structured_conf:
+            status = RuleStatus.VERIFY
+        msg = "" if status == RuleStatus.PASS else qc_config.template(
+            "S-2-coborrower", value=eng_name)
+        out.append(_res("S-2", "D", status, message=msg, fields=["borrower_name"],
+                        evidence=ev, confidence=mr.score or 0.5,
+                        template_id=None if status == RuleStatus.PASS else "S-2-coborrower"))
     # co-borrower present on engagement/contract but missing on appraisal
     co = ctx.engagement.value("co_borrower_name") or ctx.contract.value("co_borrower_name")
-    appr_borrower = (ctx.appraisal.value("borrower_name") or "").lower()
-    if co and co.lower() not in appr_borrower:
-        out.append(RuleResult(
-            rule_id="S-2", checklist_num="D", section="subject",
-            status=RuleStatus.VERIFY,
-            message=qc_config.template("S-2-coborrower", value=co),
-            fields_involved=["co_borrower_name"], template_id="S-2-coborrower",
-            confidence=0.6,
-            evidence=[ctx.appraisal.evidence("borrower_name"),
-                      ctx.engagement.evidence("co_borrower_name")],
-        ))
-    # refinance + owner != borrower → comment required (VERIFY)
+    if co and appr_name and matching.match_name_containment(co, appr_name).verdict != "match":
+        out.append(_res("S-2", "D", RuleStatus.VERIFY,
+                        message=qc_config.template("S-2-coborrower", value=co),
+                        fields=["co_borrower_name"], template_id="S-2-coborrower",
+                        confidence=0.6,
+                        evidence=[ctx.appraisal.evidence("borrower_name"),
+                                  ctx.engagement.evidence("co_borrower_name")]))
+    # refinance + owner != borrower → comment required
     if ctx.transaction_type == "refinance":
         owner = ctx.appraisal.value("owner_of_public_record")
-        borrower = ctx.appraisal.value("borrower_name")
-        if owner and borrower:
-            from app.qc import matching
-            mr = matching.match_text(owner, borrower, kind="name")
+        if owner and appr_name:
+            mr = matching.match_text(owner, appr_name, kind="name")
             if mr.verdict == "mismatch":
-                out.append(RuleResult(
-                    rule_id="S-2", checklist_num="1", section="subject",
-                    status=RuleStatus.VERIFY,
-                    message=qc_config.template("S-2-refi-owner"),
-                    fields_involved=["owner_of_public_record", "borrower_name"],
-                    template_id="S-2-refi-owner", confidence=0.7,
-                    evidence=[ctx.appraisal.evidence("owner_of_public_record"),
-                              ctx.appraisal.evidence("borrower_name")],
-                ))
+                out.append(_res("S-2", "1", RuleStatus.VERIFY,
+                                message=qc_config.template("S-2-refi-owner"),
+                                fields=["owner_of_public_record", "borrower_name"],
+                                template_id="S-2-refi-owner", confidence=0.7,
+                                evidence=[ctx.appraisal.evidence("owner_of_public_record"),
+                                          ctx.appraisal.evidence("borrower_name")]))
     return out
 
 
-# ---- S-3/S-4 presence (Phase 1) -------------------------------------------
+# ---- S-3 Owner of public record (presence) ---------------------------------
 
 @rule(id="S-3", num="1", section="subject", phase=1, name="Owner of public record present")
 def s3_owner(ctx):
     return H.present(ctx, "S-3", "1", "subject", "owner_of_public_record", label="Owner of Public Record")
 
 
+# ---- S-4 Legal description / APN / taxes / tax year ------------------------
+
+_LEGAL_PLACEHOLDER = re.compile(r"^\s*(see\s+(attached|addendum|exhibit)|n/?a)\b", re.I)
+
+
 @rule(id="S-4a", num="2", section="subject", phase=1, name="Legal description present")
 def s4_legal(ctx):
-    return H.present(ctx, "S-4a", "2", "subject", "legal_description", label="Legal Description")
+    base = H.present(ctx, "S-4a", "2", "subject", "legal_description", label="Legal Description")
+    if base.status != RuleStatus.PASS:
+        return base
+    val = str(ctx.appraisal.value("legal_description") or "").strip()
+    # present but suspiciously short or a deferral placeholder → reviewer confirms
+    if len(val) < 10 or _LEGAL_PLACEHOLDER.match(val):
+        return _res("S-4a", "2", RuleStatus.VERIFY,
+                    message=qc_config.template("S-4-legal", value=val),
+                    fields=["legal_description"], template_id="S-4-legal",
+                    evidence=[ctx.appraisal.evidence("legal_description")], confidence=0.6)
+    return base
 
 
-@rule(id="S-4b", num="3", section="subject", phase=1, name="APN present")
+@rule(id="S-4b", num="3", section="subject", phase=1, name="APN present and plausible")
 def s4_apn(ctx):
-    return H.present(ctx, "S-4b", "3", "subject", "assessors_parcel_number", label="Assessor's Parcel #")
+    base = H.present(ctx, "S-4b", "3", "subject", "assessors_parcel_number", label="Assessor's Parcel #")
+    if base.status != RuleStatus.PASS:
+        return base
+    # state-specific format check (config map; county-level variation is real,
+    # so a non-match is VERIFY, never an automatic FAIL)
+    state = matching.normalize_state(ctx.appraisal.value("state") or "")
+    pattern = (qc_config.subject("apn_formats") or {}).get(state)
+    if pattern:
+        apn = str(ctx.appraisal.value("assessors_parcel_number") or "").strip()
+        if not re.fullmatch(pattern, apn):
+            return _res("S-4b", "3", RuleStatus.VERIFY,
+                        message=qc_config.template("S-4-apn-format", value=apn, state=state),
+                        fields=["assessors_parcel_number"], template_id="S-4-apn-format",
+                        evidence=[ctx.appraisal.evidence("assessors_parcel_number")],
+                        confidence=0.6)
+    return base
 
 
-@rule(id="S-4c", num="5", section="subject", phase=1, name="R.E. taxes no decimals")
+@rule(id="S-4c", num="5", section="subject", phase=1, name="R.E. taxes valid")
 def s4_taxes(ctx):
-    # presence + no-decimal format
     val = ctx.appraisal.value("real_estate_taxes")
     if not val:
         return H.present(ctx, "S-4c", "5", "subject", "real_estate_taxes", label="R.E. Taxes")
     if "." in str(val):
         return H.format_regex(ctx, "S-4c", "5", "subject", "real_estate_taxes",
                               r"^\D*\d{1,3}(,?\d{3})*\D*$", "S-4-taxdecimal", label="R.E. Taxes")
+    # whole number — reasonableness: $0 or an extreme amount is almost always a
+    # data-entry error
+    amt = matching.normalize_currency(val)
+    tax_max = qc_config.semantic("tax_amount_max", 100000)
+    if amt is not None and (amt <= 0 or amt > tax_max):
+        return _res("S-4c", "5", RuleStatus.VERIFY,
+                    message=qc_config.template("S-4-tax-implausible", value=val),
+                    fields=["real_estate_taxes"], template_id="S-4-tax-implausible",
+                    evidence=[ctx.appraisal.evidence("real_estate_taxes")], confidence=0.6)
     return H.present(ctx, "S-4c", "5", "subject", "real_estate_taxes", label="R.E. Taxes")
 
 
-# ---- S-5 Neighborhood name (not blank / not N/A) --------------------------
+def _year_of(text) -> int:
+    m = re.search(r"\b(19|20)\d{2}\b", str(text or ""))
+    return int(m.group(0)) if m else 0
+
+
+@rule(id="S-4d", num="5", section="subject", phase=1, name="Tax year current")
+def s4_tax_year(ctx):
+    tax_year = _year_of(ctx.appraisal.value("tax_year"))
+    eff_year = _year_of(ctx.appraisal.value("effective_date"))
+    ev = [ctx.appraisal.evidence("tax_year"), ctx.appraisal.evidence("effective_date")]
+    if not tax_year or not eff_year:
+        return _res("S-4d", "5", RuleStatus.SKIPPED,
+                    message="tax year / effective date not extracted",
+                    fields=["tax_year", "effective_date"], evidence=ev)
+    window = int(qc_config.semantic("tax_year_window", 2))
+    ok = (eff_year - window) <= tax_year <= eff_year
+    if ok:
+        return _res("S-4d", "5", RuleStatus.PASS, fields=["tax_year"], evidence=ev)
+    status = RuleStatus.FAIL
+    if ctx.appraisal.confidence("tax_year") < ctx.structured_conf:
+        status = RuleStatus.VERIFY
+    return _res("S-4d", "5", status, message=qc_config.template("S-4-taxyear"),
+                fields=["tax_year"], template_id="S-4-taxyear", evidence=ev,
+                confidence=0.8)
+
+
+# ---- S-5 Neighborhood name (not blank / not N/A / not generic) -------------
 
 @rule(id="S-5", num="6", section="subject", phase=1, name="Neighborhood name valid")
 def s5_neighborhood(ctx):
     val = (ctx.appraisal.value("neighborhood_name") or "").strip()
     ev = [ctx.appraisal.evidence("neighborhood_name")]
-    bad = {"", "n/a", "na", "none", "unknown"}
-    if val.lower() in bad:
-        return RuleResult(rule_id="S-5", checklist_num="6", section="subject",
-                          status=RuleStatus.FAIL,
-                          message=qc_config.template("S-5-neighborhood"),
-                          fields_involved=["neighborhood_name"], template_id="S-5-neighborhood",
-                          evidence=ev)
-    return RuleResult(rule_id="S-5", checklist_num="6", section="subject",
-                      status=RuleStatus.PASS, fields_involved=["neighborhood_name"], evidence=ev)
+    bad = {"", "n/a", "na", "none", "unknown", "not applicable"}
+    if val.lower() in bad or (val and len(val) < 3):
+        return _res("S-5", "6", RuleStatus.FAIL,
+                    message=qc_config.template("S-5-neighborhood"),
+                    fields=["neighborhood_name"], template_id="S-5-neighborhood",
+                    evidence=ev)
+    generic = {str(g).lower() for g in (qc_config.subject("neighborhood_generic") or [])}
+    if val.lower() in generic:
+        return _res("S-5", "6", RuleStatus.VERIFY,
+                    message=qc_config.template("S-5-generic", value=val),
+                    fields=["neighborhood_name"], template_id="S-5-generic",
+                    evidence=ev, confidence=0.6)
+    return _res("S-5", "6", RuleStatus.PASS, fields=["neighborhood_name"], evidence=ev)
 
 
-# ---- S-6 Census tract format (XXXX.XX) ------------------------------------
+# ---- S-6 Census tract format + map reference -------------------------------
+
+def _normalize_census(val: str) -> str:
+    """An 11-digit FIPS (state+county+tract) is normalized to the tract's
+    XXXX.XX form before the format check."""
+    s = str(val or "").strip()
+    digits = re.sub(r"\D", "", s)
+    if len(digits) == 11:
+        return f"{int(digits[5:9])}.{digits[9:]}"
+    return s
+
 
 @rule(id="S-6", num="8", section="subject", phase=1, name="Census tract format")
 def s6_census(ctx):
+    raw = ctx.appraisal.value("census_tract")
+    if raw and _normalize_census(raw) != str(raw).strip():
+        norm = _normalize_census(raw)
+        ev = [ctx.appraisal.evidence("census_tract")]
+        ok = bool(re.search(r"^\d{1,4}\.\d{2}$", norm))
+        return _res("S-6", "8", RuleStatus.PASS if ok else RuleStatus.FAIL,
+                    message="" if ok else qc_config.template("S-6-census"),
+                    fields=["census_tract"], evidence=ev,
+                    template_id=None if ok else "S-6-census")
     return H.format_regex(ctx, "S-6", "8", "subject", "census_tract",
                           r"\d{3,4}\.\d{2}", "S-6-census", label="Census Tract")
 
 
-# ---- S-7 Occupancy status marked (checkbox-derived) ------------------------
+@rule(id="S-6b", num="7", section="subject", phase=1, name="Map reference numeric")
+def s6_mapref(ctx):
+    # numeric with common separators ("31-4", "470-J7", a bare number); letters
+    # mixed with digits are typical of map grids, so only a fully non-numeric
+    # value fails the UAD numeric expectation
+    return H.format_regex(ctx, "S-6b", "7", "subject", "map_reference",
+                          r"\d", "S-6-mapref", label="Map Reference")
+
+
+# ---- S-7 Occupancy status + conditional completeness ------------------------
 
 @rule(id="S-7", num="9", section="subject", phase=1, name="Occupancy status marked")
 def s7_occupancy(ctx):
-    # occupant_status is read from the subject Owner/Tenant/Vacant checkbox
-    # (drawing detection, ~95% on digital URARs); blank => genuinely unmarked.
-    return H.present(ctx, "S-7", "9", "subject", "occupant_status",
-                     template_id="S-7-occupant", label="Occupancy")
+    out = [H.present(ctx, "S-7", "9", "subject", "occupant_status",
+                     template_id="S-7-occupant", label="Occupancy")]
+    occ = str(ctx.appraisal.value("occupant_status") or "").strip().lower()
+    if occ == "tenant":
+        # lease terms must accompany a tenant occupancy
+        if not (ctx.appraisal.value("lease_dates") or ctx.appraisal.value("rental_amount")):
+            out.append(_res("S-7", "9", RuleStatus.VERIFY,
+                            message=qc_config.template("S-7-tenant"),
+                            fields=["occupant_status", "lease_dates", "rental_amount"],
+                            template_id="S-7-tenant", confidence=0.6,
+                            evidence=[ctx.appraisal.evidence("occupant_status")]))
+    elif occ == "vacant":
+        if not ctx.appraisal.value("utilities_on"):
+            out.append(_res("S-7", "9", RuleStatus.VERIFY,
+                            message=qc_config.template("S-7-vacant"),
+                            fields=["occupant_status", "utilities_on"],
+                            template_id="S-7-vacant", confidence=0.6,
+                            evidence=[ctx.appraisal.evidence("occupant_status")]))
+    return out
 
 
 # ---- S-11 Property Rights Appraised marked (checkbox-derived) ---------------
@@ -144,11 +300,23 @@ def s11_rights(ctx):
                      template_id="S-11-rights", label="Property Rights Appraised")
 
 
-# ---- S-8 Special assessments (blank not allowed; 0 if none) ----------------
+# ---- S-8 Special assessments (blank not allowed; >0 needs explanation) ------
 
-@rule(id="S-8", num="10", section="subject", phase=1, name="Special assessments not blank")
+@rule(id="S-8", num="10", section="subject", phase=1, name="Special assessments valid")
 def s8_assessment(ctx):
-    return H.present(ctx, "S-8", "10", "subject", "special_assessments", label="Special Assessments")
+    base = H.present(ctx, "S-8", "10", "subject", "special_assessments",
+                     label="Special Assessments")
+    if base.status != RuleStatus.PASS:
+        return base
+    amt = matching.normalize_currency(ctx.appraisal.value("special_assessments"))
+    if amt and amt > 0 and not ctx.appraisal.value("special_assessments_comment"):
+        # a non-zero assessment needs an explanation of what it is for
+        return _res("S-8", "10", RuleStatus.VERIFY,
+                    message=qc_config.template("S-8-assessment", value=int(amt)),
+                    fields=["special_assessments", "special_assessments_comment"],
+                    template_id="S-8-assessment", confidence=0.6,
+                    evidence=[ctx.appraisal.evidence("special_assessments")])
+    return base
 
 
 # ---- S-9 PUD/HOA (HOA dues > 0 ⇒ PUD must be marked) ----------------------
@@ -156,30 +324,28 @@ def s8_assessment(ctx):
 @rule(id="S-9", num="11", section="subject", phase=3, name="HOA dues imply PUD marked")
 def s9_pud(ctx):
     hoa = ctx.appraisal.value("hoa_dues")
-    from app.qc import matching
     amt = matching.normalize_currency(hoa)
     ev = [ctx.appraisal.evidence("hoa_dues"), ctx.appraisal.evidence("is_pud_checked")]
     if not amt or amt <= 0:
-        return RuleResult(rule_id="S-9", checklist_num="11", section="subject",
-                          status=RuleStatus.PASS, fields_involved=["hoa_dues"], evidence=ev)
+        return _res("S-9", "11", RuleStatus.PASS, fields=["hoa_dues"], evidence=ev)
     pud = str(ctx.appraisal.value("is_pud_checked") or "").lower() in {"true", "yes", "1", "x"}
     if pud:
-        return RuleResult(rule_id="S-9", checklist_num="11", section="subject",
-                          status=RuleStatus.PASS, fields_involved=["hoa_dues", "is_pud_checked"], evidence=ev)
+        return _res("S-9", "11", RuleStatus.PASS,
+                    fields=["hoa_dues", "is_pud_checked"], evidence=ev)
     status = RuleStatus.VERIFY if ctx.appraisal.confidence("is_pud_checked") < ctx.checkbox_conf else RuleStatus.FAIL
-    return RuleResult(rule_id="S-9", checklist_num="11", section="subject",
-                      status=status,
-                      message=qc_config.template("S-9-pud", value=int(amt)),
-                      fields_involved=["hoa_dues", "is_pud_checked"],
-                      template_id="S-9-pud", evidence=ev, confidence=0.7)
+    return _res("S-9", "11", status,
+                message=qc_config.template("S-9-pud", value=int(amt)),
+                fields=["hoa_dues", "is_pud_checked"],
+                template_id="S-9-pud", evidence=ev, confidence=0.7)
 
 
 # ---- S-10 Lender/client name + address (cross-document) -------------------
 
 @rule(id="S-10a", num="E", section="subject", phase=2, name="Lender name matches order form")
 def s10_lender_name(ctx):
+    # company normalizer drops Inc/LLC/Corp/NA designators before comparing
     return H.cross_doc_match(ctx, "S-10a", "E", "subject", "lender_name", "S-10-lender",
-                             authority="engagement", kind="generic", label="lender name")
+                             authority="engagement", kind="company", label="lender name")
 
 
 @rule(id="S-10b", num="F", section="subject", phase=2, name="Lender address matches order form")
@@ -188,29 +354,42 @@ def s10_lender_addr(ctx):
     # document IS present but the lender address couldn't be read, that's an
     # extraction gap → VERIFY (not a silent SKIPPED that reads as a pass).
     if not ctx.has_engagement:
-        return RuleResult(rule_id="S-10b", checklist_num="F", section="subject",
-                          status=RuleStatus.SKIPPED, message="engagement/order not available")
+        return _res("S-10b", "F", RuleStatus.SKIPPED, message="engagement/order not available")
     if not ctx.engagement.value("lender_address"):
-        return RuleResult(rule_id="S-10b", checklist_num="F", section="subject",
-                          status=RuleStatus.VERIFY,
-                          message="The lender/client address could not be read from the order; please verify it matches the appraisal.",
-                          fields_involved=["lender_address"],
-                          evidence=[ctx.engagement.evidence("lender_address")], confidence=0.5)
+        return _res("S-10b", "F", RuleStatus.VERIFY,
+                    message="The lender/client address could not be read from the order; please verify it matches the appraisal.",
+                    fields=["lender_address"],
+                    evidence=[ctx.engagement.evidence("lender_address")], confidence=0.5)
     return H.cross_doc_match(ctx, "S-10b", "F", "subject", "lender_address", "S-10-lender-addr",
                              authority="engagement", kind="address", label="lender address")
 
 
-# ---- S-12 Prior listing data source (when offered=No, data source required) --
+# ---- S-12 Prior listing data source + listing details -----------------------
+
+_TRUTHY = {"true", "yes", "1", "x", "checked"}
+
 
 @rule(id="S-12", num="13", section="subject", phase=1, name="Prior-listing data source present")
 def s12_datasource(ctx):
-    offered = str(ctx.appraisal.value("offered_for_sale_12mo") or "").lower()
+    offered = str(ctx.appraisal.value("offered_for_sale_12mo") or "").strip().lower()
     ev = [ctx.appraisal.evidence("offered_for_sale_12mo"), ctx.appraisal.evidence("data_source")]
     ds = ctx.appraisal.value("data_source")
+    out = []
     if ds and str(ds).strip():
-        return RuleResult(rule_id="S-12", checklist_num="13", section="subject",
-                          status=RuleStatus.PASS, fields_involved=["data_source"], evidence=ev)
-    return RuleResult(rule_id="S-12", checklist_num="13", section="subject",
-                      status=RuleStatus.FAIL,
-                      message=qc_config.template("S-12-datasource"),
-                      fields_involved=["data_source"], template_id="S-12-datasource", evidence=ev)
+        out.append(_res("S-12", "13", RuleStatus.PASS, fields=["data_source"], evidence=ev))
+    else:
+        out.append(_res("S-12", "13", RuleStatus.FAIL,
+                        message=qc_config.template("S-12-datasource"),
+                        fields=["data_source"], template_id="S-12-datasource", evidence=ev))
+    # offered=Yes ⇒ the prior listing details (MLS # and DOM) must be reported
+    if offered in _TRUTHY:
+        missing = [label for field, label in
+                   (("mls_number", "MLS listing number"), ("days_on_market", "DOM"))
+                   if not ctx.appraisal.value(field)]
+        if missing:
+            out.append(_res("S-12", "13", RuleStatus.VERIFY,
+                            message=qc_config.template("S-12-listing", value=", ".join(missing)),
+                            fields=["mls_number", "days_on_market"],
+                            template_id="S-12-listing", confidence=0.6,
+                            evidence=[ctx.appraisal.evidence("offered_for_sale_12mo")]))
+    return out

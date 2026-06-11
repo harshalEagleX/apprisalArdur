@@ -18,6 +18,9 @@ numeric:
 # Per-rule semantic thresholds drawn from the checklist text.
 semantic:
   value_vs_contract_pct: 20.0      # appraised value vs contract price hold band
+  value_contract_comment_pct: 5.0  # value vs contract price variance requiring commentary (C-1)
+  tax_year_window: 2               # tax year must be within N years of the effective date
+  tax_amount_max: 100000           # R.E. taxes above this are implausible → VERIFY
   predominant_price_pct: 10.0      # market value vs predominant price comment band
   listing_price_pct: 3.0           # listing vs opinion of value comment band
   net_adjustment_pct: 15.0         # comp net adjustment cap
@@ -25,3 +28,15 @@ semantic:
   comp_resale_window_months: 36    # subject/comp prior-sale look-back (resale/flip flag)
   comp_sale_window_months: 12      # comparable sale recency
   remaining_economic_life_min: 30  # FHA/VA minimum years
+
+# Subject-section content validation (S-4 / S-5). Editable per experience (P-4).
+subject:
+  # Neighborhood names that are technically present but not meaningfully
+  # descriptive → VERIFY (a blank/blocked value is a FAIL).
+  neighborhood_generic: [residential, suburban, urban, rural, subdivision]
+  # APN format patterns by state (regex, full-match). County-level variation is
+  # real, so a non-match routes to VERIFY (never FAIL); add states as observed.
+  apn_formats:
+    TX: '\d{3,5}([-.]\d{2,4}){2,4}'
+    CA: '\d{2,4}[-.]\d{2,4}[-.]\d{2,3}'
+    FL: '\d{2}[-.]?\d{2}[-.]?\d{2}[-.]?[\dA-Z.-]{4,}'

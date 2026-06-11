@@ -1,14 +1,18 @@
 """
-Contract section rules (C-1 .. C-4 / checklist 14-18).
+Contract section rules (C-1 .. C-5 / checklist 14-18).
 
 Applies only to PURCHASE transactions. For refinance, the section must be blank
 (C-1 fires a FAIL if populated). Contract price/date/concessions are matched
-against the sales contract document.
+against the sales contract document; the personal-property check (C-5) pairs the
+contract's chattel scan with an LLM read of the appraiser's commentary.
 """
 
 from __future__ import annotations
 
+import re
+
 from app.qc import helpers as H
+from app.qc import matching
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.registry import rule
@@ -16,6 +20,14 @@ from app.qc.result import RuleResult, RuleStatus
 
 _CONTRACT_FIELDS = ["contract_price", "contract_date", "did_analyze_contract",
                     "has_financial_assistance", "financial_assistance_amount"]
+
+_TRUTHY = {"true", "yes", "1", "x", "checked"}
+_FALSY = {"false", "no", "0", "unchecked"}
+
+# UAD sale-type vocabulary the contract analysis must identify (C-1).
+_SALE_TYPES = re.compile(
+    r"(arm'?s[\s-]*length|non[\s-]*arm'?s[\s-]*length|reo\b|short\s*sale|"
+    r"court[\s-]*ordered|estate\s*sale|foreclosure)", re.I)
 
 
 def _is_purchase(ctx: QCContext) -> bool:
@@ -26,28 +38,70 @@ def _is_refi(ctx: QCContext) -> bool:
     return ctx.transaction_type == "refinance"
 
 
-# ---- C-1 contract analysis / refinance-must-be-blank ----------------------
+def _res(rule_id, num, status, message="", fields=None, evidence=None,
+         template_id=None, confidence=1.0) -> RuleResult:
+    return RuleResult(rule_id=rule_id, checklist_num=num, section="contract",
+                      status=status, message=message, fields_involved=fields or [],
+                      evidence=evidence or [], template_id=template_id,
+                      confidence=confidence)
+
+
+# ---- C-1 contract analysis / sale type / value variance / refi-blank -------
 
 @rule(id="C-1", num="14", section="contract", phase=2,
-      name="Contract section blank on refinance / analyzed on purchase")
+      name="Contract analyzed (purchase) / section blank (refinance)")
 def c1_analyze(ctx: QCContext):
     if _is_refi(ctx):
         populated = [f for f in _CONTRACT_FIELDS if ctx.appraisal.value(f)]
         if populated:
-            return RuleResult(rule_id="C-1", checklist_num="14", section="contract",
-                              status=RuleStatus.FAIL,
-                              message=qc_config.template("C-1-refi-blank"),
-                              fields_involved=populated, template_id="C-1-refi-blank",
-                              evidence=[ctx.appraisal.evidence(f) for f in populated[:3]])
-        return RuleResult(rule_id="C-1", checklist_num="14", section="contract",
-                          status=RuleStatus.PASS, fields_involved=["assignment_type"])
-    if _is_purchase(ctx):
-        # contract must be analyzed
-        return H.boolean_is(ctx, "C-1", "14", "contract", "did_analyze_contract",
-                            expected=True, template_id="C-1-refi-blank", label="Did analyze contract")
-    return RuleResult(rule_id="C-1", checklist_num="14", section="contract",
-                      status=RuleStatus.NOT_APPLICABLE,
-                      message="Transaction type not purchase/refinance.")
+            return _res("C-1", "14", RuleStatus.FAIL,
+                        message=qc_config.template("C-1-refi-blank"),
+                        fields=populated, template_id="C-1-refi-blank",
+                        evidence=[ctx.appraisal.evidence(f) for f in populated[:3]])
+        return _res("C-1", "14", RuleStatus.PASS, fields=["assignment_type"])
+    if not _is_purchase(ctx):
+        return _res("C-1", "14", RuleStatus.NOT_APPLICABLE,
+                    message="Transaction type not purchase/refinance.")
+
+    out = [H.boolean_is(ctx, "C-1", "14", "contract", "did_analyze_contract",
+                        expected=True, template_id="C-1-analyze",
+                        label="Did analyze contract")]
+
+    # sale type must be identified (UAD: Arms-Length / REO / Short Sale / ...)
+    sale_type = ctx.appraisal.value("sale_type")
+    commentary = ctx.appraisal.value("contract_analysis_comment") or ""
+    ev = [ctx.appraisal.evidence("sale_type"),
+          ctx.appraisal.evidence("contract_analysis_comment")]
+    if sale_type or _SALE_TYPES.search(commentary):
+        out.append(_res("C-1", "14", RuleStatus.PASS,
+                        fields=["sale_type"], evidence=ev))
+    elif commentary.strip():
+        # an analysis is present but never identifies the sale type
+        out.append(_res("C-1", "14", RuleStatus.FAIL,
+                        message=qc_config.template("C-1-saletype"),
+                        fields=["sale_type"], template_id="C-1-saletype", evidence=ev))
+    else:
+        # neither extracted — extraction gap, a reviewer confirms
+        out.append(_res("C-1", "14", RuleStatus.VERIFY,
+                        message=qc_config.template("C-1-saletype"),
+                        fields=["sale_type"], template_id="C-1-saletype",
+                        evidence=ev, confidence=0.5))
+
+    # appraised value vs contract price variance beyond the comment band
+    value = matching.normalize_currency(ctx.appraisal.value("appraised_value"))
+    price = matching.normalize_currency(ctx.appraisal.value("contract_price"))
+    pct = qc_config.semantic("value_contract_comment_pct", 5.0)
+    if value and price and price > 0:
+        variance = abs(value - price) / price * 100.0
+        if variance > pct:
+            out.append(_res("C-1", "14", RuleStatus.VERIFY,
+                            message=qc_config.template("C-1-variance", a=int(value),
+                                                       b=int(price), pct=int(pct)),
+                            fields=["appraised_value", "contract_price"],
+                            template_id="C-1-variance", confidence=0.7,
+                            evidence=[ctx.appraisal.evidence("appraised_value"),
+                                      ctx.appraisal.evidence("contract_price")]))
+    return out
 
 
 # ---- C-2 contract price + date (cross-document vs contract) ---------------
@@ -71,46 +125,138 @@ def c2_date(ctx: QCContext):
                              authority=auth, kind="generic", label="contract date")
 
 
-# ---- C-3 owner-of-record data source --------------------------------------
+# ---- C-3 owner-of-record data source + No→commentary ------------------------
 
 @rule(id="C-3", num="17", section="contract", phase=1,
       applies_when=_is_purchase, name="Owner-of-record data source present")
 def c3_datasource(ctx: QCContext):
-    seller_owner = ctx.appraisal.value("is_seller_owner_of_record")
+    seller_owner = str(ctx.appraisal.value("is_seller_owner_of_record") or "").strip().lower()
     ds = ctx.appraisal.value("owner_record_data_source")
     ev = [ctx.appraisal.evidence("is_seller_owner_of_record"),
           ctx.appraisal.evidence("owner_record_data_source")]
+    out = []
     if ds and str(ds).strip():
-        return RuleResult(rule_id="C-3", checklist_num="17", section="contract",
-                          status=RuleStatus.PASS, fields_involved=["owner_record_data_source"], evidence=ev)
-    return RuleResult(rule_id="C-3", checklist_num="17", section="contract",
-                      status=RuleStatus.FAIL,
-                      message=qc_config.template("C-3-datasource"),
-                      fields_involved=["owner_record_data_source"],
-                      template_id="C-3-datasource", evidence=ev)
+        out.append(_res("C-3", "17", RuleStatus.PASS,
+                        fields=["owner_record_data_source"], evidence=ev))
+    else:
+        out.append(_res("C-3", "17", RuleStatus.FAIL,
+                        message=qc_config.template("C-3-datasource"),
+                        fields=["owner_record_data_source"],
+                        template_id="C-3-datasource", evidence=ev))
+    # seller is NOT the owner of record → the circumstances need commentary
+    # (e.g. contract assignment, estate sale, builder sale)
+    if seller_owner in _FALSY:
+        commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
+        if not commentary:
+            out.append(_res("C-3", "17", RuleStatus.VERIFY,
+                            message=qc_config.template("C-3-comment"),
+                            fields=["is_seller_owner_of_record"],
+                            template_id="C-3-comment", confidence=0.6, evidence=ev))
+    return out
 
 
-# ---- C-4 financial assistance / concessions (cross-document) --------------
+# ---- C-4 financial assistance / concessions --------------------------------
 
 @rule(id="C-4", num="18", section="contract", phase=2,
-      applies_when=_is_purchase, name="Concessions match purchase agreement")
+      applies_when=_is_purchase, name="Concessions consistent and match purchase agreement")
 def c4_concessions(ctx: QCContext):
-    report_amt = ctx.appraisal.value("financial_assistance_amount") or ctx.appraisal.value("seller_concessions")
+    has = str(ctx.appraisal.value("has_financial_assistance") or "").strip().lower()
+    report_amt = (ctx.appraisal.value("financial_assistance_amount")
+                  or ctx.appraisal.value("seller_concessions"))
+    amt = matching.normalize_currency(report_amt)
+    ev_box = [ctx.appraisal.evidence("has_financial_assistance"),
+              ctx.appraisal.evidence("financial_assistance_amount")]
+    out = []
+
+    # checkbox/internal consistency before any cross-document comparison
+    if not has:
+        out.append(_res("C-4", "18", RuleStatus.VERIFY,
+                        message=qc_config.template("C-4-blank"),
+                        fields=["has_financial_assistance"],
+                        template_id="C-4-blank", confidence=0.5, evidence=ev_box))
+    elif has in _FALSY and amt and amt > 0:
+        # logical contradiction: No checked but an amount is reported
+        out.append(_res("C-4", "18", RuleStatus.FAIL,
+                        message=qc_config.template("C-4-contradict", value=int(amt)),
+                        fields=["has_financial_assistance", "financial_assistance_amount"],
+                        template_id="C-4-contradict", evidence=ev_box))
+    elif has in _TRUTHY:
+        desc = ctx.appraisal.value("financial_assistance_description")
+        if not amt or not desc:
+            status = RuleStatus.FAIL if not amt else RuleStatus.VERIFY
+            out.append(_res("C-4", "18", status,
+                            message=qc_config.template("C-4-desc"),
+                            fields=["financial_assistance_amount",
+                                    "financial_assistance_description"],
+                            template_id="C-4-desc", confidence=0.7, evidence=ev_box))
+
+    # cross-document: report amount vs purchase-agreement amount
     contract_amt = ctx.contract.value("concessions_amount")
     ev = [ctx.appraisal.evidence("financial_assistance_amount"),
           ctx.contract.evidence("concessions_amount")]
+    if not ctx.has_contract:
+        out.append(_res("C-4", "18", RuleStatus.SKIPPED,
+                        message="purchase contract not available",
+                        fields=["concessions_amount"], evidence=ev))
+        return out
     if contract_amt is None:
-        return RuleResult(rule_id="C-4", checklist_num="18", section="contract",
-                          status=RuleStatus.VERIFY,
-                          message="The concession amount could not be read from the contract; please verify it matches the appraisal.",
-                          fields_involved=["concessions_amount"], evidence=ev, confidence=0.5)
-    from app.qc import matching
+        # nothing labelled a concession in the contract; only flag when the
+        # report claims one
+        if amt and amt > 0:
+            out.append(_res("C-4", "18", RuleStatus.VERIFY,
+                            message="The concession amount could not be read from the contract; please verify it matches the appraisal.",
+                            fields=["concessions_amount"], evidence=ev, confidence=0.5))
+        else:
+            out.append(_res("C-4", "18", RuleStatus.PASS,
+                            fields=["financial_assistance_amount"], evidence=ev))
+        return out
     mr = matching.match_currency(report_amt, contract_amt)
     if mr.verdict == "match":
-        return RuleResult(rule_id="C-4", checklist_num="18", section="contract",
-                          status=RuleStatus.PASS, fields_involved=["financial_assistance_amount"], evidence=ev)
-    return RuleResult(rule_id="C-4", checklist_num="18", section="contract",
-                      status=RuleStatus.VERIFY,
-                      message=qc_config.template("C-4-concession", a=report_amt or "0", b=contract_amt),
-                      fields_involved=["financial_assistance_amount", "concessions_amount"],
-                      template_id="C-4-concession", evidence=ev, confidence=0.6)
+        out.append(_res("C-4", "18", RuleStatus.PASS,
+                        fields=["financial_assistance_amount"], evidence=ev))
+    else:
+        out.append(_res("C-4", "18", RuleStatus.VERIFY,
+                        message=qc_config.template("C-4-concession",
+                                                   a=report_amt or "0", b=contract_amt),
+                        fields=["financial_assistance_amount", "concessions_amount"],
+                        template_id="C-4-concession", evidence=ev, confidence=0.6))
+    return out
+
+
+# ---- C-5 personal property (contract chattel → commentary required) --------
+
+@rule(id="C-5", num="18", section="contract", phase=3,
+      applies_when=_is_purchase, name="Personal property addressed")
+def c5_personal_property(ctx: QCContext):
+    items = (ctx.contract.value("personal_property_items") or "").strip()
+    if not ctx.has_contract or not items:
+        return _res("C-5", "18", RuleStatus.NOT_APPLICABLE,
+                    message="No personal property identified in the purchase contract.")
+    commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
+    ev = [ctx.contract.evidence("personal_property_items"),
+          ctx.appraisal.evidence("contract_analysis_comment")]
+    if commentary:
+        addressed = None
+        try:
+            from app.extraction.llm_groq import assess_text
+            addressed = assess_text(
+                commentary,
+                "Does this appraisal contract-analysis commentary address whether the "
+                f"personal property items in the sale ({items}) contribute to or were "
+                "excluded from the appraised value?",
+            )
+        except Exception:
+            addressed = None
+        if addressed:
+            return _res("C-5", "18", RuleStatus.PASS,
+                        fields=["personal_property_items"], evidence=ev)
+        return _res("C-5", "18", RuleStatus.VERIFY,
+                    message=qc_config.template("C-5-personal", value=items),
+                    fields=["personal_property_items", "contract_analysis_comment"],
+                    template_id="C-5-personal", confidence=0.6, evidence=ev)
+    # no commentary extracted at all → reviewer confirms (an extraction gap is
+    # indistinguishable from genuinely missing commentary)
+    return _res("C-5", "18", RuleStatus.VERIFY,
+                message=qc_config.template("C-5-personal", value=items),
+                fields=["personal_property_items"], template_id="C-5-personal",
+                confidence=0.5, evidence=ev)

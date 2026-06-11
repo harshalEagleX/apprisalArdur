@@ -48,6 +48,10 @@ class QCConfig:
     def semantic(self, key: str, default: float = 0.0) -> float:
         return self._thresholds.get("semantic", {}).get(key, default)
 
+    def subject(self, key: str, default=None):
+        """Subject-section content config (generic names, APN format map)."""
+        return self._thresholds.get("subject", {}).get(key, default)
+
     # -- templates --------------------------------------------------------
     def template(self, template_id: str, **kwargs) -> str:
         """Return the filled rejection template; falls back to the id if missing."""
