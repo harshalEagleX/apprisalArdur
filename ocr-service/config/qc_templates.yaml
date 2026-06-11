@@ -59,6 +59,13 @@ N-4-landuse:  "The sum of present land use in the neighborhood section should al
 N-4-other:    "In the Present land use % if 'Other' is given a value then a description is needed."
 N-5-boundary: "{field} boundary is missing under Neighborhood Boundaries, please revise."
 N-5-delineation: "Neighborhood Boundaries does not contain boundary delineations. The Neighborhood Boundaries must be clearly delineated using 'North', 'South', 'East' and 'West'."
+N-5-abbrev: "Neighborhood Boundaries must use the spelled-out directions 'North', 'South', 'East' and 'West' — not single-letter abbreviations. Please revise."
+N-5-maponly: "Neighborhood Boundaries must be described in the report itself; a reference to the location map alone is not acceptable. Please revise."
+N-1-landuse-x: "The Built-Up classification ({a}) appears inconsistent with the Present Land Use ({b}% one-unit residential); please verify."
+N-2-mca: "The neighborhood trend indicator ({a}) appears inconsistent with the 1004MC overall trend ({b}); please reconcile or comment."
+N-3-predominant: "The predominant {field} ({value}) is outside the stated Low-High range; please revise."
+N-3-valuepred: "The opinion of market value (${a}) differs from the predominant neighborhood price (${b}) by more than {pct}%; please comment on the over- or under-improvement."
+N-3-comprange: "Comparable sale price(s) ({value}) fall outside the stated one-unit neighborhood price range; please verify the range or comment."
 
 # ---- Site ----
 ST-5-nozoning: "Zoning Compliance is marked 'No Zoning', please comment if the subject can be rebuilt if destroyed."
@@ -140,6 +147,14 @@ SIG-amc-wrong: "In the signature card, please update the AMC name: {value}."
 
 # ---- Improvements ----
 I-1-gendesc:  "Please complete the General Description (Design/Style and Year Built) in the improvements section."
+I-1-fields:   "Please complete the General Description in the improvements section ({value} missing)."
+I-1-age:      "The Effective Age ({a}) exceeds the Actual Age ({b}, from the year built); please revise."
+I-2-foundation: "Please complete the Foundation description in the improvements section."
+I-34-materials: "Please complete the materials/condition descriptions in the improvements section ({value} missing); fields that do not apply must state 'None', not be left blank."
+I-9-grid:     "The Condition rating in the improvements section ({a}) does not match the sales grid subject column ({b}); please reconcile."
+I-9-effage:   "A {value} condition rating with an effective age equal to the actual age appears inconsistent; please verify the effective age."
+I-10-adverse: "Physical deficiencies or adverse conditions affecting livability are indicated; please confirm the described items genuinely affect livability and are addressed with commentary."
+I-12-addition: "The report commentary references an addition or conversion ({value}); please confirm the permit status, conformity with the original structure, and marketability impact are addressed."
 I-7-roomcount: "Please complete the Above Grade room count (Total Rooms, Bedrooms, Baths, GLA) in the improvements section."
 I-9-condition: "Condition of the Property must be UAD compliant (C1-C6), match the photos/commentary, and be supported by the effective age."
 I-Q-quality:  "Quality of Construction must be UAD compliant (Q1-Q6)."
@@ -148,6 +163,12 @@ I-11-conform: "The property does not conform to the neighborhood; please provide
 # ---- Site (additional) ----
 ST-2-area:    "Site Area must include a unit designation: 'sf' for sites under 1 acre, 'ac' for 1 acre or more."
 ST-7-utilities: "Utilities (Gas and Electricity) checkboxes should be marked in the site section; the description field cannot state None or N/A."
+ST-1-dims:    "Site Dimensions must contain the actual dimensions; for an irregular site, please include a plat map with the subject clearly marked."
+ST-3-shape:   "Please provide the site Shape; for an irregular shape, include a plat map with the subject clearly marked."
+ST-4-view:    "The subject View must be UAD compliant (rating N/B/A followed by the view factor, e.g. 'N;Res')."
+ST-4-grid:    "The subject View in the site section ({a}) does not match the sales grid subject column ({b}); please reconcile."
+ST-8-femadata: "The FEMA flood data (zone, map number and map date) must be completed in the site section regardless of flood-zone status."
+ST-10-adverse: "Adverse site conditions or external factors are indicated; please provide commentary describing the condition and its effect on value and marketability."
 
 # ---- Reconciliation / Cost (additional) ----
 CA-2-life:    "Estimated Remaining Economic Life must be at least 30 years for FHA/VA, or explain why the subject does not meet the minimum."

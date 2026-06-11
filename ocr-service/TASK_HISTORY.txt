@@ -1083,3 +1083,48 @@ MEASURED — 4 uploads/sort transactions, HEAD baseline vs new (same docs):
     - contract_analysis_comment narrative extraction is weak → C-1 sale-type and
       C-5 mostly route to VERIFY instead of PASS/FAIL; positional narrative
       extraction (like SCA-14) would sharpen both.
+
+NEIGHBORHOOD / SITE / IMPROVEMENTS DEEP PASS (MIRA spec N-1..N-7, ST-1..ST-10, I-1..I-12)
+[x] N-1: + Built-Up vs land-use cross-validation (>=subject.builtup_residential_pct
+    one-unit with "Under 25%" built-up → VERIFY, template N-1-landuse-x).
+[x] NEW N-2 (num 20): trend groups (property_values/demand_supply/marketing_time)
+    split from N-1 + 1004MC consistency — page-1 trend direction vs
+    mca_trend_median_sale_price/total_sales direction mismatch → VERIFY (N-2-mca).
+[x] N-3 expanded: predominant price AND age must sit in [low, high]
+    (N-3-predominant); comp sale prices vs the stated range, scale-tolerant —
+    the form prints $(000)s but extraction may return dollars (N-3-comprange);
+    opinion of value vs predominant > predominant_price_pct (10%) → N-3-valuepred.
+[x] N-4: + non-zero Other land use → description VERIFY (verbatim N-4-other).
+[x] N-5: + map-only boundaries ("See location map") → FAIL (N-5-maponly);
+    single-letter N:/S:/E:/W: labels → VERIFY (N-5-abbrev).
+[x] NEW ST-1/ST-3: dimensions must be measurements (50 x 100); irregular →
+    plat-map VERIFY. Both gated NOT_APPLICABLE on 1073/1025 (condo/multi forms
+    have no Dimensions/Shape — measured noise on #2321525470 before gating).
+[x] ST-2: + unit correctness (>=43,560 sf should be acres; fractional/huge "ac"
+    values flagged).
+[x] NEW ST-4: UAD view format ^[NBA];factor + cross-check vs subject_grid_view.
+[x] ST-7: + private well/septic cascade (ST-7-wellseptic verbatim template).
+[x] ST-8: + FEMA zone/map-date completeness regardless of flood status
+    (ST-8-femadata); A/V-zone marketability VERIFY unchanged.
+[x] NEW ST-10: adverse site conditions Yes/unreadable → VERIFY (ST-10-adverse).
+[x] I-1: full completeness (units/stories/type/style/year built/effective age,
+    naming the missing fields, I-1-fields) + effective age > actual age → FAIL
+    (I-1-age, confidence-gated).
+[x] NEW I-2 foundation + I-34 materials presence (VERIFY-grade).
+[x] I-9: + condition vs subject_grid_condition_rating mismatch → FAIL (I-9-grid);
+    C1-C3 with effective age >= actual age (>5y) → VERIFY (I-9-effage).
+[x] NEW I-10: adverse livability conditions cascade.
+[x] NEW I-12: addition/conversion keyword trigger over extracted narratives —
+    fires ONLY on a keyword hit, silence is PASS (zero ambient noise).
+[x] Deliberately NOT implemented (no extracted inputs; would VERIFY every report):
+    I-5 utilities-at-inspection, I-6 appliance operation (FHA), I-8 additional
+    features, I-13 security bars, ST-9 utilities-typical, N-2 time-adjustment
+    cross-check vs grid, ST-6 four-criteria HBU text — extraction work first.
+[x] MEASURED (4 sort txns, prior pass → this pass):
+    #427 P112 F3 V16 → P121 F3 V17 (new ST-4 grid-view + ST-7 finding; I-9
+    format FAIL pre-existing); #470 P135 F2 V35 → P140 F2 V40 before the
+    1073 gate (ST-1/ST-3 noise now N/A); #505 P181 F2 V22 → P188 F2 V26
+    (N-3-valuepred caught value $380k vs predominant ~$525k; No-Zoning
+    rebuild ask); #530 P23 F9 V38 → P24 F9 V46 (honest gaps, 0 SKIPPED).
+    Unit tests: 27 new (test_nsi_rules.py); suite green except the known
+    gemini-key env test.

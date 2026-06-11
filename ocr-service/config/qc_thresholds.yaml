@@ -31,6 +31,9 @@ semantic:
 
 # Subject-section content validation (S-4 / S-5). Editable per experience (P-4).
 subject:
+  # one-unit land use at/above this % makes an "Under 25%" built-up marking
+  # contradictory (N-1 cross-validation)
+  builtup_residential_pct: 75
   # Neighborhood names that are technically present but not meaningfully
   # descriptive → VERIFY (a blank/blocked value is a FAIL).
   neighborhood_generic: [residential, suburban, urban, rural, subdivision]
