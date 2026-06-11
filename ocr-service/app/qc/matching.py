@@ -250,6 +250,33 @@ def match_name_containment(
     return MatchResult(score, "mismatch", " ".join(req), " ".join(cand))
 
 
+_DATE_RE = re.compile(r"(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})")
+
+
+def parse_date_tuple(text) -> Optional[tuple]:
+    """(year, month, day) from a M/D/Y-style string; None when unparseable."""
+    m = _DATE_RE.search(str(text or ""))
+    if not m:
+        return None
+    mm, dd, yy = (int(x) for x in m.groups())
+    if yy < 100:
+        yy += 2000
+    if not (1 <= mm <= 12 and 1 <= dd <= 31 and 1900 <= yy <= 2099):
+        return None
+    return (yy, mm, dd)
+
+
+def match_date(a, b) -> MatchResult:
+    """Exact-day date equality. Dates are identifiers, not fuzzy strings —
+    Jaro-Winkler would call 04/27/2026 and 04/29/2026 a match. Unparseable on
+    either side → review (the matcher cannot judge)."""
+    ta, tb = parse_date_tuple(a), parse_date_tuple(b)
+    if ta is None or tb is None:
+        return MatchResult(0.0, "review", str(a), str(b))
+    ok = ta == tb
+    return MatchResult(1.0 if ok else 0.0, "match" if ok else "mismatch", str(a), str(b))
+
+
 def match_currency(a, b, tolerance: float = 0.0) -> MatchResult:
     """Numeric match after stripping $ and commas. Exact unless tolerance given."""
     va, vb = normalize_currency(a), normalize_currency(b)

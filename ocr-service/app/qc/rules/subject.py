@@ -70,8 +70,9 @@ def s2_borrower(ctx: QCContext):
     appr_name = ctx.appraisal.value("borrower_name")
     ev = [ctx.appraisal.evidence("borrower_name"), ctx.engagement.evidence("borrower_name")]
     if not ctx.has_engagement:
-        out.append(_res("S-2", "D", RuleStatus.SKIPPED,
-                        message="engagement/order not available", fields=["borrower_name"]))
+        out.append(_res("S-2", "D", RuleStatus.NOT_APPLICABLE,
+                        message="Engagement letter / order form not available.",
+                        fields=["borrower_name"]))
     elif not eng_name or not appr_name:
         out.append(_res("S-2", "D", RuleStatus.VERIFY,
                         message=qc_config.template("S-2-coborrower", value=eng_name or appr_name or ""),
@@ -102,6 +103,24 @@ def s2_borrower(ctx: QCContext):
                         confidence=0.6,
                         evidence=[ctx.appraisal.evidence("borrower_name"),
                                   ctx.engagement.evidence("co_borrower_name")]))
+    # contract co-buyer awareness (advisory): the contract may reveal a buyer the
+    # order form never disclosed (e.g. a spouse added on the agreement). The
+    # appraisal is correct if it matches the order, but the lender must know.
+    buyers = ctx.contract.value("buyer_names")
+    if buyers and eng_name:
+        known = matching.name_tokens(f"{eng_name} {ctx.engagement.value('co_borrower_name') or ''}")
+        extra = [t for t in matching.name_tokens(buyers)
+                 if t not in matching._NAME_SUFFIXES
+                 and max((matching.jaro_winkler(t, k) for k in known), default=0.0)
+                 < qc_config.match_threshold]
+        if extra:
+            out.append(_res("S-2", "D", RuleStatus.VERIFY,
+                            message=qc_config.template("S-2-contract-buyer",
+                                                       value=" ".join(extra).title()),
+                            fields=["buyer_names", "borrower_name"],
+                            template_id="S-2-contract-buyer", confidence=0.6,
+                            evidence=[ctx.contract.evidence("buyer_names"),
+                                      ctx.engagement.evidence("borrower_name")]))
     # refinance + owner != borrower → comment required
     if ctx.transaction_type == "refinance":
         owner = ctx.appraisal.value("owner_of_public_record")
@@ -195,9 +214,10 @@ def s4_tax_year(ctx):
     eff_year = _year_of(ctx.appraisal.value("effective_date"))
     ev = [ctx.appraisal.evidence("tax_year"), ctx.appraisal.evidence("effective_date")]
     if not tax_year or not eff_year:
-        return _res("S-4d", "5", RuleStatus.SKIPPED,
-                    message="tax year / effective date not extracted",
-                    fields=["tax_year", "effective_date"], evidence=ev)
+        return _res("S-4d", "5", RuleStatus.VERIFY,
+                    message="The tax year / effective date could not be extracted; "
+                            "please verify the tax year is within the last 2 years.",
+                    fields=["tax_year", "effective_date"], evidence=ev, confidence=0.5)
     window = int(qc_config.semantic("tax_year_window", 2))
     ok = (eff_year - window) <= tax_year <= eff_year
     if ok:
@@ -214,6 +234,9 @@ def s4_tax_year(ctx):
 
 @rule(id="S-5", num="6", section="subject", phase=1, name="Neighborhood name valid")
 def s5_neighborhood(ctx):
+    if not ctx.appraisal.present:
+        return H.present(ctx, "S-5", "6", "subject", "neighborhood_name",
+                         label="Neighborhood Name")
     val = (ctx.appraisal.value("neighborhood_name") or "").strip()
     ev = [ctx.appraisal.evidence("neighborhood_name")]
     bad = {"", "n/a", "na", "none", "unknown", "not applicable"}
@@ -321,7 +344,15 @@ def s8_assessment(ctx):
 
 # ---- S-9 PUD/HOA (HOA dues > 0 ⇒ PUD must be marked) ----------------------
 
-@rule(id="S-9", num="11", section="subject", phase=3, name="HOA dues imply PUD marked")
+def _is_pud_form(ctx: QCContext) -> bool:
+    """The PUD checkbox cascade only exists on the 1004-family forms. A condo
+    (1073) or multi-unit (1025) report carries HOA dues by definition — the
+    project section, not the PUD box, is the right place for them there."""
+    return ctx.form_type not in ("1073", "1025")
+
+
+@rule(id="S-9", num="11", section="subject", phase=3, applies_when=_is_pud_form,
+      name="HOA dues imply PUD marked")
 def s9_pud(ctx):
     hoa = ctx.appraisal.value("hoa_dues")
     amt = matching.normalize_currency(hoa)
@@ -354,7 +385,8 @@ def s10_lender_addr(ctx):
     # document IS present but the lender address couldn't be read, that's an
     # extraction gap → VERIFY (not a silent SKIPPED that reads as a pass).
     if not ctx.has_engagement:
-        return _res("S-10b", "F", RuleStatus.SKIPPED, message="engagement/order not available")
+        return _res("S-10b", "F", RuleStatus.NOT_APPLICABLE,
+                    message="Engagement letter / order form not available.")
     if not ctx.engagement.value("lender_address"):
         return _res("S-10b", "F", RuleStatus.VERIFY,
                     message="The lender/client address could not be read from the order; please verify it matches the appraisal.",
@@ -371,6 +403,8 @@ _TRUTHY = {"true", "yes", "1", "x", "checked"}
 
 @rule(id="S-12", num="13", section="subject", phase=1, name="Prior-listing data source present")
 def s12_datasource(ctx):
+    if not ctx.appraisal.present:
+        return H.present(ctx, "S-12", "13", "subject", "data_source", label="Data Source(s)")
     offered = str(ctx.appraisal.value("offered_for_sale_12mo") or "").strip().lower()
     ev = [ctx.appraisal.evidence("offered_for_sale_12mo"), ctx.appraisal.evidence("data_source")]
     ds = ctx.appraisal.value("data_source")

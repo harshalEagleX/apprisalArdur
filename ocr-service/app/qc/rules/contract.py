@@ -54,6 +54,18 @@ def c1_analyze(ctx: QCContext):
     if _is_refi(ctx):
         populated = [f for f in _CONTRACT_FIELDS if ctx.appraisal.value(f)]
         if populated:
+            # a populated contract section on a CONFIRMED refinance is a hard
+            # FAIL; on an uncertain transaction-type read it is the type
+            # detection that needs confirming, not the section
+            txn_conf = max(ctx.appraisal.confidence("assignment_type"),
+                           ctx.engagement.confidence("assignment_type"),
+                           ctx.engagement.confidence("intended_use"))
+            if txn_conf < ctx.structured_conf:
+                return _res("C-1", "14", RuleStatus.VERIFY,
+                            message=qc_config.template("C-1-txn-unknown"),
+                            fields=["assignment_type"] + populated,
+                            template_id="C-1-txn-unknown", confidence=0.5,
+                            evidence=[ctx.appraisal.evidence("assignment_type")])
             return _res("C-1", "14", RuleStatus.FAIL,
                         message=qc_config.template("C-1-refi-blank"),
                         fields=populated, template_id="C-1-refi-blank",
@@ -121,8 +133,10 @@ def c2_price(ctx: QCContext):
       applies_when=_is_purchase, name="Contract date matches purchase agreement")
 def c2_date(ctx: QCContext):
     auth = "contract" if ctx.has_contract else "engagement"
+    # dates are identifiers: exact-day equality, never fuzzy string similarity
+    # (Jaro-Winkler would call 04/27/2026 vs 04/29/2026 a match)
     return H.cross_doc_match(ctx, "C-2b", "16", "contract", "contract_date", "C-2-date",
-                             authority=auth, kind="generic", label="contract date")
+                             authority=auth, kind="date", label="contract date")
 
 
 # ---- C-3 owner-of-record data source + No→commentary ------------------------
@@ -195,9 +209,10 @@ def c4_concessions(ctx: QCContext):
     ev = [ctx.appraisal.evidence("financial_assistance_amount"),
           ctx.contract.evidence("concessions_amount")]
     if not ctx.has_contract:
-        out.append(_res("C-4", "18", RuleStatus.SKIPPED,
-                        message="purchase contract not available",
-                        fields=["concessions_amount"], evidence=ev))
+        out.append(_res("C-4", "18", RuleStatus.VERIFY,
+                        message="The purchase contract was not provided; please verify the "
+                                "reported concessions against the agreement manually.",
+                        fields=["concessions_amount"], evidence=ev, confidence=0.5))
         return out
     if contract_amt is None:
         # nothing labelled a concession in the contract; only flag when the

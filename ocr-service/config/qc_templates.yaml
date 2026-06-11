@@ -34,6 +34,7 @@ S-5-generic:  "The neighborhood name '{value}' is generic; please provide the sp
 S-7-tenant:   "Occupancy is marked Tenant; please provide the lease terms (lease dates and monthly rental amount) in the report."
 S-7-vacant:   "Occupancy is marked Vacant; please comment whether the utilities were on or off at the time of inspection."
 S-12-listing: "The subject was offered for sale in the twelve months prior to the effective date; please provide the prior listing details ({value}) in the subject section per UAD requirement."
+S-2-contract-buyer: "The purchase contract lists additional buyer(s) {value} who do not appear on the order form. Confirm whether a co-borrower should be added."
 
 # ---- Contract ----
 C-1-refi-blank: "The assignment is meant for a refinance transaction; per the UAD requirements, the contract section should be left blank."
@@ -49,6 +50,7 @@ C-4-blank:    "In the contract section, the financial assistance question must b
 C-4-contradict: "Financial assistance is marked 'No'; however, a concession amount of ${value} is shown. Please revise."
 C-4-desc:     "Financial assistance is marked 'Yes'; please provide the total dollar amount and a description of the items to be paid by any party on behalf of the borrower."
 C-5-personal: "The purchase contract includes personal property items ({value}); please address in the report whether these items were assigned any contributory value."
+C-1-txn-unknown: "The transaction type could not be confirmed from the documents; please verify whether the contract section should be left blank."
 
 # ---- Neighborhood ----
 N-1-checkbox: "In the neighborhood section checkbox is missing for {field}, please revise."

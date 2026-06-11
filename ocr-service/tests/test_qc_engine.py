@@ -195,12 +195,13 @@ class TestSCAAdjustmentPct:
             comp_2_sale_price="500000", comp_2_gross_adj_pct="9.5"))
         assert sca_gross_adjustment(ctx).status == RuleStatus.PASS
 
-    def test_gross_skipped_when_unextracted(self):
+    def test_gross_verifies_when_unextracted(self):
+        # extraction gaps surface as VERIFY, never an invisible SKIPPED
         from app.qc.context import QCContext
         from app.qc.rules.sales_comparison import sca_gross_adjustment
         from app.qc.result import RuleStatus
         ctx = QCContext("t", appraisal=_appraisal(comp_1_sale_price="500000"))
-        assert sca_gross_adjustment(ctx).status == RuleStatus.SKIPPED
+        assert sca_gross_adjustment(ctx).status == RuleStatus.VERIFY
 
     def test_net_prefers_printed_pct(self):
         from app.qc.context import QCContext
@@ -248,12 +249,13 @@ class TestSCAPriorSale:
         ctx = QCContext("t", appraisal=_appraisal(effective_date="2026-03-15"))
         assert sca_subject_prior_sale(ctx).status == RuleStatus.PASS
 
-    def test_subject_prior_skipped_without_effective_date(self):
+    def test_subject_prior_verifies_without_effective_date(self):
+        # extraction gaps surface as VERIFY, never an invisible SKIPPED
         from app.qc.context import QCContext
         from app.qc.rules.sales_comparison import sca_subject_prior_sale
         from app.qc.result import RuleStatus
         ctx = QCContext("t", appraisal=_appraisal(subject_grid_prior_sale_date="02/09/2026"))
-        assert sca_subject_prior_sale(ctx).status == RuleStatus.SKIPPED
+        assert sca_subject_prior_sale(ctx).status == RuleStatus.VERIFY
 
     def test_comp_resale_within_window_verifies(self):
         from app.qc.context import QCContext

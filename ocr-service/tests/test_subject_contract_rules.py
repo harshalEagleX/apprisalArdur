@@ -301,3 +301,131 @@ class TestPersonalPropertyScan:
     def test_bare_appliance_mention_ignored(self):
         from app.extraction.contract_extractor import _personal_property
         assert _personal_property("The kitchen includes a refrigerator.") is None
+
+
+# ---------------------------------------------------------------------------
+# review-pass updates: SKIPPED→VERIFY, co-buyer, 1073 gate, C-1 consistency,
+# TREC concessions/date/buyers, exact date matching
+# ---------------------------------------------------------------------------
+
+class TestSkippedPolicy:
+    def test_format_rule_extraction_gap_verifies(self):
+        from app.qc.rules.subject import s6_census
+        ctx = QCContext("t", appraisal=_rs(other_field="x"))
+        assert s6_census(ctx).status == RuleStatus.VERIFY
+
+    def test_tax_year_gap_verifies(self):
+        from app.qc.rules.subject import s4_tax_year
+        ctx = QCContext("t", appraisal=_rs(other_field="x"))
+        assert s4_tax_year(ctx).status == RuleStatus.VERIFY
+
+    def test_missing_engagement_is_not_applicable(self):
+        from app.qc.rules.subject import s1_address
+        ctx = QCContext("t", appraisal=_rs(property_address="1 Main St"))
+        assert all(r.status == RuleStatus.NOT_APPLICABLE for r in s1_address(ctx))
+
+    def test_missing_contract_concessions_verifies(self):
+        from app.qc.rules.contract import c4_concessions
+        ctx = _purchase_ctx(has_financial_assistance="No")
+        assert RuleStatus.VERIFY in _statuses(c4_concessions(ctx))
+        assert RuleStatus.SKIPPED not in _statuses(c4_concessions(ctx))
+
+
+class TestDateMatching:
+    def test_close_dates_are_mismatch(self):
+        from app.qc.matching import match_date
+        assert match_date("04/27/2026", "04/29/2026").verdict == "mismatch"
+
+    def test_same_day_different_format_match(self):
+        from app.qc.matching import match_date
+        assert match_date("4/27/26", "04/27/2026").verdict == "match"
+
+    def test_unparseable_is_review(self):
+        from app.qc.matching import match_date
+        assert match_date("April", "04/27/2026").verdict == "review"
+
+
+class TestContractCoBuyer:
+    def test_extra_contract_buyer_verifies(self):
+        from app.qc.rules.subject import s2_borrower
+        ctx = QCContext(
+            "t",
+            appraisal=_rs(borrower_name="Anton Deineko"),
+            engagement=_rs("engagement_letter", borrower_name="Anton Deineko"),
+            contract=_rs("sales_contract",
+                         buyer_names="Anton Deineko and Viktoriia Domanska"))
+        extra = [r for r in s2_borrower(ctx) if r.template_id == "S-2-contract-buyer"]
+        assert extra and extra[0].status == RuleStatus.VERIFY
+        assert "Domanska" in extra[0].message
+
+    def test_matching_buyers_quiet(self):
+        from app.qc.rules.subject import s2_borrower
+        ctx = QCContext(
+            "t",
+            appraisal=_rs(borrower_name="Anton Deineko"),
+            engagement=_rs("engagement_letter", borrower_name="Anton Deineko"),
+            contract=_rs("sales_contract", buyer_names="DEINEKO, ANTON"))
+        assert not [r for r in s2_borrower(ctx) if r.template_id == "S-2-contract-buyer"]
+
+
+class TestS9FormGate:
+    def test_condo_form_not_applicable(self):
+        from app.qc.rules.subject import _is_pud_form
+        ctx = QCContext("t", appraisal=_rs(hoa_dues="635"),
+                        engagement=_rs("engagement_letter", form_type="Conventional 1073"))
+        assert not _is_pud_form(ctx)
+
+    def test_1004_form_applicable(self):
+        from app.qc.rules.subject import _is_pud_form
+        ctx = QCContext("t", appraisal=_rs(form_type="1004", hoa_dues="635"))
+        assert _is_pud_form(ctx)
+
+
+class TestC1Consistency:
+    def test_confirmed_refi_populated_fails(self):
+        from app.qc.rules.contract import c1_analyze
+        ctx = QCContext("t", appraisal=_rs(assignment_type="Refinance",
+                                           contract_price="400000"))
+        assert c1_analyze(ctx).status == RuleStatus.FAIL
+
+    def test_low_confidence_refi_verifies(self):
+        from app.core.result import ExtractionResult, ExtractionResultSet
+        from app.qc.rules.contract import c1_analyze
+        rs = ExtractionResultSet(document_path="x", document_type="appraisal_report")
+        rs.add(ExtractionResult(canonical_name="assignment_type",
+                                document_type="appraisal_report", value="Refinance",
+                                extraction_method="test", confidence=0.5, source_page=1))
+        rs.add(ExtractionResult(canonical_name="contract_price",
+                                document_type="appraisal_report", value="400000",
+                                extraction_method="test", confidence=0.9, source_page=1))
+        rs.finalize()
+        ctx = QCContext("t", appraisal=rs)
+        r = c1_analyze(ctx)
+        assert r.status == RuleStatus.VERIFY and r.template_id == "C-1-txn-unknown"
+
+
+class TestTRECExtraction:
+    def test_seller_pay_dollar_amount(self):
+        from app.extraction.contract_extractor import _trec_concessions
+        text = ("12. SETTLEMENT AND OTHER EXPENSES.\n"
+                "A.(1)(b) Seller shall also pay an amount not to exceed $ 5,000.00 to be "
+                "applied to Buyer's Expenses.")
+        assert _trec_concessions(text, "380000") == "5000"
+
+    def test_seller_pay_percentage(self):
+        from app.extraction.contract_extractor import _trec_concessions
+        text = "Seller shall also pay up to 3 % of the sales price toward expenses"
+        assert _trec_concessions(text, "380000") == "11400"
+
+    def test_executed_date_beats_closing_date(self):
+        from app.extraction.contract_extractor import _contract_date
+        text = ("The Closing Date will be 05/29/2026 or sooner.\n"
+                "lots of pages...\n"
+                "EXECUTED the 27 day of April 04/27/2026 (EFFECTIVE DATE).")
+        assert _contract_date(text) == "04/27/2026"
+
+    def test_trec_parties_clause_buyers(self):
+        from app.extraction.contract_extractor import _buyer_names
+        text = ("1. PARTIES: The parties to this contract are Lance Sheffield and Holly "
+                "Sheffield (Seller) and Anton Deineko and Viktoriia Domanska (Buyer).")
+        assert "Viktoriia Domanska" in _buyer_names(text)

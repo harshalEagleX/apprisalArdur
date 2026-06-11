@@ -60,10 +60,12 @@ def present(ctx, rule_id, num, section, field, doc="appraisal",
     label = label or field.replace("_", " ").title()
     if val and str(val).strip():
         return _mk(rule_id, num, section, RuleStatus.PASS, fields=[field], evidence=ev)
-    # blank — but if the doc itself is absent we can't assert FAIL
+    # blank — but if the doc itself is absent we can't assert FAIL. Never a
+    # silent SKIPPED (invisible to the reviewer): surface it for manual review.
     if not view.present:
-        return _mk(rule_id, num, section, RuleStatus.SKIPPED,
-                   message=f"{doc} document not available", fields=[field], evidence=ev)
+        return _mk(rule_id, num, section, RuleStatus.VERIFY,
+                   message=f"The {doc} document was not available; please verify {label} manually.",
+                   fields=[field], evidence=ev, confidence=0.5)
     msg = qc_config.template(template_id, field=label)
     return _mk(rule_id, num, section, RuleStatus.FAIL, message=msg,
                fields=[field], evidence=ev, template_id=template_id)
@@ -79,8 +81,11 @@ def format_regex(ctx, rule_id, num, section, field, pattern, template_id,
     val = view.value(field)
     ev = [view.evidence(field)]
     if not val:
-        return _mk(rule_id, num, section, RuleStatus.SKIPPED,
-                   message="field not extracted", fields=[field], evidence=ev)
+        # extraction gap — a reviewer must look; SKIPPED would be invisible
+        return _mk(rule_id, num, section, RuleStatus.VERIFY,
+                   message=f"{label or field} could not be extracted from the document; "
+                           "manual review required.",
+                   fields=[field], evidence=ev, confidence=0.5)
     status = RuleStatus.PASS if re.search(pattern, str(val)) else RuleStatus.FAIL
     status = _gate(ctx, doc, field, status, RuleStatus.FAIL)
     msg = "" if status == RuleStatus.PASS else qc_config.template(template_id, field=label or field, value=val)
@@ -106,8 +111,16 @@ def cross_doc_match(ctx, rule_id, num, section, field, template_id,
     ev = [sub.evidence(field), auth.evidence(field)]
     fields = [field]
     if not auth.present:
-        return _mk(rule_id, num, section, RuleStatus.SKIPPED,
-                   message=f"{authority} not available", fields=fields, evidence=ev)
+        # missing engagement letter → the rule genuinely cannot evaluate (N/A);
+        # missing purchase contract → the reviewer must compare manually (VERIFY)
+        if authority == "engagement":
+            return _mk(rule_id, num, section, RuleStatus.NOT_APPLICABLE,
+                       message="Engagement letter / order form not available.",
+                       fields=fields, evidence=ev)
+        return _mk(rule_id, num, section, RuleStatus.VERIFY,
+                   message=f"The {authority} document was not provided; please verify "
+                           f"the {label or field} manually.",
+                   fields=fields, evidence=ev, confidence=0.5)
     if sv is None or av is None:
         # one side missing → cannot assert match; surface for review
         return _mk(rule_id, num, section, RuleStatus.VERIFY,
@@ -116,6 +129,8 @@ def cross_doc_match(ctx, rule_id, num, section, field, template_id,
 
     if kind == "currency":
         mr = matching.match_currency(sv, av, tolerance=qc_config.semantic("currency_tolerance", 0.0))
+    elif kind == "date":
+        mr = matching.match_date(sv, av)
     else:
         mr = matching.match_text(sv, av, kind=kind,
                                  match_th=qc_config.match_threshold,

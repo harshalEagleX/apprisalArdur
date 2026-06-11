@@ -151,18 +151,47 @@ def _contract_price(text: str) -> Optional[str]:
     return None
 
 
-def _contract_date(text: str) -> Optional[str]:
-    """Latest valid date in the document = the fully-executed contract date."""
-    best = None
+def _dates_on(text: str):
+    """[(y,m,d) tuples with formatted string] for every plausible date."""
+    out = []
     for mm, dd, yy in _DATE.findall(text):
         m_, d_, y_ = int(mm), int(dd), int(yy)
         if y_ < 100:
             y_ += 2000
-        if not (1 <= m_ <= 12 and 1 <= d_ <= 31 and 2000 <= y_ <= 2099):
-            continue
-        key = (y_, m_, d_)
-        if best is None or key > best[0]:
-            best = (key, f"{m_:02d}/{d_:02d}/{y_}")
+        if 1 <= m_ <= 12 and 1 <= d_ <= 31 and 2000 <= y_ <= 2099:
+            out.append(((y_, m_, d_), f"{m_:02d}/{d_:02d}/{y_}"))
+    return out
+
+
+# Lines whose dates are deadlines/boilerplate, not the executed date — taking
+# the "latest date anywhere" used to pick the closing date over the signature.
+_DATE_NOISE = re.compile(r"(closing date|option (fee|period)|trec|effective date of loan|"
+                         r"expires|deadline)", re.I)
+_EXECUTED_CTX = re.compile(r"(executed|effective date)", re.I)
+
+
+def _contract_date(text: str) -> Optional[str]:
+    """The fully-executed contract date.
+
+    Priority 1: a date within two lines of an EXECUTED / effective-date clause
+    (TREC puts this block on the signature page, ~page 9). Priority 2: the
+    latest date in the document, ignoring deadline/boilerplate lines (closing
+    date, option period, the TREC form-revision date)."""
+    lines = text.splitlines()
+    executed, fallback = None, None
+    for i, ln in enumerate(lines):
+        for key, formatted in _dates_on(ln):
+            # the EXECUTED clause sits on the date's line, the two lines above
+            # it, or one line below (e-sign stamps land just above the blank:
+            # "04/27/2026" then "EXECUTED the __ day of __, 20__")
+            window = " ".join(lines[max(0, i - 2):i + 2])
+            if _EXECUTED_CTX.search(window):
+                if executed is None or key > executed[0]:
+                    executed = (key, formatted)
+            elif not _DATE_NOISE.search(ln):
+                if fallback is None or key > fallback[0]:
+                    fallback = (key, formatted)
+    best = executed or fallback
     return best[1] if best else None
 
 
@@ -173,6 +202,61 @@ def _concessions(text: str) -> Optional[str]:
                 v = _to_amount(m.group(1))
                 if v is not None and 0 < v <= 200_000:
                     return str(int(v))
+    return None
+
+
+# TREC One-to-Four ¶12A(1)(b): "Seller shall also pay an amount not to exceed
+# $____ to be applied to Buyer's Expenses" — the seller concession on a TREC
+# contract lives here, never on a labelled "concessions" line.
+_TREC_SELLER_PAY = re.compile(
+    r"seller shall (?:also )?pay an amount not to exceed\s*\$?\s*"
+    r"([\d]{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+(?:\.\d{2})?)", re.I)
+_TREC_SELLER_PCT = re.compile(
+    r"seller shall (?:also )?pay[^.\n]{0,80}?(\d{1,2}(?:\.\d+)?)\s*%\s*of the sales price", re.I)
+
+
+def _trec_concessions(text: str, price: Optional[str]) -> Optional[str]:
+    """Seller-paid buyer expenses from TREC ¶12 (Settlement and Other Expenses).
+    A percentage form is converted to dollars when the sales price is known.
+    Returns a digit string (possibly '0'), or None when ¶12 isn't found."""
+    m = _TREC_SELLER_PAY.search(text)
+    if m:
+        v = _to_amount(m.group(1))
+        if v is not None and 0 <= v <= 200_000:
+            return str(int(v))
+    m = _TREC_SELLER_PCT.search(text)
+    if m and price:
+        try:
+            return str(int(float(m.group(1)) / 100.0 * float(price)))
+        except ValueError:
+            return None
+    return None
+
+
+# TREC ¶1 PARTIES: "The parties to this contract are ____ (Seller) and ____
+# (Buyer)." plus generic labelled buyer lines on other state forms.
+_TREC_PARTIES = re.compile(r"\(\s*seller\s*\)\s*and\s+(.{3,120}?)\s*\(\s*buyer\s*\)",
+                           re.I | re.S)
+_BUYER_LINE = re.compile(r"^\s*(?:buyer|purchaser)s?\s*[:\-]\s*(.{3,120})$", re.I)
+
+
+def _buyer_names(text: str) -> Optional[str]:
+    """The buyer/purchaser name string from the contract, or None.
+
+    Powers the S-2 contract co-buyer advisory: the contract may list a buyer
+    the order form never disclosed."""
+    m = _TREC_PARTIES.search(text)
+    if m:
+        names = re.sub(r"\s+", " ", m.group(1)).strip(" ,;")
+        if names and not names.lower().startswith(("the ", "a ")):
+            return names
+    for line in text.splitlines():
+        lm = _BUYER_LINE.match(line)
+        if lm:
+            names = lm.group(1).strip(" ,;")
+            # a name, not a clause ("Buyer: shall pay...")
+            if names and not re.search(r"\b(shall|will|must|agrees)\b", names, re.I):
+                return names
     return None
 
 
@@ -206,6 +290,39 @@ def _personal_property(text: str) -> Optional[str]:
     return ", ".join(found) if found else None
 
 
+# Lines worth showing the LLM — price/party/signature clauses. A long condo
+# developer agreement (40+ pages) would otherwise be cut off by a flat
+# character cap before the relevant clauses ever appear in the prompt.
+_DIGEST_CTX = re.compile(
+    r"(purchase price|sales price|total.*price|executed|effective date|"
+    r"buyer|purchaser|seller|concession|witness|signature|\$\s*\d|"
+    # bare comma-grouped amounts: form-overlay PDFs render the filled value as
+    # a detached text object with no $ or label on its line ("459,900.00")
+    r"\b\d{1,3},\d{3}(?:\.\d{2})?\b)", re.I)
+
+
+def _llm_digest(text: str, cap: int = 11000) -> str:
+    """Relevant-line digest of the contract (with one line of context each),
+    in document order, capped at `cap` characters. The head of the document is
+    always kept — the parties/cover block names the buyers without any
+    searchable keyword on the line itself."""
+    lines = text.splitlines()
+    keep = set(range(min(60, len(lines))))
+    for i, ln in enumerate(lines):
+        if _DIGEST_CTX.search(ln):
+            keep.update((max(0, i - 1), i, min(len(lines) - 1, i + 1)))
+    out, used = [], 0
+    for i in sorted(keep):
+        ln = lines[i].strip()
+        if not ln:
+            continue
+        used += len(ln) + 1
+        if used > cap:
+            break
+        out.append(ln)
+    return "\n".join(out) if out else text[:cap]
+
+
 def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
     """Groq fallback for contract fields the regex strategies missed.
 
@@ -224,6 +341,8 @@ def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
                              "signature date (MM/DD/YYYY)",
             "concessions_amount": "total seller-paid concessions/contributions toward "
                                   "buyer costs (digits only); omit if none",
+            "buyer_names": "the buyer/purchaser name(s) VERBATIM as printed in the "
+                           "parties clause",
         }
         asks = {f: wanted[f] for f in missing if f in wanted}
         if not asks:
@@ -237,7 +356,7 @@ def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
                 {"role": "user",
                  "content": "Extract ONLY these fields from the contract text below. "
                             "OMIT any field not actually present — never guess.\n"
-                            f"{lines}\n\nCONTRACT TEXT:\n{text[:11000]}"},
+                            f"{lines}\n\nCONTRACT TEXT (relevant excerpts):\n{_llm_digest(text)}"},
             ],
             reasoning_effort="low", max_tokens=1024,
         )
@@ -248,7 +367,11 @@ def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
         valid_dates = {f"{int(m):02d}/{int(d):02d}/{int(y) + 2000 if int(y) < 100 else int(y)}"
                        for m, d, y in _DATE.findall(text)}
         for f in ("contract_price", "concessions_amount"):
-            v = re.sub(r"[^\d]", "", str(data.get(f, "") or ""))
+            s = re.sub(r"[,$\s]", "", str(data.get(f, "") or ""))
+            try:
+                v = str(int(float(s))) if s else ""
+            except ValueError:
+                v = ""
             if v and v in digit_runs and 0 < float(v) <= 50_000_000:
                 out[f] = v
         dv = str(data.get("contract_date", "") or "").strip()
@@ -259,14 +382,24 @@ def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
             cand = f"{mm:02d}/{dd:02d}/{yy}"
             if cand in valid_dates:
                 out["contract_date"] = cand
+        # buyer names: verbatim containment in the printed text (whitespace-
+        # normalized), same trust rule as every other LLM answer
+        bv = re.sub(r"\s+", " ", str(data.get("buyer_names", "") or "")).strip()
+        if bv and bv.lower() in re.sub(r"\s+", " ", text).lower():
+            out["buyer_names"] = bv
         return out
     except Exception as exc:
         logger.warning("Contract LLM gap-fill failed: %s", exc)
         return {}
 
 
-def extract_contract_fields(pdf_path, max_pages: int = 4) -> Dict[str, str]:
-    """Return {canonical_field: value} from the sales contract (best effort)."""
+def extract_contract_fields(pdf_path, ocr_max_pages: int = 13) -> Dict[str, str]:
+    """Return {canonical_field: value} from the sales contract (best effort).
+
+    Embedded text is read from EVERY page (cheap — a 42-page condo developer
+    agreement keeps its price schedule and signatures deep in the document);
+    Tesseract OCR for image-only pages is capped at ocr_max_pages, which covers
+    the whole scanned TREC One-to-Four including the EXECUTED block (~page 9)."""
     pdf_path = Path(pdf_path)
     try:
         doc = fitz.open(str(pdf_path))
@@ -275,8 +408,12 @@ def extract_contract_fields(pdf_path, max_pages: int = 4) -> Dict[str, str]:
         return {}
     texts: List[str] = []
     try:
-        for i in range(min(max_pages, len(doc))):
-            texts.append(_page_text(doc[i]))
+        for i in range(len(doc)):
+            embedded = doc[i].get_text("text")
+            if len(embedded.split()) >= 30:
+                texts.append(embedded)
+            elif i < ocr_max_pages:
+                texts.append(_tesseract_text(doc[i]))
     finally:
         doc.close()
     text = "\n".join(texts)
@@ -291,14 +428,20 @@ def extract_contract_fields(pdf_path, max_pages: int = 4) -> Dict[str, str]:
     if date:
         out["contract_date"] = date
     conc = _concessions(text)
-    if conc:
+    if conc is None:
+        conc = _trec_concessions(text, price)
+    if conc is not None:
         out["concessions_amount"] = conc
     items = _personal_property(text)
     if items:
         out["personal_property_items"] = items
+    buyers = _buyer_names(text)
+    if buyers:
+        out["buyer_names"] = buyers
     # LLM fallback for whatever the regex strategies could not find — answers
     # are validated against the printed text, so a wrong pick cannot pass.
-    missing = [f for f in ("contract_price", "contract_date", "concessions_amount")
+    missing = [f for f in ("contract_price", "contract_date", "concessions_amount",
+                           "buyer_names")
                if f not in out]
     if missing:
         out.update(_llm_gap_fill(text, missing))
