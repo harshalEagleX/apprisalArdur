@@ -28,6 +28,8 @@ semantic:
   comp_resale_window_months: 36    # subject/comp prior-sale look-back (resale/flip flag)
   comp_sale_window_months: 12      # comparable sale recency
   remaining_economic_life_min: 30  # FHA/VA minimum years
+  depreciation_band_pp: 15.0       # tolerated gap (pp) vs age-life depreciation baseline (CA-3)
+  signature_gap_days: 30           # signature more than N days after effective date → VERIFY
 
 # Subject-section content validation (S-4 / S-5). Editable per experience (P-4).
 subject:

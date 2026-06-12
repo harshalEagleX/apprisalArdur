@@ -124,7 +124,8 @@ def cross_doc_match(ctx, rule_id, num, section, field, template_id,
     if sv is None or av is None:
         # one side missing → cannot assert match; surface for review
         return _mk(rule_id, num, section, RuleStatus.VERIFY,
-                   message=qc_config.template(template_id, value=av or sv or "", a=sv or "", b=av or ""),
+                   message=qc_config.template(template_id, value=av or sv or "",
+                                              a=sv or "", b=av or "", field=label or field),
                    fields=fields, evidence=ev, template_id=template_id, confidence=0.5)
 
     if kind == "currency":

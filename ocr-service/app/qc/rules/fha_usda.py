@@ -101,21 +101,72 @@ def fha10_econ_life(ctx: QCContext):
                       evidence=ev, confidence=0.7)
 
 
-# ---- USDA-1 cost approach required ----------------------------------------
+# ---- FHA-5 primary comps within 12 months -----------------------------------
+
+@rule(id="FHA-5", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA primary comps within 12 months")
+def fha5_comp_dates(ctx: QCContext):
+    from app.qc.rules.sales_comparison import _effective_ym, _parse_uad_date
+    eff = _effective_ym(ctx)
+    if eff is None:
+        return RuleResult(rule_id="FHA-5", checklist_num="FHA", section="fha",
+                          status=RuleStatus.VERIFY,
+                          message="The effective date could not be read; please verify comps 1-3 sold within 12 months.",
+                          fields_involved=["effective_date"], confidence=0.5)
+    out = []
+    for i in (1, 2, 3):
+        raw = ctx.appraisal.value(f"comp_{i}_sale_date") or ""
+        ev = [ctx.appraisal.evidence(f"comp_{i}_sale_date")]
+        d = _parse_uad_date(raw)
+        ym = d.get("s") or d.get("c")
+        if not ym:
+            continue  # SCA-8 surfaces unreadable comp dates
+        months = (eff[0] - ym[0]) * 12 + (eff[1] - ym[1])
+        if months > 12:
+            # FHA hard requirement for the three primary comparables
+            out.append(RuleResult(rule_id="FHA-5", checklist_num="FHA", section="fha",
+                                  status=RuleStatus.FAIL,
+                                  message=qc_config.template("FHA-5-comps", comp=i),
+                                  fields_involved=[f"comp_{i}_sale_date"],
+                                  template_id="FHA-5-comps", evidence=ev))
+        else:
+            out.append(RuleResult(rule_id="FHA-5", checklist_num="FHA", section="fha",
+                                  status=RuleStatus.PASS,
+                                  fields_involved=[f"comp_{i}_sale_date"], evidence=ev))
+    return out
+
+
+# ---- USDA-1 cost approach required (per-field corrections) -------------------
+
+_USDA_COST_FIELDS = {
+    "site_value_estimate": "Opinion of Site Value",
+    "cost_new_improvements": "Cost New of Improvements",
+    "total_depreciation": "Depreciation",
+    "indicated_value_cost_approach": "Indicated Value by Cost Approach",
+}
+
 
 @rule(id="USDA-1", num="USDA", section="usda", phase=8, applies_when=_is_usda,
       name="USDA cost approach required")
 def usda1_cost(ctx: QCContext):
-    used = str(ctx.appraisal.value("is_cost_approach_used") or "").lower() in {"true", "yes", "1", "x"}
-    site = ctx.appraisal.value("site_value_estimate")
-    ev = [ctx.appraisal.evidence("is_cost_approach_used"), ctx.appraisal.evidence("site_value_estimate")]
-    if used or site:
+    missing = [label for f, label in _USDA_COST_FIELDS.items()
+               if not ctx.appraisal.value(f)]
+    ev = [ctx.appraisal.evidence(f) for f in _USDA_COST_FIELDS]
+    if not missing:
         return RuleResult(rule_id="USDA-1", checklist_num="USDA", section="usda",
                           status=RuleStatus.PASS,
-                          fields_involved=["is_cost_approach_used", "site_value_estimate"], evidence=ev)
+                          fields_involved=list(_USDA_COST_FIELDS), evidence=ev)
+    if len(missing) == len(_USDA_COST_FIELDS):
+        return RuleResult(rule_id="USDA-1", checklist_num="USDA", section="usda",
+                          status=RuleStatus.FAIL, message=qc_config.template("USDA-1-cost"),
+                          fields_involved=list(_USDA_COST_FIELDS),
+                          template_id="USDA-1-cost", evidence=ev)
+    # partially developed — name the specific blanks for correction
     return RuleResult(rule_id="USDA-1", checklist_num="USDA", section="usda",
-                      status=RuleStatus.FAIL, message=qc_config.template("USDA-1-cost"),
-                      fields_involved=["is_cost_approach_used"], template_id="USDA-1-cost", evidence=ev)
+                      status=RuleStatus.FAIL,
+                      message=qc_config.template("USDA-1-fields", value=", ".join(missing)),
+                      fields_involved=list(_USDA_COST_FIELDS),
+                      template_id="USDA-1-fields", evidence=ev)
 
 
 # ---- ADD-4 1004MC required for FHA/USDA -----------------------------------

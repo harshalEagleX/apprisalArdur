@@ -1128,3 +1128,48 @@ NEIGHBORHOOD / SITE / IMPROVEMENTS DEEP PASS (MIRA spec N-1..N-7, ST-1..ST-10, I
     rebuild ask); #530 P23 F9 V38 → P24 F9 V46 (honest gaps, 0 SKIPPED).
     Unit tests: 27 new (test_nsi_rules.py); suite green except the known
     gemini-key env test.
+
+RECONCILIATION / COST / INCOME / ADDENDUM / SIGNATURE / FHA DEEP PASS (MIRA spec)
+[x] R-1 multi-approach range: when cost/income approach values were extracted,
+    the final opinion must sit within [min, max] of the developed approaches
+    (R-1-range); SCA-only keeps the exact-match check.
+[x] NEW R-1b: reconciliation commentary must NAME the weighted approach and say
+    why — keyword fast-path (_WEIGHT_TERMS + approach name), Groq assess_text
+    fallback for paraphrases; unextracted/insufficient → VERIFY (R-1-weight).
+[x] NEW R-2b bias advisory (purchase only): opinion of value == contract price
+    EXACTLY → VERIFY (R-2-bias). MEASURED: fired on #2321525505 AND #2321525530
+    ($380,000 == $380,000 on Fantail) — the spec's flagship quality signal.
+[x] NEW CA-3: indicated cost value == site value + depreciated improvements
+    ($100 tolerance, FAIL conf-gated) + depreciation vs age-life baseline
+    (eff_age/(eff_age+REL), > semantic.depreciation_band_pp=15pp → VERIFY).
+    Gated on the cost approach actually being developed (zero ambient noise).
+[x] NEW IA-1: income-approach rent vs 1007 schedule rent ($5 tolerance → FAIL);
+    N/A when neither developed. NEW MF-1: 2-4 units / form 1025 → income
+    approach must be developed (VERIFY).
+[x] USDA-1: per-field corrections — names the specific blank cost-approach
+    fields (USDA-1-fields) instead of one generic FAIL.
+[x] NEW rules/addendum.py: ADD-2 comparable-selection commentary must explain
+    WHY (keyword + Groq; N/A when no narrative — SCA-14 owns that gap);
+    ADD-5 1004MC shaded-field completeness (gated on MCA extracted; absence on
+    FHA/USDA stays ADD-4); ADD-8 condo project section (1073 + MCA present);
+    ADD-9 USPAP (report type, specific exposure time, prior-services
+    description; fully-unextracted addendum collapses to ONE VERIFY).
+[x] SIG-D: + signature > semantic.signature_gap_days (30) after effective date
+    → VERIFY (SIG-1-gap). NEW DOC-1: license expiration vs signature date —
+    expired = hard FAIL (DOC-1-expired). NEW SIG-SUP: populated supervisory
+    section requires the Did/Did-Not-inspect mark (else VERIFY).
+[x] NEW FHA-5: comps 1-3 sale dates within 12 months of effective date on FHA
+    → hard FAIL per comp (reuses _parse_uad_date/_effective_ym from SCA).
+[x] helpers.cross_doc_match: one-side-missing branch now fills {field} in
+    templates (SIG-2 was printing a literal "{field}").
+[x] MEASURED (4 sort txns): aggregate P473 F15 V151 H2 N/A74 SKIPPED 0.
+    #470 (condo): ADD-5 incomplete 1004MC + ADD-8 missing project section +
+    SIG-SUP populated-without-inspect-mark. #505: R-1 final outside developed
+    approach range + R-2b bias flag. Rule count 96 → 116; 25 new unit tests.
+[ ] NEXT (extraction/vision prerequisites, not rules):
+    - Form-216 / sketch / maps / photo-classifier rules (IA-2, SK-1..4, M-1..4,
+      PH-3/5/6, FHA-6/7/8/11/13) need the document classifier + vision layer.
+    - final_reconciliation_comment / USPAP / cert-expiration extraction is weak
+      → R-1b, ADD-9, DOC-1 currently land on VERIFY for most docs; positional
+      extraction of page-2 bottom + signature block turns those into PASS/FAIL.
+    - ADD-6 needs the page-2 "comparable listings/sales counts" pair extracted.

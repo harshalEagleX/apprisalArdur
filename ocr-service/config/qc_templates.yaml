@@ -134,8 +134,16 @@ SCA-16-consist: "Comp {comp} condition rating ({comp_c}) differs from the subjec
 
 # ---- Reconciliation / Cost / Income ----
 R-1-mismatch: "In reconciliation section, Indicated Market Value does not match with indicated value by Sales Comparison Approach. Please revise."
+R-1-range:    "The final opinion of value (${value}) falls outside the range of the developed approach values (${a} - ${b}); please reconcile or comment."
+R-1-weight:   "The reconciliation commentary must identify which approach was given the most weight and explain why; please revise."
+R-2-bias:     "The opinion of value equals the contract price exactly; please verify the value conclusion is independently supported and not influenced by the contract amount."
 R-2-asisbox:  "At least one box ('As Is' or 'Subject To') must be checked in the reconciliation section."
 CA-1-sitevalue: "Please provide an Opinion of site value in the report."
+CA-3-arith:   "The indicated value by Cost Approach (${value}) does not equal site value + depreciated cost of improvements (${a} + ${b}); please verify the cost approach arithmetic."
+CA-3-depr:    "The stated depreciation appears inconsistent with the effective age and remaining economic life; please verify the depreciation estimate."
+IA-1-rent:    "The income approach gross monthly rent (${a}) does not match the subject rent schedule (${b}); please reconcile."
+MF-1-income:  "The subject is a 2-4 unit / multi-family property; the income approach and subject rent schedule (Form 1007) must be developed."
+USDA-1-fields: "The Cost Approach is required on all USDA loans; please complete: {value}."
 
 # ---- Signature ----
 SIG-1-missing: "The Appraiser Signatures are missing throughout the report, please sign in all the designated spaces."
@@ -179,6 +187,14 @@ FHA-2-match:  "FHA Case Number in the report is {a}; however the order form show
 FHA-3-intended: "FHA requires BOTH the Intended Use and Intended User statements (Lender/Client and HUD/FHA). Please include them."
 FHA-4-mpr:    "Please include a statement noting whether the subject meets FHA Minimum Property Requirements per HUD Handbook 4000.1."
 FHA-5-comps:  "FHA requires comparable sales 1, 2 and 3 to be within 12 months of the effective date. Please address comp {comp}."
+ADD-2-selection: "The comparable selection commentary describes what was done but does not explain WHY these comparables were selected (similarity, buyer pool); please revise."
+ADD-5-fields: "The 1004MC inventory analysis has incomplete required fields ({value}); each shaded field must contain a number, 0 or N/A."
+ADD-8-condo:  "The subject is a condominium; the 1004MC condo/co-op project section must be completed ({value} missing)."
+ADD-9-type:   "The USPAP addendum must identify the report as 'Appraisal Report' or 'Restricted Appraisal Report'."
+ADD-9-exposure: "Reasonable exposure time must be a specific time period (a number or range); please revise."
+ADD-9-services: "Prior services within the last 3 years are disclosed; please describe the prior services performed."
+SIG-1-gap:    "The signature date is more than {value} days after the effective date; please verify the reporting timeline."
+SIG-sup:      "The supervisory appraiser section is populated; exactly one of 'Did' / 'Did Not' inspect must be marked and the supervisory signature present."
 FHA-10-life:  "Estimated Remaining Economic Life must be given and at least 30 years for FHA; please clearly explain if less."
 USDA-1-cost:  "The Cost Approach is required on all USDA loans; please complete the cost approach."
 ADD-4-mc:     "The 1004MC Market Conditions Addendum is required for FHA/USDA loans; please ensure it is included and completed."

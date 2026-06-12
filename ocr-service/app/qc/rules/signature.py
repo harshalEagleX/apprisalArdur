@@ -55,6 +55,15 @@ def sig_date_sequence(ctx: QCContext):
                           message="The signature date or effective date could not be read; please verify the signature date is on or after the effective date.",
                           fields_involved=["date_of_signature", "effective_date"], evidence=ev, confidence=0.5)
     if sig >= eff:
+        gap_days = int(qc_config.semantic("signature_gap_days", 30))
+        if (sig - eff).days > gap_days:
+            # signing long after inspection is unusual — reviewer confirms the
+            # reporting timeline
+            return RuleResult(rule_id="SIG-D", checklist_num="101", section="signature",
+                              status=RuleStatus.VERIFY,
+                              message=qc_config.template("SIG-1-gap", value=gap_days),
+                              fields_involved=["date_of_signature", "effective_date"],
+                              template_id="SIG-1-gap", evidence=ev, confidence=0.6)
         return RuleResult(rule_id="SIG-D", checklist_num="101", section="signature",
                           status=RuleStatus.PASS,
                           fields_involved=["date_of_signature", "effective_date"], evidence=ev)
@@ -63,6 +72,58 @@ def sig_date_sequence(ctx: QCContext):
                       message=qc_config.template("SIG-date"),
                       fields_involved=["date_of_signature", "effective_date"],
                       template_id="SIG-date", evidence=ev)
+
+
+# ---- DOC-1 license not expired at signature ---------------------------------
+
+@rule(id="DOC-1", num="113", section="signature", phase=2, name="License current at signature")
+def doc1_license_current(ctx: QCContext):
+    exp = _parse_date(ctx.appraisal.value("appraiser_cert_expiration_date"))
+    sig = _parse_date(ctx.appraisal.value("date_of_signature"))
+    ev = [ctx.appraisal.evidence("appraiser_cert_expiration_date"),
+          ctx.appraisal.evidence("date_of_signature")]
+    if exp is None or sig is None:
+        return RuleResult(rule_id="DOC-1", checklist_num="113", section="signature",
+                          status=RuleStatus.VERIFY,
+                          message="The license expiration or signature date could not be read; please verify the license was current when the report was signed.",
+                          fields_involved=["appraiser_cert_expiration_date", "date_of_signature"],
+                          evidence=ev, confidence=0.5)
+    if exp >= sig:
+        return RuleResult(rule_id="DOC-1", checklist_num="113", section="signature",
+                          status=RuleStatus.PASS,
+                          fields_involved=["appraiser_cert_expiration_date"], evidence=ev)
+    # an expired license has no tolerance
+    return RuleResult(rule_id="DOC-1", checklist_num="113", section="signature",
+                      status=RuleStatus.FAIL,
+                      message=qc_config.template("DOC-1-expired"),
+                      fields_involved=["appraiser_cert_expiration_date", "date_of_signature"],
+                      template_id="DOC-1-expired", evidence=ev)
+
+
+# ---- SIG-SUP supervisory appraiser section consistency -----------------------
+
+def _has_supervisor(ctx: QCContext) -> bool:
+    return bool(ctx.appraisal.value("supervisory_appraiser_name")
+                or ctx.appraisal.value("supervisory_appraiser_cert_number"))
+
+
+@rule(id="SIG-SUP", num="111", section="signature", phase=2, applies_when=_has_supervisor,
+      name="Supervisory appraiser section complete")
+def sig_supervisor(ctx: QCContext):
+    inspect = (ctx.appraisal.value("supervisory_appraiser_did_inspect") or "").strip()
+    ev = [ctx.appraisal.evidence("supervisory_appraiser_name"),
+          ctx.appraisal.evidence("supervisory_appraiser_did_inspect")]
+    if inspect:
+        return RuleResult(rule_id="SIG-SUP", checklist_num="111", section="signature",
+                          status=RuleStatus.PASS,
+                          fields_involved=["supervisory_appraiser_name",
+                                           "supervisory_appraiser_did_inspect"], evidence=ev)
+    return RuleResult(rule_id="SIG-SUP", checklist_num="111", section="signature",
+                      status=RuleStatus.VERIFY,
+                      message=qc_config.template("SIG-sup"),
+                      fields_involved=["supervisory_appraiser_name",
+                                       "supervisory_appraiser_did_inspect"],
+                      template_id="SIG-sup", evidence=ev, confidence=0.6)
 
 
 # ---- SIG-3 appraiser licensed in the property's state ---------------------
