@@ -21,7 +21,8 @@ def g1_loan_type(ctx: QCContext):
     ev = [ctx.engagement.evidence("loan_type"), ctx.appraisal.evidence("fha_case_number")]
     if not ctx.has_engagement:
         return RuleResult(rule_id="G-1", checklist_num="B", section="global",
-                          status=RuleStatus.SKIPPED, message="engagement not available", evidence=ev)
+                          status=RuleStatus.NOT_APPLICABLE,
+                          message="Engagement letter / order form not available.", evidence=ev)
     if eng_loan == "conventional" and fha_markers:
         return RuleResult(rule_id="G-1", checklist_num="B", section="global",
                           status=RuleStatus.HOLD,

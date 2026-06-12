@@ -32,6 +32,20 @@ _DOC_TYPE = {
 }
 
 
+
+def _rebuild(rs, dtype, existing, ocr_method=None):
+    """Re-assemble an ExtractionResultSet after an overlay merged new results
+    into `existing` — the tail every _overlay_* was duplicating (DRY)."""
+    from app.core.result import ExtractionResultSet
+    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
+                                 total_pages=rs.total_pages,
+                                 ocr_method=ocr_method or rs.ocr_method)
+    for r in existing.values():
+        merged.add(r)
+    merged.finalize()
+    return merged
+
+
 def _first_pdf(folder: Path, sub: str) -> Optional[Path]:
     d = folder / sub
     if not d.is_dir():
@@ -102,12 +116,7 @@ def _overlay_form_type(rs, pdf, dtype):
         raw_source_text="true", extraction_method="form_marker",
         confidence=0.9, source_page=0, normalization_applied=["form_marker"],
     )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_comp_grid(rs, pdf, dtype):
@@ -170,12 +179,7 @@ def _overlay_comp_grid(rs, pdf, dtype):
             confidence=0.92 if from_cam else 0.88, source_page=0,
             normalization_applied=["sca_lattice" if from_cam else "comp_grid"],
         )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method="comp_grid+layered")
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing, ocr_method="comp_grid+layered")
 
 
 def _overlay_sca_llm(rs, pdf, dtype):
@@ -247,12 +251,7 @@ def _overlay_sca_llm(rs, pdf, dtype):
     )
     if replaced == 0:
         return rs
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_subject_llm(rs, pdf, dtype):
@@ -270,7 +269,7 @@ def _overlay_subject_llm(rs, pdf, dtype):
         return rs
     from app.core.result import ExtractionResult, ExtractionResultSet
     from app.extraction.subject_llm_extractor import (
-        GAP_FIELDS, SUBJECT_LLM_VERSION, extract_subject_contract_llm)
+        GAP_FIELDS, SUBJECT_LLM_VERSION, extract_gap_fields_llm)
 
     existing = {name: r for name, r in rs}
     missing = [f for f in GAP_FIELDS
@@ -279,9 +278,9 @@ def _overlay_subject_llm(rs, pdf, dtype):
     if not missing:
         return rs
     try:
-        filled = extract_subject_contract_llm(pdf, missing)
+        filled = extract_gap_fields_llm(pdf, missing)
     except Exception as exc:
-        logger.warning("Subject-LLM overlay failed for %s: %s", pdf.name, exc)
+        logger.warning("Gap-fill LLM overlay failed for %s: %s", pdf.name, exc)
         return rs
     if not filled:
         return rs
@@ -292,12 +291,7 @@ def _overlay_subject_llm(rs, pdf, dtype):
             confidence=conf, source_page=1,
             normalization_applied=[f"subject_llm:{SUBJECT_LLM_VERSION}"],
         )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_sketch(rs, pdf, dtype):
@@ -325,12 +319,7 @@ def _overlay_sketch(rs, pdf, dtype):
         raw_source_text=str(val), extraction_method=method,
         confidence=0.85, source_page=page, normalization_applied=[method],
     )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_narrative(rs, pdf, dtype):
@@ -358,12 +347,7 @@ def _overlay_narrative(rs, pdf, dtype):
         raw_source_text=text, extraction_method="positional_narrative",
         confidence=0.85, source_page=page, normalization_applied=["positional_narrative"],
     )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_photos(rs, pdf, dtype):
@@ -390,12 +374,7 @@ def _overlay_photos(rs, pdf, dtype):
             raw_source_text=value, extraction_method="photo_caption",
             confidence=0.8, source_page=0, normalization_applied=["photo_caption"],
         )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_comp_photos(rs, pdf, dtype):
@@ -417,12 +396,7 @@ def _overlay_comp_photos(rs, pdf, dtype):
             raw_source_text=str(value), extraction_method="comp_photo_vision",
             confidence=0.8, source_page=0, normalization_applied=["comp_photo_vision"],
         )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method=rs.ocr_method)
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing)
 
 
 def _overlay_contract(rs, pdf, dtype):
@@ -447,12 +421,7 @@ def _overlay_contract(rs, pdf, dtype):
             raw_source_text=str(value), extraction_method="contract_ocr",
             confidence=0.82, source_page=1, normalization_applied=["contract_ocr"],
         )
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method="contract_ocr+layered")
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing, ocr_method="contract_ocr+layered")
 
 
 def _overlay_engagement(rs, pdf, dtype):
@@ -488,12 +457,7 @@ def _overlay_engagement(rs, pdf, dtype):
             confidence=0.92, source_page=1, normalization_applied=["engagement_label"],
         )
     from app.core.result import ExtractionResultSet
-    merged = ExtractionResultSet(document_path=rs.document_path, document_type=dtype,
-                                 total_pages=rs.total_pages, ocr_method="engagement_label+layered")
-    for r in existing.values():
-        merged.add(r)
-    merged.finalize()
-    return merged
+    return _rebuild(rs, dtype, existing, ocr_method="engagement_label+layered")
 
 
 def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path=None,

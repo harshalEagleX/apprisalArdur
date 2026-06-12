@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import re
 
+from app.qc import helpers as H
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.matching import normalize_currency
 from app.qc.registry import rule
-from app.qc.result import RuleResult, RuleStatus
+from app.qc.result import RuleStatus
 
 _LAND_USE_FIELDS = [
     "land_use_one_unit", "land_use_2_4_unit", "land_use_multi_family",
@@ -27,12 +28,7 @@ _TRENDS = {"property_values": "Property Values", "demand_supply": "Demand/Supply
            "marketing_time": "Marketing Time"}
 
 
-def _res(rule_id, num, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section="neighborhood",
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
+_res = H.section_result("neighborhood")
 
 
 def _group_marked(ctx, rule_id, num, field, label):
@@ -223,6 +219,9 @@ _MAP_ONLY = re.compile(r"^\s*(please\s+)?(see|refer to)\s+(the\s+)?(attached\s+)
 
 @rule(id="N-5", num="23", section="neighborhood", phase=1, name="All four boundaries delineated")
 def n5_boundaries(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return H.present(ctx, "N-5", "23", "neighborhood", "neighborhood_boundaries",
+                         label="Neighborhood Boundaries")
     text = (ctx.appraisal.value("neighborhood_boundaries") or "")
     ev = [ctx.appraisal.evidence("neighborhood_boundaries")]
     if not text.strip():

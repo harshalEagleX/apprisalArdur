@@ -13,28 +13,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.core.result import ExtractionResult, ExtractionResultSet
 from app.qc.context import QCContext
 from app.qc.result import RuleStatus
 
 
-def _rs(**fields) -> ExtractionResultSet:
-    rs = ExtractionResultSet(document_path="x", document_type="appraisal_report")
-    for name, value in fields.items():
-        rs.add(ExtractionResult(canonical_name=name, document_type="appraisal_report",
-                                value=str(value), extraction_method="test",
-                                confidence=0.9, source_page=1))
-    rs.finalize()
-    return rs
-
-
-def _statuses(results):
-    return [r.status for r in (results if isinstance(results, list) else [results])]
-
-
-def _by_template(results, template_id):
-    return [r for r in (results if isinstance(results, list) else [results])
-            if r.template_id == template_id]
+from tests.rule_helpers import as_list as _list
+from tests.rule_helpers import by_template as _by_template
+from tests.rule_helpers import rs as _rs
+from tests.rule_helpers import statuses as _statuses
 
 
 class TestN1N2:

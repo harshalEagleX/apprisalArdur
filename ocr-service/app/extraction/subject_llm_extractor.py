@@ -1,22 +1,24 @@
-"""LLM gap-fill of the SUBJECT + CONTRACT sections — extraction layer v0.1.17.
+"""LLM gap-fill of form pages the deterministic layers read unevenly — v0.1.18.
 
-Why this exists: the deterministic layers (Camelot label regexes, spatial
-anchors) read the page-1 subject/contract blocks of the URAR unevenly — fields
-like Tax Year, Map Reference, Census Tract, Special Assessments, Occupancy and
-the contract-section answers are frequently NOT_FOUND, which leaves the S-4/S-6/
-S-7/S-8 and C-1/C-3/C-4 rules blind.
+Why this exists: Camelot label regexes and spatial anchors miss whole blocks of
+the URAR — the page-1 subject/contract answers, the page-2 reconciliation
+values, the cost-approach figures, the signature-block license dates and the
+USPAP addendum fields — which leaves the S/C, R-1b, CA-3, DOC-1 and ADD-9 rules
+blind (they land on extraction-gap VERIFYs for every report).
 
-This module is the same "brain" pattern as sca_llm_extractor: it reads page TEXT
-that the deterministic pipeline already produced (the "eyes"), asks the LLM only
-for the fields the deterministic layers MISSED, and verbatim-validates every
-free-text/numeric answer against the source text before trusting it — a value
-that does not literally appear on the page is dropped, so hallucination cannot
-pass through. Enum/boolean answers cannot be substring-validated (checkbox
-glyphs), so they are emitted at LOWER confidence than the structured cutoff:
-the rule engine then asserts them only as VERIFY, never an automatic FAIL.
+This module is the same "brain" pattern as sca_llm_extractor: it reads page
+TEXT the deterministic pipeline already produced (the "eyes"), asks the LLM
+only for the fields the deterministic layers MISSED, and verbatim-validates
+every free-text/numeric answer against the source page before trusting it — a
+value that does not literally appear on the page is dropped, so hallucination
+cannot pass through. Enum/checkbox-style answers cannot be substring-validated,
+so they are emitted BELOW the structured confidence cutoff: the rule engine
+then asserts them only as VERIFY, never an automatic FAIL.
 
-Boundary: returns {canonical_field: value}. Empty dict on any failure so the
-caller keeps its deterministic result (P-6). Performs NO OCR, never sees images.
+Fields are organized into PAGE GROUPS, each with a predicate that locates its
+form page; one LLM call covers each group's missing fields. Boundary: returns
+{canonical_field: (value, confidence)}. Empty dict on any failure so the caller
+keeps its deterministic result (P-6). Performs NO OCR, never sees images.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from app.extraction import llm_groq
 
 logger = logging.getLogger(__name__)
 
-SUBJECT_LLM_VERSION = "0.1.17"
+SUBJECT_LLM_VERSION = "0.1.18"
 
 # Confidence stamps. Verbatim-validated values sit just above the structured
 # cutoff (0.75) — the value literally appears on the page. Enum/checkbox-style
@@ -39,7 +41,7 @@ CONF_VALIDATED = 0.82
 CONF_ENUM = 0.70
 
 # field -> (kind, allowed-values-or-None). kind: text | number | enum
-GAP_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+_SUBJECT_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
     # ---- subject section ----
     "owner_of_public_record": ("text", None),
     "legal_description": ("text", None),
@@ -68,6 +70,62 @@ GAP_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
     "financial_assistance_description": ("text", None),
 }
 
+_RECON_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+    "indicated_value_cost_approach": ("number", None),
+    "indicated_value_income_approach": ("number", None),
+    "appraisal_subject_to": ("enum", ("As Is", "Subject To Completion",
+                                      "Subject To Repairs", "Subject To Inspection")),
+    "final_reconciliation_comment": ("text", None),
+}
+
+_COST_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+    "site_value_estimate": ("number", None),
+    "cost_new_improvements": ("number", None),
+    "total_depreciation": ("number", None),
+    "depreciated_cost_improvements": ("number", None),
+    "remaining_economic_life": ("number", None),
+}
+
+_SIGNATURE_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+    "date_of_signature": ("text", None),
+    "appraiser_cert_expiration_date": ("text", None),
+    "appraiser_state_cert_number": ("text", None),
+    "appraiser_cert_state": ("text", None),
+}
+
+_USPAP_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+    "appraisal_report_type": ("enum", ("Appraisal Report", "Restricted Appraisal Report")),
+    "reasonable_exposure_time": ("text", None),
+    "prior_services_performed": ("text", None),
+}
+
+# group -> (page predicate over lowercased page text, field table, page label
+# for the prompt). The predicate locates the form page the group lives on.
+PAGE_GROUPS = {
+    "subject": (
+        lambda low: "property address" in low and ("owner of public record" in low
+                                                   or "assessor" in low),
+        _SUBJECT_FIELDS, "page 1 (SUBJECT and CONTRACT sections)"),
+    "reconciliation": (
+        lambda low: "indicated value by" in low and ("reconciliation" in low
+                                                     or "sales comparison approach" in low),
+        _RECON_FIELDS, "RECONCILIATION section (bottom of the sales comparison page)"),
+    "cost": (
+        lambda low: "opinion of site value" in low or "estimated remaining economic" in low,
+        _COST_FIELDS, "COST APPROACH section"),
+    "signature": (
+        lambda low: "expiration date" in low and ("signature" in low or "appraiser" in low),
+        _SIGNATURE_FIELDS, "APPRAISER signature/certification block"),
+    "uspap": (
+        lambda low: "exposure time" in low or "restricted appraisal report" in low,
+        _USPAP_FIELDS, "USPAP addendum"),
+}
+
+# union across groups — the overlay computes its missing-fields list from this
+GAP_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+    f: spec for _, table, _ in PAGE_GROUPS.values() for f, spec in table.items()
+}
+
 _FIELD_HINTS = {
     "owner_of_public_record": "Owner of Public Record",
     "legal_description": "Legal Description",
@@ -92,19 +150,35 @@ _FIELD_HINTS = {
     "has_financial_assistance": "Is there any financial assistance/concessions: Yes/No",
     "financial_assistance_amount": "financial assistance / concession $ amount",
     "financial_assistance_description": "description of items to be paid by any party",
+    "indicated_value_cost_approach": "Indicated Value by: Cost Approach (if developed) $",
+    "indicated_value_income_approach": "Indicated Value by: Income Approach (if developed) $",
+    "appraisal_subject_to": "'This appraisal is made' checkbox: As Is / Subject To ...",
+    "final_reconciliation_comment": "the reconciliation narrative (which approach was weighted and why), VERBATIM",
+    "site_value_estimate": "OPINION OF SITE VALUE $",
+    "cost_new_improvements": "total cost-new of improvements $",
+    "total_depreciation": "total Depreciation $ (physical+functional+external)",
+    "depreciated_cost_improvements": "Depreciated Cost of Improvements $",
+    "remaining_economic_life": "Estimated Remaining Economic Life (years)",
+    "date_of_signature": "Date of Signature and Report (MM/DD/YYYY as printed)",
+    "appraiser_cert_expiration_date": "Expiration Date of Certification or License (as printed)",
+    "appraiser_state_cert_number": "State Certification # or License #",
+    "appraiser_cert_state": "the State of the certification/license (2-letter code)",
+    "appraisal_report_type": "USPAP identification checkbox: Appraisal Report or Restricted Appraisal Report",
+    "reasonable_exposure_time": "Reasonable Exposure Time (verbatim, e.g. '30-90 days')",
+    "prior_services_performed": "the prior-services disclosure (HAVE / HAVE NOT performed services, plus any description)",
 }
 
 _SYSTEM = (
-    "You read page 1 (SUBJECT and CONTRACT sections) of a URAR / Form 1004 "
-    "residential appraisal report. Output ONLY one valid JSON object and nothing else."
+    "You read pages of a URAR / Form 1004 residential appraisal report. "
+    "Output ONLY one valid JSON object and nothing else."
 )
 
 
-def _prompt(page_text: str, fields) -> str:
+def _prompt(page_text: str, fields, page_label: str) -> str:
     lines = "\n".join(f'- "{f}": {_FIELD_HINTS.get(f, f)}' for f in fields)
     return (
-        "Below is the spatially-reconstructed text of an appraisal report page "
-        "containing the SUBJECT and CONTRACT sections. Extract ONLY these fields:\n"
+        f"Below is the spatially-reconstructed text of the {page_label} of an "
+        "appraisal report. Extract ONLY these fields:\n"
         f"{lines}\n\n"
         "Rules:\n"
         "- Copy free-text values VERBATIM as they appear in the text (same casing, "
@@ -118,30 +192,49 @@ def _prompt(page_text: str, fields) -> str:
     )
 
 
-def _page_one_text(pdf_path) -> str:
-    """Spatially reconstruct the subject/contract page: cluster words by row (y),
-    sort by column (x) — same approach as the SCA grid reader, so labels sit on
-    the same line as their fill-in values."""
+def _spatial_text(page) -> str:
+    """Row-clustered, column-ordered text of one pdfplumber page — labels sit on
+    the same line as their fill-in values (same approach as the SCA grid reader)."""
+    words = page.extract_words(use_text_flow=False, keep_blank_chars=False)
+    lines: Dict[int, list] = {}
+    for w in words:
+        lines.setdefault(round(w["top"] / 3.0), []).append(w)
+    return "\n".join(
+        " ".join(w["text"] for w in sorted(lines[yk], key=lambda w: w["x0"]))
+        for yk in sorted(lines)
+    )
+
+
+def _group_pages(pdf_path, groups) -> Dict[str, str]:
+    """{group: spatial page text} for each requested group whose page is found.
+
+    Page candidates are screened with the cheap embedded-text read; only the
+    matched page is spatially reconstructed (pdfplumber is the slow part)."""
+    import fitz
     import pdfplumber
 
+    matches: Dict[str, int] = {}
+    doc = fitz.open(str(Path(pdf_path)))
+    try:
+        for i in range(doc.page_count):
+            if len(matches) == len(groups):
+                break
+            low = doc[i].get_text().lower()
+            for g in groups:
+                if g not in matches and PAGE_GROUPS[g][0](low):
+                    matches[g] = i
+    finally:
+        doc.close()
+    if not matches:
+        return {}
+    out: Dict[str, str] = {}
     with pdfplumber.open(str(Path(pdf_path))) as pdf:
-        # subject+contract are on the first form page; scan the first 3 pages and
-        # pick the first that looks like the URAR page 1.
-        for i in range(min(3, len(pdf.pages))):
-            page = pdf.pages[i]
-            words = page.extract_words(use_text_flow=False, keep_blank_chars=False)
-            lines: Dict[int, list] = {}
-            for w in words:
-                lines.setdefault(round(w["top"] / 3.0), []).append(w)
-            text = "\n".join(
-                " ".join(w["text"] for w in sorted(lines[yk], key=lambda w: w["x0"]))
-                for yk in sorted(lines)
-            )
-            low = text.lower()
-            if "property address" in low and ("owner of public record" in low
-                                              or "assessor" in low):
-                return text
-    return ""
+        for g, i in matches.items():
+            try:
+                out[g] = _spatial_text(pdf.pages[i])
+            except Exception as exc:
+                logger.debug("Spatial read failed for %s page %d: %s", g, i, exc)
+    return out
 
 
 _DIGITS = re.compile(r"\d+")
@@ -151,12 +244,12 @@ def _norm_ws(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").lower()).strip()
 
 
-def _validate(field: str, value: str, page_text: str) -> Optional[Tuple[str, float]]:
-    """Verbatim-validate one LLM answer against the page. Returns (value, conf)
+def _validate(spec, value: str, page_text: str) -> Optional[Tuple[str, float]]:
+    """Verbatim-validate one LLM answer against its page. Returns (value, conf)
     or None when the answer cannot be trusted."""
-    kind, allowed = GAP_FIELDS[field]
+    kind, allowed = spec
     v = str(value).strip()
-    if not v or len(v) > 300:
+    if not v or len(v) > 2000:
         return None
     if kind == "enum":
         # accept only an allowed option (case-insensitive); never substring-check
@@ -180,45 +273,58 @@ def _validate(field: str, value: str, page_text: str) -> Optional[Tuple[str, flo
     return v, CONF_VALIDATED
 
 
-def extract_subject_contract_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, float]]:
-    """Return {field: (value, confidence)} for the requested missing fields.
+def extract_gap_fields_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, float]]:
+    """Return {field: (value, confidence)} for the requested missing fields,
+    one LLM call per page group that has gaps.
 
-    Only fields listed in GAP_FIELDS are ever requested; every answer is
+    Only fields listed in PAGE_GROUPS are ever requested; every answer is
     validated before being returned. Empty dict on any failure (P-6).
     """
-    fields = [f for f in missing_fields if f in GAP_FIELDS]
-    if not fields or not llm_groq.groq_extraction_available():
+    if not llm_groq.groq_extraction_available():
+        return {}
+    wanted = {g: [f for f in missing_fields if f in table]
+              for g, (_, table, _) in PAGE_GROUPS.items()}
+    wanted = {g: fs for g, fs in wanted.items() if fs}
+    if not wanted:
         return {}
     name = getattr(pdf_path, "name", str(pdf_path))
     try:
-        text = _page_one_text(pdf_path)
+        pages = _group_pages(pdf_path, list(wanted))
     except Exception as exc:
-        logger.warning("Subject-LLM page read failed for %s: %s", name, exc)
-        return {}
-    if not text.strip():
-        return {}
-
-    data = llm_groq.chat_json(
-        [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": _prompt(text[:11000], fields)},
-        ],
-        reasoning_effort="low",
-        max_tokens=2048,
-    )
-    if not isinstance(data, dict):
+        logger.warning("Gap-fill page read failed for %s: %s", name, exc)
         return {}
 
     out: Dict[str, Tuple[str, float]] = {}
-    for field, raw in data.items():
-        if field not in fields or raw is None:
+    for g, text in pages.items():
+        if not text.strip():
             continue
-        ok = _validate(field, str(raw), text)
-        if ok is not None:
-            out[field] = ok
+        _, table, page_label = PAGE_GROUPS[g]
+        data = llm_groq.chat_json(
+            [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": _prompt(text[:11000], wanted[g], page_label)},
+            ],
+            reasoning_effort="low",
+            max_tokens=2048,
+        )
+        if not isinstance(data, dict):
+            continue
+        for field, raw in data.items():
+            if field not in wanted[g] or raw is None:
+                continue
+            ok = _validate(table[field], str(raw), text)
+            if ok is not None:
+                out[field] = ok
     if out:
         logger.info(
-            "Subject-LLM v%s gap-filled %d/%d requested fields for %s: %s",
-            SUBJECT_LLM_VERSION, len(out), len(fields), name, sorted(out),
+            "Gap-fill LLM v%s filled %d/%d requested fields (%s) for %s: %s",
+            SUBJECT_LLM_VERSION, len(out), len(missing_fields),
+            "+".join(sorted(pages)), name, sorted(out),
         )
     return out
+
+
+def extract_subject_contract_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, float]]:
+    """Back-compat wrapper: the original subject/contract-only entry point."""
+    subject_only = [f for f in missing_fields if f in _SUBJECT_FIELDS]
+    return extract_gap_fields_llm(pdf_path, subject_only)

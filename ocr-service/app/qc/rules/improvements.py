@@ -9,23 +9,14 @@ from __future__ import annotations
 import re
 
 from app.qc import helpers as H
+from app.qc import matching
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.registry import rule
-from app.qc.result import RuleResult, RuleStatus
+from app.qc.result import RuleStatus
 
 
-def _res(rule_id, num, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section="improvements",
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
-
-
-def _year_of(text) -> int:
-    m = re.search(r"\b(18|19|20)\d{2}\b", str(text or ""))
-    return int(m.group(0)) if m else 0
+_res = H.section_result("improvements")
 
 
 def _int_of(text):
@@ -44,6 +35,9 @@ _GEN_FIELDS = {
 
 @rule(id="I-1", num="40", section="improvements", phase=1, name="General description complete")
 def i1_general(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return H.present(ctx, "I-1", "40", "improvements", "design_style",
+                         label="General Description")
     missing = [label for f, label in _GEN_FIELDS.items() if not ctx.appraisal.value(f)]
     ev = [ctx.appraisal.evidence(f) for f in _GEN_FIELDS]
     out = []
@@ -61,8 +55,8 @@ def i1_general(ctx: QCContext):
                         evidence=ev, confidence=0.6))
 
     # year built plausibility + effective age <= actual age
-    yb = _year_of(ctx.appraisal.value("year_built"))
-    eff_year = _year_of(ctx.appraisal.value("effective_date"))
+    yb = matching.year_of(ctx.appraisal.value("year_built"))
+    eff_year = matching.year_of(ctx.appraisal.value("effective_date"))
     eff_age = _int_of(ctx.appraisal.value("effective_age"))
     if yb and eff_year and eff_age is not None:
         actual = eff_year - yb
@@ -118,6 +112,9 @@ def i34_materials(ctx: QCContext):
 
 @rule(id="I-7", num="48", section="improvements", phase=1, name="Above-grade room count present")
 def i7_rooms(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return H.present(ctx, "I-7", "48", "improvements", "gla",
+                         label="Above Grade Room Count")
     fields = ["total_rooms", "bedrooms", "baths", "gla"]
     missing = [f for f in fields if not ctx.appraisal.value(f)]
     ev = [ctx.appraisal.evidence(f) for f in fields]
@@ -147,8 +144,8 @@ def i9_condition(ctx: QCContext):
                                   ctx.appraisal.evidence("subject_grid_condition_rating")]))
     # a C1-C3 (good condition) property whose effective age EQUALS its actual
     # age is internally inconsistent — good condition implies a lower effective age
-    yb = _year_of(ctx.appraisal.value("year_built"))
-    eff_year = _year_of(ctx.appraisal.value("effective_date"))
+    yb = matching.year_of(ctx.appraisal.value("year_built"))
+    eff_year = matching.year_of(ctx.appraisal.value("effective_date"))
     eff_age = _int_of(ctx.appraisal.value("effective_age"))
     if cond in {"C1", "C2", "C3"} and yb and eff_year and eff_age is not None:
         actual = eff_year - yb

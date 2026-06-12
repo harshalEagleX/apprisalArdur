@@ -16,15 +16,10 @@ from app.qc import matching
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.registry import rule
-from app.qc.result import RuleResult, RuleStatus
+from app.qc.result import RuleStatus
 
 
-def _res(rule_id, num, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section="subject",
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
+_res = H.section_result("subject")
 
 
 # ---- S-1 Property address (cross-document, 5 components) -------------------
@@ -203,15 +198,10 @@ def s4_taxes(ctx):
     return H.present(ctx, "S-4c", "5", "subject", "real_estate_taxes", label="R.E. Taxes")
 
 
-def _year_of(text) -> int:
-    m = re.search(r"\b(19|20)\d{2}\b", str(text or ""))
-    return int(m.group(0)) if m else 0
-
-
 @rule(id="S-4d", num="5", section="subject", phase=1, name="Tax year current")
 def s4_tax_year(ctx):
-    tax_year = _year_of(ctx.appraisal.value("tax_year"))
-    eff_year = _year_of(ctx.appraisal.value("effective_date"))
+    tax_year = matching.year_of(ctx.appraisal.value("tax_year"))
+    eff_year = matching.year_of(ctx.appraisal.value("effective_date"))
     ev = [ctx.appraisal.evidence("tax_year"), ctx.appraisal.evidence("effective_date")]
     if not tax_year or not eff_year:
         return _res("S-4d", "5", RuleStatus.VERIFY,
@@ -398,9 +388,6 @@ def s10_lender_addr(ctx):
 
 # ---- S-12 Prior listing data source + listing details -----------------------
 
-_TRUTHY = {"true", "yes", "1", "x", "checked"}
-
-
 @rule(id="S-12", num="13", section="subject", phase=1, name="Prior-listing data source present")
 def s12_datasource(ctx):
     if not ctx.appraisal.present:
@@ -416,7 +403,7 @@ def s12_datasource(ctx):
                         message=qc_config.template("S-12-datasource"),
                         fields=["data_source"], template_id="S-12-datasource", evidence=ev))
     # offered=Yes ⇒ the prior listing details (MLS # and DOM) must be reported
-    if offered in _TRUTHY:
+    if offered in H.TRUTHY:
         missing = [label for field, label in
                    (("mls_number", "MLS listing number"), ("days_on_market", "DOM"))
                    if not ctx.appraisal.value(field)]

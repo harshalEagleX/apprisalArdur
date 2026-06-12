@@ -14,12 +14,7 @@ from app.qc.registry import rule
 from app.qc.result import RuleResult, RuleStatus
 
 
-def _res(rule_id, num, section, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section=section,
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
+from app.qc.helpers import make_result as _res
 
 
 # ---- R-1 indicated value (SCA) == appraised/market value ------------------

@@ -24,6 +24,11 @@ from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.result import Evidence, RuleResult, RuleStatus
 
+# Canonical interpretations of checkbox/boolean extraction values, shared by
+# every rule module (DRY) — extend here, never per-module.
+TRUTHY = {"true", "yes", "1", "x", "checked"}
+FALSY = {"false", "no", "0", "unchecked"}
+
 
 def _conf_floor(ctx: QCContext, doc: str, field: str) -> float:
     return ctx.checkbox_conf if ctx.doc(doc).is_checkbox(field) else ctx.structured_conf
@@ -36,6 +41,21 @@ def _mk(rule_id, num, section, status, message="", fields=None,
         message=message, fields_involved=fields or [], evidence=evidence or [],
         confidence=confidence, template_id=template_id,
     )
+
+
+# public RuleResult builders — rule modules use these instead of redefining
+# their own constructors (DRY)
+make_result = _mk
+
+
+def section_result(section: str):
+    """A RuleResult builder bound to one section: the shape every rule module
+    was re-implementing as a private `_res`."""
+    def _res(rule_id, num, status, message="", fields=None, evidence=None,
+             template_id=None, confidence=1.0) -> RuleResult:
+        return _mk(rule_id, num, section, status, message=message, fields=fields,
+                   evidence=evidence, confidence=confidence, template_id=template_id)
+    return _res
 
 
 def _gate(ctx: QCContext, doc: str, field: str, status: RuleStatus,

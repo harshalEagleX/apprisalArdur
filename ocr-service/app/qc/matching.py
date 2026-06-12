@@ -266,6 +266,13 @@ def parse_date_tuple(text) -> Optional[tuple]:
     return (yy, mm, dd)
 
 
+def year_of(text) -> int:
+    """First plausible 4-digit year in the text; 0 when none. Shared by the
+    tax-year / year-built / effective-date arithmetic rules."""
+    m = re.search(r"\b(18|19|20)\d{2}\b", str(text or ""))
+    return int(m.group(0)) if m else 0
+
+
 def match_date(a, b) -> MatchResult:
     """Exact-day date equality. Dates are identifiers, not fuzzy strings —
     Jaro-Winkler would call 04/27/2026 and 04/29/2026 a match. Unparseable on

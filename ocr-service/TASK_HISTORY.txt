@@ -1173,3 +1173,41 @@ RECONCILIATION / COST / INCOME / ADDENDUM / SIGNATURE / FHA DEEP PASS (MIRA spec
       → R-1b, ADD-9, DOC-1 currently land on VERIFY for most docs; positional
       extraction of page-2 bottom + signature block turns those into PASS/FAIL.
     - ADD-6 needs the page-2 "comparable listings/sales counts" pair extracted.
+
+DRY REFACTOR + DEEP-PAGE GAP-FILL (extraction v0.1.18)
+[x] DRY: helpers.section_result()/make_result replace the seven per-module
+    _res() builders; helpers.TRUTHY/FALSY replace per-module truthy sets;
+    matching.year_of() replaces duplicated _year_of helpers; transaction.py
+    _rebuild() replaces 10 identical overlay merge tails; tests/rule_helpers.py
+    replaces the triplicated _rs/_statuses/_by_template test builders.
+    Behavior-neutral: full rule suite green after each step.
+[x] subject_llm_extractor v0.1.18: generalized to PAGE_GROUPS — subject (23
+    fields), reconciliation (4), cost (5), signature (4), uspap (3); one page
+    predicate + one LLM call per group with gaps, all through the same
+    verbatim-validation pipeline. extract_gap_fields_llm() is the entry point
+    (extract_subject_contract_llm kept as a back-compat wrapper); the overlay
+    is unchanged except the function name — the GAP_FIELDS union drives it.
+[x] MEASURED smoke (Fantail): 10/10 deep fields filled — cert expiration
+    02/28/2027 (TX), date of signature 05/12/2026, reconciliation narrative,
+    'As Is', site value 60000, REL 60, report type, exposure '<60 days'.
+[x] MEASURED corpus (sort, 3 valid txns): DOC-1 license-expiry VERIFY→PASS on
+    all 3; R-2 as-is box →PASS on 2; ADD-9 report-type/exposure partially
+    →PASS; CA-1 →PASS on #505; CA-3 now evaluates and FAILed #505's cost
+    arithmetic ($395,604 vs site+depreciated-cost — reviewer sees both sides;
+    possible row-association miss by the LLM on one component, flagged below).
+    R-1b conversion is intermittent: the long verbatim reconciliation
+    narrative does not always survive substring validation.
+[x] Empty-context hardening (audit follow-up): I-1/I-7/N-5 FAILed when the
+    appraisal document was entirely absent → routed through present() (VERIFY);
+    G-1 SKIPPED → NOT_APPLICABLE. Empty-context profile now: V59 N/A32 P4 S1
+    (the one SKIP is the deliberate vision-gated SCA-16V).
+[!] uploads/sort/#2321525530 was deleted AGAIN — this time including its .zip
+    (a __MACOSX artifact appeared; something external is reorganizing the
+    folder). Its corpus slot now measures the missing-document degradation
+    path. Restore the source files to re-include it.
+[ ] NEXT:
+    - CA-3 component row-association: digit-run validation can't tell which
+      cost row a number came from; anchor the prompt with row labels or
+      cross-check components sum before accepting.
+    - R-1b long-text fill: relax validation to sentence-level containment so
+      the reconciliation narrative survives OCR reflow.

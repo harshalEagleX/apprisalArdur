@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import re
 
+from app.qc import helpers as H
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.matching import normalize_currency
 from app.qc.registry import rule
-from app.qc.result import RuleResult, RuleStatus
+from app.qc.result import RuleStatus
 
-_TRUTHY = {"true", "yes", "1", "x"}
 _SQFT_PER_ACRE = 43_560
 
 
@@ -23,12 +23,7 @@ def _has_site_detail(ctx: QCContext) -> bool:
     return ctx.form_type not in ("1073", "1025")
 
 
-def _res(rule_id, num, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section="site",
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
+_res = H.section_result("site")
 
 
 # ---- ST-1 site dimensions: real measurements or irregular+plat -------------
@@ -153,8 +148,8 @@ def st4_view(ctx: QCContext):
 
 @rule(id="ST-7", num="32", section="site", phase=4, name="Utilities marked; private systems addressed")
 def st7_utilities(ctx: QCContext):
-    elec = str(ctx.appraisal.value("utilities_electricity") or "").lower() in _TRUTHY | {"public"}
-    gas = str(ctx.appraisal.value("utilities_gas") or "").lower() in _TRUTHY | {"public"}
+    elec = str(ctx.appraisal.value("utilities_electricity") or "").lower() in H.TRUTHY | {"public"}
+    gas = str(ctx.appraisal.value("utilities_gas") or "").lower() in H.TRUTHY | {"public"}
     ev = [ctx.appraisal.evidence("utilities_electricity"), ctx.appraisal.evidence("utilities_gas")]
     out = []
     if elec and gas:
@@ -227,7 +222,7 @@ def st6_hbu(ctx: QCContext):
 
 @rule(id="ST-8", num="33", section="site", phase=3, name="FEMA flood data complete; zone addressed")
 def st8_flood(ctx: QCContext):
-    in_flood = str(ctx.appraisal.value("fema_flood_hazard") or "").lower() in _TRUTHY
+    in_flood = str(ctx.appraisal.value("fema_flood_hazard") or "").lower() in H.TRUTHY
     zone = (ctx.appraisal.value("fema_flood_zone") or "").upper()
     map_date = ctx.appraisal.value("fema_map_date")
     ev = [ctx.appraisal.evidence("fema_flood_hazard"), ctx.appraisal.evidence("fema_flood_zone"),

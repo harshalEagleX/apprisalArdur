@@ -14,15 +14,12 @@ import re
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.registry import rule
-from app.qc.result import RuleResult, RuleStatus
+from app.qc.result import RuleStatus
 
 
-def _res(rule_id, num, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section="addendum",
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
+from app.qc.helpers import section_result
+
+_res = section_result("addendum")
 
 
 # ---- ADD-2 comparable selection commentary explains WHY ---------------------

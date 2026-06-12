@@ -16,13 +16,11 @@ from app.qc import matching
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.registry import rule
-from app.qc.result import RuleResult, RuleStatus
+from app.qc.result import RuleStatus
 
 _CONTRACT_FIELDS = ["contract_price", "contract_date", "did_analyze_contract",
                     "has_financial_assistance", "financial_assistance_amount"]
 
-_TRUTHY = {"true", "yes", "1", "x", "checked"}
-_FALSY = {"false", "no", "0", "unchecked"}
 
 # UAD sale-type vocabulary the contract analysis must identify (C-1).
 _SALE_TYPES = re.compile(
@@ -38,12 +36,7 @@ def _is_refi(ctx: QCContext) -> bool:
     return ctx.transaction_type == "refinance"
 
 
-def _res(rule_id, num, status, message="", fields=None, evidence=None,
-         template_id=None, confidence=1.0) -> RuleResult:
-    return RuleResult(rule_id=rule_id, checklist_num=num, section="contract",
-                      status=status, message=message, fields_involved=fields or [],
-                      evidence=evidence or [], template_id=template_id,
-                      confidence=confidence)
+_res = H.section_result("contract")
 
 
 # ---- C-1 contract analysis / sale type / value variance / refi-blank -------
@@ -159,7 +152,7 @@ def c3_datasource(ctx: QCContext):
                         template_id="C-3-datasource", evidence=ev))
     # seller is NOT the owner of record → the circumstances need commentary
     # (e.g. contract assignment, estate sale, builder sale)
-    if seller_owner in _FALSY:
+    if seller_owner in H.FALSY:
         commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
         if not commentary:
             out.append(_res("C-3", "17", RuleStatus.VERIFY,
@@ -188,13 +181,13 @@ def c4_concessions(ctx: QCContext):
                         message=qc_config.template("C-4-blank"),
                         fields=["has_financial_assistance"],
                         template_id="C-4-blank", confidence=0.5, evidence=ev_box))
-    elif has in _FALSY and amt and amt > 0:
+    elif has in H.FALSY and amt and amt > 0:
         # logical contradiction: No checked but an amount is reported
         out.append(_res("C-4", "18", RuleStatus.FAIL,
                         message=qc_config.template("C-4-contradict", value=int(amt)),
                         fields=["has_financial_assistance", "financial_assistance_amount"],
                         template_id="C-4-contradict", evidence=ev_box))
-    elif has in _TRUTHY:
+    elif has in H.TRUTHY:
         desc = ctx.appraisal.value("financial_assistance_description")
         if not amt or not desc:
             status = RuleStatus.FAIL if not amt else RuleStatus.VERIFY
