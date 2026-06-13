@@ -80,3 +80,21 @@ SCA_LLM_ALWAYS: bool = os.getenv("SCA_LLM_ALWAYS", "false").lower() in ("1", "tr
 # still prefers Gemini; Groq is the resilience backstop.
 GROQ_VISION_API_KEY: str = os.getenv("GROQ_VISION_API_KEY", "")
 GROQ_VISION_MODEL: str = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+
+# ── Field locator (reviewer click-to-scroll) ───────────────────────────────────
+# After extraction, locate each found value's bounding box on its page so the
+# reviewer UI can scroll to and highlight the exact field. Coordinates are
+# normalized [0,1] fractions of the page (top-left origin) — what the PDF viewer
+# expects. Precision-gated per the MIRA spec: ambiguous / too-short / too-long
+# values fall back to a page-level reference (no box).
+FIELD_LOCATOR_ENABLED: bool = os.getenv("FIELD_LOCATOR_ENABLED", "true").lower() in ("1", "true", "yes")
+# Value strings shorter than this (normalized) are too ambiguous to highlight
+# precisely (e.g. "C3", "Q4", "Yes") unless their page is already known AND the
+# value occurs exactly once on that page.
+FIELD_LOCATOR_MIN_LEN: int = int(os.getenv("FIELD_LOCATOR_MIN_LEN", "4"))
+# Value strings longer than this are narrative/paragraph text — a single box is
+# not meaningful, so they stay page-level only.
+FIELD_LOCATOR_MAX_LEN: int = int(os.getenv("FIELD_LOCATOR_MAX_LEN", "80"))
+# Pad the located box by this fraction of the page on every side so the highlight
+# sits comfortably around the text rather than clipping it.
+FIELD_LOCATOR_PAD: float = float(os.getenv("FIELD_LOCATOR_PAD", "0.004"))

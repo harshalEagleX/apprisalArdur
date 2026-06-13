@@ -17,6 +17,11 @@ public record PythonEvidence(
         @JsonProperty("value")      String value,
         @JsonProperty("confidence") Double confidence,
         @JsonProperty("page")       Integer page,
+        // Normalized [0,1] field box (top-left origin) for this specific piece of
+        // evidence, when the locator could place it: {"x","y","w","h"}. Null when
+        // the value couldn't be located precisely (page-level reference only).
+        // Kept so a multi-field rule can make each side independently clickable.
+        @JsonProperty("bbox")       java.util.Map<String, Double> bbox,
         @JsonProperty("method")     String method
 ) {
 }

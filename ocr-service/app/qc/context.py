@@ -66,6 +66,7 @@ class DocView:
             value=r.value,
             confidence=r.effective_confidence,
             page=r.source_page,
+            bbox=r.bbox,            # normalized [0,1] field box for click-to-scroll (None if unlocated)
             method=r.extraction_method,
             field=field_name,
         )

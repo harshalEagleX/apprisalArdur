@@ -77,6 +77,7 @@ def extract_documents(folder: Path) -> Dict[str, object]:
                 rs = _overlay_comp_photos(rs, pdf, dtype)
             elif role == "contract":
                 rs = _overlay_contract(rs, pdf, dtype)
+            rs = _overlay_locate(rs, pdf)
             sets[role] = rs
         except Exception as exc:
             logger.error("Extraction failed for %s/%s: %s", folder.name, role, exc)
@@ -461,6 +462,19 @@ def _overlay_engagement(rs, pdf, dtype):
     return _rebuild(rs, dtype, existing, ocr_method="engagement_label+layered")
 
 
+def _overlay_locate(rs, pdf):
+    """Stamp each found value with its on-page bounding box (normalized [0,1],
+    top-left origin) so the reviewer UI can scroll to and highlight the exact
+    field. Mutates `rs` in place and returns it. No-op / safe when the locator is
+    disabled or the value can't be located (P-6)."""
+    from app.extraction.field_locator import locate_fields
+    try:
+        locate_fields(Path(pdf), rs)
+    except Exception as exc:
+        logger.warning("Field locator overlay failed for %s: %s", Path(pdf).name, exc)
+    return rs
+
+
 def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path=None,
                              transaction_id: Optional[str] = None, persist: bool = True,
                              progress=None):
@@ -516,15 +530,19 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     _emit("photos", "Analyzing report photographs", 42.0)
     rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")
+    _emit("locate", "Locating field positions for review highlights", 44.0)
+    rs = _overlay_locate(rs, Path(appraisal_path))
     sets["appraisal"] = rs
     if engagement_path:
         _emit("extract_engagement", "Extracting engagement letter", 45.0)
         eng = run_full_extraction(Path(engagement_path), "engagement_letter", use_paddle=False)
-        sets["engagement"] = _overlay_engagement(eng, Path(engagement_path), "engagement_letter")
+        eng = _overlay_engagement(eng, Path(engagement_path), "engagement_letter")
+        sets["engagement"] = _overlay_locate(eng, Path(engagement_path))
     if contract_path:
         _emit("extract_contract", "Extracting sales contract", 65.0)
         con = run_full_extraction(Path(contract_path), "sales_contract", use_paddle=False)
-        sets["contract"] = _overlay_contract(con, Path(contract_path), "sales_contract")
+        con = _overlay_contract(con, Path(contract_path), "sales_contract")
+        sets["contract"] = _overlay_locate(con, Path(contract_path))
 
     _emit("rules", "Evaluating QC rules", 85.0)
     ctx = QCContext(

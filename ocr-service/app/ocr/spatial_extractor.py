@@ -34,6 +34,14 @@ Y_BELOW_MAX = 22.0         # pixels — one text line
 # Minimum word length to consider as a value (not noise)
 MIN_VALUE_LENGTH = 1
 
+# Strip everything but alphanumerics and lowercase, so value-vs-word comparison is
+# insensitive to spaces, commas, currency signs and punctuation ("$1,450" == "1450").
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_for_match(text: str) -> str:
+    return _NON_ALNUM.sub("", (text or "").lower())
+
 
 @dataclass
 class SpatialWord:
@@ -360,6 +368,51 @@ class SpatialWordMap:
             [sw for sw in self._words if abs(sw.y_center - y_center) <= tolerance],
             key=lambda sw: sw.x0,
         )
+
+    def locate_value(
+        self, value: str, *, row_tolerance: float = Y_ROW_TOLERANCE
+    ) -> List[Tuple[float, float, float, float]]:
+        """Find every place an already-extracted VALUE appears, as the bounding
+        box (x0, y0, x1, y1) of the contiguous run of words that spells it on one
+        horizontal row.
+
+        This is the inverse of find_label: the value is known (the extractor
+        already produced it) and we want *where it sits* so the reviewer can be
+        scrolled to it. Matching is done on a punctuation/space-insensitive
+        normalized form, so "1,450" matches the word "1,450" and "123 Main St"
+        matches the three words "123" "Main" "St".
+
+        Returns one box per distinct row match (callers use the count to decide
+        whether a match is unambiguous). Empty when the value is not on the page
+        — e.g. a scanned page with no text layer yields no words here.
+        """
+        target = _normalize_for_match(value)
+        if not target:
+            return []
+
+        # Group words into rows by quantized y-center, each sorted left→right.
+        rows: Dict[int, List[SpatialWord]] = {}
+        for sw in self._words:
+            rows.setdefault(round(sw.y_center / row_tolerance), []).append(sw)
+
+        matches: List[Tuple[float, float, float, float]] = []
+        for row_words in rows.values():
+            row_words.sort(key=lambda sw: sw.x0)
+            n = len(row_words)
+            for i in range(n):
+                acc = ""
+                for j in range(i, n):
+                    acc += _normalize_for_match(row_words[j].text)
+                    if len(acc) > len(target):
+                        break
+                    if acc == target:
+                        span = row_words[i : j + 1]
+                        matches.append((
+                            min(w.x0 for w in span), min(w.y0 for w in span),
+                            max(w.x1 for w in span), max(w.y1 for w in span),
+                        ))
+                        break  # shortest span from this start wins
+        return matches
 
     def __len__(self) -> int:
         return len(self._words)

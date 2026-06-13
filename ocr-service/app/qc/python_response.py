@@ -75,6 +75,20 @@ _SOURCE_LABELS = {
 }
 
 
+def _primary_evidence(r: RuleResult):
+    """Pick the one evidence whose location drives the reviewer's click-to-scroll.
+    The viewer scrolls the appraisal report, so prefer an appraisal evidence that
+    has a precise field box, then any evidence with a box, then any with a page
+    (appraisal preferred). Returns None when nothing carries a location."""
+    ev = r.evidence
+    return (
+        next((e for e in ev if e.bbox and e.document == "appraisal"), None)
+        or next((e for e in ev if e.bbox), None)
+        or next((e for e in ev if e.page and e.document == "appraisal"), None)
+        or next((e for e in ev if e.page), None)
+    )
+
+
 def _comparable_label(field: Optional[str], document: str) -> Optional[str]:
     """Which property/source a piece of evidence belongs to, for the reviewer
     panel: a named source for known cross-source fields, "Comp N" for a
@@ -94,12 +108,18 @@ def _comparable_label(field: Optional[str], document: str) -> Optional[str]:
 def _rule_to_json(r: RuleResult) -> Dict:
     appraisal_value = _doc_value(r, "appraisal")
     engagement_value = _doc_value(r, "engagement") or _doc_value(r, "contract")
-    page = next((e.page for e in r.evidence if e.page), 0)
+    # The location that drives click-to-scroll: page + (when located) the precise
+    # normalized field box. Falls back to page-only, then nothing.
+    primary = _primary_evidence(r)
+    page = primary.page if primary and primary.page else 0
+    box = primary.bbox if primary else None
     # Structured, document-tagged evidence. This is the authoritative record of
     # WHICH document each value came from (appraisal | engagement | contract |
     # ...). The flattened appraisal_value/engagement_value fields below collapse
     # engagement and contract into one slot and lose that attribution; the
     # reviewer UI must use this list, not those, to label sources correctly.
+    # `bbox` is the per-evidence normalized field box (None when unlocated), so a
+    # multi-field rule can make each side independently clickable later.
     evidence: List[Dict] = [
         {
             "document": e.document,
@@ -107,6 +127,7 @@ def _rule_to_json(r: RuleResult) -> Dict:
             "value": e.value,
             "confidence": round(e.confidence, 3),
             "page": e.page,
+            "bbox": e.bbox,
             "method": e.method,
         }
         for e in r.evidence if e.value
@@ -135,7 +156,10 @@ def _rule_to_json(r: RuleResult) -> Dict:
         "review_required": is_review,
         "target_field": r.fields_involved[0] if r.fields_involved else None,
         "source_page": page,
-        "bbox_x": None, "bbox_y": None, "bbox_w": None, "bbox_h": None,
+        "bbox_x": box["x"] if box else None,
+        "bbox_y": box["y"] if box else None,
+        "bbox_w": box["w"] if box else None,
+        "bbox_h": box["h"] if box else None,
     }
 
 
@@ -148,6 +172,7 @@ _STAGE_LABELS = {
     "subject_llm": "Subject/contract gap-fill (LLM)",
     "sketch": "Building-sketch GLA",
     "photos": "Photograph analysis",
+    "locate": "Field location (review highlights)",
     "extract_engagement": "Engagement letter extraction",
     "extract_contract": "Sales contract extraction",
     "rules": "QC rule evaluation",

@@ -65,6 +65,15 @@ class ExtractionResult:
     source_page: int = 0                # 1-indexed PDF page number (0 = unknown)
     char_start: Optional[int] = None    # character offset within page text
 
+    # Positional anchor for reviewer click-to-scroll. Normalized to the page's
+    # own width/height as fractions in [0,1] with a TOP-LEFT origin — the exact
+    # convention the PDF viewer expects (it multiplies each by 100% of the page
+    # container, so the highlight is zoom-independent). None means "value not
+    # located on the page" → the reviewer scrolls to the page without a box.
+    # Keys: {"x", "y", "w", "h"}. Stamped by app.extraction.field_locator after
+    # extraction; extractors themselves never set it (separation of concerns).
+    bbox: Optional[Dict[str, float]] = None
+
     # Normalization audit trail
     normalization_applied: List[str] = field(default_factory=list)
 
