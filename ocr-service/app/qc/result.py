@@ -98,10 +98,25 @@ class RuleResult:
 
 
 @dataclass
+class RuleTiming:
+    """Wall-clock time one rule's evaluation actually took (perf_counter delta).
+    Measured around spec.fn(ctx) in the engine — never estimated."""
+    rule_id: str
+    section: str
+    status: str
+    ms: float
+
+
+@dataclass
 class QCReport:
     """All rule results for one transaction, plus a roll-up."""
     transaction_id: str
     results: List[RuleResult] = field(default_factory=list)
+    # Real measured timings. rule_timings is filled by the engine (one entry per
+    # rule it executed); stage_ms is filled by the transaction orchestrator (the
+    # extraction/QC pipeline stages). Both are wall-clock perf_counter deltas.
+    rule_timings: List[RuleTiming] = field(default_factory=list)
+    stage_ms: Dict[str, float] = field(default_factory=dict)
 
     def counts(self) -> Dict[str, int]:
         c = {s.value: 0 for s in RuleStatus}

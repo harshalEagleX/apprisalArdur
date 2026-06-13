@@ -58,6 +58,7 @@ public class QCProcessingService {
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
     private final ProcessingMetricsRepository metricsRepository;
+    private final com.apprisal.common.repository.DocStatRepository docStatRepository;
     private final ObjectMapper objectMapper;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final BusinessEventService businessEventService;
@@ -85,6 +86,7 @@ public class QCProcessingService {
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             ProcessingMetricsRepository metricsRepository,
+            com.apprisal.common.repository.DocStatRepository docStatRepository,
             ObjectMapper objectMapper,
             RealtimeEventPublisher realtimeEventPublisher,
             BusinessEventService businessEventService) {
@@ -94,6 +96,7 @@ public class QCProcessingService {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.metricsRepository = metricsRepository;
+        this.docStatRepository = docStatRepository;
         this.objectMapper = objectMapper;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.businessEventService = businessEventService;
@@ -773,7 +776,86 @@ public class QCProcessingService {
         // Capture processing metrics for analytics
         saveMetrics(qcResult, pythonResponse, appraisal, modelConfig, queueWaitMs, retryCount);
 
+        // Capture per-section / per-rule timing breakdown (docStats)
+        saveDocStats(qcResult, pythonResponse, appraisal);
+
         return qcResult;
+    }
+
+    /**
+     * Persist the real, measured QC timing breakdown reported by Python into the
+     * doc_stat tables (the admin docStats feature). The numbers are written
+     * verbatim from the engine's perf_counter measurements — never derived or
+     * synthesized here. Best-effort: a failure never blocks QC persistence (P-6).
+     */
+    private void saveDocStats(QCResult qcResult, PythonQCResponse r, BatchFile file) {
+        var timings = r.timings();
+        if (timings == null) {
+            return; // older Python build without timing instrumentation
+        }
+        try {
+            // remove any prior timing for this result (rerun) to avoid duplicates
+            docStatRepository.findByQcResultId(qcResult.getId())
+                    .ifPresent(docStatRepository::delete);
+
+            var batch = file.getBatch();
+            Long batchId = batch != null ? batch.getId() : null;
+            Long clientId = (batch != null && batch.getClient() != null) ? batch.getClient().getId() : null;
+            String clientName = (batch != null && batch.getClient() != null) ? batch.getClient().getName() : null;
+
+            var slowStage   = (timings.stages()   != null && !timings.stages().isEmpty())   ? timings.stages().get(0)   : null;
+            var slowSection = (timings.sections() != null && !timings.sections().isEmpty()) ? timings.sections().get(0) : null;
+            var slowRule    = (timings.rules()    != null && !timings.rules().isEmpty())    ? timings.rules().get(0)    : null;
+
+            DocStat docStat = DocStat.builder()
+                    .qcResult(qcResult)
+                    .batchFileId(file.getId())
+                    .batchId(batchId)
+                    .clientId(clientId)
+                    .filename(file.getFilename())
+                    .clientName(clientName)
+                    .qcDecision(qcResult.getQcDecision() != null ? qcResult.getQcDecision().name() : null)
+                    .totalMs(timings.totalMs())
+                    .ruleEngineMs(timings.ruleEngineMs())
+                    .measuredPipelineMs(timings.measuredPipelineMs())
+                    .ruleCount(timings.ruleCount())
+                    .slowestStageLabel(slowStage != null ? slowStage.label() : null)
+                    .slowestStageMs(slowStage != null ? slowStage.ms() : null)
+                    .slowestSectionLabel(slowSection != null ? slowSection.label() : null)
+                    .slowestSectionMs(slowSection != null ? slowSection.ms() : null)
+                    .slowestRuleId(slowRule != null ? slowRule.ruleId() : null)
+                    .slowestRuleName(slowRule != null ? slowRule.ruleName() : null)
+                    .slowestRuleMs(slowRule != null ? slowRule.ms() : null)
+                    .build();
+
+            int i = 0;
+            if (timings.stages() != null) {
+                for (var s : timings.stages()) {
+                    docStat.addStage(new DocStatStage(s.stage(), s.label(), s.ms(), s.pctOfPipeline(), i++));
+                }
+            }
+            i = 0;
+            if (timings.sections() != null) {
+                for (var s : timings.sections()) {
+                    docStat.addSection(new DocStatSection(s.section(), s.label(), s.ms(),
+                            s.ruleCount(), s.pctOfRules(), i++));
+                }
+            }
+            i = 0;
+            if (timings.rules() != null) {
+                for (var rule : timings.rules()) {
+                    docStat.addRule(new DocStatRule(rule.ruleId(), rule.ruleName(), rule.section(),
+                            rule.status(), rule.ms(), i++));
+                }
+            }
+
+            docStatRepository.save(docStat);
+            log.info("Saved docStats for file {}: rules={} ruleEngineMs={} pipelineMs={}",
+                    file.getFilename(), timings.ruleCount(), timings.ruleEngineMs(),
+                    timings.measuredPipelineMs());
+        } catch (Exception e) {
+            log.warn("Failed to save docStats for file {}: {}", file.getFilename(), e.getMessage());
+        }
     }
 
     /**

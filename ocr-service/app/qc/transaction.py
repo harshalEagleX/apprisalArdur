@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from time import perf_counter
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -470,12 +471,28 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     Returns (QCReport, QCContext) so the caller can build the Java response shape."""
     from app.extraction.layers.orchestrator import run_full_extraction
 
+    # Stage timer: each _emit closes the previously-open stage (recording its
+    # real perf_counter duration) and opens the new one. _finish_stage() closes
+    # the last. These are genuine wall-clock measurements of the pipeline phases.
+    stage_ms: Dict[str, float] = {}
+    _open = {"stage": None, "t": 0.0}
+
     def _emit(stage, msg, pct):
+        now = perf_counter()
+        if _open["stage"] is not None:
+            stage_ms[_open["stage"]] = stage_ms.get(_open["stage"], 0.0) + (now - _open["t"]) * 1000.0
+        _open["stage"], _open["t"] = stage, now
         if progress:
             try:
                 progress(stage, msg, pct)
             except Exception:
                 pass
+
+    def _finish_stage():
+        if _open["stage"] is not None:
+            stage_ms[_open["stage"]] = stage_ms.get(_open["stage"], 0.0) + \
+                (perf_counter() - _open["t"]) * 1000.0
+            _open["stage"] = None
 
     transaction_id = transaction_id or str(Path(appraisal_path).stem)
     sets = {}
@@ -512,6 +529,8 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
         structured_conf=qc_config.structured_conf, checkbox_conf=qc_config.checkbox_conf,
     )
     report = run_qc(ctx)
+    _finish_stage()
+    report.stage_ms = stage_ms
     if persist:
         persist_report(report, document_id=Path(appraisal_path).name)
     _emit("done", "QC complete", 100.0)
@@ -525,7 +544,9 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
     transaction_id = transaction_id or str(folder).split("uploads/")[-1]
     start = time.time()
 
+    _t = perf_counter()
     sets = extract_documents(folder)
+    stage_ms = {"extraction": (perf_counter() - _t) * 1000.0}
     ctx = QCContext(
         transaction_id=transaction_id,
         appraisal=sets.get("appraisal"),
@@ -534,7 +555,10 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
         structured_conf=qc_config.structured_conf,
         checkbox_conf=qc_config.checkbox_conf,
     )
+    _t = perf_counter()
     report = run_qc(ctx, min_phase=min_phase)
+    stage_ms["rules"] = (perf_counter() - _t) * 1000.0
+    report.stage_ms = stage_ms
 
     if persist:
         doc_id = (_first_pdf(folder, "appraisal") or folder).name

@@ -34,5 +34,6 @@ public record PythonQCResponse(
         @JsonProperty("rule_results")        List<PythonRuleResult> ruleResults,
         @JsonProperty("action_items")        List<String> actionItems,
         List<String> suggestions,
-        @JsonProperty("processing_notices") List<String> processingNotices
+        @JsonProperty("processing_notices") List<String> processingNotices,
+        @JsonProperty("timings") PythonTimings timings
 ) {}

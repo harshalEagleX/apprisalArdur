@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Users, Building2,
-  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network,
+  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer,
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/admin/users",    label: "Users",      Icon: Users },
   { href: "/admin/clients",  label: "Clients",    Icon: Building2 },
   { href: "/analytics",      label: "Analytics",  Icon: BarChart2 },
+  { href: "/admin/doc-stats", label: "DocStats",  Icon: Timer },
   { href: "/admin/audit",    label: "Audit Graph", Icon: Network },
 ];
 

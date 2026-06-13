@@ -304,6 +304,55 @@ export const getAdminBatches = (page = 0, status?: string, search?: string) => {
 export const getBatchById = (id: number) =>
   apiFetch<Batch>(`/api/admin/batches/${id}`);
 
+// ── DocStats (per-appraisal QC timing breakdown) ────────────────────────────
+export interface DocStatSummary {
+  id: number;
+  batchFileId: number | null;
+  batchId: number | null;
+  filename: string | null;
+  clientName: string | null;
+  qcDecision: string | null;
+  totalMs: number | null;
+  ruleEngineMs: number | null;
+  measuredPipelineMs: number | null;
+  ruleCount: number | null;
+  slowestStageLabel: string | null;
+  slowestStageMs: number | null;
+  slowestSectionLabel: string | null;
+  slowestSectionMs: number | null;
+  slowestRuleId: string | null;
+  slowestRuleName: string | null;
+  slowestRuleMs: number | null;
+  createdAt: string | null;
+}
+export interface DocStatStage   { stage: string; label: string; ms: number; pctOfPipeline: number; }
+export interface DocStatSection { section: string; label: string; ms: number; ruleCount: number; pctOfRules: number; }
+export interface DocStatRule    { ruleId: string; ruleName: string; section: string; status: string; ms: number; }
+export interface DocStatDetail extends DocStatSummary {
+  clientId: number | null;
+  stages: DocStatStage[];
+  sections: DocStatSection[];
+  rules: DocStatRule[];
+}
+export interface DocStatBatchRollup {
+  batchId: number; clientName: string; appraisalCount: number;
+  totalMs: number; ruleEngineMs: number; avgMs: number; lastRun: string;
+}
+
+export const getDocStats = (page = 0, q?: string, batchId?: number, size = 20) => {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q) params.set("q", q);
+  if (batchId != null) params.set("batchId", String(batchId));
+  return apiFetch<{ content: DocStatSummary[]; number: number; totalPages: number; totalElements: number }>(
+    `/api/admin/doc-stats?${params.toString()}`);
+};
+
+export const getDocStatDetail = (id: number) =>
+  apiFetch<DocStatDetail>(`/api/admin/doc-stats/${id}`);
+
+export const getDocStatBatches = () =>
+  apiFetch<DocStatBatchRollup[]>(`/api/admin/doc-stats/batches`);
+
 export const getBatchStatus = (id: number) =>
   apiFetch<{
     status: string;

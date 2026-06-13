@@ -14,11 +14,12 @@ Each rule runs in isolation — one rule raising never blocks the others (P-6).
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 from typing import List, Optional
 
 from app.qc.context import QCContext
 from app.qc.registry import RuleSpec, all_rules
-from app.qc.result import QCReport, RuleResult, RuleStatus
+from app.qc.result import QCReport, RuleResult, RuleStatus, RuleTiming
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,9 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
             continue
         if min_phase is not None and spec.phase > min_phase:
             continue
+        # Time the actual evaluation of this rule — gate/applicability checks plus
+        # the rule function. This is the real per-rule cost, measured every run.
+        started = perf_counter()
         gate = _SECTION_GATE.get(spec.section)
         if gate is not None and not gate(ctx):
             report.results.append(RuleResult(
@@ -65,6 +69,7 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
                 section=spec.section, status=RuleStatus.NOT_APPLICABLE,
                 message="No sales-comparison grid on this report form (e.g. appraisal update / completion report).",
             ))
+            _record_timing(report, spec, RuleStatus.NOT_APPLICABLE, started)
             continue
         if not spec.applicable(ctx):
             report.results.append(RuleResult(
@@ -72,10 +77,15 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
                 section=spec.section, status=RuleStatus.NOT_APPLICABLE,
                 message="Not applicable to this loan/transaction/form type.",
             ))
+            _record_timing(report, spec, RuleStatus.NOT_APPLICABLE, started)
             continue
         try:
             out = spec.fn(ctx)
-            report.results.extend(_normalize(out, spec))
+            results = _normalize(out, spec)
+            report.results.extend(results)
+            # the rule's headline status (worst of any sub-results) labels the timing
+            status = _worst_status(results)
+            _record_timing(report, spec, status, started)
         except Exception as exc:
             logger.error("QC rule %s crashed: %s", spec.rule_id, exc)
             report.results.append(RuleResult(
@@ -83,8 +93,28 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
                 section=spec.section, status=RuleStatus.SKIPPED,
                 message=f"Rule execution error: {exc}",
             ))
+            _record_timing(report, spec, RuleStatus.SKIPPED, started)
     _escalate_sections(report)
     return report
+
+
+# Worst-first precedence so a rule that emits several sub-results is labelled by
+# its most severe outcome (matches the report-level overall() ordering).
+_STATUS_RANK = {RuleStatus.HOLD: 5, RuleStatus.FAIL: 4, RuleStatus.VERIFY: 3,
+                RuleStatus.SKIPPED: 2, RuleStatus.PASS: 1, RuleStatus.NOT_APPLICABLE: 0}
+
+
+def _worst_status(results: List[RuleResult]) -> RuleStatus:
+    if not results:
+        return RuleStatus.SKIPPED
+    return max((r.status for r in results), key=lambda s: _STATUS_RANK.get(s, 0))
+
+
+def _record_timing(report: QCReport, spec: RuleSpec, status: RuleStatus, started: float) -> None:
+    report.rule_timings.append(RuleTiming(
+        rule_id=spec.rule_id, section=spec.section,
+        status=status.value, ms=(perf_counter() - started) * 1000.0,
+    ))
 
 
 # Sections that warrant a systematic-failure HOLD (data-grid heavy sections where

@@ -1211,3 +1211,30 @@ DRY REFACTOR + DEEP-PAGE GAP-FILL (extraction v0.1.18)
       cross-check components sum before accepting.
     - R-1b long-text fill: relax validation to sentence-level containment so
       the reconciliation narrative survives OCR reflow.
+
+DOCSTATS — per-appraisal QC timing (Python measure → Java persist → Admin UI)
+[x] Python: engine.run_qc wraps each rule's evaluation in perf_counter and
+    records RuleTiming(rule_id, section, status, ms); transaction.run_transaction_qc_paths
+    times every pipeline stage (extraction phases + rule eval) via a stage
+    timer that closes each stage when the next opens. python_response._build_timings
+    aggregates real measurements into {total_ms, rule_engine_ms,
+    measured_pipeline_ms, rule_count, stages[], sections[], rules[]} +
+    slowest_*; emitted as response "timings". NO estimated/proxied numbers —
+    every value is a wall-clock perf_counter delta. MEASURED on Fantail:
+    subject_llm gap-fill 161s dominates the pipeline, SCA-14 599ms (it makes an
+    LLM call) dominates the 610ms rule engine, every other rule sub-2ms.
+[x] Java: PythonTimings DTO (nested Stage/Section/Rule records) + timings field
+    on PythonQCResponse; DocStat entity (denormalized identity + headline
+    timings) with DocStatStage/DocStatSection/DocStatRule children (JPA
+    ddl-auto, no Flyway per DB policy); DocStatRepository (search + batch
+    rollup); QCProcessingService.saveDocStats persists verbatim alongside
+    saveMetrics (best-effort, rerun-safe delete-then-insert);
+    DocStatsApiController GET /api/admin/doc-stats (search,page), /{id} (full
+    breakdown), /batches (rollup). common+qc+app reactor compiles.
+[x] Frontend: AdminLayout nav "DocStats" (Timer icon); app/admin/doc-stats list
+    (debounced server search by filename/client/batch, summary table linking to
+    detail); app/admin/doc-stats/[id] detail (headline stats, pipeline-stage
+    bars, QC-section bars, sortable/filterable per-rule table); lib/duration.ts
+    human-readable µs/ms/s/min formatter + scan-tone colors. tsc + eslint clean.
+[ ] NEXT: surface docStats from the batch detail view (deep-link per file);
+    add a corpus-wide "slowest rules across all appraisals" aggregate endpoint.

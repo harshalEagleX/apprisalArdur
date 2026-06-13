@@ -139,6 +139,100 @@ def _rule_to_json(r: RuleResult) -> Dict:
     }
 
 
+# Human-readable labels for the pipeline stages emitted by the orchestrator, so
+# the admin docStats view reads in plain language, not snake_case tokens.
+_STAGE_LABELS = {
+    "extract_appraisal": "Appraisal OCR + field extraction",
+    "sca_grid": "Sales-comparison grid",
+    "sca_llm": "Comparable adjustments (LLM)",
+    "subject_llm": "Subject/contract gap-fill (LLM)",
+    "sketch": "Building-sketch GLA",
+    "photos": "Photograph analysis",
+    "extract_engagement": "Engagement letter extraction",
+    "extract_contract": "Sales contract extraction",
+    "rules": "QC rule evaluation",
+    "extraction": "Document extraction",
+    "done": "Finalize",
+}
+
+
+def _stage_label(stage: str) -> str:
+    return _STAGE_LABELS.get(stage, stage.replace("_", " ").capitalize())
+
+
+def _section_label(section: str) -> str:
+    return section.replace("_", " ").title()
+
+
+def _build_timings(report: QCReport, total_ms: int) -> Dict:
+    """Aggregate the engine's measured per-rule timings and the orchestrator's
+    measured stage timings into a human-readable breakdown. All numbers are real
+    perf_counter measurements — nothing here is estimated or proxied."""
+    # per-rule, slowest first
+    rules = sorted(
+        (
+            {
+                "rule_id": t.rule_id,
+                "rule_name": _rule_display_name(t.rule_id, t.section),
+                "section": t.section.upper(),
+                "status": t.status,
+                "ms": round(t.ms, 3),
+            }
+            for t in report.rule_timings
+        ),
+        key=lambda d: d["ms"], reverse=True,
+    )
+
+    # per-section roll-up
+    sec_ms: Dict[str, float] = {}
+    sec_count: Dict[str, int] = {}
+    for t in report.rule_timings:
+        sec_ms[t.section] = sec_ms.get(t.section, 0.0) + t.ms
+        sec_count[t.section] = sec_count.get(t.section, 0) + 1
+    rule_engine_ms = sum(sec_ms.values())
+    sections = sorted(
+        (
+            {
+                "section": s.upper(),
+                "label": _section_label(s),
+                "ms": round(ms, 3),
+                "rule_count": sec_count[s],
+                "pct_of_rules": round(ms / rule_engine_ms * 100, 1) if rule_engine_ms else 0.0,
+            }
+            for s, ms in sec_ms.items()
+        ),
+        key=lambda d: d["ms"], reverse=True,
+    )
+
+    # pipeline stages (extraction phases + rule evaluation)
+    stage_total = sum(report.stage_ms.values()) or 1.0
+    stages = sorted(
+        (
+            {
+                "stage": name,
+                "label": _stage_label(name),
+                "ms": round(ms, 3),
+                "pct_of_pipeline": round(ms / stage_total * 100, 1),
+            }
+            for name, ms in report.stage_ms.items()
+        ),
+        key=lambda d: d["ms"], reverse=True,
+    )
+
+    return {
+        "total_ms": total_ms,
+        "rule_engine_ms": round(rule_engine_ms, 3),
+        "measured_pipeline_ms": round(sum(report.stage_ms.values()), 3),
+        "rule_count": len(report.rule_timings),
+        "stages": stages,
+        "sections": sections,
+        "rules": rules,
+        "slowest_stage": stages[0] if stages else None,
+        "slowest_section": sections[0] if sections else None,
+        "slowest_rule": rules[0] if rules else None,
+    }
+
+
 def report_to_python_qc_response(
     report: QCReport, ctx: QCContext, *,
     processing_time_ms: int = 0, document_id: str = "", job_id: str = "",
@@ -189,4 +283,5 @@ def report_to_python_qc_response(
         "action_items": action_items,
         "suggestions": [],
         "processing_notices": [],
+        "timings": _build_timings(report, processing_time_ms),
     }
