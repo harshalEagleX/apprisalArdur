@@ -4,8 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft, Timer, Layers, Gauge, Search, ArrowUpDown, Cpu, FileText,
+  Hourglass, AlertTriangle, Info,
 } from "lucide-react";
-import { getDocStatDetail, type DocStatDetail, type DocStatRule } from "@/lib/api";
+import {
+  getDocStatDetail, getDocStatThresholds, type DocStatDetail, type DocStatRule, type DocStatStage,
+} from "@/lib/api";
 import { fmtMs, durationTone } from "@/lib/duration";
 import { Skeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
@@ -47,19 +50,62 @@ function Bar({ label, ms, pct, max, sub }: {
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.04]">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-indigo-500/70 to-sky-400/70 transition-all"
-          style={{ width: `${width}%` }}
-        />
+        <div className="h-full rounded-full bg-gradient-to-r from-indigo-500/70 to-sky-400/70 transition-all"
+          style={{ width: `${width}%` }} />
       </div>
     </div>
   );
 }
 
+/** Stage bar: like Bar, but flags over-threshold (red) and, for LLM stages,
+ *  splits the fill into inference (model) vs throttle-wait (queue/rate-limit). */
+function StageBar({ s, max, threshold }: { s: DocStatStage; max: number; threshold?: number }) {
+  const width = max > 0 ? Math.max(2, (s.ms / max) * 100) : 0;
+  const over = threshold != null && s.ms > threshold;
+  const hasLlm = s.llmCalls > 0 && (s.inferenceMs + s.throttleWaitMs) > 0;
+  // within the bar, show the inference vs throttle proportion of the LLM time
+  const llmTotal = s.inferenceMs + s.throttleWaitMs || 1;
+  const infPct = (s.inferenceMs / llmTotal) * 100;
+  return (
+    <div className="group">
+      <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+        <span className="flex items-center gap-1.5 truncate text-slate-300">
+          {label_(s.label)}
+          {over && <AlertTriangle size={11} className="shrink-0 text-red-400" />}
+        </span>
+        <span className="flex shrink-0 items-center gap-2 tabular-nums">
+          {hasLlm && (
+            <span className="flex items-center gap-1.5 text-[10px]">
+              <span className="flex items-center gap-0.5 text-sky-300" title="model inference"><Cpu size={10} />{fmtMs(s.inferenceMs)}</span>
+              <span className="flex items-center gap-0.5 text-amber-300" title="throttle / rate-limit wait"><Hourglass size={10} />{fmtMs(s.throttleWaitMs)}</span>
+            </span>
+          )}
+          <span className={over ? "text-red-300" : durationTone(s.ms)}>{fmtMs(s.ms)}</span>
+          <span className="w-10 text-right text-slate-600">{s.pctOfPipeline.toFixed(1)}%</span>
+        </span>
+      </div>
+      <div className={`h-2 w-full overflow-hidden rounded-full bg-white/[0.04] ${over ? "ring-1 ring-red-500/40" : ""}`}>
+        {hasLlm ? (
+          <div className="flex h-full" style={{ width: `${width}%` }}>
+            <div className="h-full bg-sky-400/70" style={{ width: `${infPct}%` }} title="inference" />
+            <div className="h-full bg-amber-400/70" style={{ width: `${100 - infPct}%` }} title="throttle wait" />
+          </div>
+        ) : (
+          <div className={`h-full rounded-full transition-all ${over ? "bg-red-500/70" : "bg-gradient-to-r from-indigo-500/70 to-sky-400/70"}`}
+            style={{ width: `${width}%` }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function label_(s: string) { return <span className="truncate">{s}</span>; }
+
 export default function DocStatDetailPage() {
   const params = useParams();
   const id = Number(params?.id);
   const [data, setData]     = useState<DocStatDetail | null>(null);
+  const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [loading, setLoad]  = useState(true);
   const [ruleSearch, setRuleSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("ms");
@@ -68,8 +114,13 @@ export default function DocStatDetailPage() {
   const load = useCallback(async () => {
     if (!Number.isFinite(id)) return;
     setLoad(true);
-    try { setData(await getDocStatDetail(id)); }
-    catch { toast.error("Failed to load timing detail"); }
+    try {
+      const [d, th] = await Promise.all([
+        getDocStatDetail(id),
+        getDocStatThresholds().catch(() => ({} as Record<string, number>)),
+      ]);
+      setData(d); setThresholds(th);
+    } catch { toast.error("Failed to load timing detail"); }
     finally { setLoad(false); }
   }, [id]);
 
@@ -144,12 +195,14 @@ export default function DocStatDetailPage() {
         {data.qcDecision && <StatusBadge status={data.qcDecision} />}
       </header>
 
-      {/* Headline numbers */}
+      {/* Headline numbers — total, rule engine, and the Groq inference/throttle split */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <HeadStat icon={Timer} label="Total time"   value={fmtMs(data.totalMs)} hint="end-to-end" tone="text-white" />
         <HeadStat icon={Cpu}   label="Rule engine"  value={fmtMs(data.ruleEngineMs)} hint={`${data.ruleCount ?? 0} rules`} tone="text-sky-300" />
-        <HeadStat icon={Layers} label="Slowest stage" value={fmtMs(data.slowestStageMs)} hint={data.slowestStageLabel ?? "—"} tone="text-amber-300" />
-        <HeadStat icon={Gauge} label="Slowest rule"  value={fmtMs(data.slowestRuleMs)} hint={data.slowestRuleId ?? "—"} tone="text-amber-300" />
+        <HeadStat icon={Cpu}   label="LLM inference" value={fmtMs(data.llmInferenceMs)} hint={`${data.llmCalls ?? 0} Groq call${(data.llmCalls ?? 0) === 1 ? "" : "s"}`} tone="text-sky-300" />
+        <HeadStat icon={Hourglass} label="LLM throttle wait" value={fmtMs(data.llmThrottleWaitMs)}
+          hint={(data.rateLimitHits ?? 0) > 0 ? `${data.rateLimitHits} rate-limit hit(s)` : "no rate-limit hits"}
+          tone={(data.rateLimitHits ?? 0) > 0 ? "text-red-300" : "text-amber-300"} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -158,11 +211,13 @@ export default function DocStatDetailPage() {
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
             <Layers size={15} className="text-indigo-300" /> Pipeline stages
           </h2>
-          <p className="mb-4 text-[11px] text-slate-500">Where end-to-end time was spent (extraction → rules).</p>
+          <p className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-500">
+            <Info size={11} /> Stages run sequentially — total pipeline time is their sum. Sky = model inference, amber = throttle wait; red = over expected max.
+          </p>
           <div className="space-y-3">
             {data.stages.length === 0 && <p className="text-xs text-slate-500">No stage timings recorded.</p>}
             {data.stages.map((s) => (
-              <Bar key={s.stage} label={s.label} ms={s.ms} pct={s.pctOfPipeline} max={stageMax} />
+              <StageBar key={s.stage} s={s} max={stageMax} threshold={thresholds[s.stage]} />
             ))}
           </div>
         </section>
@@ -207,6 +262,7 @@ export default function DocStatDetailPage() {
                 <th className="px-4 py-2.5 text-left font-medium">Name</th>
                 <SortTh k="section" sortKey={sortKey} onSort={toggleSort}>Section</SortTh>
                 <SortTh k="status" sortKey={sortKey} onSort={toggleSort}>Status</SortTh>
+                <th className="px-4 py-2.5 text-right font-medium">LLM</th>
                 <SortTh k="ms" right sortKey={sortKey} onSort={toggleSort}>Time</SortTh>
               </tr>
             </thead>
@@ -214,9 +270,14 @@ export default function DocStatDetailPage() {
               {sortedRules.map((r: DocStatRule, i) => (
                 <tr key={`${r.ruleId}-${i}`} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
                   <td className="px-4 py-2.5 font-mono text-[12px] text-slate-300">{r.ruleId}</td>
-                  <td className="px-4 py-2.5 text-slate-400 max-w-[320px] truncate">{r.ruleName}</td>
+                  <td className="px-4 py-2.5 text-slate-400 max-w-[300px] truncate">{r.ruleName}</td>
                   <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.section}</td>
                   <td className="px-4 py-2.5">{r.status ? <StatusBadge status={r.status} size="xs" /> : "—"}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-[12px]">
+                    {r.llmCalls > 0
+                      ? <span className="text-sky-300" title={`${r.llmCalls} Groq call(s), ${fmtMs(r.throttleMs)} throttle`}>{r.llmCalls}× · {fmtMs(r.llmMs)}</span>
+                      : <span className="text-slate-600">—</span>}
+                  </td>
                   <td className={`px-4 py-2.5 text-right tabular-nums ${durationTone(r.ms)}`}>{fmtMs(r.ms)}</td>
                 </tr>
               ))}

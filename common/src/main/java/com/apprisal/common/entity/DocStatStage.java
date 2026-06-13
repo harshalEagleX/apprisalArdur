@@ -23,13 +23,19 @@ public class DocStatStage {
     @Column(name = "label")               private String label;
     @Column(name = "ms")                  private Double ms;
     @Column(name = "pct_of_pipeline")     private Double pctOfPipeline;
+    // Groq cost split when this stage made LLM calls (measured).
+    @Column(name = "llm_calls")           private Integer llmCalls;
+    @Column(name = "inference_ms")        private Double inferenceMs;
+    @Column(name = "throttle_wait_ms")    private Double throttleWaitMs;
     @Column(name = "ordinal")             private Integer ordinal;
 
     protected DocStatStage() {}
 
-    public DocStatStage(String stage, String label, Double ms, Double pctOfPipeline, Integer ordinal) {
+    public DocStatStage(String stage, String label, Double ms, Double pctOfPipeline,
+                        Integer llmCalls, Double inferenceMs, Double throttleWaitMs, Integer ordinal) {
         this.stage = stage; this.label = label; this.ms = ms;
-        this.pctOfPipeline = pctOfPipeline; this.ordinal = ordinal;
+        this.pctOfPipeline = pctOfPipeline; this.llmCalls = llmCalls;
+        this.inferenceMs = inferenceMs; this.throttleWaitMs = throttleWaitMs; this.ordinal = ordinal;
     }
 
     public void setDocStat(DocStat d) { this.docStat = d; }
@@ -39,5 +45,8 @@ public class DocStatStage {
     public String getLabel()        { return label; }
     public Double getMs()           { return ms; }
     public Double getPctOfPipeline(){ return pctOfPipeline; }
+    public Integer getLlmCalls()    { return llmCalls; }
+    public Double getInferenceMs()  { return inferenceMs; }
+    public Double getThrottleWaitMs(){ return throttleWaitMs; }
     public Integer getOrdinal()     { return ordinal; }
 }

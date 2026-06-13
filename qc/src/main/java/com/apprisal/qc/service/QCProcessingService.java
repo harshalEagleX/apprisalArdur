@@ -806,6 +806,7 @@ public class QCProcessingService {
             var slowStage   = (timings.stages()   != null && !timings.stages().isEmpty())   ? timings.stages().get(0)   : null;
             var slowSection = (timings.sections() != null && !timings.sections().isEmpty()) ? timings.sections().get(0) : null;
             var slowRule    = (timings.rules()    != null && !timings.rules().isEmpty())    ? timings.rules().get(0)    : null;
+            var llm         = timings.llm();
 
             DocStat docStat = DocStat.builder()
                     .qcResult(qcResult)
@@ -826,12 +827,17 @@ public class QCProcessingService {
                     .slowestRuleId(slowRule != null ? slowRule.ruleId() : null)
                     .slowestRuleName(slowRule != null ? slowRule.ruleName() : null)
                     .slowestRuleMs(slowRule != null ? slowRule.ms() : null)
+                    .llmCalls(llm != null ? llm.totalCalls() : 0)
+                    .llmInferenceMs(llm != null ? llm.totalInferenceMs() : 0.0)
+                    .llmThrottleWaitMs(llm != null ? llm.totalThrottleWaitMs() : 0.0)
+                    .rateLimitHits(llm != null ? llm.rateLimitHits() : 0)
                     .build();
 
             int i = 0;
             if (timings.stages() != null) {
                 for (var s : timings.stages()) {
-                    docStat.addStage(new DocStatStage(s.stage(), s.label(), s.ms(), s.pctOfPipeline(), i++));
+                    docStat.addStage(new DocStatStage(s.stage(), s.label(), s.ms(), s.pctOfPipeline(),
+                            s.llmCalls(), s.inferenceMs(), s.throttleWaitMs(), i++));
                 }
             }
             i = 0;
@@ -845,7 +851,7 @@ public class QCProcessingService {
             if (timings.rules() != null) {
                 for (var rule : timings.rules()) {
                     docStat.addRule(new DocStatRule(rule.ruleId(), rule.ruleName(), rule.section(),
-                            rule.status(), rule.ms(), i++));
+                            rule.status(), rule.ms(), rule.llmCalls(), rule.llmMs(), rule.throttleMs(), i++));
                 }
             }
 

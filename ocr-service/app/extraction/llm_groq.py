@@ -36,11 +36,14 @@ _tpm_lock = threading.Lock()
 _tpm_log: Deque[Tuple[float, int]] = collections.deque()
 
 
-def _throttle_tpm(est_tokens: int) -> None:
+def _throttle_tpm(est_tokens: int) -> float:
     """Block until sending `est_tokens` keeps the last-60s usage under the limit.
     This turns a would-be 429 into an orderly wait — a multi-page grid is then
-    processed in steps within the budget."""
+    processed in steps within the budget. Returns the milliseconds actually
+    slept, so the caller can attribute pre-wait time to the throttle (not the
+    model)."""
     limit = max(1, config.GROQ_TPM_LIMIT)
+    slept_ms = 0.0
     with _tpm_lock:
         now = time.time()
         while _tpm_log and now - _tpm_log[0][0] > 60:
@@ -50,11 +53,14 @@ def _throttle_tpm(est_tokens: int) -> None:
             wait = 60 - (now - _tpm_log[0][0]) + 0.5
             if wait > 0:
                 logger.info("Groq TPM budget reached (%d/%d); waiting %.1fs", used, limit, wait)
+                _t = time.perf_counter()
                 time.sleep(min(wait, 60))
+                slept_ms = (time.perf_counter() - _t) * 1000.0
             now = time.time()
             while _tpm_log and now - _tpm_log[0][0] > 60:
                 _tpm_log.popleft()
         _tpm_log.append((time.time(), est_tokens))
+    return slept_ms
 
 
 def groq_extraction_available() -> bool:
@@ -112,28 +118,55 @@ def chat_json(
     eff = reasoning_effort if reasoning_effort is not None else config.GROQ_REASONING_EFFORT
     if eff:
         body["reasoning_effort"] = eff
+    # Telemetry: separate throttle-wait (queue/rate-limit) from inference (model)
+    # time so the admin docStats can tell a frequency problem from a size problem.
+    est_tokens = 0
+    throttle_ms = 0.0
+    inference_ms = 0.0
+    attempts = 0
+    rate_limited = False
     # Throttle only the extraction model (the vision key/model has its own budget).
     if api_key == config.GROQ_API_KEY:
         prompt_chars = sum(len(str(m.get("content", ""))) for m in messages)
         # input tokens + a realistic completion estimate (incl. reasoning), not the
         # max_tokens cap — overestimating would make the throttle wait needlessly.
-        _throttle_tpm(prompt_chars // 4 + min(max_tokens, 1500))
+        est_tokens = prompt_chars // 4 + min(max_tokens, 1500)
+        throttle_ms += _throttle_tpm(est_tokens)
+
+    def _emit_telemetry(ok: bool):
+        try:
+            from app.extraction import llm_telemetry
+            llm_telemetry.record(llm_telemetry.LLMCall(
+                span=llm_telemetry.current_span(), model=model,
+                throttle_wait_ms=throttle_ms, inference_ms=inference_ms,
+                attempts=attempts, rate_limited=rate_limited, ok=ok,
+            ))
+        except Exception:
+            pass  # telemetry must never affect the LLM path (P-6)
+
     # Retry transient capacity/rate-limit errors with backoff (free tier is
     # token-per-minute limited); honor Retry-After when the API provides it.
     for attempt in range(3):
+        attempts += 1
         try:
+            _t = time.perf_counter()
             resp = requests.post(
                 f"{config.GROQ_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json=body,
                 timeout=timeout or config.GROQ_TIMEOUT,
             )
+            inference_ms += (time.perf_counter() - _t) * 1000.0
             if resp.status_code in (429, 500, 503) and attempt < 2:
+                if resp.status_code == 429:
+                    rate_limited = True
                 try:
                     wait = float(resp.headers.get("retry-after", ""))
                 except (TypeError, ValueError):
                     wait = 0.0
+                _b = time.perf_counter()
                 time.sleep(min(max(wait, 2.0 * (attempt + 1)), 12.0))
+                throttle_ms += (time.perf_counter() - _b) * 1000.0
                 continue
             # Reasoning models intermittently fail strict JSON validation (the
             # reasoning channel leaks / truncates). Drop response_format and parse
@@ -143,13 +176,19 @@ def chat_json(
                 continue
             if resp.status_code != 200:
                 logger.warning("Groq %s HTTP %s: %s", model, resp.status_code, resp.text[:200])
+                _emit_telemetry(ok=False)
                 return None
             content = resp.json()["choices"][0]["message"]["content"]
-            return _extract_json(content)
+            result = _extract_json(content)
+            _emit_telemetry(ok=result is not None)
+            return result
         except Exception as exc:  # never break the pipeline (P-6)
             logger.warning("Groq %s attempt %d failed: %s", model, attempt + 1, exc)
             if attempt < 2:
+                _b = time.perf_counter()
                 time.sleep(2.0 * (attempt + 1))
+                throttle_ms += (time.perf_counter() - _b) * 1000.0
+    _emit_telemetry(ok=False)
     return None
 
 

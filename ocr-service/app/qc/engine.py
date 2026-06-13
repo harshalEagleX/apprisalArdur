@@ -80,7 +80,13 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
             _record_timing(report, spec, RuleStatus.NOT_APPLICABLE, started)
             continue
         try:
-            out = spec.fn(ctx)
+            # attribute any Groq calls this rule makes to the rule (LLM telemetry)
+            from app.extraction import llm_telemetry
+            _span = llm_telemetry.set_span(spec.rule_id)
+            try:
+                out = spec.fn(ctx)
+            finally:
+                llm_telemetry.reset_span(_span)
             results = _normalize(out, spec)
             report.results.extend(results)
             # the rule's headline status (worst of any sub-results) labels the timing

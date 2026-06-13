@@ -117,6 +117,9 @@ class QCReport:
     # extraction/QC pipeline stages). Both are wall-clock perf_counter deltas.
     rule_timings: List[RuleTiming] = field(default_factory=list)
     stage_ms: Dict[str, float] = field(default_factory=dict)
+    # Per-call Groq telemetry (LLMCall objects) captured during the run; the
+    # response builder aggregates these by span (rule id / stage name).
+    llm_calls: List = field(default_factory=list)
 
     def counts(self) -> Dict[str, int]:
         c = {s.value: 0 for s in RuleStatus}

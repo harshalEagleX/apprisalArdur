@@ -32,16 +32,35 @@ public interface DocStatRepository extends JpaRepository<DocStat, Long> {
                          @Param("batchId") Long batchId,
                          Pageable pageable);
 
-    /** Per-batch rollup rows: count + summed/avg timings, grouped by batch. */
+    /**
+     * Raw per-file timing rows for percentile computation, newest first.
+     * Columns: batchId, clientName, totalMs, ruleEngineMs, measuredPipelineMs, createdAt.
+     * Percentiles are computed in Java (DB-agnostic) over these rows.
+     */
     @Query("""
-        SELECT d.batchId, MAX(d.clientName), COUNT(d),
-               SUM(d.totalMs), SUM(d.ruleEngineMs), AVG(d.totalMs), MAX(d.createdAt)
+        SELECT d.batchId, d.clientName, d.totalMs, d.ruleEngineMs, d.measuredPipelineMs, d.createdAt
         FROM DocStat d
         WHERE d.batchId IS NOT NULL
-        GROUP BY d.batchId
-        ORDER BY MAX(d.createdAt) DESC
+        ORDER BY d.createdAt DESC
         """)
-    java.util.List<Object[]> batchRollup(Pageable pageable);
+    java.util.List<Object[]> batchTimingRows(Pageable pageable);
+
+    /**
+     * Cumulative per-rule ranking across the whole corpus:
+     * ruleId, ruleName, section, AVG(ms), MAX(ms), SUM(llmCalls), runs, llmRuns.
+     * llmRuns = number of runs where this rule made at least one LLM call;
+     * the %-LLM is llmRuns/runs, computed by the caller.
+     */
+    @Query("""
+        SELECT r.ruleId, MAX(r.ruleName), MAX(r.section),
+               AVG(r.ms), MAX(r.ms), COALESCE(SUM(r.llmCalls), 0), COUNT(r),
+               SUM(CASE WHEN r.llmCalls > 0 THEN 1 ELSE 0 END)
+        FROM DocStatRule r
+        WHERE r.ruleId IS NOT NULL
+        GROUP BY r.ruleId
+        ORDER BY AVG(r.ms) DESC
+        """)
+    java.util.List<Object[]> ruleRanking(Pageable pageable);
 
     void deleteByBatchId(Long batchId);
 }

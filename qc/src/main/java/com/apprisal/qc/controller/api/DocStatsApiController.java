@@ -2,6 +2,7 @@ package com.apprisal.qc.controller.api;
 
 import com.apprisal.common.entity.DocStat;
 import com.apprisal.common.repository.DocStatRepository;
+import com.apprisal.qc.config.DocStatsThresholds;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -9,24 +10,26 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Admin docStats API — read-only views over the measured QC timing breakdown.
  *
  * All timings served here originate from the Python engine's perf_counter
- * measurements (persisted in {@link DocStat}); nothing is computed or estimated
- * in this controller. ROLE_ADMIN is enforced in SecurityConfig for /api/admin/**.
+ * measurements (persisted in {@link DocStat}); the only values this controller
+ * derives are statistical aggregates (percentiles, averages) computed over those
+ * real measurements. ROLE_ADMIN is enforced in SecurityConfig for /api/admin/**.
  */
 @RestController
 @RequestMapping("/api/admin/doc-stats")
 public class DocStatsApiController {
 
     private final DocStatRepository docStatRepository;
+    private final DocStatsThresholds thresholds;
 
-    public DocStatsApiController(DocStatRepository docStatRepository) {
+    public DocStatsApiController(DocStatRepository docStatRepository, DocStatsThresholds thresholds) {
         this.docStatRepository = docStatRepository;
+        this.thresholds = thresholds;
     }
 
     /** Paginated, searchable list — one row per processed appraisal. */
@@ -59,29 +62,115 @@ public class DocStatsApiController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /** Per-batch rollup: how long QC took across all appraisals in each batch. */
+    /**
+     * Per-batch rollup with P50/P95/P99 over each batch's appraisals — answers
+     * "how long does a typical appraisal in this batch take, and how bad is the
+     * tail?" Percentiles use nearest-rank over the real per-file measurements.
+     */
     @GetMapping("/batches")
     public ResponseEntity<List<Map<String, Object>>> batches(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
-        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
-        List<Map<String, Object>> rows = docStatRepository.batchRollup(pageable).stream()
-                .map(r -> Map.<String, Object>of(
-                        "batchId", r[0],
-                        "clientName", r[1] != null ? r[1] : "—",
-                        "appraisalCount", r[2],
-                        "totalMs", r[3] != null ? r[3] : 0.0,
-                        "ruleEngineMs", r[4] != null ? r[4] : 0.0,
-                        "avgMs", r[5] != null ? r[5] : 0.0,
-                        "lastRun", String.valueOf(r[6])))
-                .toList();
-        return ResponseEntity.ok(rows);
+            @RequestParam(defaultValue = "2000") int sample) {
+        var rows = docStatRepository.batchTimingRows(PageRequest.of(0, Math.min(Math.max(1, sample), 5000)));
+
+        // group rows by batch
+        Map<Long, List<Object[]>> byBatch = new LinkedHashMap<>();
+        for (Object[] r : rows) {
+            byBatch.computeIfAbsent((Long) r[0], k -> new ArrayList<>()).add(r);
+        }
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (var e : byBatch.entrySet()) {
+            List<Object[]> g = e.getValue();
+            List<Double> totals   = collect(g, 2);
+            List<Double> ruleEng  = collect(g, 3);
+            List<Double> pipeline = collect(g, 4);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("batchId", e.getKey());
+            m.put("clientName", g.get(0)[1] != null ? g.get(0)[1] : "—");
+            m.put("appraisalCount", g.size());
+            m.put("lastRun", String.valueOf(g.get(0)[5]));
+            m.put("totalMs", percentiles(totals));
+            m.put("ruleEngineMs", percentiles(ruleEng));
+            m.put("pipelineMs", percentiles(pipeline));
+            out.add(m);
+        }
+        // newest batch first (rows already came newest-first)
+        return ResponseEntity.ok(out);
     }
 
-    // ── mappers ─────────────────────────────────────────────────────────────
+    /**
+     * Cumulative per-rule ranking across all measured runs — average time, LLM
+     * call volume, and how often each rule triggers an LLM call. This is the
+     * "where to optimize across the corpus" view, not a single run.
+     */
+    @GetMapping("/rules/ranking")
+    public ResponseEntity<List<Map<String, Object>>> ruleRanking(
+            @RequestParam(defaultValue = "300") int size) {
+        var rows = docStatRepository.ruleRanking(PageRequest.of(0, Math.min(Math.max(1, size), 1000)));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            long runs    = ((Number) r[6]).longValue();
+            long llmRuns = r[7] != null ? ((Number) r[7]).longValue() : 0L;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("ruleId", r[0]);
+            m.put("ruleName", r[1]);
+            m.put("section", r[2]);
+            m.put("avgMs", round3(r[3] != null ? ((Number) r[3]).doubleValue() : 0.0));
+            m.put("maxMs", round3(r[4] != null ? ((Number) r[4]).doubleValue() : 0.0));
+            m.put("llmCalls", r[5] != null ? ((Number) r[5]).longValue() : 0L);
+            m.put("runs", runs);
+            m.put("llmRuns", llmRuns);
+            m.put("pctLlm", runs > 0 ? Math.round(llmRuns * 1000.0 / runs) / 10.0 : 0.0);
+            out.add(m);
+        }
+        return ResponseEntity.ok(out);
+    }
+
+    /** Per-stage expected-max thresholds (ms) so the UI can flag slow stages. */
+    @GetMapping("/thresholds")
+    public ResponseEntity<Map<String, Long>> thresholds() {
+        return ResponseEntity.ok(thresholds.getThresholds());
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────
+
+    private static List<Double> collect(List<Object[]> rows, int col) {
+        List<Double> v = new ArrayList<>(rows.size());
+        for (Object[] r : rows) if (r[col] != null) v.add(((Number) r[col]).doubleValue());
+        return v;
+    }
+
+    /** {p50, p95, p99, min, max, avg, count} over a value list (nearest-rank). */
+    private static Map<String, Object> percentiles(List<Double> values) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        if (values.isEmpty()) {
+            m.put("count", 0);
+            for (String k : new String[]{"p50", "p95", "p99", "min", "max", "avg"}) m.put(k, 0.0);
+            return m;
+        }
+        List<Double> s = new ArrayList<>(values);
+        Collections.sort(s);
+        m.put("count", s.size());
+        m.put("p50", round3(nearestRank(s, 50)));
+        m.put("p95", round3(nearestRank(s, 95)));
+        m.put("p99", round3(nearestRank(s, 99)));
+        m.put("min", round3(s.get(0)));
+        m.put("max", round3(s.get(s.size() - 1)));
+        m.put("avg", round3(s.stream().mapToDouble(Double::doubleValue).average().orElse(0.0)));
+        return m;
+    }
+
+    private static double nearestRank(List<Double> sorted, int p) {
+        if (sorted.isEmpty()) return 0.0;
+        int rank = (int) Math.ceil(p / 100.0 * sorted.size());
+        int idx = Math.min(Math.max(rank - 1, 0), sorted.size() - 1);
+        return sorted.get(idx);
+    }
+
+    private static double round3(double v) { return Math.round(v * 1000.0) / 1000.0; }
 
     private static Map<String, Object> toSummary(DocStat d) {
-        var m = new java.util.LinkedHashMap<String, Object>();
+        var m = new LinkedHashMap<String, Object>();
         m.put("id", d.getId());
         m.put("batchFileId", d.getBatchFileId());
         m.put("batchId", d.getBatchId());
@@ -99,6 +188,10 @@ public class DocStatsApiController {
         m.put("slowestRuleId", d.getSlowestRuleId());
         m.put("slowestRuleName", d.getSlowestRuleName());
         m.put("slowestRuleMs", d.getSlowestRuleMs());
+        m.put("llmCalls", d.getLlmCalls());
+        m.put("llmInferenceMs", d.getLlmInferenceMs());
+        m.put("llmThrottleWaitMs", d.getLlmThrottleWaitMs());
+        m.put("rateLimitHits", d.getRateLimitHits());
         m.put("createdAt", String.valueOf(d.getCreatedAt()));
         return m;
     }
@@ -107,27 +200,37 @@ public class DocStatsApiController {
         var m = toSummary(d);
         m.put("clientId", d.getClientId());
         m.put("stages", d.getStages().stream()
-                .sorted(java.util.Comparator.comparingInt(s -> nz(s.getOrdinal())))
-                .map(s -> Map.<String, Object>of(
-                        "stage", s.getStage(), "label", s.getLabel(),
-                        "ms", nz(s.getMs()), "pctOfPipeline", nz(s.getPctOfPipeline())))
-                .toList());
+                .sorted(Comparator.comparingInt(s -> nz(s.getOrdinal())))
+                .map(s -> {
+                    var x = new LinkedHashMap<String, Object>();
+                    x.put("stage", s.getStage()); x.put("label", s.getLabel());
+                    x.put("ms", nz(s.getMs())); x.put("pctOfPipeline", nz(s.getPctOfPipeline()));
+                    x.put("llmCalls", nz(s.getLlmCalls()));
+                    x.put("inferenceMs", nz(s.getInferenceMs()));
+                    x.put("throttleWaitMs", nz(s.getThrottleWaitMs()));
+                    return x;
+                }).toList());
         m.put("sections", d.getSections().stream()
-                .sorted(java.util.Comparator.comparingInt(s -> nz(s.getOrdinal())))
+                .sorted(Comparator.comparingInt(s -> nz(s.getOrdinal())))
                 .map(s -> Map.<String, Object>of(
                         "section", s.getSection(), "label", s.getLabel(),
                         "ms", nz(s.getMs()), "ruleCount", s.getRuleCount() != null ? s.getRuleCount() : 0,
                         "pctOfRules", nz(s.getPctOfRules())))
                 .toList());
         m.put("rules", d.getRules().stream()
-                .sorted(java.util.Comparator.comparingInt(r -> nz(r.getOrdinal())))
-                .map(r -> Map.<String, Object>of(
-                        "ruleId", r.getRuleId() != null ? r.getRuleId() : "",
-                        "ruleName", r.getRuleName() != null ? r.getRuleName() : "",
-                        "section", r.getSection() != null ? r.getSection() : "",
-                        "status", r.getStatus() != null ? r.getStatus() : "",
-                        "ms", nz(r.getMs())))
-                .toList());
+                .sorted(Comparator.comparingInt(r -> nz(r.getOrdinal())))
+                .map(r -> {
+                    var x = new LinkedHashMap<String, Object>();
+                    x.put("ruleId", r.getRuleId() != null ? r.getRuleId() : "");
+                    x.put("ruleName", r.getRuleName() != null ? r.getRuleName() : "");
+                    x.put("section", r.getSection() != null ? r.getSection() : "");
+                    x.put("status", r.getStatus() != null ? r.getStatus() : "");
+                    x.put("ms", nz(r.getMs()));
+                    x.put("llmCalls", nz(r.getLlmCalls()));
+                    x.put("llmMs", nz(r.getLlmMs()));
+                    x.put("throttleMs", nz(r.getThrottleMs()));
+                    return x;
+                }).toList());
         return m;
     }
 

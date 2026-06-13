@@ -474,6 +474,10 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     # Stage timer: each _emit closes the previously-open stage (recording its
     # real perf_counter duration) and opens the new one. _finish_stage() closes
     # the last. These are genuine wall-clock measurements of the pipeline phases.
+    # _emit also sets the LLM-telemetry span to the stage name so any Groq call
+    # an overlay stage makes is attributed to that stage.
+    from app.extraction import llm_telemetry
+    llm_calls = llm_telemetry.start_capture()
     stage_ms: Dict[str, float] = {}
     _open = {"stage": None, "t": 0.0}
 
@@ -482,6 +486,7 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
         if _open["stage"] is not None:
             stage_ms[_open["stage"]] = stage_ms.get(_open["stage"], 0.0) + (now - _open["t"]) * 1000.0
         _open["stage"], _open["t"] = stage, now
+        llm_telemetry.set_span(stage)
         if progress:
             try:
                 progress(stage, msg, pct)
@@ -531,6 +536,8 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     report = run_qc(ctx)
     _finish_stage()
     report.stage_ms = stage_ms
+    report.llm_calls = list(llm_calls)
+    llm_telemetry.stop_capture()
     if persist:
         persist_report(report, document_id=Path(appraisal_path).name)
     _emit("done", "QC complete", 100.0)
@@ -544,7 +551,10 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
     transaction_id = transaction_id or str(folder).split("uploads/")[-1]
     start = time.time()
 
+    from app.extraction import llm_telemetry
+    llm_calls = llm_telemetry.start_capture()
     _t = perf_counter()
+    llm_telemetry.set_span("extraction")
     sets = extract_documents(folder)
     stage_ms = {"extraction": (perf_counter() - _t) * 1000.0}
     ctx = QCContext(
@@ -556,9 +566,12 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
         checkbox_conf=qc_config.checkbox_conf,
     )
     _t = perf_counter()
+    llm_telemetry.set_span("rules")
     report = run_qc(ctx, min_phase=min_phase)
     stage_ms["rules"] = (perf_counter() - _t) * 1000.0
     report.stage_ms = stage_ms
+    report.llm_calls = list(llm_calls)
+    llm_telemetry.stop_capture()
 
     if persist:
         doc_id = (_first_pdf(folder, "appraisal") or folder).name

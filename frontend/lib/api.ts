@@ -323,20 +323,35 @@ export interface DocStatSummary {
   slowestRuleId: string | null;
   slowestRuleName: string | null;
   slowestRuleMs: number | null;
+  llmCalls: number | null;
+  llmInferenceMs: number | null;
+  llmThrottleWaitMs: number | null;
+  rateLimitHits: number | null;
   createdAt: string | null;
 }
-export interface DocStatStage   { stage: string; label: string; ms: number; pctOfPipeline: number; }
+export interface DocStatStage {
+  stage: string; label: string; ms: number; pctOfPipeline: number;
+  llmCalls: number; inferenceMs: number; throttleWaitMs: number;
+}
 export interface DocStatSection { section: string; label: string; ms: number; ruleCount: number; pctOfRules: number; }
-export interface DocStatRule    { ruleId: string; ruleName: string; section: string; status: string; ms: number; }
+export interface DocStatRule {
+  ruleId: string; ruleName: string; section: string; status: string; ms: number;
+  llmCalls: number; llmMs: number; throttleMs: number;
+}
 export interface DocStatDetail extends DocStatSummary {
   clientId: number | null;
   stages: DocStatStage[];
   sections: DocStatSection[];
   rules: DocStatRule[];
 }
+export interface Pctl { p50: number; p95: number; p99: number; min: number; max: number; avg: number; count: number; }
 export interface DocStatBatchRollup {
-  batchId: number; clientName: string; appraisalCount: number;
-  totalMs: number; ruleEngineMs: number; avgMs: number; lastRun: string;
+  batchId: number; clientName: string; appraisalCount: number; lastRun: string;
+  totalMs: Pctl; ruleEngineMs: Pctl; pipelineMs: Pctl;
+}
+export interface DocStatRuleRank {
+  ruleId: string; ruleName: string; section: string;
+  avgMs: number; maxMs: number; llmCalls: number; runs: number; llmRuns: number; pctLlm: number;
 }
 
 export const getDocStats = (page = 0, q?: string, batchId?: number, size = 20) => {
@@ -352,6 +367,12 @@ export const getDocStatDetail = (id: number) =>
 
 export const getDocStatBatches = () =>
   apiFetch<DocStatBatchRollup[]>(`/api/admin/doc-stats/batches`);
+
+export const getDocStatRuleRanking = () =>
+  apiFetch<DocStatRuleRank[]>(`/api/admin/doc-stats/rules/ranking`);
+
+export const getDocStatThresholds = () =>
+  apiFetch<Record<string, number>>(`/api/admin/doc-stats/thresholds`);
 
 export const getBatchStatus = (id: number) =>
   apiFetch<{

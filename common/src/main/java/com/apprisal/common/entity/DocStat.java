@@ -58,6 +58,12 @@ public class DocStat {
     @Column(name = "slowest_rule_name")     private String slowestRuleName;
     @Column(name = "slowest_rule_ms")       private Double slowestRuleMs;
 
+    // ── Groq/LLM telemetry totals for this run (measured, not estimated) ───────
+    @Column(name = "llm_calls")              private Integer llmCalls;
+    @Column(name = "llm_inference_ms")       private Double llmInferenceMs;
+    @Column(name = "llm_throttle_wait_ms")   private Double llmThrottleWaitMs;
+    @Column(name = "rate_limit_hits")        private Integer rateLimitHits;
+
     @Column(name = "created_at") private LocalDateTime createdAt;
 
     // ── Breakdown children ─────────────────────────────────────────────────────
@@ -99,6 +105,10 @@ public class DocStat {
         public Builder slowestRuleId(String v)      { d.slowestRuleId = v;     return this; }
         public Builder slowestRuleName(String v)    { d.slowestRuleName = v;   return this; }
         public Builder slowestRuleMs(Double v)      { d.slowestRuleMs = v;     return this; }
+        public Builder llmCalls(Integer v)          { d.llmCalls = v;          return this; }
+        public Builder llmInferenceMs(Double v)     { d.llmInferenceMs = v;    return this; }
+        public Builder llmThrottleWaitMs(Double v)  { d.llmThrottleWaitMs = v; return this; }
+        public Builder rateLimitHits(Integer v)     { d.rateLimitHits = v;     return this; }
         public DocStat build()                      { return d; }
     }
 
@@ -122,6 +132,10 @@ public class DocStat {
     public String getSlowestRuleId()     { return slowestRuleId; }
     public String getSlowestRuleName()   { return slowestRuleName; }
     public Double getSlowestRuleMs()     { return slowestRuleMs; }
+    public Integer getLlmCalls()         { return llmCalls; }
+    public Double getLlmInferenceMs()    { return llmInferenceMs; }
+    public Double getLlmThrottleWaitMs() { return llmThrottleWaitMs; }
+    public Integer getRateLimitHits()    { return rateLimitHits; }
     public LocalDateTime getCreatedAt()  { return createdAt; }
     public List<DocStatStage> getStages()     { return stages; }
     public List<DocStatSection> getSections() { return sections; }

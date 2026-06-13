@@ -164,11 +164,28 @@ def _section_label(section: str) -> str:
     return section.replace("_", " ").title()
 
 
+def _aggregate_llm(report: QCReport) -> Dict[str, Dict]:
+    """Sum the captured Groq calls by span (rule id or stage name). Returns
+    {span: {calls, inference_ms, throttle_wait_ms, rate_limited}}."""
+    by_span: Dict[str, Dict] = {}
+    for c in report.llm_calls:
+        span = c.span or "(unattributed)"
+        agg = by_span.setdefault(span, {"calls": 0, "inference_ms": 0.0,
+                                        "throttle_wait_ms": 0.0, "rate_limited": 0})
+        agg["calls"] += 1
+        agg["inference_ms"] += c.inference_ms
+        agg["throttle_wait_ms"] += c.throttle_wait_ms
+        agg["rate_limited"] += 1 if c.rate_limited else 0
+    return by_span
+
+
 def _build_timings(report: QCReport, total_ms: int) -> Dict:
     """Aggregate the engine's measured per-rule timings and the orchestrator's
     measured stage timings into a human-readable breakdown. All numbers are real
     perf_counter measurements — nothing here is estimated or proxied."""
-    # per-rule, slowest first
+    llm_by_span = _aggregate_llm(report)
+
+    # per-rule, slowest first — wall-clock ms plus any Groq cost the rule incurred
     rules = sorted(
         (
             {
@@ -177,6 +194,9 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
                 "section": t.section.upper(),
                 "status": t.status,
                 "ms": round(t.ms, 3),
+                "llm_calls": llm_by_span.get(t.rule_id, {}).get("calls", 0),
+                "llm_ms": round(llm_by_span.get(t.rule_id, {}).get("inference_ms", 0.0), 3),
+                "throttle_ms": round(llm_by_span.get(t.rule_id, {}).get("throttle_wait_ms", 0.0), 3),
             }
             for t in report.rule_timings
         ),
@@ -204,7 +224,8 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
         key=lambda d: d["ms"], reverse=True,
     )
 
-    # pipeline stages (extraction phases + rule evaluation)
+    # pipeline stages (extraction phases + rule evaluation) — each stage's Groq
+    # inference vs throttle-wait split, when the stage made LLM calls
     stage_total = sum(report.stage_ms.values()) or 1.0
     stages = sorted(
         (
@@ -213,11 +234,26 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
                 "label": _stage_label(name),
                 "ms": round(ms, 3),
                 "pct_of_pipeline": round(ms / stage_total * 100, 1),
+                "llm_calls": llm_by_span.get(name, {}).get("calls", 0),
+                "inference_ms": round(llm_by_span.get(name, {}).get("inference_ms", 0.0), 3),
+                "throttle_wait_ms": round(llm_by_span.get(name, {}).get("throttle_wait_ms", 0.0), 3),
             }
             for name, ms in report.stage_ms.items()
         ),
         key=lambda d: d["ms"], reverse=True,
     )
+
+    # corpus-level LLM summary for this run
+    total_calls = sum(a["calls"] for a in llm_by_span.values())
+    total_inference = sum(a["inference_ms"] for a in llm_by_span.values())
+    total_throttle = sum(a["throttle_wait_ms"] for a in llm_by_span.values())
+    rate_limit_hits = sum(a["rate_limited"] for a in llm_by_span.values())
+    llm = {
+        "total_calls": total_calls,
+        "total_inference_ms": round(total_inference, 3),
+        "total_throttle_wait_ms": round(total_throttle, 3),
+        "rate_limit_hits": rate_limit_hits,
+    }
 
     return {
         "total_ms": total_ms,
@@ -227,6 +263,7 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
         "stages": stages,
         "sections": sections,
         "rules": rules,
+        "llm": llm,
         "slowest_stage": stages[0] if stages else None,
         "slowest_section": sections[0] if sections else None,
         "slowest_rule": rules[0] if rules else None,

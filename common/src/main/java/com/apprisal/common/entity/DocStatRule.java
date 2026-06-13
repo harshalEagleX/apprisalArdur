@@ -24,14 +24,19 @@ public class DocStatRule {
     @Column(name = "section", length = 64)  private String section;
     @Column(name = "status", length = 24)   private String status;
     @Column(name = "ms")                    private Double ms;
+    // Groq cost when this rule made LLM calls (measured); 0 for pure-deterministic rules.
+    @Column(name = "llm_calls")             private Integer llmCalls;
+    @Column(name = "llm_ms")                private Double llmMs;
+    @Column(name = "throttle_ms")           private Double throttleMs;
     @Column(name = "ordinal")               private Integer ordinal;
 
     protected DocStatRule() {}
 
     public DocStatRule(String ruleId, String ruleName, String section, String status,
-                       Double ms, Integer ordinal) {
+                       Double ms, Integer llmCalls, Double llmMs, Double throttleMs, Integer ordinal) {
         this.ruleId = ruleId; this.ruleName = ruleName; this.section = section;
-        this.status = status; this.ms = ms; this.ordinal = ordinal;
+        this.status = status; this.ms = ms; this.llmCalls = llmCalls;
+        this.llmMs = llmMs; this.throttleMs = throttleMs; this.ordinal = ordinal;
     }
 
     public void setDocStat(DocStat d) { this.docStat = d; }
@@ -42,5 +47,8 @@ public class DocStatRule {
     public String getSection()  { return section; }
     public String getStatus()   { return status; }
     public Double getMs()       { return ms; }
+    public Integer getLlmCalls(){ return llmCalls; }
+    public Double getLlmMs()    { return llmMs; }
+    public Double getThrottleMs(){ return throttleMs; }
     public Integer getOrdinal() { return ordinal; }
 }

@@ -1238,3 +1238,70 @@ DOCSTATS — per-appraisal QC timing (Python measure → Java persist → Admin 
     human-readable µs/ms/s/min formatter + scan-tone colors. tsc + eslint clean.
 [ ] NEXT: surface docStats from the batch detail view (deep-link per file);
     add a corpus-wide "slowest rules across all appraisals" aggregate endpoint.
+
+DOCSTATS v2 — PLAN (operational depth: Groq telemetry, percentiles, thresholds, ranking)
+Assessment accepted. Truth rule unchanged: every number is a measured value, no
+estimates. How it fits the existing build:
+
+[P1] Groq call telemetry (throttle-wait vs inference vs 429) — THE key gap.
+   - NEW app/extraction/llm_telemetry.py: contextvar span ("current rule id" or
+     "current stage") + contextvar sink (per-request capture list) + LLMCall
+     dataclass {span, model, throttle_wait_ms, inference_ms, attempts,
+     rate_limited, ok, est_tokens}.
+   - llm_groq.chat_json instrumented: time the _throttle_tpm pre-wait + the
+     429/503 backoff sleeps = throttle_wait_ms; time each requests.post =
+     inference_ms; count attempts; flag rate_limited on any 429. record() each
+     call into the active sink. Graceful no-op when telemetry unavailable (P-6).
+   - engine.run_qc sets span=rule_id around spec.fn; transaction sets span=stage
+     in _emit and start/stop_capture around the whole run → report.llm_calls.
+   - python_response._build_timings: per-rule {llm_calls, llm_ms, throttle_ms},
+     per-stage {inference_ms, throttle_wait_ms}, top-level llm summary
+     {total_calls, total_inference_ms, total_throttle_wait_ms, rate_limit_hits}.
+[P2] Percentiles P50/P95/P99 — DocStatRepository returns per-file totals per
+   batch; controller computes percentiles in Java (DB-agnostic) for total +
+   rule-engine + pipeline; /doc-stats/batches surfaces them; list view shows a
+   Batches tab.
+[P3] Per-stage thresholds — config (DocStatsThresholds, application-overridable
+   per P-4) of expected max ms per stage; /doc-stats/thresholds endpoint; detail
+   view highlights any stage over threshold red.
+[P4] Cumulative rule ranking — /doc-stats/rules/ranking: per rule AVG(ms),
+   SUM(llm_calls), runs, % of runs that triggered an LLM call, over the whole
+   corpus; new Ranking view.
+   + LLM call count per rule stored on DocStatRule (subsumes the "no LLM call
+     count" gap); "stages are sequential, total = sum" note added to the UI.
+[deferred, documented] rerun before/after compare (needs QCResult.rerunOf join
+   in UI), confidence-per-ms, time-series chart (needs run history accumulation).
+
+DOCSTATS v2 — IMPLEMENTED (Groq telemetry, percentiles, thresholds, ranking)
+[x] P1 Groq telemetry: app/extraction/llm_telemetry.py (contextvar span + sink
+    + LLMCall); llm_groq.chat_json now measures throttle_wait_ms (TPM pre-wait +
+    429/503 backoff) separately from inference_ms (per-request latency), counts
+    attempts, flags rate_limited; engine sets span=rule_id, transaction sets
+    span=stage and captures the run; _build_timings adds per-rule {llm_calls,
+    llm_ms, throttle_ms}, per-stage {inference_ms, throttle_wait_ms}, top-level
+    llm {total_calls, total_inference_ms, total_throttle_wait_ms, rate_limit_hits}.
+    MEASURED live on #2321525505: subject_llm 165s = 4.3s inference + 160s
+    THROTTLE (5 calls, 1 rate-limit hit) — proves the bottleneck is rate-limit
+    pressure, not prompt size; extract_contract 69.6s is OCR (only 569ms LLM);
+    SCA-14 852ms = a single clean inference call. The split is real.
+[x] P1 Java: PythonTimings + Llm record + stage/rule LLM fields; DocStat gains
+    llm_calls/llm_inference_ms/llm_throttle_wait_ms/rate_limit_hits, DocStatStage
+    inference_ms/throttle_wait_ms, DocStatRule llm_calls/llm_ms/throttle_ms;
+    saveDocStats maps them.
+[x] P2 percentiles: DocStatRepository.batchTimingRows + controller computes
+    P50/P95/P99/min/max/avg (nearest-rank, DB-agnostic) per batch over total /
+    rule-engine / pipeline; GET /doc-stats/batches.
+[x] P3 thresholds: DocStatsThresholds @ConfigurationProperties (per-stage
+    expected-max ms, overridable via docstats.thresholds.*); GET
+    /doc-stats/thresholds; detail view flags over-threshold stages red.
+[x] P4 ranking: DocStatRepository.ruleRanking + GET /doc-stats/rules/ranking
+    (per rule AVG/MAX ms, SUM llm_calls, runs, %-of-runs-with-LLM across corpus).
+[x] Frontend: list page now has Appraisals | Batches | Rule-ranking tabs;
+    appraisals row shows the LLM inference/throttle split + rate-limit flag;
+    detail page splits each LLM stage bar into sky=inference / amber=throttle,
+    red-rings over-threshold stages, adds LLM columns to the rule table, a
+    sequential-stages note, and inference/throttle headline cards. tsc+eslint
+    clean; common+qc+app BUILD SUCCESS.
+[ ] NEXT (documented, deferred): rerun before/after timing compare (needs
+    QCResult.rerunOf join in UI), confidence-per-ms, time-series trend chart
+    (needs accumulated run history).
