@@ -147,7 +147,13 @@ function isNotApplicable(rule: QCRuleResult) {
 
 function focusForRule(rule: QCRuleResult): RuleFocus {
   const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
-  const hasBox = [rule.bboxX, rule.bboxY, rule.bboxW, rule.bboxH].every(v => typeof v === "number");
+  // A box is real only when all four are numbers AND it has positive area. The
+  // backend stores 0,0,0,0 to mean "page known, exact box unavailable" (the
+  // value could not be located precisely), which must scroll to the page
+  // WITHOUT drawing a zero-size highlight — per the MIRA page-level-only rule.
+  const hasBox =
+    [rule.bboxX, rule.bboxY, rule.bboxW, rule.bboxH].every(v => typeof v === "number") &&
+    (rule.bboxW as number) > 0 && (rule.bboxH as number) > 0;
   if (!backendPage) {
     return { ruleId: rule.ruleId, page: 1, documentType: "APPRAISAL", note: "Location not yet extracted", bbox: null, located: false };
   }
