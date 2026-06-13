@@ -87,5 +87,30 @@ public interface DocStatRepository extends JpaRepository<DocStat, Long> {
         """)
     Optional<DocStat> findPreviousByDocStatId(@Param("id") Long id);
 
-    void deleteByBatchId(Long batchId);
+    // ── FK-safe cascade delete for a batch ─────────────────────────────────────
+    // Bulk JPQL deletes bypass entity orphanRemoval, so children must be deleted
+    // before parents, and doc_stat (which FKs to qc_result) before qc_result.
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM DocStatRule r WHERE r.docStat.id IN (SELECT d.id FROM DocStat d WHERE d.batchId = :batchId)")
+    int deleteRulesByBatchId(@Param("batchId") Long batchId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM DocStatSection s WHERE s.docStat.id IN (SELECT d.id FROM DocStat d WHERE d.batchId = :batchId)")
+    int deleteSectionsByBatchId(@Param("batchId") Long batchId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM DocStatStage s WHERE s.docStat.id IN (SELECT d.id FROM DocStat d WHERE d.batchId = :batchId)")
+    int deleteStagesByBatchId(@Param("batchId") Long batchId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM DocStat d WHERE d.batchId = :batchId")
+    int deleteByBatchId(@Param("batchId") Long batchId);
+
+    /** Delete a batch's whole docStat tree (children first), FK-safe. */
+    default int deleteTreeByBatchId(Long batchId) {
+        deleteRulesByBatchId(batchId);
+        deleteSectionsByBatchId(batchId);
+        deleteStagesByBatchId(batchId);
+        return deleteByBatchId(batchId);
+    }
 }

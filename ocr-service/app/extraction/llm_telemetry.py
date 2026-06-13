@@ -62,14 +62,17 @@ def current_span() -> Optional[str]:
 # ── capture: collect calls for one measured run ────────────────────────────
 
 def start_capture() -> List[LLMCall]:
-    """Begin capturing LLM calls; returns the list calls accumulate into."""
+    """Begin capturing LLM calls; returns the list calls accumulate into.
+    Resets the span too, so a reused thread/context never carries a stale one."""
     calls: List[LLMCall] = []
     _sink.set(calls)
+    _span.set(None)
     return calls
 
 
 def stop_capture() -> None:
     _sink.set(None)
+    _span.set(None)
 
 
 def record(call: LLMCall) -> None:

@@ -1323,3 +1323,34 @@ DOCSTATS v3 — deferred items delivered (trend, rerun-compare, confidence-per-m
     faster, red = slower) for total / rule-engine / inference / throttle.
 [x] common+qc+app BUILD SUCCESS; frontend tsc+eslint clean; confidence verified
     flowing through the timings block. All assessment items now closed.
+
+DOCSTATS — LOAD/ROBUSTNESS AUDIT (150+ users / 1000+ docs/day) — fixes applied
+Audited the docStats feature and its interactions for production load. Found and
+fixed four real issues (each verified, not cosmetic):
+[x] A. LazyInitializationException risk: app runs spring.jpa.open-in-view=false,
+    so the detail/compare endpoints mapping the lazy stages/sections/rules
+    collections would throw outside a tx. Added @Transactional(readOnly=true) to
+    detail() and compare() so the session stays open through mapping. (list /
+    batches / ranking / trend use Object[] projections — unaffected.)
+[x] B. Batch-delete FK violation: BatchService.deleteBatch deleted qc_result
+    without removing doc_stat (which FKs qc_result), so any batch with timings
+    would FAIL to delete. Added docStatRepository.deleteTreeByBatchId (children-
+    first @Modifying bulk deletes via doc_stat.batch_id) and wired it before the
+    qc_result delete. doc_stat_rule also indexed on rule_id.
+[x] C. Unbounded ranking scan: GROUP BY rule_id over the whole doc_stat_rule
+    table (~137k rows/day) had no index → full scan that worsens with volume.
+    Added @Index idx_doc_stat_rule_ruleid (ddl-auto creates it on next start).
+[x] D. Event-loop blocking: /qc/process ran the sync, throttle-bound QC (up to
+    160s) directly in the single uvicorn worker's event loop, serializing ALL
+    requests incl. the /qc/progress polls Java makes during the same QC. Now
+    awaited via starlette run_in_threadpool — frees the loop AND gives each
+    request its own copied context, isolating the LLM-telemetry contextvars.
+    Proven: 3 concurrent contexts captured 5/3/4 calls each with zero
+    cross-contamination; record() after stop is a safe no-op.
+Governors for fan-out: Java qcTaskExecutor caps concurrent /qc/process; Groq
+_tpm_lock serializes token spend; per-request progress tokens never collide.
+Note for ops: anyio threadpool default is 40; on 8GB hardware the Java executor
+should remain the real concurrency cap. Long-term, if doc_stat_rule grows into
+tens of millions, replace the live ranking GROUP BY with a rolled-up aggregate.
+common+batch+qc+app BUILD SUCCESS; rule+engine tests green (only the pre-existing
+gemini-key env test fails).

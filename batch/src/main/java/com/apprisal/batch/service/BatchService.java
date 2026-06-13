@@ -57,6 +57,7 @@ public class BatchService {
     private final QCRuleResultRepository qcRuleResultRepository;
     private final DocumentMatchRepository documentMatchRepository;
     private final ProcessingMetricsRepository metricsRepository;
+    private final com.apprisal.common.repository.DocStatRepository docStatRepository;
     private final AuditLogService auditLogService;
     private final BusinessEventService businessEventService;
 
@@ -69,6 +70,7 @@ public class BatchService {
             QCRuleResultRepository qcRuleResultRepository,
             DocumentMatchRepository documentMatchRepository,
             ProcessingMetricsRepository metricsRepository,
+            com.apprisal.common.repository.DocStatRepository docStatRepository,
             AuditLogService auditLogService,
             BusinessEventService businessEventService) {
         this.batchRepository = batchRepository;
@@ -77,6 +79,7 @@ public class BatchService {
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.documentMatchRepository = documentMatchRepository;
         this.metricsRepository = metricsRepository;
+        this.docStatRepository = docStatRepository;
         this.auditLogService = auditLogService;
         this.businessEventService = businessEventService;
     }
@@ -180,10 +183,12 @@ public class BatchService {
         long dbStarted = System.nanoTime();
         int matchesDeleted = documentMatchRepository.deleteByBatchId(batchId);
         int metricsDeleted = metricsRepository.deleteByBatchId(batchId);
+        // doc_stat FKs to qc_result, so its tree must be removed before qcResults
+        int docStatsDeleted = docStatRepository.deleteTreeByBatchId(batchId);
         int rulesDeleted = qcRuleResultRepository.deleteByBatchId(batchId);
         int resultsDeleted = qcResultRepository.deleteByBatchId(batchId);
-        log.info("Deleted batch {} QC rows in {} ms: documentMatches={}, metrics={}, ruleResults={}, qcResults={}",
-                batch.getParentBatchId(), elapsedMs(dbStarted), matchesDeleted, metricsDeleted, rulesDeleted, resultsDeleted);
+        log.info("Deleted batch {} QC rows in {} ms: documentMatches={}, metrics={}, docStats={}, ruleResults={}, qcResults={}",
+                batch.getParentBatchId(), elapsedMs(dbStarted), matchesDeleted, metricsDeleted, docStatsDeleted, rulesDeleted, resultsDeleted);
 
         // Delete storage files
         long filesStarted = System.nanoTime();

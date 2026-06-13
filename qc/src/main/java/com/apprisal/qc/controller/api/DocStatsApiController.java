@@ -8,6 +8,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -54,8 +55,11 @@ public class DocStatsApiController {
                 "totalElements", result.getTotalElements()));
     }
 
-    /** Full timing breakdown for one appraisal (stages + sections + rules). */
+    /** Full timing breakdown for one appraisal (stages + sections + rules).
+     *  readOnly tx keeps the session open while the lazy child collections are
+     *  mapped (open-in-view is disabled). */
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> detail(@PathVariable Long id) {
         return docStatRepository.findById(id)
                 .map(d -> ResponseEntity.ok(toDetail(d)))
@@ -170,6 +174,7 @@ public class DocStatsApiController {
      * can show whether a change made the file faster or slower.
      */
     @GetMapping("/{id}/compare")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> compare(@PathVariable Long id) {
         var cur = docStatRepository.findById(id).orElse(null);
         if (cur == null) return ResponseEntity.notFound().build();

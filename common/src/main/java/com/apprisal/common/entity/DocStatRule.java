@@ -8,7 +8,11 @@ import jakarta.persistence.*;
  */
 @Entity
 @Table(name = "doc_stat_rule",
-       indexes = { @Index(name = "idx_doc_stat_rule_parent", columnList = "doc_stat_id") })
+       indexes = {
+           @Index(name = "idx_doc_stat_rule_parent", columnList = "doc_stat_id"),
+           // the cumulative ranking GROUP BY rule_id scans this table — index it
+           @Index(name = "idx_doc_stat_rule_ruleid", columnList = "rule_id")
+       })
 public class DocStatRule {
 
     @Id

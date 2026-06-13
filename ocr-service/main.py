@@ -167,6 +167,7 @@ async def qc_process(
     the integration contract with QCProcessingService.
     """
     import os as _os
+    from starlette.concurrency import run_in_threadpool
     from app.qc.transaction import run_transaction_qc_paths
     from app.qc.python_response import report_to_python_qc_response
 
@@ -184,7 +185,12 @@ async def qc_process(
                                "elapsed_ms": int((_time.time() - started) * 1000)}
 
     try:
-        report, ctx = run_transaction_qc_paths(
+        # Run the (potentially long, throttle-bound) QC off the event loop so a
+        # single in-flight document never blocks progress polls or other QC
+        # requests on this worker. The worker thread also gets its own copied
+        # context, which isolates the LLM-telemetry contextvars per request.
+        report, ctx = await run_in_threadpool(
+            run_transaction_qc_paths,
             appraisal, engagement, contract,
             transaction_id=(file.filename or "transaction"),
             persist=True, progress=_progress,
