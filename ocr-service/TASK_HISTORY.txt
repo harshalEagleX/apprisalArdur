@@ -1370,3 +1370,17 @@ DOCSTATS — LOAD-FIX VERIFICATION (live Postgres integration test)
       QCResult.rerunOf + findPreviousByDocStatId → deleteTreeByBatchId removes
       2 docStats + children with NO FK violation (fix B). Seeded graph cleaned up.
     Tests run: 2, Failures: 0, Errors: 0. Dev DB verified clean afterward.
+
+QC EXECUTOR — capped at 2 for 8GB (config-overridable) + rule-coverage verification
+[x] AsyncConfig qcTaskExecutor was core=4/max=10 (bursts to 10 concurrent docs →
+    OOM risk on 8GB at ~400-500MB/doc OCR). Now a hard cap: core=max=2,
+    queue=100, overridable via qc.executor.{core-pool-size,max-pool-size,
+    queue-capacity} (default 2/2/100) so a 16GB box bumps to 4 without code.
+[x] Verified against the claim that neighborhood/reconciliation/signature have
+    "zero rules": current demo HEAD registers 114 rules / 15 sections. Live on a
+    real appraisal (#2321525505): neighborhood 13 visible results (8 PASS/5
+    VERIFY/0 N/A), reconciliation 5 (2 PASS/3 VERIFY), signature 6 (5 PASS/1
+    VERIFY), cost 3 visible, income 2 N/A (correct for SFR). N-4/N-5/N-7/R-2/
+    SIG-2/DOC-1 all present (committed 9ae25f5/02823db/f8af293). The text-only
+    rule set is DONE and firing; remaining MIRA rules need the vision/classifier
+    layer (sketch SK-*, maps M-*, photo PH-3/5/6, FHA-6/7/8/11/13, IA-2 Form216).

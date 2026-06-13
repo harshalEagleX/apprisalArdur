@@ -2,6 +2,7 @@ package com.apprisal.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -13,13 +14,15 @@ import java.util.concurrent.ThreadPoolExecutor;
 /**
  * Async configuration for background QC processing.
  *
- * Sizing rationale:
- *  - OCR jobs run 5-15 min each and are CPU+IO-heavy.
- *  - Core=4 keeps 4 batches permanently warm without idling extra threads.
- *  - Max=10 allows bursting when demand is high.
- *  - Queue=100 absorbs upload bursts without blocking HTTP threads.
- *  - AbortPolicy: when the queue is full, return HTTP 503 to the admin
- *    so they get clear feedback rather than silently blocking the request thread.
+ * Sizing rationale (memory-bound, not CPU-bound):
+ *  - Each in-flight document peaks around 400-500MB during OCR (PaddleOCR holds
+ *    its model in memory for the duration of extraction).
+ *  - On an 8GB box, 2 concurrent documents (~0.8-1GB OCR) fits alongside Spring
+ *    Boot (~0.5GB), Postgres connections, and the Next.js process; 3+ risks OOM.
+ *    So the pool is a HARD cap of 2 (core == max), not a bursting pool.
+ *  - Queue=100 absorbs upload bursts: excess batches wait rather than run
+ *    concurrently; AbortPolicy returns HTTP 503 only on extreme overload.
+ *  - Configurable (P-4): bump qc.executor.* on a 16GB box (e.g. 4) without code.
  */
 @Configuration
 @EnableAsync
@@ -27,18 +30,26 @@ public class AsyncConfig {
 
     private static final Logger log = LoggerFactory.getLogger(AsyncConfig.class);
 
+    @Value("${qc.executor.core-pool-size:2}")
+    private int corePoolSize;
+    @Value("${qc.executor.max-pool-size:2}")
+    private int maxPoolSize;
+    @Value("${qc.executor.queue-capacity:100}")
+    private int queueCapacity;
+
     @Bean("qcTaskExecutor")
     public Executor qcTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(4);
-        executor.setMaxPoolSize(10);
-        executor.setQueueCapacity(100);
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(queueCapacity);
         executor.setThreadNamePrefix("qc-worker-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(300);  // 5 min — allow long OCR jobs to finish
         executor.initialize();
-        log.info("QC task executor configured: core=4, max=10, queue=100, AbortPolicy");
+        log.info("QC task executor configured: core={}, max={}, queue={}, AbortPolicy",
+                corePoolSize, maxPoolSize, queueCapacity);
         return executor;
     }
 }
