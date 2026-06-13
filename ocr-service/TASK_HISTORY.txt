@@ -1354,3 +1354,19 @@ should remain the real concurrency cap. Long-term, if doc_stat_rule grows into
 tens of millions, replace the live ranking GROUP BY with a rolled-up aggregate.
 common+batch+qc+app BUILD SUCCESS; rule+engine tests green (only the pre-existing
 gemini-key env test fails).
+
+DOCSTATS — LOAD-FIX VERIFICATION (live Postgres integration test)
+[x] Closed the gap flagged after the load audit: the A/B/D fixes were validated
+    by compile+reason only. Added app/src/test/.../DocStatsIntegrationTests
+    (@SpringBootTest against the real ardurApprisal Postgres, matching the
+    existing EnversAudit test pattern) and RAN it green:
+    - Test 1: every DocStatRepository JPQL (search CAST-as-string, batchTimingRows,
+      ruleRanking CASE-WHEN, recentTrend, findPreviousByDocStatId cross-join,
+      findByQcResultId) + every controller endpoint (list/batches/ranking/trend/
+      thresholds/detail-404) parse and execute on Postgres. ddl-auto created the
+      doc_stat/_stage/_section/_rule tables + idx_doc_stat_rule_ruleid.
+    - Test 2: full lifecycle — persist tree → controller.detail() maps the lazy
+      stages/sections/rules with open-in-view=false (fix A) → rerun compare via
+      QCResult.rerunOf + findPreviousByDocStatId → deleteTreeByBatchId removes
+      2 docStats + children with NO FK violation (fix B). Seeded graph cleaned up.
+    Tests run: 2, Failures: 0, Errors: 0. Dev DB verified clean afterward.
