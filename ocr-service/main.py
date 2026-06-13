@@ -180,8 +180,12 @@ async def qc_process(
                            "sub_percent": 0.0, "elapsed_ms": 0}
 
     def _progress(stage, message, pct):
+        # `pct` is the pipeline stage percent on a 0–100 scale; `sub_percent` is the
+        # contract's 0–1 within-file fraction (Java's smoothedPercent and the
+        # frontend both clamp it to [0,1]). Sending 0–100 here pinned the bar to
+        # 100% as soon as any stage passed 1%. Normalize to 0–1.
         _QC_PROGRESS[token] = {"stage": stage, "message": message,
-                               "sub_percent": float(pct),
+                               "sub_percent": max(0.0, min(1.0, float(pct) / 100.0)),
                                "elapsed_ms": int((_time.time() - started) * 1000)}
 
     try:

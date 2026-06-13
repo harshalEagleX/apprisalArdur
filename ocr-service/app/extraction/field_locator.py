@@ -162,6 +162,10 @@ def locate_fields(pdf_path, result_set: ExtractionResultSet) -> int:
             if not r.found or not r.value:
                 continue
             found += 1
+            if r.bbox:
+                # An extractor already placed this field precisely (e.g. the comp
+                # grid knows each comparable's exact cell) — never clobber it.
+                continue
             located = _locate_one(r, doc.page_count, page)
             if located is None:
                 continue

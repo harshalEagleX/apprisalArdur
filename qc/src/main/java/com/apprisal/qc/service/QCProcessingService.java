@@ -708,6 +708,7 @@ public class QCProcessingService {
                 .errorCount(0)
                 .processingTimeMs(pythonResponse.processingTimeMs())
                 .extractionMethod(pythonResponse.extractionMethod())
+                .ruleEngineVersion(pythonResponse.ruleEngineVersion())
                 .pythonDocumentId(pythonResponse.documentId())
                 .pythonProcessingJobId(pythonResponse.processingJobId())
                 .cacheHit(pythonResponse.cacheHit())
@@ -761,6 +762,30 @@ public class QCProcessingService {
         appraisal.setStatus(FileStatus.COMPLETED);
         batchFileRepository.save(appraisal);
         log.info("Saved QC result for file {}: decision={}", appraisal.getFilename(), decision);
+
+        // Re-run conflict handling: a reviewer may have the now-superseded result
+        // open. Their in-progress decisions on it are preserved (the old result is
+        // kept, only stamped supersededAt), but they must be told the results they
+        // are looking at have been replaced — push to the OLD result's topic (the
+        // one their session is subscribed to) with the new id so the UI can offer
+        // to load it. Best-effort: never block persistence (P-6).
+        if (isRerun && previousActive != null) {
+            try {
+                realtimeEventPublisher.publish(
+                        "/topic/reviewer/qc/" + previousActive.getId() + "/superseded",
+                        Map.of(
+                                "supersededResultId", previousActive.getId(),
+                                "newResultId", qcResult.getId(),
+                                "supersededAt", AppTime.now().toString(),
+                                "message", "This report was re-processed by a new QC run. "
+                                        + "Your decisions so far are preserved for audit; "
+                                        + "load the new results to continue."
+                        ));
+            } catch (Exception pubEx) {
+                log.warn("Failed to publish supersede event for result {}: {}",
+                        previousActive.getId(), pubEx.getMessage());
+            }
+        }
         log.info(TimelineLog.event("admin_batches", "java_qc_result_saved",
                 "batch_id", batchId,
                 "batch_file_id", appraisal.getId(),

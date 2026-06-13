@@ -19,6 +19,10 @@ public record PythonQCResponse(
         @JsonProperty("extracted_fields")    Map<String, Object> extractedFields,
         @JsonProperty("field_confidence")    Map<String, Double> fieldConfidence,
         @JsonProperty("total_rules")         Integer totalRules,
+        // Version of the QC ruleset that produced this result ("qc-1.0.0+<fp>").
+        // Stamped on the QCResult so two runs are comparable and a flag delta is
+        // attributable to a rule change vs a report change.
+        @JsonProperty("rule_engine_version") String ruleEngineVersion,
         Integer passed,
         Integer failed,
         Integer verify,

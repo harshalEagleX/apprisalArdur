@@ -100,7 +100,10 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
           AND b.status IN (
             com.apprisal.common.entity.BatchStatus.UPLOADED,
             com.apprisal.common.entity.BatchStatus.VALIDATING,
-            com.apprisal.common.entity.BatchStatus.ERROR
+            com.apprisal.common.entity.BatchStatus.ERROR,
+            com.apprisal.common.entity.BatchStatus.COMPLETED,
+            com.apprisal.common.entity.BatchStatus.REVIEW_PENDING,
+            com.apprisal.common.entity.BatchStatus.IN_REVIEW
           )
         """)
     int markQcProcessingIfTriggerable(@Param("batchId") Long batchId, @Param("now") LocalDateTime now);

@@ -2,14 +2,14 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Search, Plus, RefreshCw, ChevronLeft, ChevronRight,
-  FileStack, Clock3, CheckCircle2, Play, UserPlus, SlidersHorizontal, XCircle,
+  FileStack, Clock3, CheckCircle2, Play, UserPlus, XCircle,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import {
   getAdminBatches, processQC, assignReviewer, deleteBatch,
   reconcileStuckBatches, cancelQC, getAdminDashboard, getAllUsers,
   bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer,
-  type Batch, type User, type QCModelSelection,
+  type Batch, type User,
 } from "@/lib/api";
 import { removeJob } from "@/lib/jobs";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
@@ -26,10 +26,6 @@ const STATUSES = [
   "", "UPLOADED", "VALIDATING", "VALIDATION_FAILED",
   "QC_PROCESSING", "REVIEW_PENDING", "IN_REVIEW", "COMPLETED", "ERROR",
 ];
-
-const MODEL_OPTIONS: Record<QCModelSelection["provider"], { label: string; text: string[]; vision: string[] }> = {
-  ollama: { label: "Ollama", text: ["llava:7b", "llava:13b"], vision: ["llava:7b", "llava:13b"] },
-};
 
 type ReconcileResult = {
   stuckFound: number; retried: number; abandoned: number; pythonHealthy: boolean; message: string;
@@ -142,9 +138,6 @@ export default function BatchesPage() {
   const [reconciling, setReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
   const [reviewerWorkload, setReviewerWorkload] = useState<Record<string, number>>({});
-  const modelProvider: QCModelSelection["provider"] = "ollama";
-  const [textModel, setTextModel]     = useState(MODEL_OPTIONS.ollama.text[0]);
-  const visionModel                   = MODEL_OPTIONS.ollama.vision[0];
   const searchMountedRef              = useRef(false);
 
   // ── Bulk selection state ─────────────────────────────────────────────────
@@ -173,7 +166,7 @@ export default function BatchesPage() {
     setBulkLoading(true);
     try {
       const ids = Array.from(selectedIds);
-      const { succeeded, failed } = await bulkProcessQC(ids, { provider: modelProvider, textModel, visionModel });
+      const { succeeded, failed } = await bulkProcessQC(ids);
       if (succeeded.length > 0) toast.success(`QC started for ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
       if (failed.length > 0) toast.error(`Failed to start QC for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
       clearSelection();
@@ -182,7 +175,7 @@ export default function BatchesPage() {
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, modelProvider, textModel, visionModel, clearSelection]);
+  }, [selectedIds, clearSelection]);
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedIds.size === 0) return;
@@ -316,15 +309,12 @@ export default function BatchesPage() {
       batch_id: batch.id,
       batch_ref: batch.parentBatchId,
       current_status: batch.status,
-      model_provider: modelProvider,
-      text_model: textModel,
-      vision_model: visionModel,
     });
     setActionBusy(batch.id, true);
     try {
-      await processQC(batch.id, { provider: modelProvider, textModel, visionModel });
+      await processQC(batch.id);
       setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "QC_PROCESSING", errorMessage: undefined } : b));
-      toast.info(`QC started for "${batch.parentBatchId}"`, `${MODEL_OPTIONS[modelProvider].label} · ${textModel}`);
+      toast.info(`QC started for "${batch.parentBatchId}"`, "Running OCR + QC rules");
       adminBatchTimeline("frontend_qc_trigger_complete", {
         batch_id: batch.id,
         batch_ref: batch.parentBatchId,
@@ -470,22 +460,6 @@ export default function BatchesPage() {
                 <XCircle size={13} /> Clear
               </button>
             )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 py-2">
-            <span className="inline-flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <SlidersHorizontal size={12} /> QC model
-            </span>
-            <span className="h-8 rounded-md border border-white/10 bg-[#11161C] px-2 text-xs leading-8 text-slate-300">
-              {MODEL_OPTIONS[modelProvider].label}
-            </span>
-            <select value={textModel} onChange={e => setTextModel(e.target.value)}
-              className="h-8 min-w-[150px] rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
-              aria-label="Select QC text model">
-              {MODEL_OPTIONS[modelProvider].text.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <span className="h-8 rounded-md border border-white/10 bg-[#11161C] px-2 text-xs leading-8 text-slate-300">
-              Vision {visionModel}
-            </span>
           </div>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">

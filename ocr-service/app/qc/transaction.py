@@ -131,10 +131,10 @@ def _overlay_comp_grid(rs, pdf, dtype):
     from app.extraction.comp_grid_extractor import extract_comp_grid
     from app.extraction.sca_grid_matrix import extract_sca_grid
     try:
-        grid = extract_comp_grid(pdf)
+        grid, grid_pos = extract_comp_grid(pdf)
     except Exception as exc:
         logger.warning("Comp-grid extraction failed for %s: %s", pdf.name, exc)
-        grid = {}
+        grid, grid_pos = {}, {}
     # Overlay the dedicated Camelot-lattice cell reads (glue-free) where they pass
     # a per-field validator, so garbled cells (e.g. "1 C 1") are rejected and the
     # pdfplumber band value is kept. Camelot fixes the pdfplumber glue (site/date).
@@ -169,16 +169,26 @@ def _overlay_comp_grid(rs, pdf, dtype):
             cam_fields.add(name)
     if not grid:
         return rs
+    # The grid page every comparable field lives on — so even a lattice (Camelot)
+    # cell or a value the locator can't disambiguate still scrolls to the right
+    # page. Taken from the positions the pdfplumber pass recorded.
+    grid_page = next((p["page"] for p in grid_pos.values() if p.get("page")), 0)
     existing = {name: r for name, r in rs}
     for name, value in grid.items():
         if not value or not str(value).strip():
             continue
         from_cam = name in cam_fields
+        pos = grid_pos.get(name)
+        # Prefer the pdfplumber cell box/page; fall back to the grid page so a
+        # lattice-only field is at least page-located (never source_page=0 here).
+        page = (pos or {}).get("page") or grid_page
+        bbox = (pos or {}).get("bbox")
         existing[name] = ExtractionResult(
             canonical_name=name, document_type=dtype, value=str(value),
             raw_source_text=str(value),
             extraction_method="sca_lattice" if from_cam else "comp_grid",
-            confidence=0.92 if from_cam else 0.88, source_page=0,
+            confidence=0.92 if from_cam else 0.88, source_page=page,
+            bbox=bbox,
             normalization_applied=["sca_lattice" if from_cam else "comp_grid"],
         )
     return _rebuild(rs, dtype, existing, ocr_method="comp_grid+layered")
@@ -239,10 +249,15 @@ def _overlay_sca_llm(rs, pdf, dtype):
         prev = existing.get(name)
         if prev is not None and str(prev.value) == str(value):
             continue
+        # The LLM refines the value but reads no geometry — inherit the grid
+        # page/box a deterministic pass (comp_grid / lattice) already recorded so
+        # the SCA review rule can still scroll to the cell (never drop to page 0).
         existing[name] = ExtractionResult(
             canonical_name=name, document_type=dtype, value=str(value),
             raw_source_text=str(value), extraction_method="sca_llm",
-            confidence=0.9, source_page=0,
+            confidence=0.9,
+            source_page=prev.source_page if prev else 0,
+            bbox=prev.bbox if prev else None,
             normalization_applied=[f"sca_llm:{SCA_LLM_VERSION}"],
         )
         replaced += 1

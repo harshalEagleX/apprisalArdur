@@ -81,6 +81,14 @@ SCA_LLM_ALWAYS: bool = os.getenv("SCA_LLM_ALWAYS", "false").lower() in ("1", "tr
 GROQ_VISION_API_KEY: str = os.getenv("GROQ_VISION_API_KEY", "")
 GROQ_VISION_MODEL: str = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
+# ── QC rule-engine version ─────────────────────────────────────────────────────
+# Semantic version of the QC ruleset's LOGIC — bump when rule behaviour changes.
+# It is combined at runtime with an auto-computed fingerprint of the registered
+# rule ids, so the stamp also changes when rules are added/removed even if this
+# string isn't bumped. Stamped on every QCResult so a finding that appears or
+# disappears between two runs is attributable to a rule change vs a report change.
+QC_RULESET_VERSION: str = os.getenv("QC_RULESET_VERSION", "qc-1.0.0")
+
 # ── Field locator (reviewer click-to-scroll) ───────────────────────────────────
 # After extraction, locate each found value's bounding box on its page so the
 # reviewer UI can scroll to and highlight the exact field. Coordinates are

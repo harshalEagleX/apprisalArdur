@@ -124,24 +124,56 @@ def _row_words(words, label_prefix: str, anchors=None):
     return max(matches, key=comp_word_count)
 
 
-def _value_in_band(words, y: float, lo: float, hi: float) -> str:
+def _value_in_band(words, y: float, lo: float, hi: float):
+    """Return (text, bbox) for the tokens in this row/column band. bbox is the
+    (x0, top, x1, bottom) PDF-point box spanning the matched tokens, or None when
+    the band is empty — this is the per-comparable cell location that powers the
+    reviewer's click-to-scroll (the grid is the multi-column case where a generic
+    value match can't tell which comparable a value belongs to)."""
     toks = sorted([w for w in words if abs(w["top"] - y) < _ROW_TOL and lo <= w["x0"] < hi],
                   key=lambda w: w["x0"])
-    return " ".join(t["text"] for t in toks).strip()
+    text = " ".join(t["text"] for t in toks).strip()
+    if not toks:
+        return text, None
+    bbox = (min(t["x0"] for t in toks), min(t["top"] for t in toks),
+            max(t["x1"] for t in toks), max(t["bottom"] for t in toks))
+    return text, bbox
 
 
-def extract_comp_grid(pdf_path) -> Dict[str, str]:
-    """Return {comp_<i>_<suffix>: value} parsed from the sales grid page(s)."""
+def _norm_box(bbox, page_w: float, page_h: float, pad: float = 0.003):
+    """Normalize a (x0, top, x1, bottom) PDF-point box to {x,y,w,h} fractions
+    (top-left origin) with a small pad — the coordinate convention the reviewer
+    PDF viewer expects. None when the box is empty or the page has no size."""
+    if not bbox or page_w <= 0 or page_h <= 0:
+        return None
+    x0, top, x1, bottom = bbox
+    x = max(0.0, x0 / page_w - pad)
+    y = max(0.0, top / page_h - pad)
+    w = min(1.0 - x, (x1 - x0) / page_w + 2 * pad)
+    h = min(1.0 - y, (bottom - top) / page_h + 2 * pad)
+    if w <= 0.0 or h <= 0.0:
+        return None
+    return {"x": round(x, 5), "y": round(y, 5), "w": round(w, 5), "h": round(h, 5)}
+
+
+def extract_comp_grid(pdf_path) -> Tuple[Dict[str, str], Dict[str, Dict]]:
+    """Return ({comp_<i>_<suffix>: value}, {field: {"page", "bbox"}}) parsed from
+    the sales grid page(s). The second dict carries each field's grid page
+    (1-indexed) and normalized cell box so the reviewer can scroll to the exact
+    comparable cell; bbox is None for fields located only to the page."""
     import pdfplumber
     out: Dict[str, str] = {}
+    positions: Dict[str, Dict] = {}
     try:
         pdf = pdfplumber.open(str(Path(pdf_path)))
     except Exception:
-        return out
+        return out, positions
     try:
         comp_base = 0
         for pidx in _find_grid_pages(pdf):
             page = pdf.pages[pidx]
+            page_no = pidx + 1
+            pw, ph = float(page.width), float(page.height)
             words = page.extract_words()
             # anchors are already comps-only: the subject column value sits in
             # the x<_LABEL_X_MAX label region and is filtered out by _column_anchors.
@@ -167,15 +199,17 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
                 for k, (ax, nxt) in enumerate(cols):
                     ci = comp_base + k + 1
                     if no_adj:
-                        val = _value_in_band(words, y, ax - 8, nxt - 6)
+                        val, vbox = _value_in_band(words, y, ax - 8, nxt - 6)
                         if val:
                             out[f"comp_{ci}_{suffix}"] = _clean(suffix, val)
+                            positions[f"comp_{ci}_{suffix}"] = {"page": page_no, "bbox": _norm_box(vbox, pw, ph)}
                         continue
                     half = ax + (nxt - ax) * 0.55
-                    val = _value_in_band(words, y, ax - 12, half)
+                    val, vbox = _value_in_band(words, y, ax - 12, half)
                     if val:
                         out[f"comp_{ci}_{suffix}"] = _clean(suffix, val)
-                    adj = _value_in_band(words, y, half, nxt - 8)
+                        positions[f"comp_{ci}_{suffix}"] = {"page": page_no, "bbox": _norm_box(vbox, pw, ph)}
+                    adj, _ = _value_in_band(words, y, half, nxt - 8)
                     if adj and re.search(r"[+\-]?\$?\d", adj):
                         m = re.search(r"[+\-]?\$?[\d,]+", adj)
                         if m:
@@ -193,9 +227,14 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
                         key=lambda w: w["x0"]))
                 unit = r"(?:[sc]\d{2}/\d{2}|Active|Unk)"
                 dates = re.findall(unit + r"(?:;" + unit + r")?", row_txt)
+                ydate_box = _norm_box(
+                    (comp_anchors[0] - 12, ydate, comp_anchors[-1] + 131, ydate + 10), pw, ph)
                 for k in range(len(comp_anchors)):
                     if k < len(dates):
                         out[f"comp_{comp_base + k + 1}_sale_date"] = dates[k]
+                        # Per-comp date token sits inside the glued row; we can place it
+                        # to the grid row (page + row band) so the scroll lands correctly.
+                        positions[f"comp_{comp_base + k + 1}_sale_date"] = {"page": page_no, "bbox": ydate_box}
 
             # NB: Site size also suffers the glue (value "6,307 sf" sticks to the
             # prior comp's adjustment) but, unlike dates, the adjustment digits have
@@ -219,13 +258,14 @@ def extract_comp_grid(pdf_path) -> Dict[str, str]:
                     ys = _row_words(words, prefix, comp_anchors)
                     if ys is None:
                         continue
-                    sval = _value_in_band(words, ys, _LABEL_X_MAX, subj_hi)
+                    sval, sbox = _value_in_band(words, ys, _LABEL_X_MAX, subj_hi)
                     if sval:
                         out[f"subject_grid_{suffix}"] = _clean(suffix, sval)
+                        positions[f"subject_grid_{suffix}"] = {"page": page_no, "bbox": _norm_box(sbox, pw, ph)}
             comp_base += len(comp_anchors)
     finally:
         pdf.close()
-    return out
+    return out, positions
 
 
 def _clean(suffix: str, val: str) -> str:

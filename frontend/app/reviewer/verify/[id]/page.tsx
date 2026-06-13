@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, AlertTriangle, CheckCircle2,
-  Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search, Maximize2, Minimize2,
+  Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search, Maximize2, Minimize2, RefreshCw,
 } from "lucide-react";
 import {
   getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus,
@@ -220,6 +220,7 @@ export default function VerifyFilePage() {
   const [submitting, setSubmitting]     = useState(false);
   const [offline, setOffline]           = useState(() => typeof navigator !== "undefined" ? !navigator.onLine : false);
   const [acknowledged, setAcknowledged] = useState<Record<number, boolean>>({});
+  const [superseded, setSuperseded]     = useState<{ newResultId: number; message: string } | null>(null);
   const [signoffOpen, setSignoffOpen]   = useState(false);
   const [submitNotes, setSubmitNotes]   = useState("");
   const [submitError, setSubmitError]   = useState("");
@@ -243,6 +244,7 @@ export default function VerifyFilePage() {
 
   const progressTopic = `/topic/reviewer/qc/${qcResultId}/progress`;
   const decisionTopic = `/topic/reviewer/qc/${qcResultId}/decision`;
+  const supersededTopic = `/topic/reviewer/qc/${qcResultId}/superseded`;
 
   const applySavedDecision = useCallback((ruleId: number, savedDecision: DecisionEvent, fallbackComment?: string) => {
     setDecisions(prev => ({ ...prev, [ruleId]: savedDecision.decision }));
@@ -257,7 +259,7 @@ export default function VerifyFilePage() {
   }, []);
 
   const { connected: realtimeConnected } = useWebSocket(
-    useMemo(() => [progressTopic, decisionTopic], [progressTopic, decisionTopic]),
+    useMemo(() => [progressTopic, decisionTopic, supersededTopic], [progressTopic, decisionTopic, supersededTopic]),
     useCallback((topic: string, payload: unknown) => {
       if (topic === progressTopic && payload && typeof payload === "object") {
         const next = payload as ReviewProgress;
@@ -271,7 +273,17 @@ export default function VerifyFilePage() {
           setSaving(current => current === next.ruleResultId ? null : current);
         }
       }
-    }, [progressTopic, decisionTopic, applySavedDecision])
+      // An admin re-ran QC on this report while it was open. The results being
+      // reviewed are now superseded; surface a blocking banner with a one-click
+      // jump to the fresh result. In-progress decisions on this version are kept
+      // for audit (the backend preserves the old result).
+      if (topic === supersededTopic && payload && typeof payload === "object") {
+        const next = payload as { newResultId?: number; message?: string };
+        if (typeof next.newResultId === "number") {
+          setSuperseded({ newResultId: next.newResultId, message: next.message ?? "This report was re-processed by a new QC run." });
+        }
+      }
+    }, [progressTopic, decisionTopic, supersededTopic, applySavedDecision])
   );
 
   // ── Data loading ─────────────────────────────────────────────────────────
@@ -766,6 +778,19 @@ export default function VerifyFilePage() {
       allowTablet={false}>
       <div className="foundation-grid h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
         {activeFocus && <RuleFocusOverlay focus={activeFocus} highlighting={highlighting} />}
+
+        {superseded && (
+          <div className="flex items-center gap-3 border-b border-indigo-500/30 bg-indigo-950/60 px-4 py-2.5 text-xs text-indigo-100">
+            <RefreshCw size={14} className="flex-shrink-0" />
+            <span className="flex-1">{superseded.message}</span>
+            <a
+              href={`/reviewer/verify/${superseded.newResultId}?returnTo=${encodeURIComponent(returnTo)}`}
+              className="h-7 flex-shrink-0 rounded-md border border-indigo-400/40 bg-indigo-900/50 px-3 text-[11px] font-semibold leading-7 text-indigo-50 hover:bg-indigo-800/60"
+            >
+              Load new results
+            </a>
+          </div>
+        )}
 
         {(offline || sessionError) && (
           <div className={`flex items-center gap-3 border-b px-4 py-2 text-xs ${offline ? "border-red-500/25 bg-red-950/50 text-red-200" : "border-amber-500/25 bg-amber-950/45 text-amber-100"}`}>

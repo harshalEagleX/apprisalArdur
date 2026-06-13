@@ -79,8 +79,14 @@ class SpatialWordMap:
     spatially adjacent (same row to the right, or one line below).
     """
 
-    def __init__(self, words: List[SpatialWord]) -> None:
+    def __init__(self, words: List[SpatialWord],
+                 page_width: float = 0.0, page_height: float = 0.0) -> None:
         self._words = words
+        # Page dimensions (PDF points) — set when built from a fitz page, so a
+        # found value's box can be normalized to [0,1] fractions for the reviewer
+        # viewer. 0 when unknown (OCR-image builders) → callers stay page-level.
+        self.page_width = page_width
+        self.page_height = page_height
         # Build sorted lookup tables for fast spatial queries
         self._by_y: List[SpatialWord] = sorted(words, key=lambda w: (w.y_center, w.x0))
 
@@ -103,7 +109,7 @@ class SpatialWordMap:
             for w in raw_words
             if w[4].strip()
         ]
-        return cls(words)
+        return cls(words, page_width=float(page.rect.width), page_height=float(page.rect.height))
 
     @classmethod
     def from_tesseract(cls, image, page_number: int) -> "SpatialWordMap":

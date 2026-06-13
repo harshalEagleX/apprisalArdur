@@ -71,11 +71,6 @@ export default function ActivityMonitor() {
                         {job.detail}
                       </div>
                     )}
-                    {job.modelLabel && (
-                      <div className="mt-0.5 truncate text-[10px] text-slate-300">
-                        {job.modelLabel}
-                      </div>
-                    )}
                     {subLabel && (
                       <div className="mt-0.5 truncate text-[10px] text-slate-200" title={job.subMessage ?? subLabel}>
                         {subLabel}{job.subMessage ? ` — ${job.subMessage}` : ""}

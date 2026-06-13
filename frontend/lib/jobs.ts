@@ -30,7 +30,23 @@ function notify() {
 }
 
 export function trackJob(job: ActiveJob) {
-  jobs = [...jobs.filter(j => j.id !== job.id), job];
+  // Resume, don't reset: when the batches page remounts after a nav change it
+  // re-tracks the same job id. Preserve the original startedAt (so elapsed keeps
+  // counting) and never regress current/percent — otherwise the bar visibly
+  // resets to 0% on every tab switch. The next poll fills in fresh values.
+  const existing = jobs.find(j => j.id === job.id);
+  const merged: ActiveJob = existing
+    ? {
+        ...existing,
+        ...job,
+        startedAt: existing.startedAt,
+        current: Math.max(existing.current, job.current),
+        smoothedPercent: job.smoothedPercent ?? existing.smoothedPercent,
+        subPercent: job.subPercent ?? existing.subPercent,
+        message: job.message ?? existing.message,
+      }
+    : job;
+  jobs = [...jobs.filter(j => j.id !== job.id), merged];
   notify();
 }
 

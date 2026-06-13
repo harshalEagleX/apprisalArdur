@@ -75,6 +75,12 @@ public class QCResult {
     @Column(name = "extraction_method")
     private String extractionMethod;
 
+    // Version of the QC ruleset that produced this result ("qc-1.0.0+<fp>"). Lets
+    // two runs be compared validly and attributes a flag delta to a rule change
+    // vs a report change. Nullable for legacy rows.
+    @Column(name = "rule_engine_version")
+    private String ruleEngineVersion;
+
     @Column(name = "python_document_id")
     private String pythonDocumentId;
 
@@ -289,6 +295,9 @@ public class QCResult {
     public String getExtractionMethod() { return extractionMethod; }
     public void setExtractionMethod(String extractionMethod) { this.extractionMethod = extractionMethod; }
 
+    public String getRuleEngineVersion() { return ruleEngineVersion; }
+    public void setRuleEngineVersion(String ruleEngineVersion) { this.ruleEngineVersion = ruleEngineVersion; }
+
     public String getPythonDocumentId() { return pythonDocumentId; }
     public void setPythonDocumentId(String pythonDocumentId) { this.pythonDocumentId = pythonDocumentId; }
 
@@ -420,6 +429,7 @@ public class QCResult {
         private Integer errorCount = 0;
         private Integer processingTimeMs;
         private String  extractionMethod;
+        private String  ruleEngineVersion;
         private String  pythonDocumentId;      // IMPL FIX: was missing from builder
         private String  pythonProcessingJobId;
         private Boolean cacheHit = false;      // IMPL FIX: was missing from builder
@@ -478,6 +488,7 @@ public class QCResult {
         }
 
         public QCResultBuilder extractionMethod(String v)   { this.extractionMethod = v; return this; }
+        public QCResultBuilder ruleEngineVersion(String v)  { this.ruleEngineVersion = v; return this; }
         public QCResultBuilder pythonDocumentId(String v)   { this.pythonDocumentId = v; return this; }
         public QCResultBuilder pythonProcessingJobId(String v) { this.pythonProcessingJobId = v; return this; }
         public QCResultBuilder cacheHit(Boolean v)          { this.cacheHit = v;          return this; }
@@ -498,6 +509,7 @@ public class QCResult {
             result.errorCount      = this.errorCount;
             result.processingTimeMs = this.processingTimeMs;
             result.extractionMethod = this.extractionMethod;
+            result.ruleEngineVersion = this.ruleEngineVersion;
             result.pythonDocumentId = this.pythonDocumentId;
             result.pythonProcessingJobId = this.pythonProcessingJobId;
             result.cacheHit         = this.cacheHit;

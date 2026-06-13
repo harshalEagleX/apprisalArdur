@@ -61,6 +61,28 @@ _CONF_SPATIAL_RIGHT = 0.88
 _CONF_SPATIAL_BELOW = 0.82
 _CONF_SPATIAL_DATA = 0.78
 
+_BOX_PAD = 0.004  # fraction of page padded around a located value's box
+
+
+def _normalize_spatial_box(box, word_map) -> Optional[Dict[str, float]]:
+    """Normalize a spatially-found value box (x0,y0,x1,y1 PDF points) to {x,y,w,h}
+    fractions (top-left origin) using the page's own size — the convention the
+    reviewer PDF viewer expects. None when the box or page size is unknown (the
+    field then stays page-level). This is what gives subject/site/neighborhood
+    label-found values a precise highlight, not just a page scroll."""
+    pw = getattr(word_map, "page_width", 0.0)
+    ph = getattr(word_map, "page_height", 0.0)
+    if not box or pw <= 0 or ph <= 0:
+        return None
+    x0, y0, x1, y1 = box
+    x = min(max(x0 / pw - _BOX_PAD, 0.0), 1.0)
+    y = min(max(y0 / ph - _BOX_PAD, 0.0), 1.0)
+    w = min(max((x1 - x0) / pw + 2 * _BOX_PAD, 0.0), 1.0 - x)
+    h = min(max((y1 - y0) / ph + 2 * _BOX_PAD, 0.0), 1.0 - y)
+    if w <= 0 or h <= 0:
+        return None
+    return {"x": round(x, 5), "y": round(y, 5), "w": round(w, 5), "h": round(h, 5)}
+
 
 class SpatialTier3Extractor:
     """
@@ -242,7 +264,7 @@ class SpatialTier3Extractor:
             if not hit:
                 continue
 
-            raw_value, method, _ = hit
+            raw_value, method, value_box = hit
             normalized = self._normalize(raw_value, fd)
             if not normalized or len(normalized.strip()) < 1:
                 continue
@@ -301,6 +323,7 @@ class SpatialTier3Extractor:
                 extraction_method=method,
                 confidence=conf,
                 source_page=page_num,
+                bbox=_normalize_spatial_box(value_box, word_map),
                 normalization_applied=[f"spatial_{fd.data_type}"],
             )
 

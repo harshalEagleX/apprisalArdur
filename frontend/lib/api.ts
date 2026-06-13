@@ -520,7 +520,7 @@ export const reconcileStuckBatches = () =>
   );
 
 export interface QCModelSelection {
-  provider: "ollama";
+  provider?: string;
   textModel?: string;
   visionModel?: string;
 }
@@ -529,14 +529,14 @@ export async function processQC(batchId: number, model?: QCModelSelection) {
   const started = performance.now();
   adminBatchTimeline("frontend_qc_trigger_api_start", {
     batch_id: batchId,
-    model_provider: model?.provider ?? "ollama",
+    model_provider: model?.provider,
     text_model: model?.textModel,
     vision_model: model?.visionModel,
   });
   try {
     const response = await apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
     `/api/qc/process/${batchId}`,
-    { method: "POST", body: JSON.stringify(model ?? { provider: "ollama" }) }
+    { method: "POST", body: JSON.stringify(model ?? {}) }
     );
     adminBatchTimeline("frontend_qc_trigger_api_complete", {
       batch_id: response.batchId,

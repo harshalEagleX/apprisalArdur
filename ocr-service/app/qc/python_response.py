@@ -22,6 +22,24 @@ from app.qc.result import QCReport, RuleResult, RuleStatus
 # the rule's title, so it must be a real description, not "Section — ID".
 _RULE_NAMES: Dict[str, str] = {}
 
+# Cached rule-engine version stamp: the semantic QC_RULESET_VERSION plus a short
+# fingerprint of the registered rule ids, so the stamp changes when rules are
+# added/removed. Computed once the registry is populated.
+_RULE_ENGINE_VERSION: Optional[str] = None
+
+
+def _rule_engine_version() -> str:
+    """`{QC_RULESET_VERSION}+{fingerprint}` — the version stamped on every result
+    so two runs are comparable and a flag delta is attributable to a rule change."""
+    global _RULE_ENGINE_VERSION
+    if _RULE_ENGINE_VERSION is None:
+        import hashlib
+        from app import config
+        ids = sorted(spec.rule_id for spec in all_rules())
+        fp = hashlib.sha1("|".join(ids).encode()).hexdigest()[:8] if ids else "00000000"
+        _RULE_ENGINE_VERSION = f"{config.QC_RULESET_VERSION}+{fp}"
+    return _RULE_ENGINE_VERSION
+
 
 def _rule_display_name(rule_id: str, section: str) -> str:
     if not _RULE_NAMES:
@@ -113,6 +131,14 @@ def _rule_to_json(r: RuleResult) -> Dict:
     primary = _primary_evidence(r)
     page = primary.page if primary and primary.page else 0
     box = primary.bbox if primary else None
+    is_review = r.status in _REVIEW
+    # Guarantee: a rule the reviewer must act on ALWAYS scrolls somewhere. When a
+    # derived/LLM value (e.g. sale_type, adverse_site_conditions) couldn't be
+    # located on any page, fall back to the report's first page — the URAR form
+    # page that carries the subject/contract/site/improvements sections. Page-level
+    # only (no box), so it never highlights the wrong line.
+    if is_review and not page:
+        page = 1
     # Structured, document-tagged evidence. This is the authoritative record of
     # WHICH document each value came from (appraisal | engagement | contract |
     # ...). The flattened appraisal_value/engagement_value fields below collapse
@@ -132,7 +158,6 @@ def _rule_to_json(r: RuleResult) -> Dict:
         }
         for e in r.evidence if e.value
     ]
-    is_review = r.status in _REVIEW
     return {
         "rule_id": r.rule_id,
         "rule_name": _rule_display_name(r.rule_id, r.section),
@@ -330,6 +355,7 @@ def report_to_python_qc_response(
         "extracted_fields": extracted_fields,
         "field_confidence": field_confidence,
         "total_rules": len(report.results),
+        "rule_engine_version": _rule_engine_version(),
         "passed": counts.get("PASS", 0),
         "failed": counts.get("FAIL", 0),
         "verify": counts.get("VERIFY", 0) + counts.get("HOLD", 0),

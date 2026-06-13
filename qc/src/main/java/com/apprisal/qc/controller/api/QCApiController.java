@@ -8,6 +8,7 @@ import com.apprisal.common.entity.Role;
 import com.apprisal.common.repository.BatchFileRepository;
 import com.apprisal.common.repository.BatchRepository;
 import com.apprisal.common.repository.DocumentMatchRepository;
+import com.apprisal.common.entity.QCRuleResult;
 import com.apprisal.common.repository.QCResultRepository;
 import com.apprisal.common.security.UserPrincipal;
 import com.apprisal.qc.service.PythonClientService;
@@ -40,6 +41,7 @@ public class QCApiController {
 
     private final QCProcessingService qcProcessingService;
     private final QCResultRepository qcResultRepository;
+    private final com.apprisal.common.repository.QCRuleResultRepository qcRuleResultRepository;
     private final PythonClientService pythonClientService;
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
@@ -49,6 +51,7 @@ public class QCApiController {
     public QCApiController(
             QCProcessingService qcProcessingService,
             QCResultRepository qcResultRepository,
+            com.apprisal.common.repository.QCRuleResultRepository qcRuleResultRepository,
             PythonClientService pythonClientService,
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
@@ -56,6 +59,7 @@ public class QCApiController {
             StuckBatchReconciler reconciler) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
+        this.qcRuleResultRepository = qcRuleResultRepository;
         this.pythonClientService = pythonClientService;
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
@@ -406,8 +410,107 @@ public class QCApiController {
             m.put("rerunOfId",     r.getRerunOf() != null ? r.getRerunOf().getId() : null);
             m.put("cacheHit",      r.getCacheHit());
             m.put("extractionMethod", r.getExtractionMethod());
+            m.put("ruleEngineVersion", r.getRuleEngineVersion());
             return m;
         }).toList();
         return ResponseEntity.ok(body);
     }
+
+    /**
+     * Diff a QC result against the run it replaced (its rerunOf): which findings
+     * appeared, disappeared, or changed status/severity between the two versions,
+     * keyed by rule id + target field. Stamped with both rule-engine versions so a
+     * delta is attributable to a rule change vs a report change. Powers the admin
+     * "what changed across reruns" view and the audit/dispute export.
+     */
+    @GetMapping("/history/diff/{qcResultId}")
+    @PreAuthorize("hasAnyRole('ADMIN','REVIEWER')")
+    public ResponseEntity<Map<String, Object>> getQCResultDiff(
+            @PathVariable @NonNull Long qcResultId) {
+        var current = qcResultRepository.findById(qcResultId).orElse(null);
+        if (current == null) {
+            return ResponseEntity.notFound().build();
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("resultId", current.getId());
+        body.put("ruleEngineVersion", current.getRuleEngineVersion());
+        var previous = current.getRerunOf();
+        if (previous == null) {
+            body.put("hasPrevious", false);
+            body.put("message", "This is the first QC run for the file — nothing to diff against.");
+            return ResponseEntity.ok(body);
+        }
+        body.put("hasPrevious", true);
+        body.put("previousResultId", previous.getId());
+        body.put("previousRuleEngineVersion", previous.getRuleEngineVersion());
+        body.put("ruleEngineChanged",
+                !java.util.Objects.equals(current.getRuleEngineVersion(), previous.getRuleEngineVersion()));
+
+        // Key each finding by rule id + target field so the same rule on two
+        // different fields (e.g. two comparables) is diffed independently.
+        var curByKey = indexFindings(current.getId());
+        var prevByKey = indexFindings(previous.getId());
+
+        List<Map<String, Object>> added = new java.util.ArrayList<>();
+        List<Map<String, Object>> removed = new java.util.ArrayList<>();
+        List<Map<String, Object>> changed = new java.util.ArrayList<>();
+        int unchanged = 0;
+
+        for (var e : curByKey.entrySet()) {
+            QCRuleResult cur = e.getValue();
+            QCRuleResult prev = prevByKey.get(e.getKey());
+            if (prev == null) {
+                added.add(findingSummary(cur, null));
+            } else if (!sameOutcome(cur, prev)) {
+                changed.add(findingSummary(cur, prev));
+            } else {
+                unchanged++;
+            }
+        }
+        for (var e : prevByKey.entrySet()) {
+            if (!curByKey.containsKey(e.getKey())) {
+                removed.add(findingSummary(e.getValue(), null));
+            }
+        }
+
+        body.put("added", added);
+        body.put("removed", removed);
+        body.put("changed", changed);
+        body.put("unchangedCount", unchanged);
+        body.put("summary", Map.of(
+                "added", added.size(), "removed", removed.size(),
+                "changed", changed.size(), "unchanged", unchanged));
+        return ResponseEntity.ok(body);
+    }
+
+    private Map<String, QCRuleResult> indexFindings(Long resultId) {
+        Map<String, QCRuleResult> byKey = new LinkedHashMap<>();
+        for (QCRuleResult r : qcRuleResultRepository.findByQcResultId(resultId)) {
+            byKey.put(textOr(r.getRuleId(), "?") + "|" + textOr(r.getTargetField(), ""), r);
+        }
+        return byKey;
+    }
+
+    private boolean sameOutcome(QCRuleResult a, QCRuleResult b) {
+        return java.util.Objects.equals(norm(a.getStatus()), norm(b.getStatus()))
+                && java.util.Objects.equals(norm(a.getSeverity()), norm(b.getSeverity()));
+    }
+
+    private Map<String, Object> findingSummary(QCRuleResult r, QCRuleResult prev) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("ruleId", r.getRuleId());
+        m.put("ruleName", r.getRuleName());
+        m.put("section", r.getSection());
+        m.put("targetField", r.getTargetField());
+        m.put("status", r.getStatus());
+        m.put("severity", r.getSeverity());
+        if (prev != null) {
+            m.put("previousStatus", prev.getStatus());
+            m.put("previousSeverity", prev.getSeverity());
+        }
+        return m;
+    }
+
+    private static String norm(String s) { return s == null ? "" : s.trim().toLowerCase(); }
+    private static String textOr(String v, String fallback) { return (v == null || v.isBlank()) ? fallback : v; }
 }
