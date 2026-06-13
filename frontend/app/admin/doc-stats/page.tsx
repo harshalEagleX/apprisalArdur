@@ -3,11 +3,15 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Search, Timer, ChevronLeft, ChevronRight, Gauge, FileSearch, ArrowRight,
-  Cpu, Hourglass, AlertTriangle, ListOrdered, Boxes,
+  Cpu, Hourglass, AlertTriangle, ListOrdered, Boxes, TrendingUp,
 } from "lucide-react";
 import {
-  getDocStats, getDocStatBatches, getDocStatRuleRanking,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from "recharts";
+import {
+  getDocStats, getDocStatBatches, getDocStatRuleRanking, getDocStatTrend,
   type DocStatSummary, type DocStatBatchRollup, type DocStatRuleRank, type Pctl,
+  type DocStatTrendPoint,
 } from "@/lib/api";
 import { fmtMs, durationTone } from "@/lib/duration";
 import { TableSkeleton } from "@/components/shared/Skeleton";
@@ -15,12 +19,13 @@ import EmptyState from "@/components/shared/EmptyState";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { toast } from "@/lib/toast";
 
-type View = "appraisals" | "batches" | "ranking";
+type View = "appraisals" | "batches" | "ranking" | "trend";
 
 const TABS: { key: View; label: string; Icon: typeof Timer }[] = [
   { key: "appraisals", label: "Appraisals", Icon: FileSearch },
   { key: "batches",    label: "Batches",    Icon: Boxes },
   { key: "ranking",    label: "Rule ranking", Icon: ListOrdered },
+  { key: "trend",      label: "Trend",      Icon: TrendingUp },
 ];
 
 export default function DocStatsPage() {
@@ -62,6 +67,7 @@ export default function DocStatsPage() {
       {view === "appraisals" && <AppraisalsPanel />}
       {view === "batches" && <BatchesPanel />}
       {view === "ranking" && <RankingPanel />}
+      {view === "trend" && <TrendPanel />}
     </div>
   );
 }
@@ -282,6 +288,7 @@ function RankingPanel() {
             <th className="px-4 py-2.5 font-medium">Distribution</th>
             <th className="px-4 py-2.5 font-medium text-right">LLM calls</th>
             <th className="px-4 py-2.5 font-medium text-right">LLM %</th>
+            <th className="px-4 py-2.5 font-medium text-right" title="Average rule confidence">Conf.</th>
             <th className="px-4 py-2.5 font-medium text-right">Runs</th>
           </tr>
         </thead>
@@ -304,11 +311,65 @@ function RankingPanel() {
               <td className="px-4 py-2.5 text-right tabular-nums">
                 <span className={r.pctLlm > 0 ? "text-amber-300" : "text-slate-600"}>{r.pctLlm}%</span>
               </td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-slate-400">
+                {(r.avgConfidence * 100).toFixed(0)}%
+              </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{r.runs}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ── Trend: total / inference / throttle across successive runs ───────────── */
+function TrendPanel() {
+  const [rows, setRows] = useState<DocStatTrendPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRows(await getDocStatTrend(undefined, 40)); }
+    catch { toast.error("Failed to load trend"); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { const t = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(t); }, [load]);
+
+  if (loading) return <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-4"><TableSkeleton rows={6} cols={3} /></div>;
+  if (rows.length === 0) return <EmptyState icon={TrendingUp} title="No runs to trend yet" description="The trend builds up as QC runs accumulate — re-run a batch to see if an optimization landed." />;
+
+  // chart in seconds for readability; index the runs chronologically
+  const data = rows.map((r, i) => ({
+    idx: i + 1,
+    at: r.at && r.at !== "null" ? new Date(r.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : `#${i + 1}`,
+    total: +(r.totalMs / 1000).toFixed(2),
+    inference: +(r.inferenceMs / 1000).toFixed(2),
+    throttle: +(r.throttleWaitMs / 1000).toFixed(2),
+  }));
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
+        <TrendingUp size={15} className="text-indigo-300" /> Processing-time trend
+      </h2>
+      <p className="mb-4 text-[11px] text-slate-500">
+        Last {rows.length} runs, oldest → newest (seconds). Watch total fall after an optimization — and whether throttle-wait, not inference, is what&apos;s moving.
+      </p>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data} margin={{ top: 6, right: 12, bottom: 0, left: -12 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff0a" />
+          <XAxis dataKey="at" tick={{ fill: "#64748b", fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={28} />
+          <YAxis tick={{ fill: "#64748b", fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}s`} />
+          <Tooltip
+            contentStyle={{ background: "#0f141a", border: "1px solid #ffffff14", borderRadius: 8, fontSize: 12 }}
+            labelStyle={{ color: "#cbd5e1" }} formatter={(v, n) => [`${v}s`, String(n)]} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Line type="monotone" dataKey="total"     name="Total"          stroke="#818cf8" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="inference" name="LLM inference"  stroke="#38bdf8" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="throttle"  name="LLM throttle"   stroke="#fbbf24" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

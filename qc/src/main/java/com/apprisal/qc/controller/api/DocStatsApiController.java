@@ -111,16 +111,21 @@ public class DocStatsApiController {
         for (Object[] r : rows) {
             long runs    = ((Number) r[6]).longValue();
             long llmRuns = r[7] != null ? ((Number) r[7]).longValue() : 0L;
+            double avgMs = r[3] != null ? ((Number) r[3]).doubleValue() : 0.0;
+            double avgConf = r[8] != null ? ((Number) r[8]).doubleValue() : 0.0;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("ruleId", r[0]);
             m.put("ruleName", r[1]);
             m.put("section", r[2]);
-            m.put("avgMs", round3(r[3] != null ? ((Number) r[3]).doubleValue() : 0.0));
+            m.put("avgMs", round3(avgMs));
             m.put("maxMs", round3(r[4] != null ? ((Number) r[4]).doubleValue() : 0.0));
             m.put("llmCalls", r[5] != null ? ((Number) r[5]).longValue() : 0L);
             m.put("runs", runs);
             m.put("llmRuns", llmRuns);
             m.put("pctLlm", runs > 0 ? Math.round(llmRuns * 1000.0 / runs) / 10.0 : 0.0);
+            m.put("avgConfidence", round3(avgConf));
+            // confidence-per-ms: output quality earned per millisecond spent
+            m.put("confidencePerMs", avgMs > 0 ? round3(avgConf / avgMs) : 0.0);
             out.add(m);
         }
         return ResponseEntity.ok(out);
@@ -130,6 +135,68 @@ public class DocStatsApiController {
     @GetMapping("/thresholds")
     public ResponseEntity<Map<String, Long>> thresholds() {
         return ResponseEntity.ok(thresholds.getThresholds());
+    }
+
+    /**
+     * Time-series of recent runs (oldest→newest) for trend charting — total,
+     * rule-engine, and the LLM inference/throttle split. Pass {@code filename}
+     * to watch one appraisal's timing across re-runs (did the optimization land?).
+     */
+    @GetMapping("/trend")
+    public ResponseEntity<List<Map<String, Object>>> trend(
+            @RequestParam(required = false) String filename,
+            @RequestParam(defaultValue = "30") int limit) {
+        String f = (filename == null || filename.isBlank()) ? null : filename.trim();
+        var rows = docStatRepository.recentTrend(f, PageRequest.of(0, Math.min(Math.max(1, limit), 200)));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object[] r : rows) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", r[0]);
+            m.put("at", String.valueOf(r[1]));
+            m.put("filename", r[2]);
+            m.put("totalMs", r[3] != null ? ((Number) r[3]).doubleValue() : 0.0);
+            m.put("ruleEngineMs", r[4] != null ? ((Number) r[4]).doubleValue() : 0.0);
+            m.put("inferenceMs", r[5] != null ? ((Number) r[5]).doubleValue() : 0.0);
+            m.put("throttleWaitMs", r[6] != null ? ((Number) r[6]).doubleValue() : 0.0);
+            out.add(m);
+        }
+        Collections.reverse(out); // chronological for the chart
+        return ResponseEntity.ok(out);
+    }
+
+    /**
+     * Before/after timing comparison: this run vs the run it superseded (same
+     * file re-QC'd). Returns both detail payloads plus headline deltas so the UI
+     * can show whether a change made the file faster or slower.
+     */
+    @GetMapping("/{id}/compare")
+    public ResponseEntity<Map<String, Object>> compare(@PathVariable Long id) {
+        var cur = docStatRepository.findById(id).orElse(null);
+        if (cur == null) return ResponseEntity.notFound().build();
+        var prev = docStatRepository.findPreviousByDocStatId(id).orElse(null);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("current", toDetail(cur));
+        out.put("previous", prev != null ? toDetail(prev) : null);
+        if (prev != null) {
+            Map<String, Object> delta = new LinkedHashMap<>();
+            delta.put("totalMs", diff(cur.getTotalMs(), prev.getTotalMs()));
+            delta.put("ruleEngineMs", diff(cur.getRuleEngineMs(), prev.getRuleEngineMs()));
+            delta.put("llmInferenceMs", diff(cur.getLlmInferenceMs(), prev.getLlmInferenceMs()));
+            delta.put("llmThrottleWaitMs", diff(cur.getLlmThrottleWaitMs(), prev.getLlmThrottleWaitMs()));
+            out.put("delta", delta);
+        }
+        return ResponseEntity.ok(out);
+    }
+
+    /** {current, previous, deltaMs, pct} — negative deltaMs means the current run was faster. */
+    private static Map<String, Object> diff(Double cur, Double prev) {
+        double c = cur != null ? cur : 0.0, p = prev != null ? prev : 0.0;
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("current", round3(c));
+        m.put("previous", round3(p));
+        m.put("deltaMs", round3(c - p));
+        m.put("pct", p > 0 ? Math.round((c - p) / p * 1000.0) / 10.0 : 0.0);
+        return m;
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
@@ -226,6 +293,7 @@ public class DocStatsApiController {
                     x.put("section", r.getSection() != null ? r.getSection() : "");
                     x.put("status", r.getStatus() != null ? r.getStatus() : "");
                     x.put("ms", nz(r.getMs()));
+                    x.put("confidence", nz(r.getConfidence()));
                     x.put("llmCalls", nz(r.getLlmCalls()));
                     x.put("llmMs", nz(r.getLlmMs()));
                     x.put("throttleMs", nz(r.getThrottleMs()));

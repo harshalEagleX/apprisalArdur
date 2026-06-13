@@ -89,9 +89,11 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
                 llm_telemetry.reset_span(_span)
             results = _normalize(out, spec)
             report.results.extend(results)
-            # the rule's headline status (worst of any sub-results) labels the timing
+            # the rule's headline status (worst of any sub-results) labels the
+            # timing; its confidence rides along for the confidence-vs-time view
             status = _worst_status(results)
-            _record_timing(report, spec, status, started)
+            conf = next((r.confidence for r in results if r.status == status), 1.0)
+            _record_timing(report, spec, status, started, conf)
         except Exception as exc:
             logger.error("QC rule %s crashed: %s", spec.rule_id, exc)
             report.results.append(RuleResult(
@@ -116,10 +118,12 @@ def _worst_status(results: List[RuleResult]) -> RuleStatus:
     return max((r.status for r in results), key=lambda s: _STATUS_RANK.get(s, 0))
 
 
-def _record_timing(report: QCReport, spec: RuleSpec, status: RuleStatus, started: float) -> None:
+def _record_timing(report: QCReport, spec: RuleSpec, status: RuleStatus,
+                   started: float, confidence: float = 1.0) -> None:
     report.rule_timings.append(RuleTiming(
         rule_id=spec.rule_id, section=spec.section,
         status=status.value, ms=(perf_counter() - started) * 1000.0,
+        confidence=confidence,
     ))
 
 

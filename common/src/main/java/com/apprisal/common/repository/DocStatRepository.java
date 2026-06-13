@@ -54,13 +54,38 @@ public interface DocStatRepository extends JpaRepository<DocStat, Long> {
     @Query("""
         SELECT r.ruleId, MAX(r.ruleName), MAX(r.section),
                AVG(r.ms), MAX(r.ms), COALESCE(SUM(r.llmCalls), 0), COUNT(r),
-               SUM(CASE WHEN r.llmCalls > 0 THEN 1 ELSE 0 END)
+               SUM(CASE WHEN r.llmCalls > 0 THEN 1 ELSE 0 END), AVG(r.confidence)
         FROM DocStatRule r
         WHERE r.ruleId IS NOT NULL
         GROUP BY r.ruleId
         ORDER BY AVG(r.ms) DESC
         """)
     java.util.List<Object[]> ruleRanking(Pageable pageable);
+
+    /**
+     * Recent runs for a time-series trend (oldest→newest is reversed in the
+     * controller). Optionally scoped to one appraisal filename so you can watch
+     * the same file's timing across re-runs after a code change.
+     * Columns: id, createdAt, filename, totalMs, ruleEngineMs, llmInferenceMs, llmThrottleWaitMs.
+     */
+    @Query("""
+        SELECT d.id, d.createdAt, d.filename, d.totalMs, d.ruleEngineMs,
+               d.llmInferenceMs, d.llmThrottleWaitMs
+        FROM DocStat d
+        WHERE (:filename IS NULL OR d.filename = :filename)
+        ORDER BY d.createdAt DESC
+        """)
+    java.util.List<Object[]> recentTrend(@Param("filename") String filename, Pageable pageable);
+
+    /**
+     * The timing of the run this docStat superseded — its qcResult's rerunOf.
+     * Enables a before/after comparison after re-running QC on the same file.
+     */
+    @Query("""
+        SELECT prev FROM DocStat prev, DocStat cur
+        WHERE cur.id = :id AND prev.qcResult.id = cur.qcResult.rerunOf.id
+        """)
+    Optional<DocStat> findPreviousByDocStatId(@Param("id") Long id);
 
     void deleteByBatchId(Long batchId);
 }

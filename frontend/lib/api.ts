@@ -336,7 +336,7 @@ export interface DocStatStage {
 export interface DocStatSection { section: string; label: string; ms: number; ruleCount: number; pctOfRules: number; }
 export interface DocStatRule {
   ruleId: string; ruleName: string; section: string; status: string; ms: number;
-  llmCalls: number; llmMs: number; throttleMs: number;
+  confidence: number; llmCalls: number; llmMs: number; throttleMs: number;
 }
 export interface DocStatDetail extends DocStatSummary {
   clientId: number | null;
@@ -352,6 +352,17 @@ export interface DocStatBatchRollup {
 export interface DocStatRuleRank {
   ruleId: string; ruleName: string; section: string;
   avgMs: number; maxMs: number; llmCalls: number; runs: number; llmRuns: number; pctLlm: number;
+  avgConfidence: number; confidencePerMs: number;
+}
+export interface DocStatTrendPoint {
+  id: number; at: string; filename: string;
+  totalMs: number; ruleEngineMs: number; inferenceMs: number; throttleWaitMs: number;
+}
+export interface DocStatDelta { current: number; previous: number; deltaMs: number; pct: number; }
+export interface DocStatCompare {
+  current: DocStatDetail;
+  previous: DocStatDetail | null;
+  delta?: { totalMs: DocStatDelta; ruleEngineMs: DocStatDelta; llmInferenceMs: DocStatDelta; llmThrottleWaitMs: DocStatDelta };
 }
 
 export const getDocStats = (page = 0, q?: string, batchId?: number, size = 20) => {
@@ -373,6 +384,15 @@ export const getDocStatRuleRanking = () =>
 
 export const getDocStatThresholds = () =>
   apiFetch<Record<string, number>>(`/api/admin/doc-stats/thresholds`);
+
+export const getDocStatTrend = (filename?: string, limit = 30) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (filename) params.set("filename", filename);
+  return apiFetch<DocStatTrendPoint[]>(`/api/admin/doc-stats/trend?${params.toString()}`);
+};
+
+export const getDocStatCompare = (id: number) =>
+  apiFetch<DocStatCompare>(`/api/admin/doc-stats/${id}/compare`);
 
 export const getBatchStatus = (id: number) =>
   apiFetch<{

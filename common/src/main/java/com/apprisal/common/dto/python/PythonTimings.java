@@ -53,6 +53,7 @@ public record PythonTimings(
             String section,
             String status,
             Double ms,
+            Double confidence,
             @JsonProperty("llm_calls")   Integer llmCalls,
             @JsonProperty("llm_ms")      Double llmMs,
             @JsonProperty("throttle_ms") Double throttleMs

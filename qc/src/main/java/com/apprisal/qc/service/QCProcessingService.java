@@ -851,7 +851,8 @@ public class QCProcessingService {
             if (timings.rules() != null) {
                 for (var rule : timings.rules()) {
                     docStat.addRule(new DocStatRule(rule.ruleId(), rule.ruleName(), rule.section(),
-                            rule.status(), rule.ms(), rule.llmCalls(), rule.llmMs(), rule.throttleMs(), i++));
+                            rule.status(), rule.ms(), rule.confidence(), rule.llmCalls(),
+                            rule.llmMs(), rule.throttleMs(), i++));
                 }
             }
 

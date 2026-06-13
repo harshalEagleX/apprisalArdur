@@ -1305,3 +1305,21 @@ DOCSTATS v2 — IMPLEMENTED (Groq telemetry, percentiles, thresholds, ranking)
 [ ] NEXT (documented, deferred): rerun before/after timing compare (needs
     QCResult.rerunOf join in UI), confidence-per-ms, time-series trend chart
     (needs accumulated run history).
+
+DOCSTATS v3 — deferred items delivered (trend, rerun-compare, confidence-per-ms)
+[x] Confidence-per-ms: RuleTiming carries the rule's headline confidence; engine
+    takes the worst-status result's confidence; persisted on DocStatRule.confidence;
+    ruleRanking now returns AVG(confidence) and the controller derives
+    confidencePerMs (quality earned per ms) — a slow low-confidence rule is now
+    visibly worse value than a fast certain one. UI ranking shows a Conf. column.
+[x] Time-series trend: DocStatRepository.recentTrend(filename?, limit) +
+    GET /doc-stats/trend (chronological); new Trend tab plots total / LLM
+    inference / LLM throttle in seconds via recharts — the view that shows
+    whether an optimization actually landed and whether throttle (not inference)
+    is what moved.
+[x] Rerun before/after compare: DocStatRepository.findPreviousByDocStatId via
+    QCResult.rerunOf; GET /doc-stats/{id}/compare returns current+previous +
+    headline deltas; detail view shows a "Versus previous run" strip (green =
+    faster, red = slower) for total / rule-engine / inference / throttle.
+[x] common+qc+app BUILD SUCCESS; frontend tsc+eslint clean; confidence verified
+    flowing through the timings block. All assessment items now closed.

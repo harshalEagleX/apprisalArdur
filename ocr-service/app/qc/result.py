@@ -100,11 +100,14 @@ class RuleResult:
 @dataclass
 class RuleTiming:
     """Wall-clock time one rule's evaluation actually took (perf_counter delta).
-    Measured around spec.fn(ctx) in the engine — never estimated."""
+    Measured around spec.fn(ctx) in the engine — never estimated. `confidence`
+    is the rule's headline confidence (lets the ranking show time beside output
+    quality — a slow low-confidence rule is worse value than a fast certain one)."""
     rule_id: str
     section: str
     status: str
     ms: float
+    confidence: float = 1.0
 
 
 @dataclass

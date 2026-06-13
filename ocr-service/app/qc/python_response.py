@@ -194,6 +194,7 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
                 "section": t.section.upper(),
                 "status": t.status,
                 "ms": round(t.ms, 3),
+                "confidence": round(t.confidence, 3),
                 "llm_calls": llm_by_span.get(t.rule_id, {}).get("calls", 0),
                 "llm_ms": round(llm_by_span.get(t.rule_id, {}).get("inference_ms", 0.0), 3),
                 "throttle_ms": round(llm_by_span.get(t.rule_id, {}).get("throttle_wait_ms", 0.0), 3),

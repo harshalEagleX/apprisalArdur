@@ -24,6 +24,8 @@ public class DocStatRule {
     @Column(name = "section", length = 64)  private String section;
     @Column(name = "status", length = 24)   private String status;
     @Column(name = "ms")                    private Double ms;
+    // The rule's headline confidence — pairs time with output quality.
+    @Column(name = "confidence")            private Double confidence;
     // Groq cost when this rule made LLM calls (measured); 0 for pure-deterministic rules.
     @Column(name = "llm_calls")             private Integer llmCalls;
     @Column(name = "llm_ms")                private Double llmMs;
@@ -33,10 +35,12 @@ public class DocStatRule {
     protected DocStatRule() {}
 
     public DocStatRule(String ruleId, String ruleName, String section, String status,
-                       Double ms, Integer llmCalls, Double llmMs, Double throttleMs, Integer ordinal) {
+                       Double ms, Double confidence, Integer llmCalls, Double llmMs,
+                       Double throttleMs, Integer ordinal) {
         this.ruleId = ruleId; this.ruleName = ruleName; this.section = section;
-        this.status = status; this.ms = ms; this.llmCalls = llmCalls;
-        this.llmMs = llmMs; this.throttleMs = throttleMs; this.ordinal = ordinal;
+        this.status = status; this.ms = ms; this.confidence = confidence;
+        this.llmCalls = llmCalls; this.llmMs = llmMs; this.throttleMs = throttleMs;
+        this.ordinal = ordinal;
     }
 
     public void setDocStat(DocStat d) { this.docStat = d; }
@@ -47,6 +51,7 @@ public class DocStatRule {
     public String getSection()  { return section; }
     public String getStatus()   { return status; }
     public Double getMs()       { return ms; }
+    public Double getConfidence(){ return confidence; }
     public Integer getLlmCalls(){ return llmCalls; }
     public Double getLlmMs()    { return llmMs; }
     public Double getThrottleMs(){ return throttleMs; }

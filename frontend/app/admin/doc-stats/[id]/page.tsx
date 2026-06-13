@@ -7,7 +7,8 @@ import {
   Hourglass, AlertTriangle, Info,
 } from "lucide-react";
 import {
-  getDocStatDetail, getDocStatThresholds, type DocStatDetail, type DocStatRule, type DocStatStage,
+  getDocStatDetail, getDocStatThresholds, getDocStatCompare,
+  type DocStatDetail, type DocStatRule, type DocStatStage, type DocStatCompare,
 } from "@/lib/api";
 import { fmtMs, durationTone } from "@/lib/duration";
 import { Skeleton } from "@/components/shared/Skeleton";
@@ -106,6 +107,7 @@ export default function DocStatDetailPage() {
   const id = Number(params?.id);
   const [data, setData]     = useState<DocStatDetail | null>(null);
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
+  const [compare, setCompare] = useState<DocStatCompare | null>(null);
   const [loading, setLoad]  = useState(true);
   const [ruleSearch, setRuleSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("ms");
@@ -115,11 +117,12 @@ export default function DocStatDetailPage() {
     if (!Number.isFinite(id)) return;
     setLoad(true);
     try {
-      const [d, th] = await Promise.all([
+      const [d, th, cmp] = await Promise.all([
         getDocStatDetail(id),
         getDocStatThresholds().catch(() => ({} as Record<string, number>)),
+        getDocStatCompare(id).catch(() => null),
       ]);
-      setData(d); setThresholds(th);
+      setData(d); setThresholds(th); setCompare(cmp);
     } catch { toast.error("Failed to load timing detail"); }
     finally { setLoad(false); }
   }, [id]);
@@ -205,6 +208,24 @@ export default function DocStatDetailPage() {
           tone={(data.rateLimitHits ?? 0) > 0 ? "text-red-300" : "text-amber-300"} />
       </div>
 
+      {/* Before/after vs the run this superseded (same file re-QC'd) */}
+      {compare?.previous && compare.delta && (
+        <div className="mb-6 rounded-xl border border-white/10 bg-[#11161C]/60 p-4">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+            <ArrowUpDown size={15} className="text-indigo-300" /> Versus previous run
+            <span className="text-[11px] font-normal text-slate-500">
+              re-QC of the same file · prior run {compare.previous.createdAt ? new Date(compare.previous.createdAt).toLocaleString() : ""}
+            </span>
+          </h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <DeltaCard label="Total" d={compare.delta.totalMs} />
+            <DeltaCard label="Rule engine" d={compare.delta.ruleEngineMs} />
+            <DeltaCard label="LLM inference" d={compare.delta.llmInferenceMs} />
+            <DeltaCard label="LLM throttle" d={compare.delta.llmThrottleWaitMs} />
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Pipeline stages */}
         <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
@@ -285,6 +306,23 @@ export default function DocStatDetailPage() {
           </table>
         </div>
       </section>
+    </div>
+  );
+}
+
+/** Before/after delta tile — green when the current run got faster, red when slower. */
+function DeltaCard({ label, d }: { label: string; d: { current: number; previous: number; deltaMs: number; pct: number } }) {
+  const faster = d.deltaMs < 0;
+  const flat = Math.abs(d.deltaMs) < 1;
+  const tone = flat ? "text-slate-400" : faster ? "text-green-300" : "text-red-300";
+  const sign = d.deltaMs > 0 ? "+" : "";
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#0c1014] p-3">
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-base font-semibold tabular-nums text-white">{fmtMs(d.current)}</div>
+      <div className={`text-[11px] tabular-nums ${tone}`}>
+        {flat ? "no change" : `${sign}${fmtMs(Math.abs(d.deltaMs))} (${sign}${d.pct}%)`} vs {fmtMs(d.previous)}
+      </div>
     </div>
   );
 }
