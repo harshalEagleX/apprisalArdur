@@ -420,8 +420,17 @@ public class BatchService {
                 }
 
                 String filename = filenameOnly;
-                Path filePath = batchDir.resolve(fileType.name().toLowerCase()).resolve(filename);
-                Files.createDirectories(filePath.getParent());
+                Path typeDir = batchDir.resolve(fileType.name().toLowerCase());
+                Files.createDirectories(typeDir);
+                // Two entries can share a filename but hold different content (e.g.
+                // two "appraisal.pdf" under different subfolders). Never overwrite —
+                // store under a suffixed name and log the collision so both survive.
+                Path filePath = uniqueFilePath(typeDir, filename);
+                if (!filePath.getFileName().toString().equals(filename)) {
+                    log.warn("Filename collision in ZIP: '{}' already present in {} folder — stored as '{}'",
+                            filename, fileType.name().toLowerCase(), filePath.getFileName());
+                    filename = filePath.getFileName().toString();
+                }
                 Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 String contentHash = computeSha256(filePath);
                 String qualityFlags = documentQualityFlags(fileType, filename, contentHash, batch.getFiles());
@@ -494,6 +503,30 @@ public class BatchService {
             log.warn("Could not compute SHA-256 for file '{}': {}", file, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Resolve a non-colliding path in {@code dir} for {@code filename}. If the name
+     * is free it is returned as-is; otherwise a " (n)" suffix is inserted before the
+     * extension until a free path is found, so a duplicate filename never overwrites
+     * an existing document on disk.
+     */
+    private static Path uniqueFilePath(Path dir, String filename) {
+        Path candidate = dir.resolve(filename);
+        if (!Files.exists(candidate)) {
+            return candidate;
+        }
+        int dot = filename.lastIndexOf('.');
+        String base = dot > 0 ? filename.substring(0, dot) : filename;
+        String ext = dot > 0 ? filename.substring(dot) : "";
+        for (int n = 2; n < 1000; n++) {
+            Path next = dir.resolve(base + " (" + n + ")" + ext);
+            if (!Files.exists(next)) {
+                return next;
+            }
+        }
+        // Pathological fallback — guaranteed unique by timestamp.
+        return dir.resolve(base + " (" + System.currentTimeMillis() + ")" + ext);
     }
 
     @Transactional
