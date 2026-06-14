@@ -721,6 +721,28 @@ export type QCHistoryRun = {
 export const getQCResultDiff = (qcResultId: number) =>
   apiFetch<QCResultDiff>(`/api/qc/history/diff/${qcResultId}`);
 
+// Download the structured findings export (JSON or CSV) for a batch — the artifact
+// an admin sends to the AMC manually. Streams the file to the browser.
+export async function downloadFindingsExport(
+  batchId: number,
+  parentBatchId: string,
+  format: "json" | "csv",
+): Promise<void> {
+  const res = await fetch(`${JAVA}/api/qc/findings/${batchId}?format=${format}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Findings export failed (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `findings_${parentBatchId}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const requestReReview = (qcResultId: number, reason: string) =>
   apiFetch<{ success: boolean; message: string }>(`/api/reviewer/qc/${qcResultId}/request-re-review`, {
     method: "POST",

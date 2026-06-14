@@ -2,12 +2,13 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   History, XCircle, FileStack, RefreshCw, Plus, Minus,
-  ArrowRight, ChevronDown, ChevronRight, GitCompare,
+  ArrowRight, ChevronDown, ChevronRight, GitCompare, Download,
 } from "lucide-react";
 import {
-  getBatchById, getQCHistory, getQCResultDiff,
+  getBatchById, getQCHistory, getQCResultDiff, downloadFindingsExport,
   type Batch, type BatchFile, type QCHistoryRun, type QCResultDiff, type QCDiffFinding,
 } from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 /** Colour a QC status token (PASS / FAIL / VERIFY / etc.). */
 function statusTone(status: string | null): string {
@@ -237,6 +238,19 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<BatchFile[]>([]);
   const [historyByFile, setHistoryByFile] = useState<Record<number, QCHistoryRun[]>>({});
+  const [downloading, setDownloading] = useState<"json" | "csv" | null>(null);
+
+  const handleExport = useCallback(async (fmt: "json" | "csv") => {
+    if (!batch) return;
+    setDownloading(fmt);
+    try {
+      await downloadFindingsExport(batch.id, batch.parentBatchId, fmt);
+    } catch (e) {
+      toast.error("Findings export failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setDownloading(null);
+    }
+  }, [batch]);
 
   const loadHistory = useCallback(async (batchId: number) => {
     setLoading(true);
@@ -353,6 +367,31 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
               ))}
             </div>
           )}
+        </div>
+
+        {/* Findings export — the artifact the admin sends to the AMC manually. */}
+        <div className="border-t border-white/10 p-4">
+          <div className="mb-2 text-[11px] text-slate-500">
+            Download structured findings (overrides reflected, waived rules marked):
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => void handleExport("json")}
+              disabled={downloading !== null}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+            >
+              <Download size={14} className={downloading === "json" ? "animate-pulse" : ""} /> JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport("csv")}
+              disabled={downloading !== null}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-indigo-400/30 bg-indigo-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+            >
+              <Download size={14} className={downloading === "csv" ? "animate-pulse" : ""} /> CSV
+            </button>
+          </div>
         </div>
       </aside>
     </div>
