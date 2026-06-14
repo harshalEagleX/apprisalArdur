@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { type QCResult } from "@/lib/api";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
 import { PageSpinner } from "@/components/shared/Spinner";
@@ -71,6 +72,9 @@ export default function ReviewerQueuePage() {
     return QUEUE_VIEWS.includes(next as QueueView) ? next as QueueView : "all";
   });
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // qcResultIds in this queue that a re-run superseded while the reviewer sat
+  // here — surfaces a "queue has updates" banner without a manual refresh.
+  const [staleIds, setStaleIds] = useState<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const loadQueue = useCallback(async (showRefreshSpinner = false) => {
@@ -85,6 +89,7 @@ export default function ReviewerQueuePage() {
       if (!pendingRes.ok) { setError(`Server responded with ${pendingRes.status}`); return; }
       const data: unknown = await pendingRes.json();
       setItems(asArray<QCResult>(data));
+      setStaleIds(new Set()); // a fresh load reflects the latest active results
       if (submittedRes.ok) {
         const submitted: unknown = await submittedRes.json();
         setSubmittedItems(asArray<SubmittedReviewItem>(submitted));
@@ -101,6 +106,30 @@ export default function ReviewerQueuePage() {
     const timer = window.setTimeout(() => { void loadQueue(); }, 0);
     return () => window.clearTimeout(timer);
   }, [loadQueue]);
+
+  // Queue-level live notifications: subscribe to each assigned result's existing
+  // /superseded topic. When an admin re-runs QC, the active result the reviewer
+  // sees is replaced — instead of silently going stale, the queue flags it and
+  // offers a one-click refresh. Reuses the same realtime channel the verify page
+  // uses; no extra backend wiring.
+  const supersededTopics = useMemo(
+    () => items.map(i => `/topic/reviewer/qc/${i.id}/superseded`),
+    [items],
+  );
+  useWebSocket(
+    supersededTopics,
+    useCallback((topic: string) => {
+      const match = topic.match(/\/topic\/reviewer\/qc\/(\d+)\/superseded/);
+      if (!match) return;
+      const supersededId = Number(match[1]);
+      setStaleIds(prev => {
+        if (prev.has(supersededId)) return prev;
+        const next = new Set(prev);
+        next.add(supersededId);
+        return next;
+      });
+    }, []),
+  );
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -298,6 +327,24 @@ export default function ReviewerQueuePage() {
           </button>
         </div>
       </div>
+
+      {staleIds.size > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-4 py-3">
+          <RefreshCw size={16} className="shrink-0 text-indigo-300" />
+          <span className="flex-1 text-sm text-indigo-100/90">
+            {staleIds.size} report{staleIds.size === 1 ? " was" : "s were"} re-processed by a new QC run.
+            Your queue is out of date — refresh to load the latest results.
+          </span>
+          <button
+            onClick={() => loadQueue(true)}
+            disabled={refreshing}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-indigo-400/30 bg-indigo-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+            Refresh queue
+          </button>
+        </div>
+      )}
 
       {!loading && !error && (
         <div data-guide="reviewer-queue-next" className="mb-4 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
