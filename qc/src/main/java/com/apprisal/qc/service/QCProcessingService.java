@@ -542,6 +542,13 @@ public class QCProcessingService {
                 appraisal.getFilename(),
                 pair.hasEngagement() ? pair.getEngagement().getFilename() : "none");
 
+        // Storage pre-check: confirm the source PDFs are actually readable on disk
+        // BEFORE extraction starts. A disk/mount problem must surface as a clear
+        // storage error, not a confusing downstream OCR/extraction failure.
+        assertFileReadable(pair.getAppraisalPath(), "appraisal");
+        assertFileReadable(pair.getEngagementPath(), "engagement");
+        assertFileReadable(pair.getContractPath(), "contract");
+
         // On rerun: supersede the existing active result rather than skipping.
         // Historical results are retained for audit purposes.
         var existingActive = qcResultRepository.findActiveByBatchFileId(appraisal.getId());
@@ -1177,6 +1184,23 @@ public class QCProcessingService {
 
     private String decisionKey(QCRuleResult r) {
         return textOr(r.getRuleId(), "?") + "|" + textOr(r.getTargetField(), "");
+    }
+
+    /**
+     * Verify a source PDF path is a readable regular file before extraction. A
+     * provided-but-unreadable path (disk unmounted, file deleted) fails fast with a
+     * clear storage error rather than surfacing as a downstream extraction failure.
+     * Null paths (genuinely absent optional documents) are left to the matcher.
+     */
+    private void assertFileReadable(java.nio.file.Path path, String role) {
+        if (path == null) {
+            return;
+        }
+        if (!java.nio.file.Files.isRegularFile(path) || !java.nio.file.Files.isReadable(path)) {
+            throw new IllegalStateException(
+                    "Storage unavailable: the " + role + " PDF could not be read at " + path
+                    + " (disk or mount issue). QC was not started for this document.");
+        }
     }
 
     private static String normStatus(String s) {

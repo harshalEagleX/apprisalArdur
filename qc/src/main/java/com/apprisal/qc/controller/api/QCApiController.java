@@ -113,6 +113,25 @@ public class QCApiController {
         // The previous QCResults are superseded (not deleted) so history is preserved.
         // Only block if QC is already actively running for this batch.
 
+        // Pre-flight: confirm the Python OCR/QC service is reachable BEFORE we claim
+        // the batch. Without this, triggering while Python is down would transition
+        // the batch to QC_PROCESSING and leave it stuck until the reconciler fires.
+        // A fast /live check lets us reject synchronously with a clear message and
+        // leave the batch exactly as it was.
+        if (!pythonClientService.isHealthy()) {
+            log.warn(TimelineLog.event("admin_batches", "java_qc_trigger_rejected",
+                    "batch_id", batchId,
+                    "reason", "python_service_unavailable",
+                    "elapsed_ms", TimelineLog.elapsedMs(started)));
+            return ResponseEntity.status(503).body(Map.of(
+                "message", "QC service is unavailable — the OCR/QC engine is not responding. "
+                        + "The batch was not started; try again once the service is back.",
+                "batchId", batchId,
+                "status", batch.getStatus() != null ? batch.getStatus().name() : "UNKNOWN",
+                "serviceAvailable", false
+            ));
+        }
+
         if (!qcProcessingService.claimBatchForProcessing(batchId, modelConfig)) {
             var latestStatus = batchRepository.findById(batchId)
                     .map(b -> b.getStatus() != null ? b.getStatus().name() : "UNKNOWN")
