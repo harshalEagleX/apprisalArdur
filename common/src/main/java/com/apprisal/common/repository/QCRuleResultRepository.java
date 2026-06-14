@@ -121,6 +121,7 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
           AND rr.reviewerVerified IS NULL
           AND rr.firstPresentedAt IS NOT NULL
           AND rr.firstPresentedAt < :cutoff
+          AND qr.supersededAt IS NULL
         ORDER BY rr.firstPresentedAt ASC
         """)
     List<QCRuleResult> findOverdueReviewItems(@Param("cutoff") LocalDateTime cutoff);
