@@ -384,6 +384,9 @@ public class BatchService {
         boolean hasAppraisalFolder = false;
         boolean hasEngagementFolder = false;
         int entryCount = 0;
+        // Non-PDF files are catalogued (so nothing is silently dropped) but excluded
+        // from the extraction pipeline, which only handles PDFs.
+        List<String> excludedNonPdf = new ArrayList<>();
 
         try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
             ZipEntry entry;
@@ -423,6 +426,8 @@ public class BatchService {
                 }
 
                 if (!entryName.toLowerCase().endsWith(".pdf")) {
+                    excludedNonPdf.add(filenameOnly);
+                    log.info("Cataloguing non-PDF entry (excluded from extraction): {}", entryName);
                     continue;
                 }
 
@@ -485,6 +490,15 @@ public class BatchService {
         }
 
         flagDocumentRoleAmbiguity(batch);
+
+        if (!excludedNonPdf.isEmpty()) {
+            String note = excludedNonPdf.size() + " non-PDF file(s) catalogued and excluded from extraction: "
+                    + String.join(", ", excludedNonPdf);
+            String existing = batch.getIntakeWarnings();
+            batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+            log.info("Batch {} catalogued {} non-PDF file(s) excluded from extraction",
+                    batch.getParentBatchId(), excludedNonPdf.size());
+        }
     }
 
     /**
