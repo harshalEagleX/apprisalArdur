@@ -85,7 +85,7 @@ function fmtVal(key: string, val: string | number | null | undefined): string {
 }
 
 // Shown prominently or already rendered elsewhere — keep them out of the generic list.
-const PROMOTED_META = new Set(["subjectAddress", "reviewerEmail"]);
+const PROMOTED_META = new Set(["subjectAddress", "addressMatch", "reviewerEmail"]);
 
 // ── Key label prettifier ──────────────────────────────────────────────────────
 function prettyKey(key: string): string {
@@ -145,6 +145,18 @@ export default function AuditNodeDrawer({
               {String(node.meta.subjectAddress)}
             </div>
             <div className="mt-0.5 text-[9px] text-slate-500">from document content</div>
+            {node.meta.addressMatch === "OK" && (
+              <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                Document set matches this property
+              </div>
+            )}
+            {node.meta.addressMatch === "MISMATCH" && (
+              <div className="mt-1.5 flex items-start gap-1 rounded border border-red-500/30 bg-red-950/30 px-1.5 py-1 text-[10px] text-red-300">
+                <span className="mt-0.5 w-1.5 h-1.5 shrink-0 rounded-full bg-red-400" />
+                <span>Address mismatch — a supporting document may belong to a different property than its filename implies. Verify before relying on this set.</span>
+              </div>
+            )}
           </div>
         )}
 

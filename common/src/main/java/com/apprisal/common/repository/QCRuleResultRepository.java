@@ -36,6 +36,21 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
     List<QCRuleResult> findByQcResultId(Long qcResultId);
 
     /**
+     * Count cross-document subject-address checks (rule S-1 / target property_address)
+     * that did NOT pass for a result. A non-zero count means the appraisal's subject
+     * address disagrees with a supporting document's — the documents may not belong
+     * to the same property (e.g. a mis-named / mis-matched contract). Powers the
+     * audit's document-set identity badge.
+     */
+    @Query("""
+        SELECT COUNT(rr) FROM QCRuleResult rr
+        WHERE rr.qcResult.id = :qcResultId
+          AND rr.targetField = 'property_address'
+          AND LOWER(rr.status) NOT IN ('pass', 'not_applicable')
+        """)
+    long countSubjectAddressMismatches(@Param("qcResultId") Long qcResultId);
+
+    /**
      * All rule results awaiting admin override approval (across all batches).
      * Used by the admin override queue.
      */

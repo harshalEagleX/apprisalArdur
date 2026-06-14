@@ -41,16 +41,19 @@ public class AuditGraphController {
     private final BatchRepository     batchRepository;
     private final BatchFileRepository batchFileRepository;
     private final QCResultRepository  qcResultRepository;
+    private final com.apprisal.common.repository.QCRuleResultRepository qcRuleResultRepository;
     private final AuditLogRepository  auditLogRepository;
 
     public AuditGraphController(
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             QCResultRepository qcResultRepository,
+            com.apprisal.common.repository.QCRuleResultRepository qcRuleResultRepository,
             AuditLogRepository auditLogRepository) {
         this.batchRepository     = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository  = qcResultRepository;
+        this.qcRuleResultRepository = qcRuleResultRepository;
         this.auditLogRepository  = auditLogRepository;
     }
 
@@ -440,6 +443,11 @@ public class AuditGraphController {
 
         if (qcr != null) {
             meta.put("subjectAddress", qcr.getSubjectAddress());
+            // Document-set identity: did the appraisal's subject address agree with the
+            // supporting documents' (cross-doc rule S-1)? A mismatch means a supporting
+            // file may belong to a different property than its filename implies.
+            meta.put("addressMatch",
+                qcRuleResultRepository.countSubjectAddressMismatches(qcr.getId()) > 0 ? "MISMATCH" : "OK");
             meta.put("qcDecision",   qcr.getQcDecision()   != null ? qcr.getQcDecision().name()   : null);
             meta.put("finalDecision",qcr.getFinalDecision() != null ? qcr.getFinalDecision().name(): null);
             meta.put("qcReviewer",   qcr.getReviewedBy()   != null ? qcr.getReviewedBy().getUsername() : null);
