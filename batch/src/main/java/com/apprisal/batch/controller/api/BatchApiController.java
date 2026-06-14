@@ -273,16 +273,28 @@ public class BatchApiController {
         }
     }
 
+    /**
+     * Delete a batch. Soft by default — the batch disappears from the app but its
+     * data and audit trail are preserved. A hard purge (irreversible) requires the
+     * explicit {@code hard=true} flag, which the UI gates behind a second
+     * confirmation.
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteBatch(
             @PathVariable @NonNull Long id,
+            @RequestParam(name = "hard", defaultValue = "false") boolean hard,
             @AuthenticationPrincipal UserPrincipal principal) {
         Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), id);
         if (denied.isPresent()) return denied.get();
         try {
-            batchService.deleteBatch(id);
-            auditLogService.logEntity(principal.getUser(), "BATCH_DELETED", "Batch", id);
-            return ResponseEntity.ok(Map.of("success", true));
+            if (hard) {
+                batchService.deleteBatch(id);
+                auditLogService.logEntity(principal.getUser(), "BATCH_HARD_DELETED", "Batch", id);
+            } else {
+                batchService.softDeleteBatch(id, principal.getUser().getId());
+                auditLogService.logEntity(principal.getUser(), "BATCH_SOFT_DELETED", "Batch", id);
+            }
+            return ResponseEntity.ok(Map.of("success", true, "hard", hard));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

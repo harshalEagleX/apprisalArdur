@@ -158,8 +158,29 @@ public class BatchService {
     }
 
     /**
-     * Delete a batch and all its associated files.
-     * 
+     * Soft-delete a batch: mark it deleted so it disappears from the app (hidden
+     * by @SQLRestriction on the Batch entity) while its rows, files, and Envers
+     * audit trail are fully preserved. This is the default delete path — a hard
+     * purge ({@link #deleteBatch}) is a separate, explicit admin action.
+     *
+     * @param batchId the batch to soft-delete
+     * @param actorId id of the admin performing the deletion (recorded on the row)
+     * @throws ResourceNotFoundException if batch not found
+     */
+    @Transactional
+    public void softDeleteBatch(@NonNull Long batchId, Long actorId) {
+        Batch batch = batchRepository.findById(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
+        batch.setDeletedAt(java.time.LocalDateTime.now());
+        batch.setDeletedBy(actorId);
+        batchRepository.save(batch);
+        log.info("Soft-deleted batch {} (id={}) by user {}", batch.getParentBatchId(), batchId, actorId);
+    }
+
+    /**
+     * Hard-delete (purge) a batch and all its associated files and QC rows.
+     * Irreversible — only invoked on explicit admin confirmation.
+     *
      * @param batchId the batch ID to delete
      * @throws ResourceNotFoundException if batch not found
      */

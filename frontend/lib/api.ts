@@ -586,8 +586,10 @@ export const assignReviewer = (batchId: number, reviewerId: number) =>
     body: JSON.stringify({ reviewerId }),
   });
 
-export const deleteBatch = (batchId: number) =>
-  apiFetch(`/api/admin/batches/${batchId}`, { method: "DELETE" });
+// Soft-delete by default (data + audit trail preserved). Pass hard=true for an
+// irreversible purge — the UI gates that behind a second confirmation.
+export const deleteBatch = (batchId: number, hard = false) =>
+  apiFetch(`/api/admin/batches/${batchId}${hard ? "?hard=true" : ""}`, { method: "DELETE" });
 
 // ── Reviewer ──────────────────────────────────────────────────────────────────
 export const getQCResults = (batchId: number) =>

@@ -3,6 +3,7 @@ package com.apprisal.common.entity;
 import com.apprisal.common.util.AppTime;
 import jakarta.persistence.*;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -10,9 +11,15 @@ import java.util.List;
 
 /**
  * Batch entity representing a collection of appraisal documents.
+ *
+ * Soft-deleted rows (deleted_at IS NOT NULL) are globally excluded from every
+ * JPQL/criteria query via {@link SQLRestriction}, so a deleted batch disappears
+ * from the app while its data and audit trail are preserved. A hard purge is a
+ * separate, explicit admin action (see BatchService).
  */
 @Audited
 @Entity
+@SQLRestriction("deleted_at IS NULL")
 @Table(name = "batch",
        indexes = {
            @Index(name = "idx_batch_status_updated", columnList = "status, updated_at"),
@@ -68,6 +75,14 @@ public class Batch {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    /** Set when the batch is soft-deleted; non-null rows are hidden by @SQLRestriction. */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    /** Id of the user who soft-deleted the batch (audit). */
+    @Column(name = "deleted_by")
+    private Long deletedBy;
 
     public Batch() {
     }
@@ -177,6 +192,22 @@ public class Batch {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    public Long getDeletedBy() {
+        return deletedBy;
+    }
+
+    public void setDeletedBy(Long deletedBy) {
+        this.deletedBy = deletedBy;
     }
 
     // Builder pattern
