@@ -106,10 +106,12 @@ public class AnalyticsService {
         }
         data.put("modelVersions", versions);
 
-        // QC decision distribution
-        long autoPass  = qcResultRepo.countByQcDecision(QCDecision.AUTO_PASS);
-        long toVerify  = qcResultRepo.countByQcDecision(QCDecision.TO_VERIFY);
-        long autoFail  = qcResultRepo.countByQcDecision(QCDecision.AUTO_FAIL);
+        // QC decision distribution — active results within the window only, so a
+        // rerun neither double-counts (old + new) nor leaks results from outside
+        // the selected period.
+        long autoPass  = qcResultRepo.countActiveByQcDecisionSince(QCDecision.AUTO_PASS, from);
+        long toVerify  = qcResultRepo.countActiveByQcDecisionSince(QCDecision.TO_VERIFY, from);
+        long autoFail  = qcResultRepo.countActiveByQcDecisionSince(QCDecision.AUTO_FAIL, from);
         long total     = autoPass + toVerify + autoFail;
         data.put("decisionBreakdown", Map.of(
             "autoPassPct",  total > 0 ? pct(autoPass * 100.0 / total) : 0,

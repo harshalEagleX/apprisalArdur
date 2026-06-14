@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
 import jakarta.persistence.QueryHint;
 
 import java.util.List;
@@ -79,6 +81,20 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     long countByQcDecision(QCDecision qcDecision);
 
     /**
+     * Count results with a given decision within a window, excluding superseded
+     * reruns — for analytics so a rerun does not double-count the old + new result
+     * and the breakdown reflects the selected period, not all time.
+     */
+    @Query("""
+        SELECT COUNT(qr) FROM QCResult qr
+        WHERE qr.qcDecision = :decision
+          AND qr.supersededAt IS NULL
+          AND qr.processedAt >= :from
+        """)
+    long countActiveByQcDecisionSince(@Param("decision") QCDecision decision,
+                                      @Param("from") LocalDateTime from);
+
+    /**
      * Paginated pending queue — ADMIN view (all clients).
      *
      * AUTO_FAIL batches are routed to reviewer sign-off, so the queue is not
@@ -92,12 +108,14 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         LEFT JOIN FETCH b.assignedReviewer
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
         ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """,
         countQuery = """
         SELECT COUNT(DISTINCT qr) FROM QCResult qr
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
         """)
     org.springframework.data.domain.Page<QCResult> findPendingVerificationPaged(
             org.springframework.data.domain.Pageable pageable);
@@ -112,6 +130,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         JOIN FETCH b.assignedReviewer reviewer
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
           AND reviewer.id = :reviewerId
         ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """,
@@ -119,6 +138,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         SELECT COUNT(DISTINCT qr) FROM QCResult qr
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
           AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
         """)
     org.springframework.data.domain.Page<QCResult> findPendingVerificationForReviewerPaged(
@@ -136,6 +156,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         LEFT JOIN FETCH b.assignedReviewer
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
         ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """)
     List<QCResult> findPendingVerification();
@@ -150,6 +171,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         JOIN FETCH b.assignedReviewer reviewer
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
           AND reviewer.id = :reviewerId
         ORDER BY qr.failedCount DESC, qr.verifyCount DESC, qr.updatedAt ASC
         """)
@@ -159,6 +181,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         SELECT COUNT(qr) FROM QCResult qr
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
         """)
     long countPendingReviewerWork();
 
@@ -166,6 +189,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         SELECT COUNT(qr) FROM QCResult qr
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
           AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
         """)
     long countPendingReviewerWorkForReviewer(@Param("reviewerId") Long reviewerId);
