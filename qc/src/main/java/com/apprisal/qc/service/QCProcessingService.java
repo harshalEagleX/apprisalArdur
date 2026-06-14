@@ -55,6 +55,7 @@ public class QCProcessingService {
     private final PythonClientService pythonClient;
     private final FileMatchingService fileMatchingService;
     private final QCResultRepository qcResultRepository;
+    private final com.apprisal.common.repository.QCRuleResultRepository qcRuleResultRepository;
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
     private final ProcessingMetricsRepository metricsRepository;
@@ -83,6 +84,7 @@ public class QCProcessingService {
             PythonClientService pythonClient,
             FileMatchingService fileMatchingService,
             QCResultRepository qcResultRepository,
+            com.apprisal.common.repository.QCRuleResultRepository qcRuleResultRepository,
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             ProcessingMetricsRepository metricsRepository,
@@ -93,6 +95,7 @@ public class QCProcessingService {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
+        this.qcRuleResultRepository = qcRuleResultRepository;
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.metricsRepository = metricsRepository;
@@ -757,6 +760,20 @@ public class QCProcessingService {
             }
         }
 
+        // Carry the reviewer's prior decisions across a rerun: where a finding
+        // recurs with the same rule id, target field AND outcome, the reviewer's
+        // Pass/Fail/override is preserved, so a rerun (often a single-field
+        // extraction fix) does not silently discard their work. Findings that are
+        // new, gone, or whose status changed are left pending and re-queued for
+        // re-examination.
+        if (isRerun && previousActive != null) {
+            int carried = migrateReviewerDecisions(previousActive, qcResult);
+            if (carried > 0) {
+                log.info("Carried {} reviewer decision(s) from superseded result {} to the rerun for file {}",
+                        carried, previousActive.getId(), appraisal.getFilename());
+            }
+        }
+
         // Save
         qcResult = Objects.requireNonNull(qcResultRepository.save(qcResult));
         appraisal.setStatus(FileStatus.COMPLETED);
@@ -1111,6 +1128,59 @@ public class QCProcessingService {
             return fallback != null ? fallback : NOT_PROVIDED;
         }
         return value;
+    }
+
+    /**
+     * Carry reviewer decisions from a superseded result onto the new rerun result.
+     * A decision is migrated only when a finding recurs with the same rule id +
+     * target field AND the same status (outcome) — so a Pass/Fail/override still
+     * applies to the same finding. New findings, removed findings, and findings
+     * whose status changed are left pending (re-queued) for re-examination.
+     *
+     * @return how many decisions were carried forward.
+     */
+    private int migrateReviewerDecisions(QCResult previous, QCResult fresh) {
+        Map<String, QCRuleResult> prevByKey = new java.util.HashMap<>();
+        for (QCRuleResult prev : qcRuleResultRepository.findByQcResultId(previous.getId())) {
+            prevByKey.put(decisionKey(prev), prev);
+        }
+        int carried = 0;
+        for (QCRuleResult cur : fresh.getRuleResults()) {
+            QCRuleResult prev = prevByKey.get(decisionKey(cur));
+            if (prev == null) {
+                continue; // new/unmatched finding → stays pending (re-queued)
+            }
+            boolean hadDecision = prev.getReviewerVerified() != null
+                    || Boolean.TRUE.equals(prev.getOverridePending())
+                    || prev.getOverrideApprovedBy() != null;
+            if (!hadDecision) {
+                continue;
+            }
+            // Outcome changed → the decision no longer applies; re-examine.
+            if (!java.util.Objects.equals(normStatus(cur.getStatus()), normStatus(prev.getStatus()))) {
+                continue;
+            }
+            cur.setReviewerVerified(prev.getReviewerVerified());
+            cur.setReviewerComment(prev.getReviewerComment());
+            cur.setVerifiedAt(prev.getVerifiedAt());
+            cur.setDecisionLatencyMs(prev.getDecisionLatencyMs());
+            cur.setAcknowledgedReferences(prev.getAcknowledgedReferences());
+            cur.setOverridePending(prev.getOverridePending());
+            cur.setOverrideRequestedBy(prev.getOverrideRequestedBy());
+            cur.setOverrideRequestedAt(prev.getOverrideRequestedAt());
+            cur.setOverrideApprovedBy(prev.getOverrideApprovedBy());
+            cur.setOverrideApprovedAt(prev.getOverrideApprovedAt());
+            carried++;
+        }
+        return carried;
+    }
+
+    private String decisionKey(QCRuleResult r) {
+        return textOr(r.getRuleId(), "?") + "|" + textOr(r.getTargetField(), "");
+    }
+
+    private static String normStatus(String s) {
+        return s == null ? "" : s.trim().toLowerCase();
     }
 
     private double confidenceFor(PythonRuleResult rule, String normalizedStatus) {
