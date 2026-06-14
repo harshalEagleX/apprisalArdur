@@ -793,6 +793,8 @@ export interface Batch {
   assignedReviewer?: Pick<User, "id" | "username" | "fullName">;
   createdBy?: Pick<User, "id" | "username">;
   errorMessage?: string;
+  /** Non-fatal intake warnings (e.g. ambiguous document roles); newline-separated. */
+  intakeWarnings?: string | null;
   createdAt: string;
   updatedAt: string;
 }

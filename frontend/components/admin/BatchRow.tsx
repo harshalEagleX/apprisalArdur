@@ -98,6 +98,17 @@ export const BatchRow = memo(function BatchRow({
       {/* Status + inline QC progress */}
       <td className="px-4 py-3">
         <StatusBadge status={b.status} />
+        {b.intakeWarnings && (
+          <div
+            className="mt-1.5 flex max-w-[190px] items-start gap-1 rounded-md border border-amber-500/25 bg-amber-950/25 px-1.5 py-1"
+            title={b.intakeWarnings}
+          >
+            <AlertTriangle size={10} className="mt-0.5 flex-shrink-0 text-amber-400" />
+            <span className="text-[10px] leading-tight text-amber-300 line-clamp-2">
+              Ambiguous documents — confirm before QC
+            </span>
+          </div>
+        )}
         {b.status === "QC_PROCESSING" && progress && (
           <div className="mt-1.5">
             <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">

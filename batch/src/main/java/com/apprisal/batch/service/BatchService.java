@@ -483,6 +483,38 @@ public class BatchService {
         if (batch.getFiles().isEmpty()) {
             throw new ValidationException("No valid PDF files found in the batch");
         }
+
+        flagDocumentRoleAmbiguity(batch);
+    }
+
+    /**
+     * Flag ambiguous document roles — more than one appraisal (possibly different
+     * properties), engagement letter, or contract in a single ZIP. We never
+     * silently merge: the batch records a warning so the admin can confirm the
+     * intended mapping before running QC. Processing is not blocked.
+     */
+    private void flagDocumentRoleAmbiguity(Batch batch) {
+        long appraisals = batch.getFiles().stream().filter(f -> f.getFileType() == FileType.APPRAISAL).count();
+        long engagements = batch.getFiles().stream().filter(f -> f.getFileType() == FileType.ENGAGEMENT).count();
+        long contracts = batch.getFiles().stream().filter(f -> f.getFileType() == FileType.CONTRACT).count();
+
+        List<String> warnings = new ArrayList<>();
+        if (appraisals > 1) {
+            warnings.add(appraisals + " appraisal PDFs found — confirm they belong to the same appraisal set. "
+                    + "Different properties must be split into separate batches.");
+        }
+        if (engagements > 1) {
+            warnings.add(engagements + " engagement letters found — confirm which one applies before running QC.");
+        }
+        if (contracts > 1) {
+            warnings.add(contracts + " contracts found — confirm which one applies before running QC.");
+        }
+
+        if (!warnings.isEmpty()) {
+            batch.setIntakeWarnings(String.join("\n", warnings));
+            log.warn("Batch {} has ambiguous document roles: appraisals={}, engagements={}, contracts={}",
+                    batch.getParentBatchId(), appraisals, engagements, contracts);
+        }
     }
 
     private String documentQualityFlags(FileType fileType, String filename, String contentHash, List<BatchFile> existingFiles) {

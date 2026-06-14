@@ -43,6 +43,14 @@ public class Batch {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    /**
+     * Non-fatal intake warnings (e.g. ambiguous document roles — more than one
+     * appraisal, engagement, or contract). The batch still processes, but the
+     * admin is asked to confirm the intended mapping. Newline-separated.
+     */
+    @Column(name = "intake_warnings", columnDefinition = "TEXT")
+    private String intakeWarnings;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     private Client client;
@@ -208,6 +216,14 @@ public class Batch {
 
     public void setDeletedBy(Long deletedBy) {
         this.deletedBy = deletedBy;
+    }
+
+    public String getIntakeWarnings() {
+        return intakeWarnings;
+    }
+
+    public void setIntakeWarnings(String intakeWarnings) {
+        this.intakeWarnings = intakeWarnings;
     }
 
     // Builder pattern

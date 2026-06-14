@@ -131,6 +131,7 @@ public class BatchApiController {
         m.put("parentBatchId", b.getParentBatchId());
         m.put("status",        b.getStatus() != null ? b.getStatus().name() : null);
         m.put("errorMessage",  b.getErrorMessage());
+        m.put("intakeWarnings", b.getIntakeWarnings());
         m.put("fileHash",      b.getFileHash());
         m.put("createdAt",     b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
         m.put("updatedAt",     b.getUpdatedAt() != null ? b.getUpdatedAt().toString() : null);
