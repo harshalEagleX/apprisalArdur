@@ -45,9 +45,10 @@ export interface BatchSummary {
 export interface AnalyticsOverview {
   totalFilesProcessed: number;
   activeSessions: number;
-  avgOcrAccuracy: number;
-  avgRulePassRate: number;
-  avgProcessingSeconds: number;
+  // These averages are null when no files were processed in the window.
+  avgOcrAccuracy: number | null;
+  avgRulePassRate: number | null;
+  avgProcessingSeconds: number | null;
   cacheHitRate: number;
   totalBatches: number;
   pendingReview: number;
@@ -56,13 +57,13 @@ export interface AnalyticsOverview {
 
 export interface TrendPoint {
   date: string;
-  ocrAccuracy: number;
-  passRate: number;
+  ocrAccuracy: number | null;
+  passRate: number | null;
   fileCount: number;
 }
 
 export interface MlInsights {
-  avgRulePassRate: number;
+  avgRulePassRate: number | null;
   decisionBreakdown: {
     // Java returns autoPass / toVerify / autoFail (counts) + *Pct fields
     autoPass: number;

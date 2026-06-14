@@ -28,7 +28,7 @@ const CustomTooltip = ({ active, payload, label }: {
         <div key={p.name} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
           <span className="text-slate-400">{p.name}:</span>
-          <span className="font-medium text-white">{p.value.toFixed(1)}%</span>
+          <span className="font-medium text-white">{p.value == null ? "—" : `${p.value.toFixed(1)}%`}</span>
         </div>
       ))}
     </div>

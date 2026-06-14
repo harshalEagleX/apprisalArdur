@@ -48,7 +48,7 @@ public class AnalyticsService {
         snap.put("activeSessions", sessionRepo.countByStatus(OperatorSession.Status.ACTIVE));
 
         Double avgConf = metricsRepo.avgOcrConfidenceSince(from);
-        snap.put("avgOcrAccuracy", pct(avgConf));
+        snap.put("avgOcrAccuracy", pctFraction(avgConf));
 
         Double avgPass = metricsRepo.avgRulePassRateSince(from);
         snap.put("avgRulePassRate", pct(avgPass));
@@ -72,7 +72,7 @@ public class AnalyticsService {
         LocalDateTime from = LocalDateTime.now().minusDays(days);
         Map<String, Object> data = new LinkedHashMap<>();
 
-        data.put("avgAccuracy",     pct(metricsRepo.avgOcrConfidenceSince(from)));
+        data.put("avgAccuracy",     pctFraction(metricsRepo.avgOcrConfidenceSince(from)));
         data.put("avgProcessingMs", metricsRepo.avgProcessingMsSince(from));
 
         List<Map<String, Object>> methods = new ArrayList<>();
@@ -155,7 +155,7 @@ public class AnalyticsService {
         for (Object[] row : metricsRepo.dailyTrendSince(from)) {
             trend.add(Map.of(
                 "date",        row[0],
-                "ocrAccuracy", pct(toDouble(row[1])),
+                "ocrAccuracy", pctFraction(toDouble(row[1])),
                 "passRate",    pct(toDouble(row[2])),
                 "fileCount",   row[3]
             ));
@@ -234,6 +234,8 @@ public class AnalyticsService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private Double pct(Double v) { return v != null ? Math.round(v * 10.0) / 10.0 : null; }
+    /** OCR confidence is persisted as a 0-1 fraction; render it as a 0-100 percentage. */
+    private Double pctFraction(Double v) { return v != null ? pct(v * 100.0) : null; }
     private Double toDouble(Object o) { return o instanceof Number n ? n.doubleValue() : null; }
     private Long   toLong(Object o)   { return o instanceof Number n ? n.longValue()   : null; }
 }

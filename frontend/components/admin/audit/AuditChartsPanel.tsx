@@ -23,11 +23,20 @@ async function get<T>(path: string): Promise<T> {
 
 // ── Types for additional data ─────────────────────────────────────────────────
 interface OcrInsights {
-  avgAccuracy: number;
-  avgProcessingMs: number;
+  avgAccuracy: number | null;
+  avgProcessingMs: number | null;
   cacheHits: number;
   extractionMethods: { method: string; count: number }[];
 }
+
+// Null-safe formatters — analytics averages are null when no files were processed
+// in the window, so render an em dash rather than crashing on .toFixed().
+const fmtPct = (v: number | null | undefined, dp = 1): string =>
+  v == null || Number.isNaN(v) ? "—" : `${v.toFixed(dp)}%`;
+const fmtSec = (v: number | null | undefined, dp = 1): string =>
+  v == null || Number.isNaN(v) ? "—" : `${v.toFixed(dp)}s`;
+const fmtNum = (v: number | null | undefined): string =>
+  v == null || Number.isNaN(v) ? "—" : v.toLocaleString();
 
 interface OperatorInsights {
   activeNow: number;
@@ -158,26 +167,26 @@ export default function AuditChartsPanel() {
           <Section title="Overview" icon={Layers}>
             {overview ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <Stat label="Files"    value={overview.totalFilesProcessed.toLocaleString()} />
+                <Stat label="Files"    value={fmtNum(overview.totalFilesProcessed)} />
                 <Stat label="Batches"  value={overview.totalBatches} />
                 <Stat
                   label="Pass Rate"
-                  value={`${overview.avgRulePassRate.toFixed(1)}%`}
+                  value={fmtPct(overview.avgRulePassRate)}
                   color="text-green-400"
                 />
                 <Stat
                   label="OCR Accuracy"
-                  value={`${overview.avgOcrAccuracy.toFixed(1)}%`}
+                  value={fmtPct(overview.avgOcrAccuracy)}
                   color="text-indigo-400"
                 />
                 <Stat
                   label="Avg Process"
-                  value={`${overview.avgProcessingSeconds.toFixed(1)}s`}
+                  value={fmtSec(overview.avgProcessingSeconds)}
                   color="text-amber-400"
                 />
                 <Stat
                   label="Cache Hit"
-                  value={`${overview.cacheHitRate.toFixed(0)}%`}
+                  value={fmtPct(overview.cacheHitRate, 0)}
                   color="text-cyan-400"
                 />
                 {overview.pendingReview > 0 && (
@@ -225,7 +234,7 @@ export default function AuditChartsPanel() {
               <div className="mt-2 pt-2 border-t border-white/5">
                 <Stat
                   label="Avg Rule Pass Rate"
-                  value={`${ml.avgRulePassRate.toFixed(1)}%`}
+                  value={fmtPct(ml.avgRulePassRate)}
                   color="text-green-400"
                 />
               </div>
@@ -240,12 +249,12 @@ export default function AuditChartsPanel() {
                 <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
                   <Stat
                     label="Avg Accuracy"
-                    value={`${ocrData.avgAccuracy.toFixed(1)}%`}
+                    value={fmtPct(ocrData.avgAccuracy)}
                     color="text-indigo-400"
                   />
                   <Stat
                     label="Cache Hits"
-                    value={ocrData.cacheHits.toLocaleString()}
+                    value={fmtNum(ocrData.cacheHits)}
                     color="text-cyan-400"
                   />
                   {ocrData.avgProcessingMs != null && (
