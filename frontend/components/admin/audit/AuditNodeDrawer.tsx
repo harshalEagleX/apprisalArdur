@@ -1,7 +1,7 @@
 "use client";
 import { X, ExternalLink } from "lucide-react";
 import type { GraphNode, GraphLink, ViewMode } from "./types";
-import { NODE_COLOR } from "./types";
+import { NODE_COLOR, isSupportingPending } from "./types";
 
 interface Props {
   node: GraphNode;
@@ -13,7 +13,17 @@ interface Props {
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, fileType }: { status: string; fileType?: string }) {
+  if (isSupportingPending(status, fileType)) {
+    return (
+      <span
+        className="inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-medium bg-slate-800 text-slate-400 border-slate-700"
+        title="Supporting document — read for cross-document checks, not separately QC'd"
+      >
+        Supporting
+      </span>
+    );
+  }
   const map: Record<string, string> = {
     PASS:           "bg-green-950 text-green-400 border-green-800/50",
     FAIL:           "bg-red-950 text-red-400 border-red-800/50",
@@ -118,7 +128,7 @@ export default function AuditNodeDrawer({
         </div>
 
         {/* Status */}
-        <StatusBadge status={node.status} />
+        <StatusBadge status={node.status} fileType={node.meta?.fileType ? String(node.meta.fileType) : undefined} />
 
         {/* Rule bar (FILE & DECISION nodes only) */}
         {passed !== null && failed !== null && total !== null && (

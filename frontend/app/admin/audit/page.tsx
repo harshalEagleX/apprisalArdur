@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Network, Maximize2, AlertCircle } from "lucide-react";
 import type { GraphData, GraphNode, ViewMode, BatchSummary } from "@/components/admin/audit/types";
-import { NODE_COLOR, NODE_SIZE, EDGE_COLOR } from "@/components/admin/audit/types";
+import { NODE_COLOR, NODE_SIZE, EDGE_COLOR, nodeStatusLabel } from "@/components/admin/audit/types";
 import { displayName } from "@/lib/displayName";
 import AuditSidebar     from "@/components/admin/audit/AuditSidebar";
 import AuditBreadcrumb  from "@/components/admin/audit/AuditBreadcrumb";
@@ -241,7 +241,7 @@ export default function AdminAuditPage() {
                   onEngineStop={() => { graphRef.current?.zoomToFit?.(400); }}
                   nodeLabel={(n: unknown) => {
                     const node = n as GraphNode;
-                    const lines = [`${node.type.replace(/_/g, " ")}: ${node.label}`, `Status: ${node.status}`];
+                    const lines = [`${node.type.replace(/_/g, " ")}: ${node.label}`, `Status: ${nodeStatusLabel(node.status, node.meta?.fileType as string | undefined)}`];
                     if (node.meta?.reviewer)  lines.push(`Reviewer: ${displayName(String(node.meta.reviewer))}`);
                     if (node.meta?.client)    lines.push(`Client: ${String(node.meta.client)}`);
                     if (node.meta?.fileCount !== undefined) lines.push(`Files: ${String(node.meta.fileCount)}`);

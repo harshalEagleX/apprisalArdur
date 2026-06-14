@@ -10,6 +10,18 @@ export type NodeType =
 
 export type ViewMode = "ALL" | "BY_BATCH" | "BY_FILE" | "LIST";
 
+/**
+ * A supporting document (contract / engagement letter) is read for cross-document
+ * checks but never QC'd on its own, so its file status stays PENDING permanently.
+ * Surfacing "Pending" implies it's stuck — these helpers relabel it "Supporting".
+ */
+export function isSupportingPending(status: string, fileType?: string | null): boolean {
+  return status === "PENDING" && (fileType === "CONTRACT" || fileType === "ENGAGEMENT");
+}
+export function nodeStatusLabel(status: string, fileType?: string | null): string {
+  return isSupportingPending(status, fileType) ? "Supporting" : status.replace(/_/g, " ");
+}
+
 export interface GraphNode {
   id: string;
   label: string;

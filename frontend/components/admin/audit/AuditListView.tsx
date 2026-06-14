@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, FileText, GitBranch } from "lucide-react";
 import type { GraphNode, ViewMode } from "./types";
-import { NODE_COLOR } from "./types";
+import { NODE_COLOR, isSupportingPending } from "./types";
 import { displayName } from "@/lib/displayName";
 
 interface Props {
@@ -17,7 +17,20 @@ interface Props {
 type SortKey = "label" | "type" | "status";
 type SortDir = "asc" | "desc";
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, fileType }: { status: string; fileType?: string }) {
+  // A supporting document (contract / engagement letter) is read for cross-document
+  // checks but never QC'd on its own, so its file status stays PENDING forever.
+  // Showing "Pending" implies it's stuck — label it "Supporting" instead.
+  if (isSupportingPending(status, fileType)) {
+    return (
+      <span
+        className="text-[10px] font-medium text-slate-500"
+        title="Supporting document — read for cross-document checks, not separately QC'd"
+      >
+        Supporting
+      </span>
+    );
+  }
   const map: Record<string, string> = {
     PASS:           "text-green-400",
     FAIL:           "text-red-400",
@@ -158,7 +171,7 @@ export default function AuditListView({
                     {node.type.replace(/_/g, " ")}
                   </td>
                   <td className="px-2 py-2">
-                    <StatusBadge status={node.status} />
+                    <StatusBadge status={node.status} fileType={node.meta.fileType ? String(node.meta.fileType) : undefined} />
                   </td>
                   <td className="px-2 py-2 text-[10px] text-slate-500 truncate max-w-[80px]"
                       title={String(node.meta.reviewer ?? node.meta.reviewerEmail ?? "")}>
