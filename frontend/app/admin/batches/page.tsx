@@ -16,6 +16,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import UploadModal from "@/components/admin/UploadModal";
 import { BatchRow } from "@/components/admin/BatchRow";
 import { BatchRecoveryDrawer } from "@/components/admin/BatchRecoveryDrawer";
+import { BatchHistoryDrawer } from "@/components/admin/BatchHistoryDrawer";
 import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
 import { toast } from "@/lib/toast";
@@ -134,6 +135,7 @@ export default function BatchesPage() {
   const [showUpload, setShowUpload]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Batch | null>(null);
   const [recoveryTarget, setRecoveryTarget] = useState<Batch | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<Batch | null>(null);
   const [actionLoading, setActionLoading] = useState<Set<number>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
@@ -312,9 +314,14 @@ export default function BatchesPage() {
     });
     setActionBusy(batch.id, true);
     try {
-      await processQC(batch.id);
+      const res = await processQC(batch.id);
       setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "QC_PROCESSING", errorMessage: undefined } : b));
-      toast.info(`QC started for "${batch.parentBatchId}"`, "Running OCR + QC rules");
+      if (res.reviewerActive) {
+        toast.info(`QC re-running for "${batch.parentBatchId}"`,
+          "A reviewer currently has this report open — they'll be notified and their decisions are preserved.");
+      } else {
+        toast.info(`QC started for "${batch.parentBatchId}"`, "Running OCR + QC rules");
+      }
       adminBatchTimeline("frontend_qc_trigger_complete", {
         batch_id: batch.id,
         batch_ref: batch.parentBatchId,
@@ -573,6 +580,7 @@ export default function BatchesPage() {
                   onAssign={handleAssign}
                   onDelete={setDeleteTarget}
                   onOpenRecovery={setRecoveryTarget}
+                  onOpenHistory={setHistoryTarget}
                   selected={selectedIds.has(b.id)}
                   onSelect={handleSelect}
                 />
@@ -623,6 +631,10 @@ export default function BatchesPage() {
         onRetry={batch => void handleProcessQC(batch)}
         onDelete={batch => { setRecoveryTarget(null); setDeleteTarget(batch); }}
         onReupload={() => { setRecoveryTarget(null); setShowUpload(true); }}
+      />
+      <BatchHistoryDrawer
+        batch={historyTarget}
+        onClose={() => setHistoryTarget(null)}
       />
     </div>
   );

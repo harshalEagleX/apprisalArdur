@@ -129,6 +129,19 @@ public class QCApiController {
             ));
         }
 
+        // Pre-flight: is a reviewer actively reviewing the result this re-run will
+        // replace? Computed BEFORE the async run supersedes it. We do NOT block —
+        // the reviewer is notified live and their decisions are preserved — but the
+        // admin is told so the re-run is never a silent override.
+        long activeReviewSignals = qcRuleResultRepository.countActiveReviewPresenceForBatch(
+                batchId, java.time.LocalDateTime.now().minusMinutes(30));
+        boolean reviewerActive = activeReviewSignals > 0;
+        if (reviewerActive) {
+            log.info(TimelineLog.event("admin_batches", "java_qc_rerun_reviewer_active",
+                    "batch_id", batchId,
+                    "active_review_signals", activeReviewSignals));
+        }
+
         // Fire async — returns immediately
         qcProcessingService.processBatchAsync(batchId, modelConfig);
 
@@ -142,6 +155,7 @@ public class QCApiController {
             "batchId", batchId,
             "modelProvider", modelConfig.provider(),
             "modelName", modelConfig.textModel(),
+            "reviewerActive", reviewerActive,
             "pollUrl", "/api/admin/batches/" + batchId + "/status"
         ));
     }

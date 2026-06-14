@@ -125,6 +125,22 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
         """)
     List<QCRuleResult> findOverdueReviewItems(@Param("cutoff") LocalDateTime cutoff);
 
+    /**
+     * Count rule rows on a batch's ACTIVE (non-superseded) QC result(s) that were
+     * presented to a reviewer after {@code cutoff}. A non-zero count means a
+     * reviewer is (or was very recently) actively reviewing this report — used to
+     * warn an admin before they re-run QC and replace what the reviewer sees.
+     */
+    @Query("""
+        SELECT COUNT(rr) FROM QCRuleResult rr
+        WHERE rr.qcResult.batchFile.batch.id = :batchId
+          AND rr.qcResult.supersededAt IS NULL
+          AND rr.firstPresentedAt IS NOT NULL
+          AND rr.firstPresentedAt > :cutoff
+        """)
+    long countActiveReviewPresenceForBatch(@Param("batchId") Long batchId,
+                                           @Param("cutoff") LocalDateTime cutoff);
+
     @Query("""
         SELECT rr.overrideRequestedBy.id, COUNT(rr)
         FROM QCRuleResult rr

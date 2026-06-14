@@ -534,7 +534,7 @@ export async function processQC(batchId: number, model?: QCModelSelection) {
     vision_model: model?.visionModel,
   });
   try {
-    const response = await apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string }>(
+    const response = await apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string; reviewerActive?: boolean }>(
     `/api/qc/process/${batchId}`,
     { method: "POST", body: JSON.stringify(model ?? {}) }
     );
@@ -670,21 +670,54 @@ export const decideOverride = (
   );
 
 export const getQCHistory = (batchFileId: number) =>
-  apiFetch<Array<{
-    id: number;
-    qcDecision: string | null;
-    finalDecision: string | null;
-    totalRules: number;
-    passedCount: number;
-    failedCount: number;
-    verifyCount: number;
-    processedAt: string | null;
-    supersededAt: string | null;
-    isActive: boolean;
-    rerunOfId: number | null;
-    cacheHit: boolean | null;
-    extractionMethod: string | null;
-  }>>(`/api/qc/history/file/${batchFileId}`);
+  apiFetch<QCHistoryRun[]>(`/api/qc/history/file/${batchFileId}`);
+
+export type QCDiffFinding = {
+  ruleId: string | null;
+  ruleName: string | null;
+  section: string | null;
+  targetField: string | null;
+  status: string | null;
+  severity: string | null;
+  previousStatus?: string | null;
+  previousSeverity?: string | null;
+};
+
+export type QCResultDiff = {
+  resultId: number;
+  ruleEngineVersion: string | null;
+  hasPrevious: boolean;
+  previousResultId?: number;
+  previousRuleEngineVersion?: string | null;
+  ruleEngineChanged?: boolean;
+  added?: QCDiffFinding[];
+  removed?: QCDiffFinding[];
+  changed?: QCDiffFinding[];
+  unchangedCount?: number;
+  summary?: { added: number; removed: number; changed: number; unchanged: number };
+  message?: string;
+};
+
+export type QCHistoryRun = {
+  id: number;
+  qcDecision: string | null;
+  finalDecision: string | null;
+  totalRules: number;
+  passedCount: number;
+  failedCount: number;
+  verifyCount: number;
+  processedAt: string | null;
+  supersededAt: string | null;
+  isActive: boolean;
+  rerunOfId: number | null;
+  cacheHit: boolean | null;
+  extractionMethod: string | null;
+  ruleEngineVersion: string | null;
+};
+
+// Diff a QC result against the run it replaced (added / removed / changed findings).
+export const getQCResultDiff = (qcResultId: number) =>
+  apiFetch<QCResultDiff>(`/api/qc/history/diff/${qcResultId}`);
 
 export const requestReReview = (qcResultId: number, reason: string) =>
   apiFetch<{ success: boolean; message: string }>(`/api/reviewer/qc/${qcResultId}/request-re-review`, {

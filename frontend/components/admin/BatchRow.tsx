@@ -1,6 +1,6 @@
 "use client";
 import React, { memo } from "react";
-import { Play, RefreshCw, Square, Trash2, AlertTriangle, AlertCircle, UserPlus } from "lucide-react";
+import { Play, RefreshCw, Square, Trash2, AlertTriangle, AlertCircle, UserPlus, History } from "lucide-react";
 import type { Batch, User } from "@/lib/api";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { ReviewerAssignControl } from "./ReviewerAssignControl";
@@ -17,6 +17,7 @@ export interface BatchRowProps {
   onAssign: (batchId: number, reviewerId: number) => void;
   onDelete: (batch: Batch) => void;
   onOpenRecovery: (batch: Batch) => void;
+  onOpenHistory: (batch: Batch) => void;
   // Bulk-selection
   selected?: boolean;
   onSelect?: (id: number, checked: boolean) => void;
@@ -33,6 +34,7 @@ export const BatchRow = memo(function BatchRow({
   onAssign,
   onDelete,
   onOpenRecovery,
+  onOpenHistory,
   selected = false,
   onSelect,
 }: BatchRowProps) {
@@ -243,6 +245,18 @@ export const BatchRow = memo(function BatchRow({
                 No reviewers
               </span>
             ))}
+
+          {/* QC history + version diff — only once QC has produced results */}
+          {(b.status === "COMPLETED" || b.status === "REVIEW_PENDING" || b.status === "IN_REVIEW") && (
+            <button
+              onClick={() => onOpenHistory(b)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-indigo-950/40 hover:text-indigo-300"
+              title="QC history & version diff"
+              aria-label="QC history and version diff"
+            >
+              <History size={14} />
+            </button>
+          )}
 
           {/* Delete */}
           <button
