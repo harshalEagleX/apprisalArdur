@@ -1,9 +1,10 @@
 "use client";
 import React from "react";
 import type { Batch, User } from "@/lib/api";
+import { displayName } from "@/lib/displayName";
 
 function displayUser(user: User): string {
-  return user.fullName || user.username;
+  return user.fullName || displayName(user.username);
 }
 
 function formatAge(value?: string): string {

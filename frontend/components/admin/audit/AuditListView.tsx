@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, FileText, GitBranch } from "lucide-react";
 import type { GraphNode, ViewMode } from "./types";
 import { NODE_COLOR } from "./types";
+import { displayName } from "@/lib/displayName";
 
 interface Props {
   nodes: GraphNode[];
@@ -159,8 +160,11 @@ export default function AuditListView({
                   <td className="px-2 py-2">
                     <StatusBadge status={node.status} />
                   </td>
-                  <td className="px-2 py-2 text-[10px] text-slate-500 truncate max-w-[80px]">
-                    {String(node.meta.reviewer ?? node.meta.reviewerEmail ?? "—")}
+                  <td className="px-2 py-2 text-[10px] text-slate-500 truncate max-w-[80px]"
+                      title={String(node.meta.reviewer ?? node.meta.reviewerEmail ?? "")}>
+                    {node.meta.reviewer || node.meta.reviewerEmail
+                      ? displayName(String(node.meta.reviewer ?? node.meta.reviewerEmail))
+                      : "—"}
                   </td>
                   <td className="px-2 py-2">
                     {pct !== null ? (

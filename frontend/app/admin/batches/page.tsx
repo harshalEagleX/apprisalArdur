@@ -11,6 +11,7 @@ import {
   bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer, getSystemHealth,
   type Batch, type User,
 } from "@/lib/api";
+import { displayName } from "@/lib/displayName";
 import { removeJob } from "@/lib/jobs";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import UploadModal from "@/components/admin/UploadModal";
@@ -527,7 +528,7 @@ export default function BatchesPage() {
             >
               <option value="" disabled>Assign reviewer…</option>
               {reviewers.map(r => (
-                <option key={r.id} value={r.id}>{r.fullName ?? r.username}</option>
+                <option key={r.id} value={r.id}>{r.fullName ?? displayName(r.username)}</option>
               ))}
             </select>
           )}

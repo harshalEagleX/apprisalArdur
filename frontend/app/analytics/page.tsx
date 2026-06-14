@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock, FileText, Lightbulb, Scale, ShieldAlert, TrendingUp, Users } from "lucide-react";
+import { displayName } from "@/lib/displayName";
 
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
@@ -261,7 +262,7 @@ export default function AnalyticsPage() {
                   </div>
                   {(operatorRows as Array<{name:string;activeMinutes:number;filesProcessed:number;corrections:number}>).map(op => (
                     <div key={op.name} className="grid grid-cols-4 gap-2 text-sm">
-                      <span className="text-slate-300 truncate">{op.name}</span>
+                      <span className="text-slate-300 truncate" title={op.name}>{displayName(op.name)}</span>
                       <span className="text-right text-slate-400">{(op.activeMinutes / 60).toFixed(1)}h</span>
                       <span className="text-right text-slate-400">{op.filesProcessed}</span>
                       <span className="text-right text-amber-400">{op.corrections}</span>

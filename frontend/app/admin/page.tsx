@@ -6,6 +6,7 @@ import {
   ArrowRight, Upload, UserPlus, Activity, ShieldAlert, CalendarDays,
 } from "lucide-react";
 import { getAdminDashboard, type Batch, type User } from "@/lib/api";
+import { displayName } from "@/lib/displayName";
 import StatCard from "@/components/shared/StatCard";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { CardSkeleton, Skeleton } from "@/components/shared/Skeleton";
@@ -188,7 +189,7 @@ export default function AdminOverviewPage() {
                 .map(({ reviewer: r, active }) => (
                 <div key={r.id} className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-slate-200 truncate">{r.fullName ?? r.username}</div>
+                    <div className="text-sm text-slate-200 truncate">{r.fullName ?? displayName(r.username)}</div>
                     <div className="text-[11px] text-slate-500">{r.username}</div>
                   </div>
                   <div className="flex w-full items-center gap-2 sm:w-auto">

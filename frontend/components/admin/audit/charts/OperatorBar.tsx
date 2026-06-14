@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import { displayName } from "@/lib/displayName";
 
 interface Operator {
   name: string;
@@ -46,10 +47,10 @@ export default function OperatorBar({ data }: Props) {
     return <div className="flex h-20 items-center justify-center text-xs text-slate-600">No operator data</div>;
   }
 
-  // Truncate long names for the axis
+  // Friendly, truncated names for the axis (emails -> local part, not raw address)
   const formatted = data.slice(0, 8).map(op => ({
     ...op,
-    name: op.name.split(" ")[0] ?? op.name,
+    name: displayName(op.name).split(" ")[0] || displayName(op.name),
   }));
 
   return (

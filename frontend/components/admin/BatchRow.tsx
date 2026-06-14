@@ -2,6 +2,7 @@
 import React, { memo } from "react";
 import { Play, RefreshCw, Square, Trash2, AlertTriangle, AlertCircle, UserPlus, History } from "lucide-react";
 import type { Batch, User } from "@/lib/api";
+import { displayName } from "@/lib/displayName";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { ReviewerAssignControl } from "./ReviewerAssignControl";
 import type { BatchProgress } from "@/hooks/useBatchPolling";
@@ -167,8 +168,8 @@ export const BatchRow = memo(function BatchRow({
       {/* Reviewer */}
       <td className="px-4 py-3 text-xs">
         {b.assignedReviewer ? (
-          <span className="text-slate-300">
-            {b.assignedReviewer.fullName ?? b.assignedReviewer.username}
+          <span className="text-slate-300" title={b.assignedReviewer.username}>
+            {b.assignedReviewer.fullName ?? displayName(b.assignedReviewer.username)}
           </span>
         ) : (
           <span className="text-slate-600">Unassigned</span>

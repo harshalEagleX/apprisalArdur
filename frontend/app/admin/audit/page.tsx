@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { Network, Maximize2, AlertCircle } from "lucide-react";
 import type { GraphData, GraphNode, ViewMode, BatchSummary } from "@/components/admin/audit/types";
 import { NODE_COLOR, NODE_SIZE, EDGE_COLOR } from "@/components/admin/audit/types";
+import { displayName } from "@/lib/displayName";
 import AuditSidebar     from "@/components/admin/audit/AuditSidebar";
 import AuditBreadcrumb  from "@/components/admin/audit/AuditBreadcrumb";
 import AuditNodeDrawer  from "@/components/admin/audit/AuditNodeDrawer";
@@ -42,7 +43,11 @@ export default function AdminAuditPage() {
   const [showCharts,    setShowCharts]    = useState(true);
   const [graphSize,     setGraphSize]     = useState({ w: 800, h: 600 });
 
-  const graphRef     = useRef<{ zoomToFit: (ms?: number) => void } | null>(null);
+  const graphRef     = useRef<{
+    zoomToFit: (ms?: number) => void;
+    d3Force: (name: string) => { strength?: (s: number) => void; distance?: (d: number) => void } | undefined;
+    d3ReheatSimulation: () => void;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // ── Data loading ────────────────────────────────────────────────────────────
@@ -103,6 +108,18 @@ export default function AdminAuditPage() {
     void loadBatchList();
     void loadGraph();
   }, [loadGraph, loadBatchList]);
+
+  // ── Spread nodes apart so labels don't collide ──────────────────────────────
+  // The default force layout packs a batch's files tightly around it, so their
+  // labels overlap. Stronger charge repulsion + a longer link distance give each
+  // node room for its label.
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg || graphData.nodes.length === 0) return;
+    fg.d3Force("charge")?.strength?.(-260);
+    fg.d3Force("link")?.distance?.(90);
+    fg.d3ReheatSimulation();
+  }, [graphData]);
 
   // ── Resize observer ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -225,7 +242,7 @@ export default function AdminAuditPage() {
                   nodeLabel={(n: unknown) => {
                     const node = n as GraphNode;
                     const lines = [`${node.type.replace(/_/g, " ")}: ${node.label}`, `Status: ${node.status}`];
-                    if (node.meta?.reviewer)  lines.push(`Reviewer: ${String(node.meta.reviewer)}`);
+                    if (node.meta?.reviewer)  lines.push(`Reviewer: ${displayName(String(node.meta.reviewer))}`);
                     if (node.meta?.client)    lines.push(`Client: ${String(node.meta.client)}`);
                     if (node.meta?.fileCount !== undefined) lines.push(`Files: ${String(node.meta.fileCount)}`);
                     return lines.join("\n");
@@ -253,12 +270,32 @@ export default function AdminAuditPage() {
                       ctx.stroke();
                     }
                     ctx.globalAlpha = 1;
-                    // Node label at sufficient zoom
-                    if (globalScale > 1.8) {
-                      ctx.font = `${Math.max(8, 10 / globalScale)}px sans-serif`;
-                      ctx.fillStyle = dim ? "#ffffff22" : "#ffffffbb";
+                    // Node label at sufficient zoom. Skip dimmed nodes (keeps the
+                    // highlighted path legible), draw an ellipsised label on a dark
+                    // rounded backdrop so adjacent labels never blur together.
+                    if (globalScale > 1.8 && !dim) {
+                      const raw = node.label ?? "";
+                      const text = raw.length > 22 ? raw.slice(0, 21) + "…" : raw;
+                      const fontPx = Math.max(8, 10 / globalScale);
+                      ctx.font = `${fontPx}px sans-serif`;
                       ctx.textAlign = "center";
-                      ctx.fillText(node.label.slice(0, 24), node.x, node.y + size + 10 / globalScale);
+                      ctx.textBaseline = "middle";
+                      const padX = 4 / globalScale;
+                      const padY = 2 / globalScale;
+                      const tw = ctx.measureText(text).width;
+                      const lx = node.x;
+                      const ly = node.y + size + fontPx + 6 / globalScale;
+                      const bw = tw + padX * 2;
+                      const bh = fontPx + padY * 2;
+                      const r = 3 / globalScale;
+                      // Rounded-rect backdrop
+                      ctx.fillStyle = "#0b0f14d9";
+                      ctx.beginPath();
+                      ctx.roundRect(lx - bw / 2, ly - bh / 2, bw, bh, r);
+                      ctx.fill();
+                      ctx.fillStyle = "#e2e8f0";
+                      ctx.fillText(text, lx, ly);
+                      ctx.textBaseline = "alphabetic";
                     }
                   }}
                   linkColor={(l: unknown) => EDGE_COLOR[(l as { type: string }).type] ?? "#ffffff14"}
