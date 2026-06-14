@@ -19,6 +19,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.lang.NonNull;
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
+import javax.sql.DataSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,19 +43,54 @@ public class AdminApiController {
     private final AuditLogService auditLogService;
     private final AuditLogRepository auditLogRepository;
     private final QCResultRepository qcResultRepository;
+    private final DataSource dataSource;
 
     public AdminApiController(UserService userService,
             ClientService clientService,
             BatchService batchService,
             AuditLogService auditLogService,
             AuditLogRepository auditLogRepository,
-            QCResultRepository qcResultRepository) {
+            QCResultRepository qcResultRepository,
+            DataSource dataSource) {
         this.userService = userService;
         this.clientService = clientService;
         this.batchService = batchService;
         this.auditLogService = auditLogService;
         this.auditLogRepository = auditLogRepository;
         this.qcResultRepository = qcResultRepository;
+        this.dataSource = dataSource;
+    }
+
+    /**
+     * Database connection-pool health for the admin "degraded mode" banner.
+     * The pool already degrades gracefully (callers queue up to the 30s
+     * connection-timeout, then fail with a clear error rather than crashing) —
+     * this surfaces that pressure proactively so an admin knows operations may be
+     * slow before they hit a timeout. {@code degraded} is true when callers are
+     * waiting for a connection or the pool is fully checked out.
+     */
+    @GetMapping("/system/health")
+    public ResponseEntity<Map<String, Object>> systemHealth() {
+        Map<String, Object> body = new HashMap<>();
+        Map<String, Object> pool = new HashMap<>();
+        boolean degraded = false;
+        if (dataSource instanceof HikariDataSource hikari) {
+            HikariPoolMXBean mx = hikari.getHikariPoolMXBean();
+            if (mx != null) {
+                int active = mx.getActiveConnections();
+                int waiting = mx.getThreadsAwaitingConnection();
+                int max = hikari.getMaximumPoolSize();
+                pool.put("active", active);
+                pool.put("idle", mx.getIdleConnections());
+                pool.put("total", mx.getTotalConnections());
+                pool.put("waiting", waiting);
+                pool.put("max", max);
+                degraded = waiting > 0 || active >= max;
+            }
+        }
+        body.put("pool", pool);
+        body.put("degraded", degraded);
+        return ResponseEntity.ok(body);
     }
 
     // ── User Management ───────────────────────────────────────────────────────

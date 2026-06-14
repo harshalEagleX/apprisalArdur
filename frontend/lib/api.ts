@@ -304,6 +304,15 @@ export const getAdminBatches = (page = 0, status?: string, search?: string) => {
 export const getBatchById = (id: number) =>
   apiFetch<Batch>(`/api/admin/batches/${id}`);
 
+export type SystemHealth = {
+  degraded: boolean;
+  pool: { active?: number; idle?: number; total?: number; waiting?: number; max?: number };
+};
+
+// DB connection-pool health — drives the admin "system under load" banner.
+export const getSystemHealth = () =>
+  apiFetch<SystemHealth>("/api/admin/system/health");
+
 // ── DocStats (per-appraisal QC timing breakdown) ────────────────────────────
 export interface DocStatSummary {
   id: number;

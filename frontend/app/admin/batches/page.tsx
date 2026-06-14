@@ -2,13 +2,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Search, Plus, RefreshCw, ChevronLeft, ChevronRight,
-  FileStack, Clock3, CheckCircle2, Play, UserPlus, XCircle,
+  FileStack, Clock3, CheckCircle2, Play, UserPlus, XCircle, AlertCircle,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import {
   getAdminBatches, processQC, assignReviewer, deleteBatch,
   reconcileStuckBatches, cancelQC, getAdminDashboard, getAllUsers,
-  bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer,
+  bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer, getSystemHealth,
   type Batch, type User,
 } from "@/lib/api";
 import { removeJob } from "@/lib/jobs";
@@ -136,6 +136,7 @@ export default function BatchesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Batch | null>(null);
   const [recoveryTarget, setRecoveryTarget] = useState<Batch | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Batch | null>(null);
+  const [dbDegraded, setDbDegraded] = useState(false);
   const [actionLoading, setActionLoading] = useState<Set<number>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
@@ -294,6 +295,21 @@ export default function BatchesPage() {
     void load();
   });
 
+  // Poll DB connection-pool health so an admin sees a "system under load" banner
+  // before operations start timing out. The backend still degrades gracefully on
+  // its own; this is a proactive heads-up, not the failure handler.
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      getSystemHealth()
+        .then(h => { if (!cancelled) setDbDegraded(Boolean(h.degraded)); })
+        .catch(() => { /* health probe is best-effort; ignore transient errors */ });
+    };
+    check();
+    const timer = window.setInterval(check, 30_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+
   useEffect(() => {
     if (loading) return;
     adminBatchTimeline("frontend_table_displayed", {
@@ -409,6 +425,14 @@ export default function BatchesPage() {
 
   return (
     <div className="max-w-[1500px] p-6">
+      {dbDegraded && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-4 py-2.5">
+          <AlertCircle size={15} className="shrink-0 text-amber-400" />
+          <span className="text-sm text-amber-200">
+            System under load — database connections are saturated. Uploads and QC runs may be slow or briefly queue; they are not lost.
+          </span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col gap-4 mb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
