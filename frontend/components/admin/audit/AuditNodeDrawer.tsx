@@ -2,6 +2,7 @@
 import { X, ExternalLink } from "lucide-react";
 import type { GraphNode, GraphLink, ViewMode } from "./types";
 import { NODE_COLOR, isSupportingPending } from "./types";
+import { displayName } from "@/lib/displayName";
 
 interface Props {
   node: GraphNode;
@@ -72,6 +73,8 @@ function RuleBar({ passed, failed, total }: { passed: number; failed: number; to
 function fmtVal(key: string, val: string | number | null | undefined): string {
   if (val == null || val === "") return "—";
   const s = String(val);
+  // Reviewer fields are emails — show a friendly name, not the raw address.
+  if (key.toLowerCase().includes("reviewer")) return displayName(s);
   if ((key.toLowerCase().endsWith("at") || key.toLowerCase().endsWith("date")) && s.includes("T")) {
     try { return new Date(s).toLocaleString(); } catch { /* pass */ }
   }
@@ -80,6 +83,9 @@ function fmtVal(key: string, val: string | number | null | undefined): string {
   }
   return s;
 }
+
+// Shown prominently or already rendered elsewhere — keep them out of the generic list.
+const PROMOTED_META = new Set(["subjectAddress", "reviewerEmail"]);
 
 // ── Key label prettifier ──────────────────────────────────────────────────────
 function prettyKey(key: string): string {
@@ -130,6 +136,18 @@ export default function AuditNodeDrawer({
         {/* Status */}
         <StatusBadge status={node.status} fileType={node.meta?.fileType ? String(node.meta.fileType) : undefined} />
 
+        {/* Subject address — the property the document is actually about, taken
+            from extracted content (not the filename). The audit's identity anchor. */}
+        {node.meta.subjectAddress && (
+          <div className="rounded-md border border-indigo-500/20 bg-indigo-950/20 px-2.5 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-indigo-300/70">Subject Address</div>
+            <div className="mt-0.5 text-[12px] font-medium text-slate-100 break-words leading-snug">
+              {String(node.meta.subjectAddress)}
+            </div>
+            <div className="mt-0.5 text-[9px] text-slate-500">from document content</div>
+          </div>
+        )}
+
         {/* Rule bar (FILE & DECISION nodes only) */}
         {passed !== null && failed !== null && total !== null && (
           <RuleBar passed={passed} failed={failed} total={total} />
@@ -138,7 +156,7 @@ export default function AuditNodeDrawer({
         {/* Meta fields — grouped */}
         <div className="space-y-2">
           {Object.entries(node.meta)
-            .filter(([, v]) => v != null && v !== "")
+            .filter(([k, v]) => v != null && v !== "" && !PROMOTED_META.has(k))
             .map(([k, v]) => (
               <div key={k} className="flex flex-col gap-0.5">
                 <span className="text-[10px] uppercase tracking-wide text-slate-600">

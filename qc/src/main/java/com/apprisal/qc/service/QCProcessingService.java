@@ -723,6 +723,7 @@ public class QCProcessingService {
                 .pythonProcessingJobId(pythonResponse.processingJobId())
                 .cacheHit(pythonResponse.cacheHit())
                 .missingDocuments(missingDocumentsJson(pythonResponse))
+                .subjectAddress(subjectAddressFrom(pythonResponse))
                 .sourceDocumentHash(appraisal.getContentHash())
                 .sourceDocumentVersion(appraisal.getContentVersion())
                 .build();
@@ -1184,6 +1185,38 @@ public class QCProcessingService {
 
     private String decisionKey(QCRuleResult r) {
         return textOr(r.getRuleId(), "?") + "|" + textOr(r.getTargetField(), "");
+    }
+
+    /**
+     * Compose the subject property's address from the document's extracted fields
+     * (content, not filename) so the audit anchors identity on what the appraisal
+     * is actually about. Returns null when the address could not be extracted.
+     */
+    private String subjectAddressFrom(PythonQCResponse response) {
+        if (response == null || response.extractedFields() == null) {
+            return null;
+        }
+        Map<String, Object> f = response.extractedFields();
+        String street = fieldText(f.get("property_address"));
+        if (street == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(street);
+        String city  = fieldText(f.get("city"));
+        String state = fieldText(f.get("state"));
+        String zip   = fieldText(f.get("zip_code"));
+        if (city != null)  sb.append(", ").append(city);
+        if (state != null) sb.append(", ").append(state);
+        if (zip != null)   sb.append(" ").append(zip);
+        return sb.toString();
+    }
+
+    /** A non-blank, non-sentinel extracted field value, or null. */
+    private static String fieldText(Object value) {
+        if (value == null) return null;
+        String s = String.valueOf(value).trim();
+        if (s.isEmpty() || "null".equalsIgnoreCase(s) || s.matches("^__[A-Z0-9_]+__$")) return null;
+        return s;
     }
 
     /**

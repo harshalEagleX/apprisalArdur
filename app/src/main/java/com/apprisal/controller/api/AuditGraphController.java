@@ -250,7 +250,14 @@ public class AuditGraphController {
                     (f.getOrderId()  != null && f.getOrderId().toLowerCase().contains(qLow))
                 );
 
-                if (!batchHit && !fileHit) continue;
+                // Subject-address match: the property the appraisal is actually about,
+                // extracted from content. Filenames lie; the subject address is the
+                // reliable identity anchor for an audit search.
+                boolean addrHit = qcrs.stream().anyMatch(r ->
+                    r.getSubjectAddress() != null && r.getSubjectAddress().toLowerCase().contains(qLow)
+                );
+
+                if (!batchHit && !fileHit && !addrHit) continue;
             }
 
             String batchNodeId = "batch_" + batch.getId();
@@ -432,6 +439,7 @@ public class AuditGraphController {
         meta.put("lastActionAt",  ts(file.getUpdatedAt()));
 
         if (qcr != null) {
+            meta.put("subjectAddress", qcr.getSubjectAddress());
             meta.put("qcDecision",   qcr.getQcDecision()   != null ? qcr.getQcDecision().name()   : null);
             meta.put("finalDecision",qcr.getFinalDecision() != null ? qcr.getFinalDecision().name(): null);
             meta.put("qcReviewer",   qcr.getReviewedBy()   != null ? qcr.getReviewedBy().getUsername() : null);

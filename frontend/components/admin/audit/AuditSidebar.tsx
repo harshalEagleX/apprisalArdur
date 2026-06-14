@@ -88,7 +88,7 @@ export default function AuditSidebar({
             value={search}
             onChange={e => onSearchChange(e.target.value)}
             onKeyDown={e => e.key === "Enter" && onSearch()}
-            placeholder="Batch ID, file, reviewer, client…"
+            placeholder="Batch ID, subject address, file, reviewer, client…"
             className="w-full bg-[#161b22] border border-white/10 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-300 placeholder-slate-600 outline-none focus:border-indigo-500/60 transition-colors"
           />
           {search && (
