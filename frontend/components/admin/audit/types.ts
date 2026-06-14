@@ -123,6 +123,7 @@ export const NODE_SIZE: Record<NodeType, number> = {
 
 export const EDGE_COLOR: Record<string, string> = {
   CONTAINS:    "#ffffff22",
+  SUPPORTS:    "#22c55e55", // supporting doc -> appraisal it backs
   HAS_SESSION: "#f59e0b44",
   RESULTED_IN: "#f9743644",
   LED_TO:      "#06b6d444",

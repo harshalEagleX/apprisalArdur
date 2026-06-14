@@ -83,10 +83,11 @@ public class AuditGraphController {
             log.info("[graph/overview] batch {} → {} files, {} qcResults",
                 b.getId(), files.size(), qcrs.size());
 
+            String apprNodeId = appraisalNodeId(files);
             for (BatchFile file : files) {
                 QCResult qcr = qcByFileId.get(file.getId());
                 nodes.add(fileNode(file, qcr, b));
-                links.add(link("batch_" + b.getId(), "file_" + file.getId(), "CONTAINS", null));
+                linkFileByRole(links, "batch_" + b.getId(), apprNodeId, file);
 
                 if (qcr != null) {
                     appendSessionDecisionNodes(nodes, links, "file_" + file.getId(), qcr, false);
@@ -127,10 +128,11 @@ public class AuditGraphController {
 
         log.info("[graph/batch] {} → {} files, {} qcResults", batchId, files.size(), qcrs.size());
 
+        String apprNodeId = appraisalNodeId(files);
         for (BatchFile file : files) {
             QCResult qcr = qcByFileId.get(file.getId());
             nodes.add(fileNode(file, qcr, batch));
-            links.add(link("batch_" + batchId, "file_" + file.getId(), "CONTAINS", null));
+            linkFileByRole(links, "batch_" + batchId, apprNodeId, file);
 
             if (qcr != null) {
                 appendSessionDecisionNodes(nodes, links, "file_" + file.getId(), qcr, false);
@@ -163,7 +165,25 @@ public class AuditGraphController {
         nodes.add(fileNode(file, qcr, batch));
 
         if (qcr == null) {
-            log.info("[graph/file] {} has no QCResult", fileId);
+            // Supporting documents (contract / engagement) have no QC result of their
+            // own — their logical journey is the appraisal they back. Show the
+            // SUPPORTS link and the appraisal's full session/decision journey so the
+            // drawer's "Full file journey" is meaningful instead of a dead end.
+            if (batch != null
+                    && file.getFileType() != com.apprisal.common.entity.FileType.APPRAISAL) {
+                BatchFile appraisal = batchFileRepository.findByBatchId(batch.getId()).stream()
+                    .filter(f -> f.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL)
+                    .findFirst().orElse(null);
+                if (appraisal != null) {
+                    QCResult apprQcr = qcResultRepository.findByBatchFileId(appraisal.getId()).orElse(null);
+                    nodes.add(fileNode(appraisal, apprQcr, batch));
+                    links.add(link("file_" + fileId, "file_" + appraisal.getId(), "SUPPORTS", null));
+                    if (apprQcr != null) {
+                        appendSessionDecisionNodes(nodes, links, "file_" + appraisal.getId(), apprQcr, true);
+                    }
+                }
+            }
+            log.info("[graph/file] {} has no QCResult — showed supporting journey ({} nodes)", fileId, nodes.size());
             return ResponseEntity.ok(graph(nodes, links));
         }
 
@@ -197,11 +217,12 @@ public class AuditGraphController {
             List<QCResult>  qcrs  = qcResultRepository.findByBatchId(batch.getId());
             Map<Long, QCResult> qcByFileId = buildQcByFileId(qcrs);
 
+            String apprNodeId = appraisalNodeId(files);
             for (BatchFile file : files) {
                 String fileNodeId = "file_" + file.getId();
                 QCResult qcr = qcByFileId.get(file.getId());
                 if (seen.add(fileNodeId)) nodes.add(fileNode(file, qcr, batch));
-                links.add(link(batchNodeId, fileNodeId, "CONTAINS", null));
+                linkFileByRole(links, batchNodeId, apprNodeId, file);
                 if (qcr != null) appendSessionDecisionNodes(nodes, links, fileNodeId, qcr, false);
             }
         }
@@ -266,11 +287,12 @@ public class AuditGraphController {
             String batchNodeId = "batch_" + batch.getId();
             if (seen.add(batchNodeId)) nodes.add(batchNode(batch));
 
+            String apprNodeId = appraisalNodeId(files);
             for (BatchFile file : files) {
                 String fileNodeId = "file_" + file.getId();
                 QCResult qcr = qcByFileId.get(file.getId());
                 if (seen.add(fileNodeId)) nodes.add(fileNode(file, qcr, batch));
-                links.add(link(batchNodeId, fileNodeId, "CONTAINS", null));
+                linkFileByRole(links, batchNodeId, apprNodeId, file);
                 if (qcr != null) appendSessionDecisionNodes(nodes, links, fileNodeId, qcr, false);
                 if (nodes.size() >= 300) break;
             }
@@ -497,6 +519,32 @@ public class AuditGraphController {
         l.put("type",   type);
         if (timestamp != null) l.put("timestamp", timestamp);
         return l;
+    }
+
+    /** Node id of the batch's appraisal (its primary document), or null. */
+    private static String appraisalNodeId(List<BatchFile> files) {
+        return files.stream()
+            .filter(f -> f.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL)
+            .findFirst()
+            .map(f -> "file_" + f.getId())
+            .orElse(null);
+    }
+
+    /**
+     * Link a file into the graph by its real role: the batch CONTAINS the appraisal
+     * (its primary document); a supporting doc SUPPORTS that appraisal rather than
+     * hanging flat off the batch, so the graph reads as one document set and a
+     * supporting doc's journey leads through the appraisal it backs.
+     */
+    private void linkFileByRole(List<Map<String, Object>> links, String batchNodeId,
+                                String appraisalNodeId, BatchFile file) {
+        String fileNodeId = "file_" + file.getId();
+        boolean isAppraisal = file.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL;
+        if (isAppraisal || appraisalNodeId == null || appraisalNodeId.equals(fileNodeId)) {
+            links.add(link(batchNodeId, fileNodeId, "CONTAINS", null));
+        } else {
+            links.add(link(fileNodeId, appraisalNodeId, "SUPPORTS", null));
+        }
     }
 
     private static Map<String, Object> graph(List<Map<String, Object>> nodes,
