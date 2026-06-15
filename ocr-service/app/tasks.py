@@ -32,7 +32,7 @@ def qc_process_task(
     appraisal_path: str,
     engagement_path: Optional[str] = None,
     contract_path: Optional[str] = None,
-    model_provider: str = "ollama",
+    model_provider: str = "groq",
     text_model: str = "",
     vision_model: str = "",
     document_id: str = "",

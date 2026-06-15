@@ -84,7 +84,8 @@ def process_document(
         document_id: Identifier for DB storage (defaults to file name)
         document_type_override: Skip classification and use this type
         persist_metadata: Write OCR metadata and classification to DB
-        use_llm: Enable Tier 1 LLM extraction (falls back gracefully if Ollama down)
+        use_llm: deprecated no-op (the local model tier was removed); kept for
+            call-site compatibility. Extraction here uses spatial + embeddings.
         use_embeddings: Enable Tier 2 embedding extraction
         run_extraction: Run the full extraction pipeline
     """
@@ -93,7 +94,6 @@ def process_document(
     from app.services.document_classifier import document_classifier
     from app.ocr.table_detector import table_detector
     from app.extraction.spatial_tier3 import SpatialTier3Extractor
-    from app.extraction.tier1_llm import LLMTier1Extractor
     from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
     from app.extraction.tier_merger import TierMerger
     from app.extraction.document_reconciler import reconcile
@@ -163,17 +163,11 @@ def process_document(
     tier3_results = {r.canonical_name: r for _, r in tier3_result_set}
     tier3_found = len([r for r in tier3_results.values() if r.found])
 
-    # ---- Step 7: Tier 1 — LLM extraction for gaps ----
+    # ---- Step 7: (removed) the local LLM tier — extraction now relies on
+    # spatial + embeddings here; the live QC path uses the Groq overlays in
+    # app/qc/transaction.py. tier1_results stays empty so the merger is unchanged.
     tier1_results: Dict[str, ExtractionResult] = {}
-    if use_llm:
-        try:
-            llm_extractor = LLMTier1Extractor()
-            tier1_results = llm_extractor.extract_missing_fields(
-                normalized_pages, doc_type, tier3_results, adaptive_doc.total_pages
-            )
-        except Exception as exc:
-            logger.warning("Tier 1 LLM extraction failed: %s", exc)
-    tier1_found = len([r for r in tier1_results.values() if r.found])
+    tier1_found = 0
 
     # ---- Step 8: Tier 2 — Embedding extraction for remaining gaps ----
     tier2_results: Dict[str, ExtractionResult] = {}

@@ -97,58 +97,6 @@ def reconciliation_forbidden_terms(text) -> List[str]:
     return [t for t in canned_config.recon_forbidden if t in low]
 
 
-# ---------------------------------------------------------------------------
-# Optional LLM "why not what" judgement (opt-in, NOT in the hot QC path).
-# Run as an enrichment step or on reviewer demand — never per-rule inline, so a
-# slow/unavailable Ollama never blocks the engine. Returns None if unavailable.
-# ---------------------------------------------------------------------------
-
-_JUDGE_PROMPT = (
-    "You are an appraisal QC assistant. Assess the following narrative from an "
-    "appraisal report. Decide two things: (1) is it SPECIFIC to this particular "
-    "property/area rather than generic boilerplate, and (2) does it EXPLAIN WHY "
-    "(give reasoning/causation) rather than only stating WHAT was done.\n"
-    "Reply with ONLY a compact JSON object: "
-    '{"specific": true|false, "explains_why": true|false, "reason": "<=20 words"}.\n\n'
-    "Narrative:\n{text}\n"
-)
-
-
-@dataclass
-class LLMJudgement:
-    specific: bool
-    explains_why: bool
-    reason: str
-
-    @property
-    def acceptable(self) -> bool:
-        return self.specific and self.explains_why
-
-
-def llm_commentary_judgement(text):
-    """Ask the local text model to judge specificity + 'why not what'.
-    Returns an LLMJudgement, or None if the text is trivial or Ollama is down."""
-    s = (text or "").strip()
-    if len(s) < canned_config.min_chars:
-        return None
-    try:
-        from app.extraction.llm_resilience import resilient_ollama_call
-        raw = resilient_ollama_call(_JUDGE_PROMPT.format(text=s[:1500]), s[:1500])
-    except Exception:
-        return None
-    if not raw:
-        return None
-    import json
-    import re
-    m = re.search(r"\{.*\}", raw, re.S)
-    if not m:
-        return None
-    try:
-        d = json.loads(m.group(0))
-        return LLMJudgement(
-            specific=bool(d.get("specific")),
-            explains_why=bool(d.get("explains_why")),
-            reason=str(d.get("reason", ""))[:120],
-        )
-    except (ValueError, TypeError):
-        return None
+# Commentary quality is judged deterministically above (canned-phrase + specificity
+# checks). An earlier optional local-LLM "why not what" judge was removed — it had
+# no callers and the deterministic checks are the source of truth.

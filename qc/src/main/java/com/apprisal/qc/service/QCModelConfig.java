@@ -1,9 +1,11 @@
 package com.apprisal.qc.service;
 
 /**
- * Model selection carried from the admin UI into the Python QC service.
+ * Model selection carried into the Python QC service.
  *
- * Default local model uses llava:7b for both OCR-text reading and vision fallbacks.
+ * The platform uses Groq (cloud) for LLM extraction — a reasoning text model plus a
+ * multimodal vision fallback. The authoritative model ids live in the Python service
+ * config (GROQ_MODEL / GROQ_VISION_MODEL); these are display/telemetry labels.
  */
 public record QCModelConfig(
         String provider,
@@ -11,13 +13,13 @@ public record QCModelConfig(
         String visionModel) {
 
     public static QCModelConfig defaults() {
-        return new QCModelConfig("ollama", "llava:7b", "llava:7b");
+        return new QCModelConfig("groq", "gpt-oss-120b", "llama-4-scout");
     }
 
     public QCModelConfig {
-        provider = "ollama";
-        textModel = clean(textModel, "llava:7b");
-        visionModel = clean(visionModel, "llava:7b");
+        provider = "groq";
+        textModel = clean(textModel, "gpt-oss-120b");
+        visionModel = clean(visionModel, "llama-4-scout");
     }
 
     public String label() {

@@ -525,6 +525,12 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 - `scripts/disk_check.sh` — disk + inode threshold alert (verified: runs, flagged the dev disk at 91%).
 - `scripts/postgres_tuning.sql` — §4.1 server settings (max_connections 200, shared_buffers 8GB,
   effective_cache_size 24GB, work_mem 32MB, SSD costs, autovacuum) with restart guidance.
+- **APPLIED dev-scaled on the local 8GB box (2026-06-16):** the literal 48GB values would have
+  stopped PG18 from restarting (shared_buffers 8GB = 100% RAM), so the local box got
+  RAM-appropriate values — `shared_buffers=1GB`, `max_connections=150`, `effective_cache_size=4GB`,
+  `work_mem=16MB`, `maintenance_work_mem=256MB`, `max_wal_size=1GB`, SSD costs + autovacuum tuning.
+  PG18 restarted clean (ready ~1s); all `pending_restart=f`. The committed `.sql` keeps the
+  **production** 48GB values — run it (or a host-scaled variant) on the real deployment box.
 - **Open (operational):** schedule the backups (cron/systemd timer), apply `postgres_tuning.sql`
   + restart on the deployment host, and run a restore drill (the Phase 5 gate). Object storage
   remains out of scope per the locked decision (local FS + backups).

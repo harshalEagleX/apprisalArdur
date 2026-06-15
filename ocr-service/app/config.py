@@ -19,12 +19,6 @@ ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 MODEL_VERSION: str = os.getenv("MODEL_VERSION", "adaptive-1.0.0")
 
-OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_TEXT_MODEL: str = os.getenv("OLLAMA_TEXT_MODEL", "mistral:7b")
-OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "llava:13b")
-OLLAMA_TIMEOUT_TEXT: int = int(os.getenv("OLLAMA_TIMEOUT_TEXT", "30"))
-OLLAMA_TIMEOUT_VISION: int = int(os.getenv("OLLAMA_TIMEOUT_VISION", "120"))
-
 # Google Cloud Vision (comparable-photo analysis: SCA-27 / SCA-16V).
 # VISION_ENABLED gates all cloud calls; the client also requires the
 # google-cloud-vision library AND credentials (a service-account JSON via

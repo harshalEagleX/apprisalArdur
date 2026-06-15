@@ -141,7 +141,7 @@ class TierMerger:
     def merge(
         self,
         tier3_results: Dict[str, ExtractionResult],  # spatial + pattern (always runs)
-        tier1_results: Dict[str, ExtractionResult],  # LLM (may be empty if Ollama down)
+        tier1_results: Dict[str, ExtractionResult],  # legacy LLM tier — now always empty (removed)
         tier2_results: Dict[str, ExtractionResult],  # embeddings (may be empty)
         document_type: str,
     ) -> Dict[str, MergedFieldResult]:

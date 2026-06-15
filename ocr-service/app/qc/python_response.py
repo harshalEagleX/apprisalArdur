@@ -188,21 +188,23 @@ def _rule_to_json(r: RuleResult) -> Dict:
     }
 
 
-# Human-readable labels for the pipeline stages emitted by the orchestrator, so
-# the admin docStats view reads in plain language, not snake_case tokens.
+# Plain-language stage names describing WHAT part of the file set is being read —
+# in terms a reviewer/admin understands, never implementation jargon (no "(LLM)",
+# no internal step names). The "how" (model inference, throttle) is a separate
+# metric, not part of the user-facing name.
 _STAGE_LABELS = {
-    "extract_appraisal": "Appraisal OCR + field extraction",
-    "sca_grid": "Sales-comparison grid",
-    "sca_llm": "Comparable adjustments (LLM)",
-    "subject_llm": "Subject/contract gap-fill (LLM)",
-    "sketch": "Building-sketch GLA",
-    "photos": "Photograph analysis",
-    "locate": "Field location (review highlights)",
-    "extract_engagement": "Engagement letter extraction",
-    "extract_contract": "Sales contract extraction",
-    "rules": "QC rule evaluation",
-    "extraction": "Document extraction",
-    "done": "Finalize",
+    "extract_appraisal": "Reading the appraisal report",
+    "sca_grid": "Comparable sales grid",
+    "sca_llm": "Comparable sales analysis",
+    "subject_llm": "Subject & contract details",
+    "sketch": "Floor plan & living area",
+    "photos": "Property photographs",
+    "locate": "Preparing review highlights",
+    "extract_engagement": "Reading the engagement letter",
+    "extract_contract": "Reading the sales contract",
+    "rules": "Running quality checks",
+    "extraction": "Reading the documents",
+    "done": "Finishing up",
 }
 
 
@@ -324,7 +326,7 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
 def report_to_python_qc_response(
     report: QCReport, ctx: QCContext, *,
     processing_time_ms: int = 0, document_id: str = "", job_id: str = "",
-    model_provider: str = "ollama", text_model: str = "", vision_model: str = "",
+    model_provider: str = "groq", text_model: str = "", vision_model: str = "",
     file_hash: str = "",
 ) -> Dict:
     """Build the PythonQCResponse dict from a QCReport + context."""

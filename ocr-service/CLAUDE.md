@@ -210,16 +210,16 @@ Do not optimize LLM call latency by reducing context size, changing prompts, or 
 
 ---
 
-### P-14 Dual-Model Strategy — Text vs Vision
+### P-14 Dual-Model Strategy — Text vs Vision (Groq cloud)
 
-This system uses two local model types with fundamentally different performance profiles:
+This system uses **Groq (cloud)** for LLM work — there is no local model server. Two model types with different profiles:
 
-- **Fast text model** (example: mistral:7b) — 1-3 seconds per call. Use for all commentary analysis, narrative quality assessment, and text-heavy field enrichment.
-- **Vision model** (example: llava:13b) — 30-45 seconds per call. Use ONLY for image-based tasks such as checkbox detection and photograph analysis.
+- **Reasoning text model** (`GROQ_MODEL`, e.g. `openai/gpt-oss-120b`) — used for structured extraction of grid/subject/contract text and narrative analysis. JSON output forced, low reasoning effort.
+- **Multimodal vision model** (`GROQ_VISION_MODEL`, e.g. `meta-llama/llama-4-scout`) — used ONLY for image tasks (comparable-photo analysis) as a fallback when Google Vision is unavailable.
 
-On constrained hardware, these models cannot run simultaneously. The pipeline routes to the correct model type based on the nature of the task. A helper function selects the fast text model for text analysis and the vision model for image tasks.
+The shared Groq **TPM budget** (`GROQ_TPM_LIMIT`, default 6000) is the real throughput ceiling, enforced by a Redis distributed token bucket shared across all Celery workers (see `readme/SCALABILITY_PLAN.md`). Never route a text-only task to the vision model, or an image task to the text model.
 
-Never route a text-only task to the vision model. Never route an image task to the text model.
+> The previous local-Ollama tier (mistral/llava) has been **removed entirely** — it was unused. All LLM extraction goes through `app/extraction/llm_groq.py`.
 
 ---
 

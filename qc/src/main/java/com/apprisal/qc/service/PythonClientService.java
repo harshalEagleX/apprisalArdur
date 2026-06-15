@@ -431,7 +431,7 @@ public class PythonClientService {
         // worker is probably not running — surface that early so the caller can
         // fail clearly without starting a duplicate sync request for the same job.
         Instant workerGraceEnd  = Instant.now().plusSeconds(180);
-        int pollIntervalMs      = 6_000; // 6 s between polls — Ollama takes 30-120 s per job
+        int pollIntervalMs      = 6_000; // 6 s between polls — a doc takes tens of seconds (OCR + Groq)
         int attempt             = 0;
 
         while (Instant.now().isBefore(deadline)) {
@@ -570,7 +570,7 @@ public class PythonClientService {
      */
     public boolean isHealthy() {
         try {
-            // Use /live (instant, no DB/Ollama checks) — /health is expensive (~7s)
+            // Use /live (instant, no DB checks) — /health is heavier
             String url = config.getUrl() + "/live";
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
             return response.getStatusCode().is2xxSuccessful();

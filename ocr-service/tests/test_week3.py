@@ -1,9 +1,8 @@
 """
 Week Three Exit Criteria Tests — Days 13-20
 
-Tests cover the three-tier extraction ensemble:
-  Day 13 — LLM Tier 1: Ollama calling, prompt parsing, hallucination detection
-  Day 14 — Prompt refinement measurable: critical fields >70% on test set
+Tests cover the extraction ensemble (the local LLM tier-1 was removed; live LLM
+extraction is the Groq overlays in app/qc/transaction.py):
   Day 15 — Embedding Tier 2: concept vectors, candidate segments, similarity
   Day 16 — Embedding calibrated: thresholds defined per field
   Day 17 — Tier merger: agreement patterns produce correct confidence levels
@@ -30,106 +29,6 @@ MSL_APR = UPLOADS / "EQSS/MSL/appraisal/96 Baell Trace Ct SE.pdf"
 
 def _skip(path): return pytest.mark.skipif(not path.exists(), reason=f"Missing: {path}")
 
-
-# ===========================================================================
-# Day 13 — LLM Tier 1
-# ===========================================================================
-
-class TestDay13LLMTier1:
-
-    def test_llm_extractor_imports(self):
-        from app.extraction.tier1_llm import LLMTier1Extractor
-        e = LLMTier1Extractor()
-        assert e is not None
-
-    def test_prompt_builds_without_error(self):
-        from app.extraction.tier1_llm import _build_extraction_prompt
-        p = _build_extraction_prompt(
-            "subject",
-            ["borrower_name", "lender_name", "property_rights"],
-            "Borrower: John Smith\nLender: First Bank\nProperty Rights: Fee Simple",
-            "appraisal_report",
-        )
-        assert "borrower_name" in p
-        assert "lender_name" in p
-        assert "Fee Simple" not in p or "property_rights" in p  # field in prompt
-
-    def test_llm_response_parser_handles_valid_json(self):
-        from app.extraction.tier1_llm import _parse_llm_response
-        response = '{"fields": {"borrower_name": {"found": true, "value": "John Smith", "source_text": "Borrower: John Smith"}}}'
-        parsed = _parse_llm_response(response)
-        assert "borrower_name" in parsed
-        assert parsed["borrower_name"]["value"] == "John Smith"
-
-    def test_llm_response_parser_handles_markdown_fences(self):
-        from app.extraction.tier1_llm import _parse_llm_response
-        response = '```json\n{"fields": {"city": {"found": true, "value": "Miami", "source_text": "City: Miami"}}}\n```'
-        parsed = _parse_llm_response(response)
-        assert "city" in parsed
-
-    def test_llm_response_parser_handles_not_found(self):
-        from app.extraction.tier1_llm import _parse_llm_response
-        response = '{"fields": {"borrower_name": {"found": false, "value": null, "source_text": null}}}'
-        parsed = _parse_llm_response(response)
-        assert parsed["borrower_name"]["found"] is False
-
-    def test_llm_response_parser_handles_malformed(self):
-        from app.extraction.tier1_llm import _parse_llm_response
-        result = _parse_llm_response("This is not JSON at all")
-        assert result == {}
-
-    def test_hallucination_detection_verified(self):
-        from app.extraction.tier1_llm import _verify_value_in_source
-        # Value appears in source AND source appears in document
-        score = _verify_value_in_source(
-            "John Smith",
-            "Borrower: John Smith signed on",
-            "The borrower Borrower: John Smith signed on the dotted line",
-        )
-        assert score >= 0.85
-
-    def test_hallucination_detection_value_not_in_source(self):
-        from app.extraction.tier1_llm import _verify_value_in_source
-        # Value does NOT appear in cited source — hallucination
-        score = _verify_value_in_source(
-            "Jane Doe",
-            "Borrower: John Smith",
-            "Borrower: John Smith applied for the loan",
-        )
-        assert score < 0.5
-
-    def test_hallucination_detection_source_not_in_document(self):
-        from app.extraction.tier1_llm import _verify_value_in_source
-        # Source text was invented — not in the actual document
-        score = _verify_value_in_source(
-            "Miami",
-            "The property is located in Miami Florida",
-            "Property Address 90 NE 32nd St",  # no mention of Miami
-        )
-        assert score < 0.85  # should be flagged
-
-    def test_section_field_groups_cover_important_fields(self):
-        from app.extraction.tier1_llm import _SECTION_FIELDS
-        all_llm_fields = {f for fields in _SECTION_FIELDS.values() for f in fields}
-        # LLM handles ALL fields that spatial/embedding fail on
-        assert "property_rights" in all_llm_fields
-        assert "assignment_type" in all_llm_fields
-        assert "appraiser_name" in all_llm_fields
-        assert "market_conditions_commentary" in all_llm_fields
-        assert "neighborhood_description" in all_llm_fields
-
-    @pytest.mark.skipif(not MSL_ENG.exists(), reason="Document not available")
-    def test_llm_extracts_from_real_engagement(self):
-        import fitz
-        from app.extraction.tier1_llm import LLMTier1Extractor
-        doc = fitz.open(str(MSL_ENG))
-        pages = {i + 1: doc[i].get_text("text") for i in range(min(3, len(doc)))}
-        doc.close()
-        e = LLMTier1Extractor()
-        if not e.is_available():
-            pytest.skip("Ollama not available")
-        results = e.extract_missing_fields(pages, "engagement_letter", {}, total_pages=10)
-        assert isinstance(results, dict)
 
 
 # ===========================================================================

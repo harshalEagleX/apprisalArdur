@@ -259,7 +259,7 @@ public class QCApiController {
             idle.put("percent", 0);
             idle.put("smoothedPercent", 0);
             idle.put("running", false);
-            idle.put("modelProvider", "ollama");
+            idle.put("modelProvider", QCModelConfig.defaults().provider());
             idle.put("modelName", QCModelConfig.defaults().textModel());
             idle.put("visionModel", QCModelConfig.defaults().visionModel());
             idle.put("subStage", null);

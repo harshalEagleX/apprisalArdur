@@ -81,7 +81,7 @@ async def startup():
 
 @app.get("/live")
 async def live():
-    """Instant liveness probe (no DB/Ollama checks) — the Java backend calls this
+    """Instant liveness probe (no DB checks) — the Java backend calls this
     before each QC batch to confirm the OCR service is reachable."""
     return {"status": "alive"}
 
@@ -101,15 +101,12 @@ def _celery_worker_running() -> bool:
 
 @app.get("/health")
 async def health():
-    from app.extraction.llm_resilience import check_ollama_health
-    ollama_status = check_ollama_health()
     return {
         "status": "ok",
         "schema_version": schema_loader.schema_version,
         "field_count": len(schema_loader.all_fields()),
         "model_version": MODEL_VERSION,
         "database": "connected" if verify_connection() else "disconnected",
-        "ollama": ollama_status,
         "celery_worker_running": _celery_worker_running(),
     }
 
@@ -166,7 +163,7 @@ async def qc_process(
     file: UploadFile = File(...),                       # appraisal report (required)
     engagement_letter: Optional[UploadFile] = File(None),
     contract_file: Optional[UploadFile] = File(None),
-    model_provider: str = Form("ollama"),
+    model_provider: str = Form("groq"),
     text_model: str = Form(""),
     vision_model: str = Form(""),
     progress_token: Optional[str] = Form(None),
@@ -304,7 +301,7 @@ async def qc_submit(
     file: UploadFile = File(...),                       # appraisal report (required)
     engagement_letter: Optional[UploadFile] = File(None),
     contract_file: Optional[UploadFile] = File(None),
-    model_provider: str = Form("ollama"),
+    model_provider: str = Form("groq"),
     text_model: str = Form(""),
     vision_model: str = Form(""),
     batch_id: Optional[str] = Form(None),
