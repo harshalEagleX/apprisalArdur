@@ -32,7 +32,7 @@ from app.extraction import llm_groq
 
 logger = logging.getLogger(__name__)
 
-SUBJECT_LLM_VERSION = "0.1.19"
+SUBJECT_LLM_VERSION = "0.1.20"
 
 # Confidence stamps. Verbatim-validated values sit just above the structured
 # cutoff (0.75) — the value literally appears on the page. Enum/checkbox-style
@@ -326,6 +326,24 @@ def _validate(spec, value: str, page_text: str) -> Optional[Tuple[str, float]]:
     return v, CONF_VALIDATED
 
 
+# Land-use category labels the LLM sometimes returns when the boundary fill-in is
+# blank/sparse — a real boundary is directional/geographic prose, never one of these.
+_LANDUSE_LABEL = re.compile(
+    r"^\s*(high|low|avg|average)?\s*"
+    r"(commercial|one[\- ]?unit|multi[\- ]?family|2[\- ]?4 ?unit|other|vacant)\s*%?\s*$",
+    re.I)
+
+
+def _field_sane(field: str, value: str) -> bool:
+    """Field-specific guard beyond verbatim validation: rejects a value the LLM
+    mis-mapped from a neighbouring cell (e.g. a land-use % label returned as the
+    neighborhood boundaries)."""
+    if field == "neighborhood_boundaries":
+        if "%" in value or _LANDUSE_LABEL.match(value):
+            return False
+    return True
+
+
 def extract_gap_fields_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, float]]:
     """Return {field: (value, confidence)} for the requested missing fields,
     one LLM call per page group that has gaps.
@@ -366,7 +384,7 @@ def extract_gap_fields_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, flo
             if field not in wanted[g] or raw is None:
                 continue
             ok = _validate(table[field], str(raw), text)
-            if ok is not None:
+            if ok is not None and _field_sane(field, ok[0]):
                 out[field] = ok
     if out:
         logger.info(

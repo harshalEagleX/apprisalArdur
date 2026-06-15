@@ -319,6 +319,35 @@ def _overlay_subject_llm(rs, pdf, dtype):
             confidence=conf, source_page=1,
             normalization_applied=[f"subject_llm:{SUBJECT_LLM_VERSION}"],
         )
+
+    # Extraction sometimes reads the one-unit Low/High range cells in the wrong
+    # order; High < Low is never a valid entry, so swap the two values. This is an
+    # extraction correction (not a rule change) — N-3 still judges whether the
+    # predominant sits within the range and whether comps fall inside it.
+    import re as _re
+    from dataclasses import replace as _replace
+
+    def _num(v):
+        m = _re.sub(r"[^\d.]", "", str(v or ""))
+        try:
+            return float(m) if m else None
+        except ValueError:
+            return None
+
+    for lo_f, hi_f in (("price_low", "price_high"), ("age_low", "age_high")):
+        lo, hi = existing.get(lo_f), existing.get(hi_f)
+        if not (lo and hi and lo.found and hi.found):
+            continue
+        ln, hn = _num(lo.value), _num(hi.value)
+        if ln is not None and hn is not None and ln > hn:
+            existing[lo_f] = _replace(
+                lo, value=hi.value, raw_source_text=hi.raw_source_text,
+                normalization_applied=list(lo.normalization_applied) + ["range_order_fix"])
+            existing[hi_f] = _replace(
+                hi, value=lo.value, raw_source_text=lo.raw_source_text,
+                normalization_applied=list(hi.normalization_applied) + ["range_order_fix"])
+            logger.info("Range order fix: swapped %s/%s (was %s > %s) for %s",
+                        lo_f, hi_f, lo.value, hi.value, pdf.name)
     return _rebuild(rs, dtype, existing)
 
 
