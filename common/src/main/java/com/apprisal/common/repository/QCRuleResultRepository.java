@@ -1,6 +1,7 @@
 package com.apprisal.common.repository;
 
 import com.apprisal.common.entity.QCRuleResult;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -140,6 +141,37 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
         ORDER BY rr.firstPresentedAt ASC
         """)
     List<QCRuleResult> findOverdueReviewItems(@Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * COUNT of overdue review items (Scaling QL-5). Lets the SLA dashboard report the
+     * 4h/8h totals without materialising the full entity lists just to call size().
+     */
+    @Query("""
+        SELECT COUNT(rr) FROM QCRuleResult rr
+        WHERE rr.needsVerification = true
+          AND rr.reviewerVerified IS NULL
+          AND rr.firstPresentedAt IS NOT NULL
+          AND rr.firstPresentedAt < :cutoff
+          AND rr.qcResult.supersededAt IS NULL
+        """)
+    long countOverdueReviewItems(@Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * Bounded overdue list (Scaling QL-5) — only the top-N most overdue rows are shown
+     * on the dashboard, so fetch N, not all. To-one JOIN FETCHes are pagination-safe.
+     */
+    @Query("""
+        SELECT rr FROM QCRuleResult rr
+        JOIN FETCH rr.qcResult qr
+        JOIN FETCH qr.batchFile bf
+        WHERE rr.needsVerification = true
+          AND rr.reviewerVerified IS NULL
+          AND rr.firstPresentedAt IS NOT NULL
+          AND rr.firstPresentedAt < :cutoff
+          AND qr.supersededAt IS NULL
+        ORDER BY rr.firstPresentedAt ASC
+        """)
+    List<QCRuleResult> findOverdueReviewItems(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
 
     /**
      * Count rule rows on a batch's ACTIVE (non-superseded) QC result(s) that were

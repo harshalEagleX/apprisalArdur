@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -35,14 +36,18 @@ public class PythonClientService {
 
     private static final Logger log = LoggerFactory.getLogger(PythonClientService.class);
 
-    private final RestTemplate restTemplate;
+    private final RestTemplate restTemplate;          // short-timeout: health/submit/poll/rules/feedback
+    private final RestTemplate processRestTemplate;   // long-timeout: synchronous /qc/process only (QL-8)
     private final OcrServiceConfig config;
     private final ObjectMapper objectMapper;
     private final ThreadLocal<Integer> lastRetryCount = ThreadLocal.withInitial(() -> 0);
 
-    public PythonClientService(RestTemplate restTemplate, OcrServiceConfig config,
+    public PythonClientService(RestTemplate restTemplate,
+                               @Qualifier("pythonProcessRestTemplate") RestTemplate processRestTemplate,
+                               OcrServiceConfig config,
                                ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
+        this.processRestTemplate = processRestTemplate;
         this.config = config;
         this.objectMapper = objectMapper;
     }
@@ -144,7 +149,8 @@ public class PythonClientService {
         try {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                ResponseEntity<PythonQCResponse> response = restTemplate.exchange(
+                // Long synchronous OCR+QC call → dedicated long-timeout client (QL-8).
+                ResponseEntity<PythonQCResponse> response = processRestTemplate.exchange(
                         url,
                         HttpMethod.POST,
                         requestEntity,

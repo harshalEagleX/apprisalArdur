@@ -154,15 +154,16 @@ public class VerificationService {
     @Transactional
     public void markItemsPresented(@NonNull Long qcResultId, @NonNull String sessionToken) {
         LocalDateTime now = LocalDateTime.now();
-        for (QCRuleResult item : qcRuleResultRepository.findPendingVerificationForQcResult(qcResultId)) {
+        List<QCRuleResult> items = qcRuleResultRepository.findPendingVerificationForQcResult(qcResultId);
+        for (QCRuleResult item : items) {
             if (item.getFirstPresentedAt() == null) {
                 item.setFirstPresentedAt(now);
             }
             if (item.getReviewSessionToken() == null || item.getReviewSessionToken().isBlank()) {
                 item.setReviewSessionToken(sessionToken);
             }
-            qcRuleResultRepository.save(item);
         }
+        qcRuleResultRepository.saveAll(items);  // QL-12: one batched flush, not N saves
     }
 
     /**
@@ -372,12 +373,13 @@ public class VerificationService {
         QCResult qcResult = getForVerification(qcResultId);
         List<QCRuleResult> items = getVerificationItems(qcResultId);
 
+        LocalDateTime verifiedAt = LocalDateTime.now();
         for (QCRuleResult item : items) {
             item.setReviewerVerified(true);
             item.setReviewerComment("Bulk passed");
-            item.setVerifiedAt(LocalDateTime.now());
-            qcRuleResultRepository.save(item);
+            item.setVerifiedAt(verifiedAt);
         }
+        qcRuleResultRepository.saveAll(items);  // QL-12: one batched flush, not N saves
 
         qcResult.setFinalDecision(FinalDecision.PASS);
         qcResult.setReviewedBy(reviewer);

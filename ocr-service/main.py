@@ -86,6 +86,19 @@ async def live():
     return {"status": "alive"}
 
 
+def _celery_worker_running() -> bool:
+    """True if at least one Celery worker answers a ping within 1s.
+
+    Drives PythonClientService.isCeleryWorkerRunning() on the Java side: when this is
+    false (Celery/Redis absent or no worker up) Java uses the synchronous /qc/process
+    path instead of the queue — graceful degradation (P-6)."""
+    try:
+        from celery_app import celery_app
+        return bool(celery_app.control.inspect(timeout=1.0).ping())
+    except Exception:
+        return False
+
+
 @app.get("/health")
 async def health():
     from app.extraction.llm_resilience import check_ollama_health
@@ -97,6 +110,7 @@ async def health():
         "model_version": MODEL_VERSION,
         "database": "connected" if verify_connection() else "disconnected",
         "ollama": ollama_status,
+        "celery_worker_running": _celery_worker_running(),
     }
 
 
@@ -228,6 +242,100 @@ async def qc_progress(token: str):
     if snap is None:
         raise HTTPException(status_code=404, detail="Unknown progress token")
     return snap
+
+
+# ---------------------------------------------------------------------------
+# Durable job queue (Scaling Phase 1) — Celery-backed async QC.
+# Contract matches PythonClientService: POST /qc/submit + GET /qc/job/{id}.
+# ---------------------------------------------------------------------------
+
+def _sha256_file(path: Optional[Path]) -> str:
+    """Content hash of a file (matches the Java content-hash dedup scheme)."""
+    if path is None:
+        return ""
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@app.post("/qc/submit")
+async def qc_submit(
+    file: UploadFile = File(...),                       # appraisal report (required)
+    engagement_letter: Optional[UploadFile] = File(None),
+    contract_file: Optional[UploadFile] = File(None),
+    model_provider: str = Form("ollama"),
+    text_model: str = Form(""),
+    vision_model: str = Form(""),
+    batch_id: Optional[str] = Form(None),
+    batch_file_id: Optional[str] = Form(None),
+    qc_result_id: Optional[str] = Form(None),
+    correlation_id: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
+    source_hash: Optional[str] = Form(None),
+):
+    """Enqueue a QC job on the Celery queue and return its job_id immediately.
+
+    Java's PythonClientService.submitQCJob calls this, then polls GET /qc/job/{id}.
+    The heavy OCR+LLM+rules work runs on a Celery worker, so the HTTP request returns
+    in milliseconds and a Java/Python restart never loses the in-flight document."""
+    import os as _os
+    from app.tasks import qc_process_task
+
+    appraisal = _save_upload(file)
+    engagement = _save_upload(engagement_letter)
+    contract = _save_upload(contract_file)
+    file_hash = source_hash or _sha256_file(appraisal)
+
+    try:
+        async_result = qc_process_task.apply_async(kwargs={
+            "appraisal_path": str(appraisal),
+            "engagement_path": str(engagement) if engagement else None,
+            "contract_path": str(contract) if contract else None,
+            "model_provider": model_provider,
+            "text_model": text_model,
+            "vision_model": vision_model,
+            "document_id": file.filename or "",
+            "source_hash": file_hash,
+        })
+    except Exception as exc:
+        # Broker unreachable — clean up the temp uploads and fail clearly (503) so the
+        # Java client falls back to the synchronous /qc/process path (P-6).
+        for p in (appraisal, engagement, contract):
+            if p:
+                try:
+                    _os.remove(p)
+                except OSError:
+                    pass
+        logging.getLogger(__name__).error("QC submit (enqueue) failed: %s", exc)
+        raise HTTPException(status_code=503, detail=f"QC queue unavailable: {exc}")
+
+    logging.getLogger(__name__).info("QC job queued: job_id=%s file=%s", async_result.id, file.filename)
+    return {"job_id": async_result.id, "status": "QUEUED", "file_hash": file_hash}
+
+
+@app.get("/qc/job/{job_id}")
+async def qc_job(job_id: str):
+    """Status/result for a queued QC job — polled by PythonClientService.waitForJobResult.
+
+    Returns Celery states: PENDING (queued / unknown), STARTED (worker running it),
+    SUCCESS (result attached), FAILURE (error attached)."""
+    try:
+        from celery.result import AsyncResult
+        from celery_app import celery_app
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"QC queue unavailable: {exc}")
+
+    res = AsyncResult(job_id, app=celery_app)
+    state = res.state
+    body: dict = {"job_id": job_id, "status": state}
+    if state == "SUCCESS":
+        body["result"] = res.result          # the PythonQCResponse dict from qc_process_task
+    elif state == "FAILURE":
+        body["error"] = str(res.result)      # exception → string for the Java error message
+    return body
 
 
 # ---------------------------------------------------------------------------

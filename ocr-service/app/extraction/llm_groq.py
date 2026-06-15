@@ -18,6 +18,7 @@ import base64
 import collections
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -35,13 +36,92 @@ logger = logging.getLogger(__name__)
 _tpm_lock = threading.Lock()
 _tpm_log: Deque[Tuple[float, int]] = collections.deque()
 
+# ── Distributed TPM throttle (Scaling Phase 2 / QL-2) ──────────────────────────
+# The per-process throttle below is correct for ONE process, but each Celery worker
+# keeps its own counter — so N workers collectively blow the real Groq account TPM
+# (a flood of 429s). A Redis token bucket shares the GROQ_TPM_LIMIT budget across
+# every worker. When Redis is unavailable we fall back to the in-process throttle so
+# a single process still behaves correctly (graceful degradation, P-6).
+_TPM_KEY = "groq:tpm:extraction"
+_redis_client = None
+_redis_init = False
 
-def _throttle_tpm(est_tokens: int) -> float:
-    """Block until sending `est_tokens` keeps the last-60s usage under the limit.
-    This turns a would-be 429 into an orderly wait — a multi-page grid is then
-    processed in steps within the budget. Returns the milliseconds actually
-    slept, so the caller can attribute pre-wait time to the throttle (not the
-    model)."""
+# Atomic token-bucket step: refill by elapsed time, allow if enough tokens, else
+# report how long to wait. KEYS[1]=bucket; ARGV=now(s), rate(tok/s), cap, need.
+_TPM_LUA = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local rate = tonumber(ARGV[2])
+local cap = tonumber(ARGV[3])
+local need = tonumber(ARGV[4])
+local data = redis.call('HMGET', key, 'tokens', 'ts')
+local tokens = tonumber(data[1])
+local ts = tonumber(data[2])
+if tokens == nil then tokens = cap; ts = now end
+local delta = now - ts
+if delta < 0 then delta = 0 end
+tokens = math.min(cap, tokens + delta * rate)
+local allow = 0
+local wait = 0
+if tokens >= need then
+  tokens = tokens - need
+  allow = 1
+else
+  wait = (need - tokens) / rate
+end
+redis.call('HSET', key, 'tokens', tokens, 'ts', now)
+redis.call('PEXPIRE', key, 120000)
+return {allow, tostring(wait)}
+"""
+
+
+def _redis():
+    """Lazy, cached Redis client shared with the Celery broker. Returns None (once)
+    when Redis is not configured/reachable so callers fall back to the local throttle."""
+    global _redis_client, _redis_init
+    if _redis_init:
+        return _redis_client
+    _redis_init = True
+    url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    try:
+        import redis as _redislib
+        client = _redislib.Redis.from_url(url, socket_timeout=1.0, socket_connect_timeout=1.0)
+        client.ping()
+        _redis_client = client
+        logger.info("Groq TPM throttle: distributed Redis token bucket active (%s)", url)
+    except Exception as exc:
+        logger.warning("Groq TPM throttle: Redis unavailable (%s) — using in-process throttle", exc)
+        _redis_client = None
+    return _redis_client
+
+
+def _throttle_tpm_redis(est_tokens: int) -> Optional[float]:
+    """Distributed throttle. Returns ms slept, or None if Redis is unavailable."""
+    client = _redis()
+    if client is None:
+        return None
+    limit = max(1, config.GROQ_TPM_LIMIT)
+    need = min(max(1, est_tokens), limit)   # a single call can never need more than the whole budget
+    rate = limit / 60.0
+    slept_ms = 0.0
+    try:
+        for _ in range(180):  # safety cap (~ up to a few minutes of waiting)
+            allow, wait_s = client.eval(_TPM_LUA, 1, _TPM_KEY, time.time(), rate, limit, need)
+            if int(allow) == 1:
+                return slept_ms
+            sleep_for = min(max(float(wait_s), 0.05), 5.0)
+            logger.info("Groq TPM budget reached (distributed %d/min); waiting %.2fs", limit, sleep_for)
+            _t = time.perf_counter()
+            time.sleep(sleep_for)
+            slept_ms += (time.perf_counter() - _t) * 1000.0
+        return slept_ms
+    except Exception as exc:
+        logger.warning("Distributed TPM throttle failed (%s) — falling back to in-process", exc)
+        return None
+
+
+def _throttle_tpm_local(est_tokens: int) -> float:
+    """Per-process rolling-60s-window throttle (fallback when Redis is unavailable)."""
     limit = max(1, config.GROQ_TPM_LIMIT)
     slept_ms = 0.0
     with _tpm_lock:
@@ -61,6 +141,17 @@ def _throttle_tpm(est_tokens: int) -> float:
                 _tpm_log.popleft()
         _tpm_log.append((time.time(), est_tokens))
     return slept_ms
+
+
+def _throttle_tpm(est_tokens: int) -> float:
+    """Block until sending `est_tokens` keeps usage under GROQ_TPM_LIMIT, shared
+    across all worker processes via a Redis token bucket (Phase 2 / QL-2). Falls back
+    to the per-process throttle when Redis is unavailable (P-6). Returns ms slept, so
+    the caller attributes pre-wait time to the throttle (not the model)."""
+    distributed = _throttle_tpm_redis(est_tokens)
+    if distributed is not None:
+        return distributed
+    return _throttle_tpm_local(est_tokens)
 
 
 def groq_extraction_available() -> bool:

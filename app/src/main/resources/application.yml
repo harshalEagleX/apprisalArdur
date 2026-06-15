@@ -15,8 +15,11 @@ spring:
     password: ${DB_PASSWORD:12345678}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      # Scaling Phase 3 §4.1: sized for 50 concurrent users. Connection arithmetic —
+      # Java 30 + (7 Celery workers × 5) ≈ 65 < Postgres max_connections; raise
+      # max_connections / add PgBouncer before growing further. Configurable (P-4).
+      maximum-pool-size: ${DB_POOL_MAX:30}
+      minimum-idle: ${DB_POOL_MIN_IDLE:10}
       connection-timeout: 30000
       idle-timeout: 600000
       keepalive-time: 300000
@@ -89,6 +92,13 @@ ocr:
 qc:
   enabled: true
   auto-process-on-upload: false
+  executor:
+    # Scaling Phase 2 (readme/SCALABILITY_PLAN.md §4.1): with Celery doing the heavy
+    # OCR off-process, this pool only enqueues + polls (I/O-bound) and fires async
+    # event saves — so it can exceed the old memory-bound cap of 2. Tune per host (P-4).
+    core-pool-size: ${QC_EXECUTOR_CORE:4}
+    max-pool-size: ${QC_EXECUTOR_MAX:8}
+    queue-capacity: ${QC_EXECUTOR_QUEUE:200}
   reconciler:
     enabled: ${QC_RECONCILER_ENABLED:true}
     retry-after-minutes: ${QC_RECONCILER_RETRY_MINUTES:15}
@@ -98,10 +108,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        # Scaling Phase 0 (readme/SCALABILITY_PLAN.md): expose metrics + prometheus so
+        # Hikari pool usage, JVM, and HTTP latency are observable for the load-test gates.
+        # micrometer-registry-prometheus is already on the classpath (app/pom.xml).
+        # SECURITY: /actuator must NOT be public in production — secure it in SecurityConfig
+        # or bind a separate management port. Phase 6 wires Grafana/alerts on top of this.
+        include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: never
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: apprisal
+  # Hikari, JVM, and HTTP server timings are auto-bound by Micrometer when actuator
+  # is present — no extra code needed; they appear under /actuator/metrics.
 
 logging:
   pattern:

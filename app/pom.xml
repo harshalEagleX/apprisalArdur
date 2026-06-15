@@ -45,6 +45,17 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- Caching (Scaling Phase 3 / QL-3): short-TTL cache for read-mostly
+             dashboard aggregates so 50 concurrent users don't each re-run them. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Actuator + Prometheus metrics -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
