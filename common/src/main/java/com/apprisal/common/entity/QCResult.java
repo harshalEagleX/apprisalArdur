@@ -30,11 +30,13 @@ public class QCResult {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // unique=false: the DB uniqueness is enforced by a PARTIAL index
-    // (uq_qc_result_batch_file_active WHERE superseded_at IS NULL) so reruns
-    // can create a new active result while historical superseded results coexist.
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_file_id", nullable = false, unique = false)
+    // A file accumulates MANY results over its lifetime (one per QC run); only the
+    // newest is active. Must be @ManyToOne — @OneToOne makes Hibernate emit a plain
+    // UNIQUE(batch_file_id) that blocks every rerun. DB uniqueness is instead a
+    // PARTIAL index (uq_qc_result_batch_file_active WHERE superseded_at IS NULL) so
+    // a new active result coexists with historical superseded ones.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_file_id", nullable = false)
     private BatchFile batchFile;
 
     @Enumerated(EnumType.STRING)
