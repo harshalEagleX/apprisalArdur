@@ -373,10 +373,10 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 | `ocr-service/main.py` (`/qc/submit`) | 4 ✅ | idempotent submit — in-flight dedup + atomic `SET NX` claim on `idempotency_key` |
 | `qc/.../StuckBatchReconciler.java` | 4 ✅ already covered | retries via durable queue + Celery `acks_late` requeue — no change needed |
 | `QCProgressStore` + `QCProcessingService` wiring | 4 ⏸ deferred | Redis-backed progress (QL-11) — needs `QCProgress`+store moved to `common` (module layering) |
-| `scripts/backup_*.sh`, systemd timers (new) | 5 | doc + DB backup, retention, disk alerts |
-| `postgresql.conf` | 5 | shared_buffers/effective_cache_size/work_mem/max_connections |
-| `scripts/loadtest/*` (new) | 6 | k6 read test, processing soak, 5k seed |
-| Actuator + Flower + Grafana wiring | 6 | dashboards/alerts |
+| `scripts/backup_db.sh`, `backup_uploads.sh`, `disk_check.sh` (new) | 5 ✅ | DB dump + hardlink upload snapshots + retention + disk/inode alert |
+| `scripts/postgres_tuning.sql` (new) | 5 ✅ script | shared_buffers/effective_cache_size/work_mem/max_connections/autovacuum (apply + restart on host) |
+| `scripts/loadtest/read_50vu.js`, `process_soak.py`, `README.md` (new) | 6 ✅ | k6 50-VU read test + processing soak (no-job-lost gate) |
+| Actuator (P0) + Flower (run cmd) + Grafana | 6 ◐ | metrics exposed + queue view; Grafana dashboards operational |
 
 ---
 
@@ -519,6 +519,28 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
   stack to verify the WebSocket progress UX. Low urgency on a single instance (in-memory progress
   is correct live; only restart-durability — cosmetic — is gained, and the reconciler rebuilds it).
 
+**Phase 5 execution log (2026-06-16) — storage durability + PG tuning, scripts built & verified:**
+- `scripts/backup_db.sh` — custom-format `pg_dump` + N-day retention.
+- `scripts/backup_uploads.sh` — rsync `--link-dest` hardlink snapshots (space-efficient) + retention.
+- `scripts/disk_check.sh` — disk + inode threshold alert (verified: runs, flagged the dev disk at 91%).
+- `scripts/postgres_tuning.sql` — §4.1 server settings (max_connections 200, shared_buffers 8GB,
+  effective_cache_size 24GB, work_mem 32MB, SSD costs, autovacuum) with restart guidance.
+- **Open (operational):** schedule the backups (cron/systemd timer), apply `postgres_tuning.sql`
+  + restart on the deployment host, and run a restore drill (the Phase 5 gate). Object storage
+  remains out of scope per the locked decision (local FS + backups).
+
+**Phase 6 execution log (2026-06-16) — observability + load-test harness, built & verified:**
+- `scripts/loadtest/read_50vu.js` (k6) — 50-VU ramp over reviewer queue + dashboards + admin
+  batches; thresholds `http_req_failed<1%`, `p95<400ms` (T-1/T-4). `node --check` passes.
+- `scripts/loadtest/process_soak.py` — submits a corpus to `/qc/submit`, polls each job to
+  terminal, reports docs/min + docs/day projection + p50/p95 and **exits non-zero if any job is
+  lost** (T-3 gate). Syntax verified.
+- `scripts/loadtest/README.md` — full-stack bring-up, run commands, no-job-lost drill, seeding.
+- Observability: Actuator `health,metrics,prometheus` exposed in Phase 0; Flower = `celery -A
+  celery_app.celery_app flower` for queue depth/worker view.
+- **Open (the gate that closes everything):** run the harness on the full running stack with a
+  seeded ~5,000-doc DB → fill §9 Measured Baselines, flip §1 targets to "met", re-assess R-1.
+
 ---
 
 ## 10. Progress Tracker  *(maintained by `/scale-plan`)*
@@ -530,12 +552,12 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 | 2 — Throughput sizing + Groq limiter | ◐ In progress | | 2026-06-15 | (limiter verified) | Redis distributed TPM bucket built+verified (cross-process); Java executor 4/8/200, SQLAlchemy 2/3, Celery concurrency=6, REDIS_URL documented. **Open:** docs/day soak + cache-hit metric |
 | 3 — Read/query performance | ◐ In progress | | 2026-06-16 | (built, compiles) | Caffeine cache on 7 dashboards (QL-3/6), AnalyticsService N+1 fixed (QL-4), SLA count-based (QL-5), saveAll (QL-12), Hikari 30/10. **Deferred:** QL-7/QL-9 (frontend-coordinated). **Open:** k6 50-VU latency gate |
 | 4 — Concurrency correctness | ◐ In progress | | 2026-06-16 | (idempotency verified) | Idempotent `/qc/submit` (in-flight reuse + terminal re-run, both verified); stuck-job recovery already covered by reconciler + Celery acks_late. **Deferred:** QL-11 progress-store wiring (module re-layering) |
-| 5 — Storage durability + PG tuning | ☐ Not started | | | | |
-| 6 — Observability + load test | ☐ Not started | | | | |
+| 5 — Storage durability + PG tuning | ◐ In progress | | 2026-06-16 | (scripts built) | `backup_db.sh`, `backup_uploads.sh` (hardlink snapshots), `disk_check.sh` (runs — flagged dev disk 91%), `postgres_tuning.sql`. **Open:** schedule on host + restart-apply PG tuning + restore drill |
+| 6 — Observability + load test | ◐ In progress | | 2026-06-16 | (harness built) | `scripts/loadtest/` k6 50-VU read test + `process_soak.py` + README; Actuator metrics live (P0). **Open:** run on full stack to fill §9 + close all gates |
 
 Legend: ☐ Not started · ◐ In progress · ☑ Gate passed
 
 ---
 
-*Created: 2026-06-15 · Updated: 2026-06-16 — Phase 0 applied (indexes + slow-query log + Actuator); Phase 1 built & queue-verified (Redis+Celery durable queue, /qc/submit + /qc/job, RestTemplate split); Phase 2 built & verified (Redis distributed Groq TPM bucket, executor/pool sizing); Phase 3 built & compile-verified (Caffeine dashboard cache, N+1 + SLA fixes, Hikari 30/10); Phase 4 built & verified (idempotent /qc/submit; stuck-job recovery already covered; QL-11 progress-store deferred — module re-layering). Open gates (need running stack): no-job-lost test, docs/day soak, k6 50-VU latency. · Stack: Spring Boot (Java 21) + FastAPI (Python) + Next.js + PostgreSQL + Redis/Celery · Host: single 8–16c/32–64GB*
+*Created: 2026-06-15 · Updated: 2026-06-16 — Phase 0 applied (indexes + slow-query log + Actuator); Phase 1 built & queue-verified (Redis+Celery durable queue, /qc/submit + /qc/job, RestTemplate split); Phase 2 built & verified (Redis distributed Groq TPM bucket, executor/pool sizing); Phase 3 built & compile-verified (Caffeine dashboard cache, N+1 + SLA fixes, Hikari 30/10); Phase 4 built & verified (idempotent /qc/submit; stuck-job recovery already covered; QL-11 progress-store deferred — module re-layering); Phase 5 scripts built (DB+uploads backup, disk alert, PG tuning SQL); Phase 6 load-test harness built (k6 50-VU + processing soak). All 6 phases implemented; remaining work is operational — run the load tests on the full stack with a seeded DB to fill §9 and close the gates. · Stack: Spring Boot (Java 21) + FastAPI (Python) + Next.js + PostgreSQL + Redis/Celery · Host: single 8–16c/32–64GB*
 *Maintained by `/scale-plan` (`.claude/skills/scale-plan.md`). Keep §9 and §10 current with every increment.*
