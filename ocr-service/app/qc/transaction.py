@@ -570,36 +570,38 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
 
     transaction_id = transaction_id or str(Path(appraisal_path).stem)
     sets = {}
-    _emit("extract_appraisal", "Reading appraisal report (OCR + fields)", 10.0)
+    # Progress messages use the same plain-language vocabulary as the stage labels
+    # in python_response._STAGE_LABELS — no implementation jargon shown to users.
+    _emit("extract_appraisal", "Reading the appraisal report", 10.0)
     rs = run_full_extraction(Path(appraisal_path), "appraisal_report", use_paddle=False)
     rs = _overlay_form_type(rs, Path(appraisal_path), "appraisal_report")
-    _emit("sca_grid", "Reading the sales comparison grid", 28.0)
+    _emit("sca_grid", "Reading the comparable sales grid", 28.0)
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
-    _emit("sca_llm", "Confirming comparable adjustments (LLM)", 36.0)
+    _emit("sca_llm", "Analyzing comparable sales", 36.0)
     rs = _overlay_sca_llm(rs, Path(appraisal_path), "appraisal_report")
-    _emit("subject_llm", "Completing subject/contract fields (LLM)", 38.0)
+    _emit("subject_llm", "Completing subject & contract details", 38.0)
     rs = _overlay_subject_llm(rs, Path(appraisal_path), "appraisal_report")
-    _emit("sketch", "Reading the building sketch GLA", 40.0)
+    _emit("sketch", "Measuring floor plan & living area", 40.0)
     rs = _overlay_sketch(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_narrative(rs, Path(appraisal_path), "appraisal_report")
-    _emit("photos", "Analyzing report photographs", 42.0)
+    _emit("photos", "Reviewing property photographs", 42.0)
     rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")
-    _emit("locate", "Locating field positions for review highlights", 44.0)
+    _emit("locate", "Preparing review highlights", 44.0)
     rs = _overlay_locate(rs, Path(appraisal_path))
     sets["appraisal"] = rs
     if engagement_path:
-        _emit("extract_engagement", "Extracting engagement letter", 45.0)
+        _emit("extract_engagement", "Reading the engagement letter", 45.0)
         eng = run_full_extraction(Path(engagement_path), "engagement_letter", use_paddle=False)
         eng = _overlay_engagement(eng, Path(engagement_path), "engagement_letter")
         sets["engagement"] = _overlay_locate(eng, Path(engagement_path))
     if contract_path:
-        _emit("extract_contract", "Extracting sales contract", 65.0)
+        _emit("extract_contract", "Reading the sales contract", 65.0)
         con = run_full_extraction(Path(contract_path), "sales_contract", use_paddle=False)
         con = _overlay_contract(con, Path(contract_path), "sales_contract")
         sets["contract"] = _overlay_locate(con, Path(contract_path))
 
-    _emit("rules", "Evaluating QC rules", 85.0)
+    _emit("rules", "Running quality checks", 85.0)
     ctx = QCContext(
         transaction_id=transaction_id,
         appraisal=sets.get("appraisal"), engagement=sets.get("engagement"),
@@ -613,7 +615,7 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     llm_telemetry.stop_capture()
     if persist:
         persist_report(report, document_id=Path(appraisal_path).name)
-    _emit("done", "QC complete", 100.0)
+    _emit("done", "Quality review complete", 100.0)
     return report, ctx
 
 
