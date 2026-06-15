@@ -151,7 +151,7 @@ and prove it.**
 | **QL-8** | One `RestTemplate` with `SimpleClientHttpRequestFactory` (**no pool**) and `readTimeout=900 s` applied to **every** Python call incl. `/live` health + progress polls (`RestTemplateConfig.java:20-22`) | A hung Python can block a health check for 15 min; no connection reuse under concurrency | 1 ✅ split (pooled JDK client) |
 | **QL-9** | `/qc/transactions` builds the reviewer picker by looping **every** distinct `transaction_id` → `transaction_report(tid)` each (`main.py:443-470`) | N+1 across the whole table on dashboard load | 3 |
 | **QL-10** | ≈138 `QCRuleResult` + ≈138 `BusinessEvent` + metrics + ≈138 `DocStatRule` per doc → **~70k+ rows/day** at 250 docs; `business_event`/`audit_log` grow fastest | Table bloat; bulk insert already used, but needs retention/partition | 0 (index) / 5 (partition) |
-| **QL-11** | Progress is **in-memory** both sides (`QCProgressStore`/`progressByBatch`, `_QC_PROGRESS`) | Lost on restart; not shareable | 4 |
+| **QL-11** | Progress is **in-memory** both sides (`progressByBatch`, `_QC_PROGRESS`); `QCProgressStore` (Redis) is built but unwired | Lost on restart; not shareable | 4 ⏸ deferred (module re-layering — see §9) |
 | **QL-12** | VerificationService save loops `.save()` per item; reviewer decision uses pessimistic row lock (`VerificationService.java:157-164,375-379`) | Minor; relies on Hibernate batching; lock only contends on same result | 3 ✅ `saveAll` (built) |
 | **QL-13** | `FileController GET /files/{id}` streams source PDFs from local disk to the viewer | 50 reviewers loading multi-MB PDFs = disk-IO bound | 5 (volume) + add HTTP caching headers |
 
@@ -370,8 +370,9 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 | `qc/.../ReviewerApiController.java`, repos | 3 ⏸ deferred | paginate `submitted` + `/rules`; DTO projections (QL-7 — frontend-coordinated) |
 | `ocr-service/main.py` (`/qc/transactions`) | 3 ⏸ deferred | single grouped query for the picker (QL-9) |
 | `batch/.../controller/FileController.java` | 3 ⏸ deferred | stream + HTTP cache headers for `/files/{id}` (QL-13) |
-| `app/.../service/QCProgressStore.java` + `QCProcessingService` | 4 | Redis-backed progress; idempotent submit; lock retry |
-| `qc/.../StuckBatchReconciler.java` | 4 | cover Celery job TTL/requeue |
+| `ocr-service/main.py` (`/qc/submit`) | 4 ✅ | idempotent submit — in-flight dedup + atomic `SET NX` claim on `idempotency_key` |
+| `qc/.../StuckBatchReconciler.java` | 4 ✅ already covered | retries via durable queue + Celery `acks_late` requeue — no change needed |
+| `QCProgressStore` + `QCProcessingService` wiring | 4 ⏸ deferred | Redis-backed progress (QL-11) — needs `QCProgress`+store moved to `common` (module layering) |
 | `scripts/backup_*.sh`, systemd timers (new) | 5 | doc + DB backup, retention, disk alerts |
 | `postgresql.conf` | 5 | shared_buffers/effective_cache_size/work_mem/max_connections |
 | `scripts/loadtest/*` (new) | 6 | k6 read test, processing soak, 5k seed |
@@ -497,6 +498,27 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 - **Open gate:** the **k6 50-VU read test** (p95 < 400 ms, 0 5xx) — needs the running stack +
   the seeded 5,000-doc DB to prove the latency target; cache hit-rate visible via Actuator then.
 
+**Phase 4 execution log (2026-06-16) — concurrency correctness, built & verified:**
+- **Idempotent submit:** `/qc/submit` now dedups on the `idempotency_key` Java already sends
+  (`batchFileId|hash|provider|models|rules`). A duplicate submit while a job is **in flight**
+  (PENDING/STARTED) returns that job instead of enqueuing a second identical document; a
+  **terminal** key is cleared so an intentional re-run still proceeds; a simultaneous-submit
+  race is resolved with an atomic `SET NX` claim (loser revokes its task). All Redis ops are
+  best-effort (Redis down → normal enqueue, P-6). Covers the edge-case-matrix rows "Duplicate
+  upload / re-run" and "Two admins click Run QC on same batch".
+- **Stuck-job recovery — already covered (no change needed):** `StuckBatchReconciler` retries
+  (re-triggers through the now-durable Celery queue → cached re-OCR) within the retry window and
+  abandons past the limit, with an `isBatchActive` guard and expired-review-lock release; Celery
+  `acks_late` + `task_reject_on_worker_lost` (Phase 2) already requeue on worker death.
+- **Verified:** `main.py` syntax OK; against live Redis + a worker — in-flight branch reused the
+  job (PASS), terminal branch did not reuse and cleared the key (PASS).
+- **Deferred — QL-11 (Redis-backed live progress):** `QCProgressStore` (Redis, with fallback) is
+  already built **but unwired**, because it sits in the `app` module yet depends on `qc`-module
+  types, and `QCProcessingService` (qc module) cannot import from `app`. Wiring it needs moving
+  `QCProgress` + the store down into `common` — a module re-layering best done with the running
+  stack to verify the WebSocket progress UX. Low urgency on a single instance (in-memory progress
+  is correct live; only restart-durability — cosmetic — is gained, and the reconciler rebuilds it).
+
 ---
 
 ## 10. Progress Tracker  *(maintained by `/scale-plan`)*
@@ -507,7 +529,7 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 | 1 — Durable queue (Redis+Celery) | ◐ In progress | | 2026-06-15 | (mechanism verified) | Celery app+task+endpoints built, RestTemplate split, Java compiles, end-to-end Redis round-trip PENDING→STARTED→SUCCESS proven. **Open:** no-job-lost integration test via full stack |
 | 2 — Throughput sizing + Groq limiter | ◐ In progress | | 2026-06-15 | (limiter verified) | Redis distributed TPM bucket built+verified (cross-process); Java executor 4/8/200, SQLAlchemy 2/3, Celery concurrency=6, REDIS_URL documented. **Open:** docs/day soak + cache-hit metric |
 | 3 — Read/query performance | ◐ In progress | | 2026-06-16 | (built, compiles) | Caffeine cache on 7 dashboards (QL-3/6), AnalyticsService N+1 fixed (QL-4), SLA count-based (QL-5), saveAll (QL-12), Hikari 30/10. **Deferred:** QL-7/QL-9 (frontend-coordinated). **Open:** k6 50-VU latency gate |
-| 4 — Concurrency correctness | ☐ Not started | | | | |
+| 4 — Concurrency correctness | ◐ In progress | | 2026-06-16 | (idempotency verified) | Idempotent `/qc/submit` (in-flight reuse + terminal re-run, both verified); stuck-job recovery already covered by reconciler + Celery acks_late. **Deferred:** QL-11 progress-store wiring (module re-layering) |
 | 5 — Storage durability + PG tuning | ☐ Not started | | | | |
 | 6 — Observability + load test | ☐ Not started | | | | |
 
@@ -515,5 +537,5 @@ Legend: ☐ Not started · ◐ In progress · ☑ Gate passed
 
 ---
 
-*Created: 2026-06-15 · Updated: 2026-06-16 — Phase 0 applied (indexes + slow-query log + Actuator); Phase 1 built & queue-verified (Redis+Celery durable queue, /qc/submit + /qc/job, RestTemplate split); Phase 2 built & verified (Redis distributed Groq TPM bucket, executor/pool sizing); Phase 3 built & compile-verified (Caffeine dashboard cache, N+1 + SLA fixes, Hikari 30/10). Open gates (need running stack): no-job-lost test, docs/day soak, k6 50-VU latency. · Stack: Spring Boot (Java 21) + FastAPI (Python) + Next.js + PostgreSQL + Redis/Celery · Host: single 8–16c/32–64GB*
+*Created: 2026-06-15 · Updated: 2026-06-16 — Phase 0 applied (indexes + slow-query log + Actuator); Phase 1 built & queue-verified (Redis+Celery durable queue, /qc/submit + /qc/job, RestTemplate split); Phase 2 built & verified (Redis distributed Groq TPM bucket, executor/pool sizing); Phase 3 built & compile-verified (Caffeine dashboard cache, N+1 + SLA fixes, Hikari 30/10); Phase 4 built & verified (idempotent /qc/submit; stuck-job recovery already covered; QL-11 progress-store deferred — module re-layering). Open gates (need running stack): no-job-lost test, docs/day soak, k6 50-VU latency. · Stack: Spring Boot (Java 21) + FastAPI (Python) + Next.js + PostgreSQL + Redis/Celery · Host: single 8–16c/32–64GB*
 *Maintained by `/scale-plan` (`.claude/skills/scale-plan.md`). Keep §9 and §10 current with every increment.*

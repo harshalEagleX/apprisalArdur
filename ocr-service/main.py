@@ -261,6 +261,44 @@ def _sha256_file(path: Optional[Path]) -> str:
     return h.hexdigest()
 
 
+# Idempotency key TTL — longer than the worst-case task time limit (30 min) so an
+# in-flight job is always covered; completed jobs are allowed to re-run (Phase 4).
+_IDEM_TTL = 3600
+
+
+def _submit_redis():
+    """Redis client shared with the Celery result backend (no separate config)."""
+    try:
+        from celery_app import celery_app
+        return celery_app.backend.client
+    except Exception:
+        return None
+
+
+def _decode(v):
+    return v.decode() if isinstance(v, (bytes, bytearray)) else v
+
+
+def _inflight_job_for(client, idem_key: str) -> Optional[str]:
+    """If a job for this idempotency key is still PENDING/STARTED, return its id so a
+    duplicate submit (double-click, client retry, reconciler race) reuses it instead of
+    enqueuing a second identical document. Terminal/stale keys are cleared so an
+    intentional re-run is never blocked. Redis errors → None (no dedup, P-6)."""
+    try:
+        from celery.result import AsyncResult
+        from celery_app import celery_app
+        existing = _decode(client.get(idem_key))
+        if not existing:
+            return None
+        state = AsyncResult(existing, app=celery_app).state
+        if state in ("PENDING", "STARTED", "RETRY"):
+            return existing
+        client.delete(idem_key)   # SUCCESS/FAILURE — let a fresh run proceed
+        return None
+    except Exception:
+        return None
+
+
 @app.post("/qc/submit")
 async def qc_submit(
     file: UploadFile = File(...),                       # appraisal report (required)
@@ -280,14 +318,37 @@ async def qc_submit(
 
     Java's PythonClientService.submitQCJob calls this, then polls GET /qc/job/{id}.
     The heavy OCR+LLM+rules work runs on a Celery worker, so the HTTP request returns
-    in milliseconds and a Java/Python restart never loses the in-flight document."""
+    in milliseconds and a Java/Python restart never loses the in-flight document.
+
+    Idempotent (Phase 4): a duplicate submit for the same idempotency_key while a job
+    is still in flight returns that job instead of starting a second identical run."""
     import os as _os
     from app.tasks import qc_process_task
+    log = logging.getLogger(__name__)
 
     appraisal = _save_upload(file)
     engagement = _save_upload(engagement_letter)
     contract = _save_upload(contract_file)
     file_hash = source_hash or _sha256_file(appraisal)
+
+    def _cleanup():
+        for p in (appraisal, engagement, contract):
+            if p:
+                try:
+                    _os.remove(p)
+                except OSError:
+                    pass
+
+    client = _submit_redis()
+    idem_redis_key = f"qc:idem:{idempotency_key}" if (idempotency_key and client is not None) else None
+
+    # Fast path: an identical job is already in flight → reuse it, drop our temp copies.
+    if idem_redis_key:
+        existing = _inflight_job_for(client, idem_redis_key)
+        if existing:
+            _cleanup()
+            log.info("QC submit deduplicated: reusing in-flight job_id=%s file=%s", existing, file.filename)
+            return {"job_id": existing, "status": "QUEUED", "file_hash": file_hash, "deduplicated": True}
 
     try:
         async_result = qc_process_task.apply_async(kwargs={
@@ -303,16 +364,27 @@ async def qc_submit(
     except Exception as exc:
         # Broker unreachable — clean up the temp uploads and fail clearly (503) so the
         # Java client falls back to the synchronous /qc/process path (P-6).
-        for p in (appraisal, engagement, contract):
-            if p:
-                try:
-                    _os.remove(p)
-                except OSError:
-                    pass
-        logging.getLogger(__name__).error("QC submit (enqueue) failed: %s", exc)
+        _cleanup()
+        log.error("QC submit (enqueue) failed: %s", exc)
         raise HTTPException(status_code=503, detail=f"QC queue unavailable: {exc}")
 
-    logging.getLogger(__name__).info("QC job queued: job_id=%s file=%s", async_result.id, file.filename)
+    # Resolve the rare simultaneous-submit race: claim the key atomically; if another
+    # request already claimed it, revoke our duplicate and return the winner.
+    if idem_redis_key:
+        try:
+            if not client.set(idem_redis_key, async_result.id, nx=True, ex=_IDEM_TTL):
+                winner = _decode(client.get(idem_redis_key))
+                if winner and winner != async_result.id:
+                    try:
+                        async_result.revoke()
+                    except Exception:
+                        pass
+                    log.info("QC submit race lost: revoked dup, returning winner job_id=%s", winner)
+                    return {"job_id": winner, "status": "QUEUED", "file_hash": file_hash, "deduplicated": True}
+        except Exception as exc:
+            log.warning("Idempotency claim skipped (Redis error: %s)", exc)
+
+    log.info("QC job queued: job_id=%s file=%s", async_result.id, file.filename)
     return {"job_id": async_result.id, "status": "QUEUED", "file_hash": file_hash}
 
 
