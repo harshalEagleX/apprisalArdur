@@ -32,7 +32,7 @@ from app.extraction import llm_groq
 
 logger = logging.getLogger(__name__)
 
-SUBJECT_LLM_VERSION = "0.1.18"
+SUBJECT_LLM_VERSION = "0.1.19"
 
 # Confidence stamps. Verbatim-validated values sit just above the structured
 # cutoff (0.75) — the value literally appears on the page. Enum/checkbox-style
@@ -70,6 +70,37 @@ _SUBJECT_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
     "financial_assistance_description": ("text", None),
 }
 
+# ---- neighborhood section (page 1 of the URAR) ----
+# The deterministic layer reads the narrative fill-ins of this section unreliably
+# — it confidently grabs the printed form LABEL (e.g. the "(including support for
+# the above conclusions)" caption) instead of the appraiser's text. These go
+# through the LLM verbatim reader, which distinguishes label from fill-in.
+_NEIGHBORHOOD_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
+    "neighborhood_boundaries": ("text", None),
+    "neighborhood_description": ("text", None),
+    "market_conditions_commentary": ("text", None),
+    "price_low": ("number", None),
+    "price_high": ("number", None),
+    "predominant_price": ("number", None),
+    "age_low": ("number", None),
+    "age_high": ("number", None),
+    "predominant_age": ("number", None),
+    "land_use_one_unit": ("number", None),
+    "land_use_2_4_unit": ("number", None),
+    "land_use_multi_family": ("number", None),
+    "land_use_commercial": ("number", None),
+    "land_use_other": ("number", None),
+    "land_use_other_description": ("text", None),
+}
+
+# Narrative fields the deterministic layer reads confidently-wrong (it returns a
+# printed label, not blank), so a blank/low-confidence trigger never re-fills
+# them. These are always sent to the LLM; the longer/more-complete answer wins.
+ALWAYS_REFILL = frozenset({
+    "neighborhood_boundaries", "neighborhood_description",
+    "market_conditions_commentary",
+})
+
 _RECON_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
     "indicated_value_cost_approach": ("number", None),
     "indicated_value_income_approach": ("number", None),
@@ -106,6 +137,12 @@ PAGE_GROUPS = {
         lambda low: "property address" in low and ("owner of public record" in low
                                                    or "assessor" in low),
         _SUBJECT_FIELDS, "page 1 (SUBJECT and CONTRACT sections)"),
+    "neighborhood": (
+        lambda low: "present land use" in low or "neighborhood boundaries" in low
+                    or ("market conditions" in low and "one-unit housing" in low),
+        _NEIGHBORHOOD_FIELDS, "NEIGHBORHOOD section (page 1: characteristics, "
+        "housing trends, one-unit price/age ranges, present land use, boundaries, "
+        "and the market-conditions narrative)"),
     "reconciliation": (
         lambda low: "indicated value by" in low and ("reconciliation" in low
                                                      or "sales comparison approach" in low),
@@ -166,6 +203,22 @@ _FIELD_HINTS = {
     "appraisal_report_type": "USPAP identification checkbox: Appraisal Report or Restricted Appraisal Report",
     "reasonable_exposure_time": "Reasonable Exposure Time (verbatim, e.g. '30-90 days')",
     "prior_services_performed": "the prior-services disclosure (HAVE / HAVE NOT performed services, plus any description)",
+    # ---- neighborhood narrative + ranges ----
+    "neighborhood_boundaries": "Neighborhood Boundaries — the appraiser's written boundary description (the fill-in text after the label, NOT the printed 'Neighborhood Boundaries' caption)",
+    "neighborhood_description": "Neighborhood Description — the appraiser's narrative fill-in (NOT the printed 'Neighborhood Description' caption)",
+    "market_conditions_commentary": "Market Conditions narrative — the appraiser's written analysis. IGNORE the printed caption text 'Market Conditions (including support for the above conclusions)'; return only the appraiser's own sentences",
+    "price_low": "One-Unit Housing PRICE range LOW $(000)",
+    "price_high": "One-Unit Housing PRICE range HIGH $(000)",
+    "predominant_price": "One-Unit Housing PRICE Predominant $(000)",
+    "age_low": "One-Unit Housing AGE range LOW (years)",
+    "age_high": "One-Unit Housing AGE range HIGH (years)",
+    "predominant_age": "One-Unit Housing AGE Predominant (years)",
+    "land_use_one_unit": "Present Land Use One-Unit %",
+    "land_use_2_4_unit": "Present Land Use 2-4 Unit %",
+    "land_use_multi_family": "Present Land Use Multi-Family %",
+    "land_use_commercial": "Present Land Use Commercial %",
+    "land_use_other": "Present Land Use Other %",
+    "land_use_other_description": "Present Land Use 'Other' description text (what the Other category is)",
 }
 
 _SYSTEM = (

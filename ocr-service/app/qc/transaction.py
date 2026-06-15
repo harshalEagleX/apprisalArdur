@@ -286,12 +286,16 @@ def _overlay_subject_llm(rs, pdf, dtype):
         return rs
     from app.core.result import ExtractionResult, ExtractionResultSet
     from app.extraction.subject_llm_extractor import (
-        GAP_FIELDS, SUBJECT_LLM_VERSION, extract_gap_fields_llm)
+        GAP_FIELDS, ALWAYS_REFILL, SUBJECT_LLM_VERSION, extract_gap_fields_llm)
 
     existing = {name: r for name, r in rs}
+    # A field is re-extracted when it is missing/blank OR it is a narrative field
+    # the deterministic layer reads confidently-wrong (ALWAYS_REFILL) — those carry
+    # a non-blank label fragment, so a blank trigger alone would never fix them.
     missing = [f for f in GAP_FIELDS
                if f not in existing or not existing[f].found
-               or not str(existing[f].value or "").strip()]
+               or not str(existing[f].value or "").strip()
+               or f in ALWAYS_REFILL]
     if not missing:
         return rs
     try:
@@ -302,6 +306,13 @@ def _overlay_subject_llm(rs, pdf, dtype):
     if not filled:
         return rs
     for name, (value, conf) in filled.items():
+        # For always-refill narratives the deterministic value may be a real (but
+        # garbled) read; keep whichever text is longer/more complete so we never
+        # replace a good full narrative with a shorter LLM snippet.
+        prev = existing.get(name)
+        if (name in ALWAYS_REFILL and prev is not None and prev.found
+                and len(str(prev.value or "")) >= len(str(value))):
+            continue
         existing[name] = ExtractionResult(
             canonical_name=name, document_type=dtype, value=str(value),
             raw_source_text=str(value), extraction_method="subject_llm",
