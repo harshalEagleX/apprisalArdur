@@ -1707,3 +1707,183 @@ This QC checklist covers quality control validation for residential mortgage app
 > **Document Version**: 1.0  
 > **Last Updated**: Based on source files "Appraisal QC Checklist (2).xlsx" and "Appraisal QC Checklist -Detailed.xlsx"  
 > **Purpose**: Comprehensive QC rule documentation for automated appraisal review systems
+
+---
+
+# Part II — Precise Pass / Fail / Verify Decision Logic (GSE/UAD‑grounded)
+
+> **What this part adds.** Part I (above) is the rule catalogue and your rejection language — **rule
+> names and templates are unchanged**. Part II makes each rule *operationally precise*: for every
+> non‑image rule it states exactly **when it PASSES, when it FAILS (auto‑reject), when it must be
+> VERIFIED (human review)**, the **cross‑rule** links, and the **public standard** the logic rests on.
+>
+> **Benchmark note.** This logic is grounded in the public GSE/UAD standard that a HomeVision
+> **MIRA**‑class engine implements (HomeVision's own rule text is proprietary and unpublished). The
+> head‑to‑head rating of our engine vs. that standard lives in the companion file
+> **`QC_Gap_Analysis_vs_HomeVision_MIRA.md`**.
+>
+> **Sources:** Fannie Mae Selling Guide B4‑1.3 (‑01 review, ‑06 condition/quality, ‑07 SCA, ‑08
+> comparable sales, ‑09 adjustments); UAD field standardization (C1‑C6 / Q1‑Q6); UAD 3.6 + ANSI
+> Z765; USPS address APIs. Full URLs in the gap‑analysis file §9.
+
+## II‑0. The three outcomes (definitions)
+
+| Outcome | Meaning | When the engine should choose it |
+|---|---|---|
+| **PASS** | Field present, internally consistent, and consistent with the cross‑documents. | All conditions in the rule's *Pass* column are true. |
+| **FAIL (auto‑reject)** | A hard, unambiguous violation of a GSE/UAD requirement or a cross‑document contradiction. | A *Fail* condition is true **and** extraction confidence is high (no OCR doubt). |
+| **VERIFY (human review)** | Likely an issue, but it depends on judgment, a lender overlay, missing data, or low OCR confidence. | A *Verify* condition is true, **or** a *Fail* condition is true but OCR/extraction is uncertain. |
+
+> **Calibration rule (applies to every rule):** a *Fail* with low extraction confidence is downgraded
+> to *Verify*. Never auto‑reject on a value the OCR isn't sure it read. (This is the single most
+> important precision guarantee.)
+
+## II‑1. USPS verification for the Subject section (live check spec)
+
+Used by **S‑1** (and supports **S‑4**, **S‑6**). USPS standardizes/validates a US address and returns
+ZIP+4, county, and deliverability ([USPS Address APIs](https://developers.usps.com/apis)).
+
+| Step | Input | USPS output used | Decision |
+|---|---|---|---|
+| 1. Standardize | Subject street/city/state/zip from the report | Canonical street, city, state, **ZIP+4**, **county**, deliverable flag | — |
+| 2. Compare to report | Standardized vs. report fields | — | If report ≠ standardized (beyond formatting) → **VERIFY** ("confirm USPS‑standardized address") |
+| 3. Cross‑doc | Standardized vs. **engagement letter** | — | If engagement‑letter address ≠ standardized → **FAIL** S‑1 (`Property address does not match with order form.`) |
+| 4. County | USPS county | — | If report county ≠ USPS county → **FAIL** (`Property county does not match with order form.`) |
+| 5. ZIP first‑5 | USPS ZIP | — | If first 5 digits differ → **FAIL** (`Property Zip code does not match... (First 5 digits must match)`) |
+| 6. Not deliverable | USPS deliverable flag = false | — | **VERIFY** (possible new construction / rural route; require appraiser data source) |
+
+> USPS is a **VERIFY/normalization aid**; the authoritative *Fail* is the mismatch with the
+> **engagement letter** (the order of record), not with USPS alone.
+
+## II‑2. Image / photo / sketch / map rules — EXCLUDED from text QC (named)
+
+Per the review instruction, rules that require analyzing a **photo, sketch, or map image** are **not**
+given text Pass/Fail logic here. They are listed so they are not mistaken for omissions. (Full
+rationale + IDs in the gap‑analysis file §7.)
+
+**Excluded (image‑dependent):** `S‑7`/`S‑7‑occupant` *(photo‑vs‑stated‑occupancy half only)* ·
+`SCA‑16V`, `SCA‑16V‑cond`, `SCA‑16V‑distress` · `SCA‑27`, `SCA‑27‑missing`, `SCA‑27‑mls`,
+`SCA‑27‑defer`, `SCA‑27‑nobuilding` · `PH‑1`…`PH‑6` · `SK‑1`…`SK‑5` · `M‑1`…`M‑4` · `FHA‑8`,
+`FHA‑9`/`FHA‑9‑sides`, `FHA‑11`. *(~20–25 of the 129 documented rules.)*
+
+---
+
+## II‑3. Subject — decision logic
+
+| Rule | PASS | FAIL (auto‑reject) | VERIFY (review) | Cross‑rule / source |
+|---|---|---|---|---|
+| **S‑1** Address | Report address = USPS‑standardized = engagement letter | Address/city/county/ZIP‑5 ≠ engagement letter | USPS ≠ report (formatting/ZIP+4); not‑deliverable | ↔ engagement; USPS §II‑1 |
+| **S‑2** Borrower | All borrowers present, spelled as order | A named co‑borrower from order is missing | Refi AND owner ≠ borrower (→ comment) | ↔ engagement; ↔ S‑3 |
+| **S‑3** Owner of record | Present and current | Blank | Refi AND owner ≠ borrower without comment | ↔ S‑2 |
+| **S‑4** Legal/APN/Tax | Legal + APN + tax year + RE taxes all present | Any blank; RE taxes contain decimals; tax year implausible | Tax year > 2 yrs old *(overlay — VERIFY, not FAIL)* | UAD field std |
+| **S‑5** Neighborhood name | Real subdivision/area name | "N/A","None","Unknown",blank | Generic placeholder text | UAD requires a recognized/common name |
+| **S‑6** Map ref / census | Census tract format `XXXX.XX`; map ref present | Census tract blank/malformed | Census tract not matching county (USPS county) | UAD field std; ↔ S‑1 county |
+| **S‑8** Special assessments | "0" or an amount **with purpose** | Amount present but no purpose stated | Blank | — |
+| **S‑9** PUD/HOA | HOA dues → PUD box marked; period (yr/mo) shown | HOA dues present AND PUD unmarked | Period missing | ↔ N/site PUD |
+| **S‑10** Lender/client | Name+address = engagement "client displayed" | Name or address ≠ engagement | Minor formatting diff | ↔ engagement |
+| **S‑11** Rights appraised | Exactly one box (Fee/Leasehold/PUD) | Zero or two+ boxes marked | — | ↔ SCA‑10 |
+| **S‑12** Prior listing/sale | Data source present; if listed, full MLS details | "Yes/listed" but data source missing | Listed (not purchase) AND value vs list > 3% | UAD; ↔ contract |
+
+## II‑4. Contract — decision logic *(purchase only; refi ⇒ section blank)*
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **C‑1** Analysis | Purchase: analyzed box + sale‑type + result | Refi AND contract section populated | Purchase AND "Did not analyze" without reason; appraised value varies from contract price w/o reconciliation | B4‑1.3‑04; ↔ R‑1 |
+| **C‑2** Price/date | Price + date = purchase contract (date = last signature) | Price ≠ contract; date ≠ fully‑executed date | OCR‑uncertain price/date | ↔ contract doc |
+| **C‑3** Owner data source | Yes/No marked with data source | No data source given | "No" without commentary | — |
+| **C‑4** Concessions | Yes/No marked; if Yes, $ + description; if No, "0" | Report concession ≠ contract concession | Yes but description thin | ↔ contract doc |
+| **C‑5** Personal property | Items identified; value contribution stated | — | Items in contract not addressed in commentary | — |
+
+## II‑5. Neighborhood — decision logic
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **N‑1** Characteristics | ≥1 box each: location/built‑up/growth | A category has zero boxes | Built‑up % inconsistent with present land use | ↔ N‑4 |
+| **N‑2** Trends | Property‑values/demand‑supply/marketing‑time set | — | Increasing/declining trend AND no time adjustment in grid | ↔ SCA‑8; 1004MC |
+| **N‑3** 1‑unit range/age | Price low ≤ predominant ≤ high; ages plausible | Predominant outside the stated low–high range | Subject value outside range w/o comment | ↔ R‑2 |
+| **N‑4** Present land use | Sums to ~100%; "Other" described | Total wildly ≠ 100% | "Other" present but undescribed | ↔ N‑1 |
+| **N‑5** Boundaries | All four boundaries delineated | Boundary description blank | "See map" only (no text delineation) | UAD |
+| **N‑6** Description | Narrative present and specific | — | Generic/boilerplate only | commentary quality |
+| **N‑7** Market conditions | Consistent with 1004MC | — | Conflicts with 1004MC trend | ↔ ADD‑4 |
+
+## II‑6. Site — decision logic *(FEMA flood **map** image is excluded; text fields below)*
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **ST‑1/ST‑2** Dimensions/area | Dimensions present; area consistent with dims | Area blank | Dims↔area mismatch | — |
+| **ST‑3** Shape | Stated | Blank | — | — |
+| **ST‑4** View | UAD view rating present | Blank | View rating ≠ grid view | ↔ SCA‑12 |
+| **ST‑5** Zoning | Classification + compliance marked | "No zoning" with no rebuild comment; illegal use → HOLD | Non‑conforming without rebuild/legal comment | B4‑1.3‑03 |
+| **ST‑6** Highest & best use | "As improved" = present use (or explained) | HBU ≠ present use with no support → HOLD | HBU box blank | — |
+| **ST‑7** Utilities/off‑site | Present; well/septic addressed if applicable | Utility field blank | Well/septic implied but not described | ↔ ST‑9 |
+| **ST‑8** FEMA flood (text) | Zone + panel + date present | Flood data fields blank | In flood zone AND no marketability comment *(map check excluded)* | FEMA; image‑map excluded |
+| **ST‑10** Adverse conditions | "None noted" or described | — | Adverse condition implied elsewhere but not noted here | ↔ comments |
+
+## II‑7. Improvements — decision logic *(C/Q‑vs‑photo checks are image; stated‑value checks below)*
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **I‑1** General desc | Type/age/units present | Required field blank | Age implausible vs year built | — |
+| **I‑2** Foundation | Stated | Blank | Foundation vs basement contradiction | — |
+| **I‑7** Above‑grade room count | Rooms/bed/bath present; grid‑consistent | Blank | Subject room count ≠ SCA‑17 subject column | ↔ SCA‑17 |
+| **I‑9** Condition (C1‑C6) | One C‑rating; grid‑consistent | No rating | Rating inconsistent across report; *photo match excluded* | UAD C1‑C6 |
+| **I‑Q** Quality (Q1‑Q6) | One Q‑rating; grid‑consistent | No rating | Rating inconsistent across report | UAD Q1‑Q6 |
+| **I‑11** Conformity | Conformity stated | — | "No" conformity without commentary | — |
+| **I‑12** Additions | Additions referenced if present | — | Addition implied (GLA jump) but not described | ↔ sketch (image) |
+
+## II‑8. Sales Comparison — decision logic *(comp **photos** excluded; data/grid below)*
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **SCA‑2** Comps required | ≥ 3 **closed** comps | < 3 closed comps | Listings used toward the minimum 3 | **B4‑1.3‑08** (min 3 closed; listings = support only) |
+| **SCA‑3** Addresses | Subject + each comp address present | Blank | — | — |
+| **SCA‑4** Proximity | Distance stated **with direction** | Distance blank | Comp distant for the market *(no hard mile cap — VERIFY)* | **B4‑1.3‑08** (state distance+direction; no GSE mile limit) |
+| **SCA‑5/6** Data/verification sources | Data source + verification source present | Blank | DOM/source thin | — |
+| **SCA‑7** Concessions | Concessions stated/adjusted | Blank | Large concession, small/no adjustment | B4‑1.3‑09 |
+| **SCA‑8** Date of sale/time adj | Sale date present; time adj if market trending | Sale date blank | Trending market AND no time adjustment | **B4‑1.3‑09**; ↔ N‑2 |
+| **SCA‑14** Quality (Q) | One Q per comp; bracketed | Q blank | Q differs from subject w/o adjustment/comment | UAD Q1‑Q6 |
+| **SCA‑15** Actual age | Age per comp | Blank | Large age spread unadjusted | — |
+| **SCA‑16** Condition (C) | One C per comp | C blank | C differs from subject w/o adjustment | UAD C1‑C6 |
+| **SCA‑17** Room count + GLA | Bed/bath/room + GLA per comp | GLA blank | GLA spread large; subject GLA ≠ improvements | ↔ I‑7; ANSI (UAD 3.6) |
+| **SCA‑net15 / SCA‑gross25** | Within threshold | *(currently FAIL on breach)* | **Recommended: VERIFY** — these are **lender overlays, not GSE limits** | **B4‑1.3‑09** (no GSE net/gross cap) |
+| **SCA‑bracket / SCA‑PR‑bracket** | Subject value brackets between adjusted comps | Subject above/below **all** adjusted comps | Brackets on one side only | arithmetic consistency |
+| **SCA‑FLIP** | No rapid resale, or explained | — | Comp/subject resold recently w/o explanation | B4‑1.3 (resale scrutiny) |
+
+> **Honesty flag (carried from gap analysis §4):** `SCA‑net15` and `SCA‑gross25` should fire as
+> **VERIFY** with a "lender overlay" label and a per‑AMC‑configurable threshold — Fannie Mae sets no
+> net/gross limit ([B4‑1.3‑09](https://selling-guide.fanniemae.com/sel/b4-1.3-09/adjustments-comparable-sales)).
+
+## II‑9. Reconciliation / Cost / Income — decision logic
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **R‑1** Value reconciliation | Approaches weighted; value supported & brackets | Final value outside adjusted‑comp range | Weighting unexplained | ↔ SCA‑bracket |
+| **R‑1b** Names approach | Reconciliation identifies primary approach | — | Generic reconciliation text | commentary |
+| **R‑2** Final opinion | Single value; as‑is/subject‑to box correct | "Subject‑to" repairs but box = as‑is | Value not equal to grid conclusion | ↔ R‑1 |
+| **CA‑1/CA‑2** Cost approach | Required fields + remaining economic life | Required field blank when cost approach required | Site value implausible vs total | — |
+| **CA‑3** Cost arithmetic | Depreciated cost + site = indicated value (within tolerance) | Arithmetic does not reconcile | Rounding‑level differences | arithmetic |
+| **IA‑1 / MF‑1** Income/rent | Subject rent matches; Form 216 complete | Rent ≠ lease/market w/o support | Form 216 fields thin | ↔ contract/lease |
+
+## II‑10. Addendum / Signature / FHA‑USDA (non‑image) — decision logic
+
+| Rule | PASS | FAIL | VERIFY | Cross‑rule / source |
+|---|---|---|---|---|
+| **ADD‑1** Commentary standard | Specific, non‑canned narrative | — | Canned/boilerplate phrase detected | commentary quality |
+| **ADD‑2** Comp‑selection commentary | Explains *why* comps chosen | — | States *what*, not *why* | B4‑1.3‑07 |
+| **ADD‑4/5** 1004MC | 1004MC present + fields complete + trend consistent | Required 1004MC field blank | Trend ≠ neighborhood N‑2/N‑7 | ↔ N‑2/N‑7 |
+| **ADD‑9** USPAP addendum | Required statements present | Missing required statement | Exposure/services boilerplate only | USPAP |
+| **SIG‑1** Signatures | Appraiser signed + dated; no date gap | Missing signature/date | Effective date vs signature gap large | — |
+| **SIG‑2** Appraiser info | License #, state, expiry present & valid | Expired license at effective date | Expiry near effective date | ↔ DOC‑1 |
+| **SIG‑3** Supervisory | If trainee, supervisor signs; state match | Trainee w/o supervisor signature | Supervisor state ≠ subject state | — |
+| **FHA‑2** Case number | Present and matching | Case # blank/mismatch on FHA | — | FHA overlay |
+| **FHA‑3** Intended use/user | FHA intended use + user stated | Missing | Generic | FHA |
+| **FHA‑5** Comp dating | FHA comp recency met | — | Older comps without FHA justification | FHA overlay |
+| **FHA‑10** Remaining economic life | Stated and plausible | Blank on FHA | Implausibly short | FHA |
+| **USDA‑1** Cost approach | Required USDA cost fields present | Blank when required | — | USDA overlay |
+
+---
+
+> **Part II version:** 1.0 — added the precise Pass/Fail/Verify decision model, USPS subject
+> verification spec, the image‑rule exclusion list, and per‑section decision logic grounded in the
+> public GSE/UAD standard. **Rule names and Part I rejection templates are unchanged.** Companion
+> rating: `QC_Gap_Analysis_vs_HomeVision_MIRA.md`.
