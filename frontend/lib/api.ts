@@ -339,7 +339,9 @@ export interface DocStatSummary {
   createdAt: string | null;
 }
 export interface DocStatStage {
-  stage: string; label: string; ms: number; pctOfPipeline: number;
+  // `stage` is the stable key; the display name is derived from it via lib/stageLabels.
+  // `label` is no longer sent by the backend (kept optional only as a legacy fallback).
+  stage: string; label?: string; ms: number; pctOfPipeline: number;
   llmCalls: number; inferenceMs: number; throttleWaitMs: number;
 }
 export interface DocStatSection { section: string; label: string; ms: number; ruleCount: number; pctOfRules: number; }

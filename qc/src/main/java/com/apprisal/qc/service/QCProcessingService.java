@@ -870,7 +870,9 @@ public class QCProcessingService {
                     .ruleEngineMs(timings.ruleEngineMs())
                     .measuredPipelineMs(timings.measuredPipelineMs())
                     .ruleCount(timings.ruleCount())
-                    .slowestStageLabel(slowStage != null ? slowStage.label() : null)
+                    // Store the slowest stage's stable KEY (not a display label); the UI
+                    // derives the name from the key (frontend/lib/stageLabels.ts).
+                    .slowestStageLabel(slowStage != null ? slowStage.stage() : null)
                     .slowestStageMs(slowStage != null ? slowStage.ms() : null)
                     .slowestSectionLabel(slowSection != null ? slowSection.label() : null)
                     .slowestSectionMs(slowSection != null ? slowSection.ms() : null)
@@ -886,7 +888,7 @@ public class QCProcessingService {
             int i = 0;
             if (timings.stages() != null) {
                 for (var s : timings.stages()) {
-                    docStat.addStage(new DocStatStage(s.stage(), s.label(), s.ms(), s.pctOfPipeline(),
+                    docStat.addStage(new DocStatStage(s.stage(), s.ms(), s.pctOfPipeline(),
                             s.llmCalls(), s.inferenceMs(), s.throttleWaitMs(), i++));
                 }
             }

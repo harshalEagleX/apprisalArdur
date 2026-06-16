@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 
 /**
  * One extraction/QC pipeline phase's measured duration (a child of {@link DocStat}).
- * e.g. "Appraisal OCR + field extraction", "QC rule evaluation".
+ * Identified by its stable {@code stage} key (e.g. "subject_llm", "rules"); the human
+ * display name is NOT stored — it is derived from the key at render time
+ * (frontend/lib/stageLabels.ts), so wording changes never require a backfill.
+ * (The legacy doc_stat_stage.label column is left in place but no longer written.)
  */
 @Entity
 @Table(name = "doc_stat_stage",
@@ -20,7 +23,6 @@ public class DocStatStage {
     private DocStat docStat;
 
     @Column(name = "stage", length = 64)  private String stage;
-    @Column(name = "label")               private String label;
     @Column(name = "ms")                  private Double ms;
     @Column(name = "pct_of_pipeline")     private Double pctOfPipeline;
     // Groq cost split when this stage made LLM calls (measured).
@@ -31,9 +33,9 @@ public class DocStatStage {
 
     protected DocStatStage() {}
 
-    public DocStatStage(String stage, String label, Double ms, Double pctOfPipeline,
+    public DocStatStage(String stage, Double ms, Double pctOfPipeline,
                         Integer llmCalls, Double inferenceMs, Double throttleWaitMs, Integer ordinal) {
-        this.stage = stage; this.label = label; this.ms = ms;
+        this.stage = stage; this.ms = ms;
         this.pctOfPipeline = pctOfPipeline; this.llmCalls = llmCalls;
         this.inferenceMs = inferenceMs; this.throttleWaitMs = throttleWaitMs; this.ordinal = ordinal;
     }
@@ -42,7 +44,6 @@ public class DocStatStage {
 
     public Long getId()             { return id; }
     public String getStage()        { return stage; }
-    public String getLabel()        { return label; }
     public Double getMs()           { return ms; }
     public Double getPctOfPipeline(){ return pctOfPipeline; }
     public Integer getLlmCalls()    { return llmCalls; }

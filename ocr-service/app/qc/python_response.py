@@ -188,28 +188,11 @@ def _rule_to_json(r: RuleResult) -> Dict:
     }
 
 
-# Plain-language stage names describing WHAT part of the file set is being read —
-# in terms a reviewer/admin understands, never implementation jargon (no "(LLM)",
-# no internal step names). The "how" (model inference, throttle) is a separate
-# metric, not part of the user-facing name.
-_STAGE_LABELS = {
-    "extract_appraisal": "Reading the appraisal report",
-    "sca_grid": "Comparable sales grid",
-    "sca_llm": "Comparable sales analysis",
-    "subject_llm": "Subject & contract details",
-    "sketch": "Floor plan & living area",
-    "photos": "Property photographs",
-    "locate": "Preparing review highlights",
-    "extract_engagement": "Reading the engagement letter",
-    "extract_contract": "Reading the sales contract",
-    "rules": "Running quality checks",
-    "extraction": "Reading the documents",
-    "done": "Finishing up",
-}
-
-
-def _stage_label(stage: str) -> str:
-    return _STAGE_LABELS.get(stage, stage.replace("_", " ").capitalize())
+# NOTE: pipeline stages are identified ONLY by their stable key (e.g. "subject_llm").
+# The human display name is NOT produced or persisted here — it is derived from the
+# key at render time by the frontend (frontend/lib/stageLabels.ts), so a wording
+# change updates every view, historical and new, with no database backfill. The
+# matching plain-language progress messages live in transaction.py (_emit).
 
 
 def _section_label(section: str) -> str:
@@ -283,8 +266,7 @@ def _build_timings(report: QCReport, total_ms: int) -> Dict:
     stages = sorted(
         (
             {
-                "stage": name,
-                "label": _stage_label(name),
+                "stage": name,            # stable key; display name derived at render time
                 "ms": round(ms, 3),
                 "pct_of_pipeline": round(ms / stage_total * 100, 1),
                 "llm_calls": llm_by_span.get(name, {}).get("calls", 0),

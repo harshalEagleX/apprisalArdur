@@ -275,7 +275,7 @@ public class DocStatsApiController {
                 .sorted(Comparator.comparingInt(s -> nz(s.getOrdinal())))
                 .map(s -> {
                     var x = new LinkedHashMap<String, Object>();
-                    x.put("stage", s.getStage()); x.put("label", s.getLabel());
+                    x.put("stage", s.getStage());   // display name derived from key in the UI
                     x.put("ms", nz(s.getMs())); x.put("pctOfPipeline", nz(s.getPctOfPipeline()));
                     x.put("llmCalls", nz(s.getLlmCalls()));
                     x.put("inferenceMs", nz(s.getInferenceMs()));

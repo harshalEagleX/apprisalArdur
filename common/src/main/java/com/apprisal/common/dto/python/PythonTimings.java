@@ -28,8 +28,7 @@ public record PythonTimings(
 ) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Stage(
-            String stage,
-            String label,
+            String stage,   // stable key; the display name is derived at render time (frontend)
             Double ms,
             @JsonProperty("pct_of_pipeline") Double pctOfPipeline,
             @JsonProperty("llm_calls")       Integer llmCalls,
