@@ -120,8 +120,8 @@ def run_full_extraction(
         return "l3", extract_scanned_pdf_with_paddle(pdf_path)
 
     def run_l4():
-        from app.extraction.spatial_tier3 import SpatialTier3Extractor
-        extractor = SpatialTier3Extractor()
+        from app.extraction.spatial_extractor import SpatialExtractor
+        extractor = SpatialExtractor()
         rs = extractor.extract(pdf_path, document_type)
         return "l4", {r.canonical_name: r for _, r in rs if r.found}
 

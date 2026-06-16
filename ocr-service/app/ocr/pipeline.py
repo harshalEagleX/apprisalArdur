@@ -93,9 +93,9 @@ def process_document(
     from app.ocr.normalizers import normalize
     from app.services.document_classifier import document_classifier
     from app.ocr.table_detector import table_detector
-    from app.extraction.spatial_tier3 import SpatialTier3Extractor
-    from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
-    from app.extraction.tier_merger import TierMerger
+    from app.extraction.spatial_extractor import SpatialExtractor
+    from app.extraction.embedding_extractor import EmbeddingExtractor
+    from app.extraction.extraction_merger import ExtractionMerger
     from app.extraction.document_reconciler import reconcile
     from app.core.result import ExtractionResult, ExtractionResultSet, ExtractionMethod
 
@@ -158,7 +158,7 @@ def process_document(
         )
 
     # ---- Step 6: Tier 3 — Spatial extraction ----
-    spatial_extractor = SpatialTier3Extractor()
+    spatial_extractor = SpatialExtractor()
     tier3_result_set = spatial_extractor.extract(path, doc_type)
     tier3_results = {r.canonical_name: r for _, r in tier3_result_set}
     tier3_found = len([r for r in tier3_results.values() if r.found])
@@ -178,7 +178,7 @@ def process_document(
                 **{k: v for k, v in tier3_results.items() if v.found},
                 **{k: v for k, v in tier1_results.items() if v.found},
             }
-            embedding_extractor = EmbeddingTier2Extractor()
+            embedding_extractor = EmbeddingExtractor()
             tier2_results = embedding_extractor.extract_missing_fields(
                 normalized_pages, doc_type, combined_found
             )
@@ -187,7 +187,7 @@ def process_document(
     tier2_found = len([r for r in tier2_results.values() if r.found])
 
     # ---- Step 9: Tier Merger (Day 17) ----
-    merger = TierMerger()
+    merger = ExtractionMerger()
     merged = merger.merge(tier3_results, tier1_results, tier2_results, doc_type)
 
     # ---- Step 10: Document Reconciler (Day 18) ----

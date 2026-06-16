@@ -1,5 +1,5 @@
 """
-Spatial Tier 3 Extractor
+Spatial Extractor — positional / spatial field extraction.
 
 Replaces text-stream label matching with spatial proximity matching.
 
@@ -15,7 +15,7 @@ Verified against real Form 1073 (90 NE 32nd St Unit 524, Miami FL):
   Δy ≈ 1.4 pixels — well within 6px tolerance
 
 Architecture: this extractor runs FIRST per page on its spatial word map.
-The text-stream Tier3PatternExtractor runs second as a fallback for any
+The text-stream PatternExtractor runs second as a fallback for any
 fields not found spatially.
 """
 
@@ -84,7 +84,7 @@ def _normalize_spatial_box(box, word_map) -> Optional[Dict[str, float]]:
     return {"x": round(x, 5), "y": round(y, 5), "w": round(w, 5), "h": round(h, 5)}
 
 
-class SpatialTier3Extractor:
+class SpatialExtractor:
     """
     PDF → image → spatial word map → field extraction by proximity.
 
@@ -93,7 +93,7 @@ class SpatialTier3Extractor:
     Both produce the same SpatialWordMap interface.
 
     Use:
-        extractor = SpatialTier3Extractor()
+        extractor = SpatialExtractor()
         result_set = extractor.extract(pdf_path, document_type)
     """
 
@@ -753,4 +753,4 @@ class SpatialTier3Extractor:
 
 
 # Module-level singleton
-spatial_extractor = SpatialTier3Extractor()
+spatial_extractor = SpatialExtractor()

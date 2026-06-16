@@ -102,14 +102,14 @@ class TestCriterion2ExtractionFormat:
 
     def test_every_field_returns_extraction_result(self):
         from app.core.result import ExtractionResult, ExtractionResultSet
-        from app.extraction.tier3_pattern import Tier3PatternExtractor
+        from app.extraction.pattern_extractor import PatternExtractor
         from app.ocr.document import load_pdf
 
         pdf = Path("../uploads/EQSS/MSL/engagement/96 Baell Tr Ct Order form.pdf")
         if not pdf.exists():
             pytest.skip("Test document not available")
 
-        extractor = Tier3PatternExtractor()
+        extractor = PatternExtractor()
         doc = load_pdf(pdf)
         rs = extractor.extract(doc, "engagement_letter")
 

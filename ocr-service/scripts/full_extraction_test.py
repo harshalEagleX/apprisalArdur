@@ -59,11 +59,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.schema import schema_loader
 from app.services.document_classifier import document_classifier
-from app.extraction.spatial_tier3 import SpatialTier3Extractor
+from app.extraction.spatial_extractor import SpatialExtractor
 import fitz
 
 schema_loader.reload()
-extractor = SpatialTier3Extractor()
+extractor = SpatialExtractor()
 
 UPLOADS = Path(__file__).parent.parent.parent / "uploads"
 

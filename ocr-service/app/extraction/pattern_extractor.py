@@ -1,5 +1,5 @@
 """
-Day 2 — Tier 3 Pattern Extractor
+Pattern Extractor — baseline synonym-label + data-pattern extraction.
 
 The baseline extraction tier: synonym label matching + data-pattern extraction.
 Every function returns ExtractionResult — never a raw string.
@@ -223,7 +223,7 @@ def _checkbox_search(text: str, labels: List[str]) -> Optional[Tuple[Optional[bo
 # Main extractor class
 # ---------------------------------------------------------------------------
 
-class Tier3PatternExtractor:
+class PatternExtractor:
     """
     Day 2 baseline extractor.
 

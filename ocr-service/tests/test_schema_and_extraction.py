@@ -28,7 +28,7 @@ import pytest
 from app.core.schema import schema_loader, FieldDefinition
 from app.core.result import ExtractionResult, ExtractionResultSet, ExtractionMethod
 from app.ocr.document import load_pdf
-from app.extraction.tier3_pattern import Tier3PatternExtractor
+from app.extraction.pattern_extractor import PatternExtractor
 
 UPLOADS = Path(__file__).parent.parent.parent / "uploads"
 
@@ -192,7 +192,7 @@ def _find_pdfs(batch_dir: Path) -> dict:
     return found
 
 
-extractor = Tier3PatternExtractor()
+extractor = PatternExtractor()
 
 
 def _run_batch(batch_name: str, batch_dir: Path) -> dict:

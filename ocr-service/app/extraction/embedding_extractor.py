@@ -1,5 +1,5 @@
 """
-Day 15 — Tier Two Embedding Extraction
+Embedding Extractor — semantic-similarity field extraction.
 
 Uses sentence-transformers to match text segments to field concepts by
 semantic similarity, without depending on exact label wording.
@@ -122,7 +122,7 @@ def _extract_candidate_segments(
 # Embedding extractor
 # ---------------------------------------------------------------------------
 
-class EmbeddingTier2Extractor:
+class EmbeddingExtractor:
     """
     Day 15 — Embedding Tier 2 Extractor.
 

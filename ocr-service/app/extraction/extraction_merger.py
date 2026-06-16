@@ -1,5 +1,5 @@
 """
-Day 17 — Confidence Score Merging
+Extraction Merger — combine spatial + embedding results with confidence scoring.
 
 Combines Tier 1 (LLM), Tier 2 (embeddings), and Tier 3 (spatial+pattern)
 results into a single authoritative extraction result per field.
@@ -130,7 +130,7 @@ class MergedFieldResult:
         return r
 
 
-class TierMerger:
+class ExtractionMerger:
     """
     Day 17 — Three-Tier Confidence Merger.
 

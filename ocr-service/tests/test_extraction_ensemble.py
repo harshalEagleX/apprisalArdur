@@ -38,13 +38,13 @@ def _skip(path): return pytest.mark.skipif(not path.exists(), reason=f"Missing: 
 class TestDay15EmbeddingTier2:
 
     def test_embedding_extractor_imports(self):
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
-        e = EmbeddingTier2Extractor()
+        from app.extraction.embedding_extractor import EmbeddingExtractor
+        e = EmbeddingExtractor()
         assert e is not None
 
     def test_field_vectors_computed(self):
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
-        e = EmbeddingTier2Extractor()
+        from app.extraction.embedding_extractor import EmbeddingExtractor
+        e = EmbeddingExtractor()
         vectors = e._get_field_vectors()
         assert len(vectors) > 50
         # Key fields must have vectors
@@ -54,15 +54,15 @@ class TestDay15EmbeddingTier2:
 
     def test_field_vectors_are_unit_normalized(self):
         import numpy as np
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
-        e = EmbeddingTier2Extractor()
+        from app.extraction.embedding_extractor import EmbeddingExtractor
+        e = EmbeddingExtractor()
         vectors = e._get_field_vectors()
         for fname, vec in list(vectors.items())[:10]:
             norm = float(np.linalg.norm(vec))
             assert 0.95 <= norm <= 1.05, f"{fname} vector norm={norm:.3f}"
 
     def test_candidate_segment_extraction(self):
-        from app.extraction.tier2_embeddings import _extract_candidate_segments
+        from app.extraction.embedding_extractor import _extract_candidate_segments
         text = "Property Address 90 NE 32nd St\n\nBorrower Gonzalo Mata Camacho\n\nLender Champions Funding LLC"
         segments = _extract_candidate_segments(text, page_number=1)
         assert len(segments) > 0
@@ -70,8 +70,8 @@ class TestDay15EmbeddingTier2:
 
     def test_similar_field_found_for_market_conditions(self):
         """Embedding tier strengths: narrative text matching to field concepts."""
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
-        e = EmbeddingTier2Extractor()
+        from app.extraction.embedding_extractor import EmbeddingExtractor
+        e = EmbeddingExtractor()
         # Narrative text describing market conditions — good match for embedding tier
         segment = "The market area shows stable property values with balanced supply and demand. Marketing time is approximately 3-6 months."
         matches = e.find_similar_fields(segment, threshold=0.50)
@@ -86,7 +86,7 @@ class TestDay15EmbeddingTier2:
             f"Expected market field, got: {field_names[:8]}"
 
     def test_threshold_calibration_values_defined(self):
-        from app.extraction.tier2_embeddings import _FIELD_THRESHOLDS
+        from app.extraction.embedding_extractor import _FIELD_THRESHOLDS
         # Critical fields should have higher thresholds
         assert _FIELD_THRESHOLDS["appraised_value"] >= 0.80
         assert _FIELD_THRESHOLDS["contract_price"] >= 0.80
@@ -94,24 +94,24 @@ class TestDay15EmbeddingTier2:
         assert _FIELD_THRESHOLDS["market_conditions_commentary"] <= 0.70
 
     def test_skip_fields_not_in_vectors(self):
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor, _SKIP_FIELDS
-        e = EmbeddingTier2Extractor()
+        from app.extraction.embedding_extractor import EmbeddingExtractor, _SKIP_FIELDS
+        e = EmbeddingExtractor()
         vectors = e._get_field_vectors()
         for skip in _SKIP_FIELDS:
             assert skip not in vectors, f"{skip} should be skipped but has a vector"
 
     def test_value_extraction_from_enum_segment(self):
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
+        from app.extraction.embedding_extractor import EmbeddingExtractor
         from app.core.schema import schema_loader
-        e = EmbeddingTier2Extractor()
+        e = EmbeddingExtractor()
         fd = schema_loader.get_field("property_rights")
         value = e._extract_value_from_segment("Property Rights Appraised Fee Simple checked", fd)
         assert value == "Fee Simple"
 
     def test_value_extraction_from_boolean_segment(self):
-        from app.extraction.tier2_embeddings import EmbeddingTier2Extractor
+        from app.extraction.embedding_extractor import EmbeddingExtractor
         from app.core.schema import schema_loader
-        e = EmbeddingTier2Extractor()
+        e = EmbeddingExtractor()
         fd = schema_loader.get_field("has_financial_assistance")
         value = e._extract_value_from_segment("Is there financial assistance? Yes", fd)
         assert value == "True"
@@ -121,7 +121,7 @@ class TestDay15EmbeddingTier2:
 # Day 17 — Confidence Merging
 # ===========================================================================
 
-class TestDay17TierMerger:
+class TestDay17ExtractionMerger:
 
     def _make_result(self, name, value, method, confidence, doc_type="appraisal_report"):
         return ExtractionResult(
@@ -131,8 +131,8 @@ class TestDay17TierMerger:
         )
 
     def test_all_agree_gets_highest_confidence(self):
-        from app.extraction.tier_merger import TierMerger
-        m = TierMerger()
+        from app.extraction.extraction_merger import ExtractionMerger
+        m = ExtractionMerger()
         t3 = self._make_result("borrower_name", "John Smith", ExtractionMethod.EXACT_LABEL_MATCH, 0.90)
         t1 = self._make_result("borrower_name", "John Smith", ExtractionMethod.LLM_INFERENCE, 0.80)
         t2 = self._make_result("borrower_name", "John Smith", ExtractionMethod.EMBEDDING_MATCH, 0.72)
@@ -142,8 +142,8 @@ class TestDay17TierMerger:
         assert r.confidence >= 0.90
 
     def test_t1_t3_agree_gets_high_confidence(self):
-        from app.extraction.tier_merger import TierMerger
-        m = TierMerger()
+        from app.extraction.extraction_merger import ExtractionMerger
+        m = ExtractionMerger()
         t3 = self._make_result("borrower_name", "John Smith", ExtractionMethod.EXACT_LABEL_MATCH, 0.90)
         t1 = self._make_result("borrower_name", "John Smith", ExtractionMethod.LLM_INFERENCE, 0.80)
         merged = m.merge({"borrower_name": t3}, {"borrower_name": t1}, {}, "appraisal_report")
@@ -152,8 +152,8 @@ class TestDay17TierMerger:
         assert 0.80 <= r.confidence <= 0.90
 
     def test_no_result_is_not_found(self):
-        from app.extraction.tier_merger import TierMerger
-        m = TierMerger()
+        from app.extraction.extraction_merger import ExtractionMerger
+        m = ExtractionMerger()
         nf = ExtractionResult(
             canonical_name="borrower_name", document_type="appraisal_report",
             extraction_method=ExtractionMethod.NOT_FOUND, confidence=0.0,
@@ -164,8 +164,8 @@ class TestDay17TierMerger:
         assert r.confidence == 0.0
 
     def test_disagreeing_tiers_requires_review(self):
-        from app.extraction.tier_merger import TierMerger
-        m = TierMerger()
+        from app.extraction.extraction_merger import ExtractionMerger
+        m = ExtractionMerger()
         t3 = self._make_result("contract_price", "263000", ExtractionMethod.EXACT_LABEL_MATCH, 0.90)
         t1 = self._make_result("contract_price", "270000", ExtractionMethod.LLM_INFERENCE, 0.75)
         merged = m.merge({"contract_price": t3}, {"contract_price": t1}, {}, "appraisal_report")
@@ -173,7 +173,7 @@ class TestDay17TierMerger:
         assert r.agreement_pattern in ("disagree", "t1_t3") or r.requires_review
 
     def test_values_compatible_handles_format_differences(self):
-        from app.extraction.tier_merger import _values_compatible
+        from app.extraction.extraction_merger import _values_compatible
         assert _values_compatible("263,000", "263000")
         assert _values_compatible("Gonzalo Mata Camacho", "gonzalo mata camacho")
         assert not _values_compatible("263000", "270000")
