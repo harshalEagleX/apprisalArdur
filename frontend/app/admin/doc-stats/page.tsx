@@ -131,7 +131,7 @@ function AppraisalsPanel() {
                 <th className="px-4 py-2.5 font-medium">Decision</th>
                 <th className="px-4 py-2.5 font-medium text-right">Total</th>
                 <th className="px-4 py-2.5 font-medium text-right">Rule engine</th>
-                <th className="px-4 py-2.5 font-medium">LLM (inf / wait)</th>
+                <th className="px-4 py-2.5 font-medium">AI (analysis / wait)</th>
                 <th className="px-4 py-2.5 font-medium">Slowest rule</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
@@ -286,8 +286,8 @@ function RankingPanel() {
             <th className="px-4 py-2.5 font-medium">Section</th>
             <th className="px-4 py-2.5 font-medium text-right">Avg time</th>
             <th className="px-4 py-2.5 font-medium">Distribution</th>
-            <th className="px-4 py-2.5 font-medium text-right">LLM calls</th>
-            <th className="px-4 py-2.5 font-medium text-right">LLM %</th>
+            <th className="px-4 py-2.5 font-medium text-right">AI calls</th>
+            <th className="px-4 py-2.5 font-medium text-right">AI %</th>
             <th className="px-4 py-2.5 font-medium text-right" title="Average rule confidence">Conf.</th>
             <th className="px-4 py-2.5 font-medium text-right">Runs</th>
           </tr>

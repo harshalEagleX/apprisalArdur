@@ -1,5 +1,5 @@
 """
-Week Two Exit Criteria Tests
+OCR + preprocessing tests — adaptive OCR, normalization, classification, tables, fuzzy match, pipeline.
 
 Tests cover all six days of Week Two:
   Day 7 — Adaptive OCR: digital pages use PyMuPDF, scanned use Tesseract

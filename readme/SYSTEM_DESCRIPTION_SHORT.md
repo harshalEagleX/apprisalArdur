@@ -182,6 +182,6 @@ experience for admins and reviewers.
 - Java backend: `http://localhost:8080`
 - Python OCR/QC service: `http://localhost:5001`
 - PostgreSQL: application database
-- Redis/Ollama/Groq/Gemini: optional or configured support services depending
+- Redis/Groq/Groq/Gemini: optional or configured support services depending
   on the active environment
 

@@ -1,5 +1,5 @@
 """
-Day 6 — Week One Exit Criteria
+Foundation tests — schema, extraction format, database, test set, baseline, corrections.
 
 From the 30-day plan, Week One exit criteria are:
   ✓ The field schema covers all document types and all extractable fields.

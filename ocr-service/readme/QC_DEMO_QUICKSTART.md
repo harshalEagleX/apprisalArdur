@@ -54,7 +54,7 @@ Key endpoints:
 | `GET /qc/report/{transaction_id}` | The persisted reviewer report (grouped by section, with evidence) |
 | `GET /qc/transactions` | List every QC'd transaction + overall outcome (dashboard picker) |
 | `POST /qc/process` `{document_path, document_type}` | Single-document extract + persist |
-| `GET /health` | Service + schema + DB + Ollama status |
+| `GET /health` | Service + schema + DB + Groq status |
 
 ## 4. Reviewer dashboard
 

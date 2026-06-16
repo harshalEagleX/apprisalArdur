@@ -430,7 +430,7 @@ check_pattern = r"(?:\[x\]|\[X\]|X|><|\]X|X\[|x)"
 
 **Where is the LLM called in the pipeline?**
 
-The LLM (llava:13b via Ollama) is called in the **NLP check layer** only.  
+The LLM (gpt-oss-120b via Groq) is called in the **NLP check layer** only.  
 It is **NOT** called during field extraction, OCR, or rule evaluation.
 
 ```
@@ -458,12 +458,12 @@ Short text snippets — never the full document:
 
 Three-tier fallback (`nlp_checks.py`):
 ```
-Tier 1: Ollama/llava:13b  →  if server down or model not loaded...
-Tier 2: rule-based checks  →  if local llava:13b is unavailable...
+Tier 1: Groq/gpt-oss-120b  →  if the Groq API is down or rate-limited...
+Tier 2: rule-based checks  →  if the Groq API is unavailable...
 Tier 3: Rule-based keyword matching  →  always available
 ```
 
-**Current state (live):** Ollama is installed, model pull is in progress (still downloading).  
+**Current state (live):** Groq (cloud) is the LLM provider — no local model to install or download.  
 Until pull completes → Tier 3 (rule-based) is active automatically.
 
 **LLM settings:**
@@ -758,7 +758,7 @@ It does not need document-level context for this task.
 - Ask the LLM to extract fields from raw OCR output
 - Chain LLM calls with document context
 
-The reason: a 27-page appraisal is ~15,000–25,000 tokens. Even llava:13b handles that poorly and inconsistently. The regex/pattern approach is more reliable and auditable for structured field extraction.
+The reason: a 27-page appraisal is ~15,000–25,000 tokens. Even gpt-oss-120b handles that poorly and inconsistently. The regex/pattern approach is more reliable and auditable for structured field extraction.
 
 ---
 
@@ -962,7 +962,7 @@ Handwritten additions (appraiser notes, signatures) will produce garbage text �
 The service:
 - Never stores uploaded files permanently (temp dir, auto-deleted)
 - Does not log file contents — only file names and request IDs
-- Does not transmit data to any external service (LLM is local via ollama)
+- LLM extraction sends document text to the Groq cloud API over HTTPS; all OCR, rules, and storage stay local
 - Does not save OCR output to disk
 
 **Current gaps:**

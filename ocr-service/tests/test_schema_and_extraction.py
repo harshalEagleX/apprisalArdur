@@ -1,5 +1,5 @@
 """
-Day 2 Verification — Run Tier 3 extraction on all 6 real document batches.
+Schema + extraction-result-format tests, and Tier-3 extraction on real document batches.
 
 Tests:
 1. Schema loads without errors, all fields have required attributes

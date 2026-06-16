@@ -1,5 +1,5 @@
 """
-Week Three Exit Criteria Tests — Days 13-20
+Extraction-ensemble tests — embeddings (Tier 2), tier merger, document reconciler, pipeline.
 
 Tests cover the extraction ensemble (the local LLM tier-1 was removed; live LLM
 extraction is the Groq overlays in app/qc/transaction.py):

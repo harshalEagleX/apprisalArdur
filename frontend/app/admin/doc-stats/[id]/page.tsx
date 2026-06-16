@@ -11,6 +11,7 @@ import {
   type DocStatDetail, type DocStatRule, type DocStatStage, type DocStatCompare,
 } from "@/lib/api";
 import { fmtMs, durationTone } from "@/lib/duration";
+import { stageLabel } from "@/lib/stageLabels";
 import { Skeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { toast } from "@/lib/toast";
@@ -71,14 +72,14 @@ function StageBar({ s, max, threshold }: { s: DocStatStage; max: number; thresho
     <div className="group">
       <div className="mb-1 flex items-center justify-between gap-3 text-xs">
         <span className="flex items-center gap-1.5 truncate text-slate-300">
-          {label_(s.label)}
+          {label_(stageLabel(s.stage, s.label))}
           {over && <AlertTriangle size={11} className="shrink-0 text-red-400" />}
         </span>
         <span className="flex shrink-0 items-center gap-2 tabular-nums">
           {hasLlm && (
             <span className="flex items-center gap-1.5 text-[10px]">
-              <span className="flex items-center gap-0.5 text-sky-300" title="model inference"><Cpu size={10} />{fmtMs(s.inferenceMs)}</span>
-              <span className="flex items-center gap-0.5 text-amber-300" title="throttle / rate-limit wait"><Hourglass size={10} />{fmtMs(s.throttleWaitMs)}</span>
+              <span className="flex items-center gap-0.5 text-sky-300" title="AI analysis time"><Cpu size={10} />{fmtMs(s.inferenceMs)}</span>
+              <span className="flex items-center gap-0.5 text-amber-300" title="time spent waiting on the AI rate limit"><Hourglass size={10} />{fmtMs(s.throttleWaitMs)}</span>
             </span>
           )}
           <span className={over ? "text-red-300" : durationTone(s.ms)}>{fmtMs(s.ms)}</span>
@@ -88,8 +89,8 @@ function StageBar({ s, max, threshold }: { s: DocStatStage; max: number; thresho
       <div className={`h-2 w-full overflow-hidden rounded-full bg-white/[0.04] ${over ? "ring-1 ring-red-500/40" : ""}`}>
         {hasLlm ? (
           <div className="flex h-full" style={{ width: `${width}%` }}>
-            <div className="h-full bg-sky-400/70" style={{ width: `${infPct}%` }} title="inference" />
-            <div className="h-full bg-amber-400/70" style={{ width: `${100 - infPct}%` }} title="throttle wait" />
+            <div className="h-full bg-sky-400/70" style={{ width: `${infPct}%` }} title="AI analysis" />
+            <div className="h-full bg-amber-400/70" style={{ width: `${100 - infPct}%` }} title="waiting on rate limit" />
           </div>
         ) : (
           <div className={`h-full rounded-full transition-all ${over ? "bg-red-500/70" : "bg-gradient-to-r from-indigo-500/70 to-sky-400/70"}`}
@@ -202,8 +203,8 @@ export default function DocStatDetailPage() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <HeadStat icon={Timer} label="Total time"   value={fmtMs(data.totalMs)} hint="end-to-end" tone="text-white" />
         <HeadStat icon={Cpu}   label="Rule engine"  value={fmtMs(data.ruleEngineMs)} hint={`${data.ruleCount ?? 0} rules`} tone="text-sky-300" />
-        <HeadStat icon={Cpu}   label="LLM inference" value={fmtMs(data.llmInferenceMs)} hint={`${data.llmCalls ?? 0} Groq call${(data.llmCalls ?? 0) === 1 ? "" : "s"}`} tone="text-sky-300" />
-        <HeadStat icon={Hourglass} label="LLM throttle wait" value={fmtMs(data.llmThrottleWaitMs)}
+        <HeadStat icon={Cpu}   label="AI analysis" value={fmtMs(data.llmInferenceMs)} hint={`${data.llmCalls ?? 0} AI call${(data.llmCalls ?? 0) === 1 ? "" : "s"}`} tone="text-sky-300" />
+        <HeadStat icon={Hourglass} label="Rate-limit wait" value={fmtMs(data.llmThrottleWaitMs)}
           hint={(data.rateLimitHits ?? 0) > 0 ? `${data.rateLimitHits} rate-limit hit(s)` : "no rate-limit hits"}
           tone={(data.rateLimitHits ?? 0) > 0 ? "text-red-300" : "text-amber-300"} />
       </div>
@@ -220,8 +221,8 @@ export default function DocStatDetailPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <DeltaCard label="Total" d={compare.delta.totalMs} />
             <DeltaCard label="Rule engine" d={compare.delta.ruleEngineMs} />
-            <DeltaCard label="LLM inference" d={compare.delta.llmInferenceMs} />
-            <DeltaCard label="LLM throttle" d={compare.delta.llmThrottleWaitMs} />
+            <DeltaCard label="AI analysis" d={compare.delta.llmInferenceMs} />
+            <DeltaCard label="Rate-limit wait" d={compare.delta.llmThrottleWaitMs} />
           </div>
         </div>
       )}
@@ -233,7 +234,7 @@ export default function DocStatDetailPage() {
             <Layers size={15} className="text-indigo-300" /> Pipeline stages
           </h2>
           <p className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-500">
-            <Info size={11} /> Stages run sequentially — total pipeline time is their sum. Sky = model inference, amber = throttle wait; red = over expected max.
+            <Info size={11} /> Stages run one after another — total time is their sum. Blue = AI analysis, amber = waiting on the AI rate limit; red = slower than expected.
           </p>
           <div className="space-y-3">
             {data.stages.length === 0 && <p className="text-xs text-slate-500">No stage timings recorded.</p>}
@@ -283,7 +284,7 @@ export default function DocStatDetailPage() {
                 <th className="px-4 py-2.5 text-left font-medium">Name</th>
                 <SortTh k="section" sortKey={sortKey} onSort={toggleSort}>Section</SortTh>
                 <SortTh k="status" sortKey={sortKey} onSort={toggleSort}>Status</SortTh>
-                <th className="px-4 py-2.5 text-right font-medium">LLM</th>
+                <th className="px-4 py-2.5 text-right font-medium">AI</th>
                 <SortTh k="ms" right sortKey={sortKey} onSort={toggleSort}>Time</SortTh>
               </tr>
             </thead>
@@ -296,7 +297,7 @@ export default function DocStatDetailPage() {
                   <td className="px-4 py-2.5">{r.status ? <StatusBadge status={r.status} size="xs" /> : "—"}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-[12px]">
                     {r.llmCalls > 0
-                      ? <span className="text-sky-300" title={`${r.llmCalls} Groq call(s), ${fmtMs(r.throttleMs)} throttle`}>{r.llmCalls}× · {fmtMs(r.llmMs)}</span>
+                      ? <span className="text-sky-300" title={`${r.llmCalls} AI call(s), ${fmtMs(r.throttleMs)} waiting on rate limit`}>{r.llmCalls}× · {fmtMs(r.llmMs)}</span>
                       : <span className="text-slate-600">—</span>}
                   </td>
                   <td className={`px-4 py-2.5 text-right tabular-nums ${durationTone(r.ms)}`}>{fmtMs(r.ms)}</td>

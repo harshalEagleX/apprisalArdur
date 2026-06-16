@@ -36,9 +36,9 @@ The platform is a **polyglot multi-service system**:
 │                                APPRISAL PLATFORM                                        │
 │                                                                                          │
 │  ┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐  │
-│  │      Next.js 16 Frontend             │     │        Ollama (Local LLM)           │  │
-│  │      Port 3000 (dev)                 │     │        Port 11434                    │  │
-│  │      Role-gated: ADMIN / REVIEWER    │     │        llava:13b model              │  │
+│  │      Next.js 16 Frontend             │     │        Groq (Cloud LLM)            │  │
+│  │      Port 3000 (dev)                 │     │        via HTTPS                     │  │
+│  │      Role-gated: ADMIN / REVIEWER    │     │        gpt-oss-120b model              │  │
 │  └──────────────┬──────────────────────┘     └─────────────────────────────────────┘  │
 │                 │ HTTP + WebSocket                         ▲                             │
 │                 ▼                                          │ HTTP                        │
@@ -46,7 +46,7 @@ The platform is a **polyglot multi-service system**:
 │  │    Java Spring Boot 3 Backend        │────►│   Python FastAPI OCR Service        │  │
 │  │    Ports: 8080 (HTTP), /ws/qc (WS)  │◄────│   Port 5001                         │  │
 │  │    5 modules: app, batch, common,    │     │   Celery workers + Redis broker      │  │
-│  │               qc, user              │     │   Ollama LLM integration             │  │
+│  │               qc, user              │     │   Groq LLM integration             │  │
 │  └──────────────┬──────────────────────┘     └─────────────────────────────────────┘  │
 │                 │ JDBC (HikariCP)                                │                      │
 │                 ▼                                                 │ SQLAlchemy           │
@@ -82,7 +82,7 @@ The platform is a **polyglot multi-service system**:
 | Next.js Frontend | React 19 + Next.js 16 | 3000 | Bearer token (localStorage) | `frontend/app/` |
 | Redis | Redis 7 | 6379 | None (dev) | Docker Compose |
 | PostgreSQL | Neon Cloud | 5432 | SSL + user/password | `jdbc:postgresql://...neon.tech` |
-| Ollama | Go binary | 11434 | None | `ollama serve` |
+| Groq | Cloud API | — | API key | api.groq.com (HTTPS) |
 
 ---
 
@@ -180,11 +180,11 @@ ocr-service/
 │   │   ├── phase2_extraction.py ← Field extraction via spatial anchors + regex
 │   │   ├── extraction_service.py ← Engagement letter + contract field extraction
 │   │   ├── cache_service.py   ← SHA-256 OCR cache (page_ocr_results table)
-│   │   ├── llm_enrichment.py  ← Ollama LLM calls for commentary analysis
+│   │   ├── llm_enrichment.py  ← Groq LLM calls for commentary analysis
 │   │   ├── comparable_extraction.py ← Sales comparison grid extraction
 │   │   ├── processing_lifecycle.py ← Durable job state machine (processing_jobs table)
 │   │   ├── progress_store.py  ← In-memory sub-stage progress store (per token)
-│   │   └── external_services.py ← Ollama health check, model availability
+│   │   └── external_services.py ← Groq health check, model availability
 │   ├── rule_engine/
 │   │   ├── engine.py          ← Rule runner: DB config, execution order, isolation
 │   │   └── rules_db.py        ← Seed + load rules config (togglable without restart)
@@ -245,8 +245,8 @@ GET  /qc/progress/{token} — sub-stage progress polling (1.5s interval from Jav
   "document_id": "uuid",
   "processing_job_id": "uuid",
   "cache_hit": false,
-  "model_provider": "ollama",
-  "model_name": "llava:7b"
+  "model_provider": "groq",
+  "model_name": "gpt-oss-120b"
 }
 ```
 
@@ -535,7 +535,7 @@ Java submits: POST /qc/submit
                   a. OCR pipeline (ThreadPoolExecutor × 4 workers)
                   b. Phase 2 field extraction
                   c. Rule engine (136 rules with DB-togglable config)
-                  d. LLM enrichment (Ollama, with keyword fallback)
+                  d. LLM enrichment (Groq, with keyword fallback)
                   e. Persist to DB (page_ocr_results, extracted_fields, rule_results)
                   f. Update processing_job status = COMPLETED
               3. Return result payload

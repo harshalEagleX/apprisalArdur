@@ -1,5 +1,5 @@
 """
-Week Four Exit Criteria Tests — Days 21-26
+Validation + AMC tests — semantic validation, cross-document consistency, routing config, AMC profiles.
 
 Day 21 — Semantic validation rules fire correctly
 Day 22 — Cross-document consistency finds mismatches

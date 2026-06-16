@@ -20,7 +20,7 @@ Admin workflow
   -> create client organisation
   -> create admin/reviewer users
   -> upload ZIP batch for a client
-  -> run QC with selected Ollama model
+  -> run QC with selected Groq model
   -> poll backend QC progress
   -> if REVIEW_PENDING, assign reviewer
   -> reviewer completes manual decisions
@@ -546,7 +546,7 @@ QC run flow:
 ```text
 Run QC / Retry
   -> POST /api/qc/process/{batchId}
-       body: { provider: "ollama", textModel, visionModel }
+       body: { provider: "groq", textModel, visionModel }
   -> optimistic row status QC_PROCESSING
   -> toast "QC started"
   -> useBatchPolling.startPolling(batch)
@@ -1221,7 +1221,7 @@ Before uploading work, an admin creates client organisations and reviewer users.
 
 On the Batches page, the admin uploads a ZIP archive for a client. The frontend checks only basic file rules: it must be a ZIP and not bigger than 50 MB. The backend does the real archive validation. After upload, the batch appears in the table, usually as `UPLOADED` or validation-related status.
 
-The admin starts QC by pressing Run QC. The frontend sends the selected Ollama model choice to the backend, changes the row to `QC_PROCESSING`, and starts polling every two seconds. While QC runs, the row shows file count, stage, percent, model details, and sub-stage. A floating background activity monitor also appears so the admin can navigate while processing continues.
+The admin starts QC by pressing Run QC. The frontend sends the selected Groq model choice to the backend, changes the row to `QC_PROCESSING`, and starts polling every two seconds. While QC runs, the row shows file count, stage, percent, model details, and sub-stage. A floating background activity monitor also appears so the admin can navigate while processing continues.
 
 When QC ends, the backend status determines the next admin action. If it becomes `COMPLETED`, no reviewer is needed. If it becomes `REVIEW_PENDING`, the admin assigns a reviewer. If it becomes `ERROR` or `VALIDATION_FAILED`, the admin opens the recovery drawer, reads/copies the error, retries QC, deletes the batch, or uploads a replacement.
 

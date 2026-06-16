@@ -389,9 +389,9 @@ Content-Type: application/json
 **Request (optional model selection):**
 ```json
 {
-  "provider": "ollama",
-  "textModel": "llava:7b",
-  "visionModel": "llava:7b"
+  "provider": "groq",
+  "textModel": "gpt-oss-120b",
+  "visionModel": "gpt-oss-120b"
 }
 ```
 
@@ -447,9 +447,9 @@ Authorization: Bearer {token}
   "percent": 33,
   "smoothedPercent": 45,
   "running": true,
-  "modelProvider": "ollama",
-  "modelName": "llava:7b",
-  "visionModel": "llava:7b",
+  "modelProvider": "groq",
+  "modelName": "gpt-oss-120b",
+  "visionModel": "gpt-oss-120b",
   "startedAt": "2026-05-11T09:15:00Z",
   "updatedAt": "2026-05-11T09:17:30Z",
   "subStage": "ocr_pages",
@@ -974,9 +974,9 @@ Emitted by `QCProcessingService` during batch processing.
   "percent": 33,
   "smoothedPercent": 45,
   "running": true,
-  "modelProvider": "ollama",
-  "modelName": "llava:7b",
-  "visionModel": "llava:7b",
+  "modelProvider": "groq",
+  "modelName": "gpt-oss-120b",
+  "visionModel": "gpt-oss-120b",
   "startedAt": "2026-05-11T09:15:00Z",
   "updatedAt": "2026-05-11T09:17:30Z",
   "subStage": "ocr_pages",
@@ -1014,7 +1014,7 @@ GET /health
   "tesseract_available": true,
   "db_available": true,
   "celery_worker_running": true,
-  "ollama_available": true
+  "groq_available": true
 }
 ```
 
@@ -1038,9 +1038,9 @@ Content-Type: multipart/form-data
 | file | Yes | Appraisal PDF |
 | engagement_letter | No | Engagement letter PDF |
 | contract_file | No | Purchase contract PDF |
-| model_provider | No | `"ollama"` (default) |
-| text_model | No | e.g. `"llava:7b"` |
-| vision_model | No | e.g. `"llava:7b"` |
+| model_provider | No | `"groq"` (default) |
+| text_model | No | e.g. `"gpt-oss-120b"` |
+| vision_model | No | e.g. `"gpt-oss-120b"` |
 | progress_token | No | UUID for sub-stage progress polling |
 | batch_id | No | Java batch ID (for correlation) |
 | batch_file_id | No | Java BatchFile ID (for correlation) |
@@ -1220,9 +1220,9 @@ The full response returned from `/qc/process` and embedded in successful job res
   "processing_job_id": "uuid",
   "cache_hit": false,
   "extraction_method": "HYBRID",
-  "model_provider": "ollama",
-  "model_name": "llava:7b",
-  "vision_model": "llava:7b",
+  "model_provider": "groq",
+  "model_name": "gpt-oss-120b",
+  "vision_model": "gpt-oss-120b",
   "supporting_document_missing": false,
   "missing_supporting_documents": [],
   "field_confidence": {
