@@ -73,6 +73,21 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @Query("SELECT COUNT(b) FROM Batch b WHERE b.client.id = :clientId AND b.status = :status")
     long countByClientIdAndStatus(@Param("clientId") Long clientId, @Param("status") BatchStatus status);
 
+    /**
+     * Per-client batch rollup in ONE grouped query (avoids N+1 across the client list):
+     * [clientId, totalBatches, completedBatches, lastActivity].
+     */
+    @Query("""
+        SELECT b.client.id,
+               COUNT(b),
+               SUM(CASE WHEN b.status = com.apprisal.common.entity.BatchStatus.COMPLETED THEN 1 ELSE 0 END),
+               MAX(b.updatedAt)
+        FROM Batch b
+        WHERE b.client.id IS NOT NULL
+        GROUP BY b.client.id
+        """)
+    List<Object[]> clientBatchStats();
+
     @Query("SELECT COUNT(b) FROM Batch b WHERE b.status = :status")
     long countByStatus(@Param("status") BatchStatus status);
 

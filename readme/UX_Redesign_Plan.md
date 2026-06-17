@@ -38,8 +38,8 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ✅ Bulk-action toolbar already present. Richer progress (elapsed + ETA) shipped. 3-tier row
   visual hierarchy still TODO.
 - 🟡 Width: Users/Clients/Batches/DocStats now fill to 1800px (was 1200–1500 left-aligned/centered). Density modes + Clients-as-table still TODO.
-- 🟡 Clients now a dense TABLE (was sparse 4-col card grid). Per-client stats (batches/files/
-  success/last-activity) + Users table extra columns need a backend aggregation endpoint — TODO.
+- ✅ Clients dense TABLE with real per-client stats (batches/files/success/last-activity) via a
+  new grouped /api/admin/clients/stats endpoint (no N+1). Users table extra columns still TODO.
 - ✅ Sidebar ≤220px (w-[220px]) + already collapsible. Grid overlay already 3.2% (within rule).
 - ⬜ Overview: group 8 metrics → Pipeline/Resources/Health; remove the Workflow-Visibility
   duplication; richer Recent Activity row; bigger reviewer-workload table.

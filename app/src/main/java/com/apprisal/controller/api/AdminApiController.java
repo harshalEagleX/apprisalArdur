@@ -43,6 +43,8 @@ public class AdminApiController {
     private final AuditLogService auditLogService;
     private final AuditLogRepository auditLogRepository;
     private final QCResultRepository qcResultRepository;
+    private final com.apprisal.common.repository.BatchRepository batchRepository;
+    private final com.apprisal.common.repository.BatchFileRepository batchFileRepository;
     private final DataSource dataSource;
 
     public AdminApiController(UserService userService,
@@ -51,6 +53,8 @@ public class AdminApiController {
             AuditLogService auditLogService,
             AuditLogRepository auditLogRepository,
             QCResultRepository qcResultRepository,
+            com.apprisal.common.repository.BatchRepository batchRepository,
+            com.apprisal.common.repository.BatchFileRepository batchFileRepository,
             DataSource dataSource) {
         this.userService = userService;
         this.clientService = clientService;
@@ -58,6 +62,8 @@ public class AdminApiController {
         this.auditLogService = auditLogService;
         this.auditLogRepository = auditLogRepository;
         this.qcResultRepository = qcResultRepository;
+        this.batchRepository = batchRepository;
+        this.batchFileRepository = batchFileRepository;
         this.dataSource = dataSource;
     }
 
@@ -185,6 +191,34 @@ public class AdminApiController {
     @GetMapping("/clients")
     public ResponseEntity<?> getClients() {
         return ResponseEntity.ok(clientService.findAll());
+    }
+
+    /**
+     * Per-client operational rollup for the clients table (batches, completed, files, success rate,
+     * last activity). Two grouped queries, joined in memory — no N+1 across the client list.
+     * Keyed by client id as a string so the frontend can look each row up.
+     */
+    @GetMapping("/clients/stats")
+    public ResponseEntity<Map<String, Object>> getClientStats() {
+        Map<Long, Long> fileCounts = new HashMap<>();
+        for (Object[] row : batchFileRepository.clientFileCounts()) {
+            fileCounts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        Map<String, Object> out = new HashMap<>();
+        for (Object[] row : batchRepository.clientBatchStats()) {
+            long clientId   = ((Number) row[0]).longValue();
+            long batches    = ((Number) row[1]).longValue();
+            long completed  = row[2] != null ? ((Number) row[2]).longValue() : 0L;
+            Object lastAct  = row[3];
+            Map<String, Object> stat = new HashMap<>();
+            stat.put("batches", batches);
+            stat.put("completed", completed);
+            stat.put("files", fileCounts.getOrDefault(clientId, 0L));
+            stat.put("successRate", batches > 0 ? Math.round((completed * 100.0) / batches) : null);
+            stat.put("lastActivity", lastAct != null ? lastAct.toString() : null);
+            out.put(String.valueOf(clientId), stat);
+        }
+        return ResponseEntity.ok(out);
     }
 
     @PostMapping("/clients")

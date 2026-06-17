@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Building2, Search, CheckCircle2, XCircle } from "lucide-react";
 import type { ComponentType } from "react";
-import { getClients, type Client } from "@/lib/api";
+import { getClients, getClientStats, type Client, type ClientStat } from "@/lib/api";
 import ClientModal from "@/components/admin/ClientModal";
 import EmptyState from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/Skeleton";
@@ -10,6 +10,7 @@ import { toast } from "@/lib/toast";
 
 export default function ClientsPage() {
   const [clients, setClients]     = useState<Client[]>([]);
+  const [stats, setStats]         = useState<Record<string, ClientStat>>({});
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch]       = useState("");
@@ -19,6 +20,8 @@ export default function ClientsPage() {
     try { setClients(await getClients()); }
     catch { toast.error("Failed to load clients"); }
     finally { setLoading(false); }
+    // Stats are best-effort — the table still renders if the rollup fails.
+    getClientStats().then(setStats).catch(() => { /* keep dashes */ });
   }, []);
 
   useEffect(() => {
@@ -106,6 +109,10 @@ export default function ClientsPage() {
                 <th className="px-4 py-2.5 font-medium">Client</th>
                 <th className="px-4 py-2.5 font-medium">Code</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 text-right font-medium">Batches</th>
+                <th className="px-4 py-2.5 text-right font-medium">Files</th>
+                <th className="px-4 py-2.5 text-right font-medium">Success</th>
+                <th className="px-4 py-2.5 font-medium">Last activity</th>
                 <th className="px-4 py-2.5 font-medium">Added</th>
               </tr>
             </thead>
@@ -130,6 +137,18 @@ export default function ClientsPage() {
                       <span className={`h-1.5 w-1.5 rounded-full ${c.status === "ACTIVE" ? "bg-green-400" : "bg-slate-500"}`} />
                       {c.status ?? "Active"}
                     </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-300">{stats[c.id]?.batches ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-300">{stats[c.id]?.files ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">
+                    {stats[c.id]?.successRate != null
+                      ? <span className={stats[c.id]!.successRate! >= 80 ? "text-green-300" : stats[c.id]!.successRate! >= 50 ? "text-amber-300" : "text-slate-300"}>{stats[c.id]!.successRate}%</span>
+                      : <span className="text-slate-600">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">
+                    {stats[c.id]?.lastActivity
+                      ? new Date(stats[c.id]!.lastActivity!).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                      : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">
                     {c.createdAt

@@ -288,6 +288,14 @@ export const deleteUser = (id: number) =>
 // ── Admin: Clients ────────────────────────────────────────────────────────────
 export const getClients = () => apiFetch<Client[]>("/api/admin/clients");
 
+export interface ClientStat {
+  batches: number; completed: number; files: number;
+  successRate: number | null; lastActivity: string | null;
+}
+/** Per-client operational rollup, keyed by client id (string). */
+export const getClientStats = () =>
+  apiFetch<Record<string, ClientStat>>("/api/admin/clients/stats");
+
 export const createClient = (name: string, code: string) =>
   apiFetch<Client>("/api/admin/clients", { method: "POST", body: JSON.stringify({ name, code }) });
 

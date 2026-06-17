@@ -48,4 +48,13 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
 
     @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.client.id = :clientId AND bf.status = :status")
     long countByClientIdAndStatus(@Param("clientId") Long clientId, @Param("status") FileStatus status);
+
+    /** Per-client file totals in one grouped query: [clientId, totalFiles]. */
+    @Query("""
+        SELECT bf.batch.client.id, COUNT(bf)
+        FROM BatchFile bf
+        WHERE bf.batch.client.id IS NOT NULL
+        GROUP BY bf.batch.client.id
+        """)
+    List<Object[]> clientFileCounts();
 }
