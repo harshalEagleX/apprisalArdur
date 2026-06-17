@@ -30,7 +30,7 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ✅ Keyboard review mode already present (F/P decide, J/K/N navigate, C comment, A ack, S submit, [/] docs) — verified.
 - ⬜ PDF ↔ finding sync (jump + highlight evidence box) — bbox plumbing already exists.
 - ⬜ Queue as a dense table (Priority/File/Client/Rules/Failures/Assigned/Age/Action).
-- ⬜ Trim reviewer queue summary cards 7 → 3 (Pending / Needs-review / Completed today).
+- ✅ Trimmed reviewer queue stat tiles 5 → 3 (Pending / With failures / Completed by you).
 - ⬜ Submitted-result screen: closure summary + Download/Copy-language/Request-re-review.
 - ⬜ Reviewer-facing language: Finding/Issue/No-issue (keep rule ids in a detail/diagnostics view).
 

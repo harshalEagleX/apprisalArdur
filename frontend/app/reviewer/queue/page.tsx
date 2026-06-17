@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock, AlertCircle, CheckCircle2, ChevronRight, RefreshCw,
-  Search, XCircle, ListFilter, FileText, ShieldAlert, PlayCircle, CalendarDays,
+  Search, XCircle, FileText, ShieldAlert, PlayCircle, CalendarDays,
   Archive,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -356,11 +356,11 @@ export default function ReviewerQueuePage() {
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
-        <QueueStat icon={FileText} label="Assigned files" value={stats.total} tone="slate" />
+      {/* Reviewers are task-oriented: show the 3 metrics that drive action, not 5.
+          Per-file failure/verify breakdowns live on each queue row below. */}
+      <div className="mb-4 grid grid-cols-3 gap-2">
+        <QueueStat icon={FileText} label="Pending reviews" value={stats.total} tone="slate" />
         <QueueStat icon={ShieldAlert} label="With failures" value={stats.failures} tone="red" />
-        <QueueStat icon={Clock} label="Review only" value={stats.reviewOnly} tone="amber" />
-        <QueueStat icon={ListFilter} label="Verify rules" value={stats.verifyRules} tone="blue" />
         <QueueStat icon={Archive} label="Completed by you" value={stats.submitted} tone="green" />
       </div>
 
