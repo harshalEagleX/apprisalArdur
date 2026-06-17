@@ -5,7 +5,7 @@ import {
   ArrowRight, ChevronDown, ChevronRight, GitCompare, Download,
 } from "lucide-react";
 import {
-  getBatchById, getQCHistory, getQCResultDiff, downloadFindingsExport,
+  getBatchById, getQCHistory, getQCResultDiff, downloadFindingsExport, processQCFiles,
   type Batch, type BatchFile, type QCHistoryRun, type QCResultDiff, type QCDiffFinding,
 } from "@/lib/api";
 import { toast } from "@/lib/toast";
@@ -197,7 +197,10 @@ function RunCard({ run, index }: { run: QCHistoryRun; index: number }) {
 }
 
 /** All runs for one file, newest first. */
-function FileHistory({ file, runs }: { file: BatchFile; runs: QCHistoryRun[] }) {
+function FileHistory({ file, runs, onRerun, busy }: {
+  file: BatchFile; runs: QCHistoryRun[];
+  onRerun?: (fileId: number) => void; busy?: boolean;
+}) {
   // Newest run first — the backend returns them by processedAt; sort defensively.
   const ordered = [...runs].sort((a, b) => {
     const ta = a.processedAt ? Date.parse(a.processedAt) : 0;
@@ -210,7 +213,23 @@ function FileHistory({ file, runs }: { file: BatchFile; runs: QCHistoryRun[] }) 
         <FileStack size={13} className="text-slate-500" />
         <span className="truncate text-xs font-medium text-slate-200" title={file.filename}>{file.filename}</span>
         <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500">{file.fileType}</span>
-        <span className="ml-auto text-[10px] text-slate-500">{ordered.length} run{ordered.length === 1 ? "" : "s"}</span>
+        <div className="ml-auto flex items-center gap-2">
+          {/* Per-file re-run (only files that have been QC'd, i.e. appraisal files). Re-runs
+              ONLY this file; other files in the batch keep their results + review state. */}
+          {onRerun && ordered.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onRerun(file.id)}
+              disabled={busy}
+              title="Re-run QC for ONLY this file — its current result is superseded; every other file in the batch is left untouched"
+              className="inline-flex items-center gap-1 rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-indigo-300 transition-colors hover:bg-white/[0.04] hover:text-indigo-200 disabled:opacity-50"
+            >
+              <RefreshCw size={10} className={busy ? "animate-spin" : ""} />
+              {busy ? "Re-running…" : "Re-run file"}
+            </button>
+          )}
+          <span className="text-[10px] text-slate-500">{ordered.length} run{ordered.length === 1 ? "" : "s"}</span>
+        </div>
       </div>
       {ordered.length === 0 ? (
         <div className="mt-2 text-[11px] text-slate-500">No QC runs yet for this document.</div>
@@ -239,6 +258,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
   const [files, setFiles] = useState<BatchFile[]>([]);
   const [historyByFile, setHistoryByFile] = useState<Record<number, QCHistoryRun[]>>({});
   const [downloading, setDownloading] = useState<"json" | "csv" | null>(null);
+  const [rerunning, setRerunning] = useState<Set<number>>(new Set());
 
   const handleExport = useCallback(async (fmt: "json" | "csv") => {
     if (!batch) return;
@@ -269,6 +289,26 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
       setLoading(false);
     }
   }, []);
+
+  const handleRerunFile = useCallback(async (fileId: number) => {
+    if (!batch) return;
+    setRerunning(prev => new Set(prev).add(fileId));
+    try {
+      const res = await processQCFiles(batch.id, [fileId]);
+      toast.success(
+        "Re-run started for this file",
+        res.reviewerActive
+          ? "A reviewer is active on this batch — they will be notified that this file was re-processed."
+          : "Only this file is re-processed; other files are untouched.",
+      );
+      // Give the worker a moment, then refresh this file's run chain.
+      window.setTimeout(() => { void loadHistory(batch.id); }, 2500);
+    } catch (e) {
+      toast.error("File re-run failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setRerunning(prev => { const n = new Set(prev); n.delete(fileId); return n; });
+    }
+  }, [batch, loadHistory]);
 
   useEffect(() => {
     if (!batch) return;
@@ -363,7 +403,8 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
                 or changed versus the run it replaced — and whether the rule engine itself changed between them.
               </p>
               {files.map(f => (
-                <FileHistory key={f.id} file={f} runs={historyByFile[f.id] ?? []} />
+                <FileHistory key={f.id} file={f} runs={historyByFile[f.id] ?? []}
+                  onRerun={handleRerunFile} busy={rerunning.has(f.id)} />
               ))}
             </div>
           )}

@@ -571,6 +571,16 @@ export const cancelQC = (batchId: number) =>
     { method: "POST" }
   );
 
+/**
+ * Partial re-run: re-process ONLY the given appraisal files. Their prior results are
+ * superseded; every other file in the batch keeps its results and reviewer state.
+ */
+export const processQCFiles = (batchId: number, fileIds: number[], model?: QCModelSelection) =>
+  apiFetch<{ message: string; batchId: number; fileCount?: number; reviewerActive?: boolean; pollUrl?: string; status?: string }>(
+    `/api/qc/process/${batchId}/files`,
+    { method: "POST", body: JSON.stringify({ fileIds, ...(model ?? {}) }) }
+  );
+
 export const getBatchQCProgress = (batchId: number) =>
   apiFetch<{
     stage: string;
