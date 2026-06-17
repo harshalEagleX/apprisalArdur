@@ -28,8 +28,10 @@ const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
 });
 
 type Decision = "PASS" | "FAIL";
-type Filter = "all" | "fail" | "verify" | "pass";
-const FILTERS: Filter[] = ["all", "fail", "verify", "pass"];
+// "attention" = the default working view: failures + items needing review, passes hidden.
+// Passes are opt-in (the "Pass" tab) — they almost never need reviewer action and only add noise.
+type Filter = "attention" | "all" | "fail" | "verify" | "pass";
+const FILTERS: Filter[] = ["attention", "fail", "verify", "pass", "all"];
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 1.8;
 const ZOOM_STEP = 0.1;
@@ -199,7 +201,7 @@ export default function VerifyFilePage() {
   const [rules, setRules]               = useState<QCRuleResult[]>([]);
   const [requireSecondApproval, setRequireSecondApproval] = useState(true);
   const [loading, setLoading]           = useState(true);
-  const [filter, setFilter]             = useState<Filter>("all");
+  const [filter, setFilter]             = useState<Filter>("attention");
   const [ruleQuery, setRuleQuery]       = useState("");
   const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const [decisions, setDecisions]       = useState<Record<number, Decision>>({});
@@ -403,6 +405,7 @@ export default function VerifyFilePage() {
     review: rules.filter(r => isReviewLikeStatus(r.status)).length,
   };
   const filtered = rules.filter(r => {
+    if (filter === "attention") return r.status === "fail" || isReviewLikeStatus(r.status);
     if (filter === "fail")   return r.status === "fail";
     if (filter === "verify") return isReviewLikeStatus(r.status);
     if (filter === "pass")   return r.status === "pass" || r.status === "MANUAL_PASS";
@@ -452,7 +455,7 @@ export default function VerifyFilePage() {
 
   function jumpToNextPending() {
     if (!nextPendingRule) return;
-    setFilter("all"); focusRule(nextPendingRule);
+    setFilter("attention"); focusRule(nextPendingRule);
     window.setTimeout(() => { document.getElementById(`rule-${nextPendingRule.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50);
   }
 
@@ -643,10 +646,11 @@ export default function VerifyFilePage() {
       event.preventDefault(); void loadRules(); void getQCProgress(qcResultId).then(setProgress).catch(() => undefined); return;
     }
     if (!inTextField && event.key === "/") { event.preventDefault(); ruleSearchRef.current?.focus(); return; }
-    if (!inTextField && event.key === "1") { event.preventDefault(); setFilter("all"); setSelectedRuleId(null); return; }
+    if (!inTextField && event.key === "1") { event.preventDefault(); setFilter("attention"); setSelectedRuleId(null); return; }
     if (!inTextField && event.key === "2") { event.preventDefault(); setFilter("fail"); setSelectedRuleId(null); return; }
     if (!inTextField && event.key === "3") { event.preventDefault(); setFilter("verify"); setSelectedRuleId(null); return; }
     if (!inTextField && event.key === "4") { event.preventDefault(); setFilter("pass"); setSelectedRuleId(null); return; }
+    if (!inTextField && event.key === "5") { event.preventDefault(); setFilter("all"); setSelectedRuleId(null); return; }
     if (!inTextField && VIEWER_SCROLL_KEYS.has(event.key) && documentViewerOwnsKeyboard(target)) {
       event.preventDefault(); scrollViewerByKey(event.key, event.shiftKey); return;
     }
@@ -967,9 +971,13 @@ export default function VerifyFilePage() {
                 {FILTERS.map(f => (
                   <button key={f} onClick={() => { setFilter(f); setSelectedRuleId(null); }}
                     aria-pressed={filter === f}
-                    aria-keyshortcuts={f === "all" ? "1" : f === "fail" ? "2" : f === "verify" ? "3" : "4"}
+                    aria-keyshortcuts={f === "attention" ? "1" : f === "fail" ? "2" : f === "verify" ? "3" : f === "pass" ? "4" : "5"}
                     className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"}`}>
-                    {f === "all" ? `All (${counts.total})` : f === "fail" ? `Fail (${counts.fail})` : f === "verify" ? `Needs Review (${counts.review})` : `Pass (${counts.pass})`}
+                    {f === "attention" ? `Needs attention (${counts.fail + counts.review})`
+                      : f === "fail" ? `Fail (${counts.fail})`
+                      : f === "verify" ? `Needs Review (${counts.review})`
+                      : f === "pass" ? `Pass (${counts.pass})`
+                      : `All (${counts.total})`}
                   </button>
                 ))}
               </div>

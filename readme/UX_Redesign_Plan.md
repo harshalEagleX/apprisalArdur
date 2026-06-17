@@ -21,7 +21,8 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ⬜ Move activity into a top-nav Activity Center / bell as the longer-term home.
 
 ## Phase 2 — Reviewer workspace (highest product value)
-- ⬜ Hide passed rules by default (show Fail + Needs-Review; "Show passed" opt-in).
+- ✅ Hide passed rules by default — new "Needs attention" view (fail+needs-review) is the
+  default; passes are an opt-in tab (key 1=attention,2=fail,3=review,4=pass,5=all).
 - ⬜ Progress as hero (large bar + "46/47 · 1 decision remaining").
 - ⬜ Evidence-first ordering: Finding → Evidence → Decision controls.
 - ⬜ Confidence framed safely ("High confidence · evidence available", not bare "100%").
