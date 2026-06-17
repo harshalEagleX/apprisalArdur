@@ -124,6 +124,17 @@ public class QCProcessingService {
 
     @Async("qcTaskExecutor")
     public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId, QCModelConfig modelConfig) {
+        return processBatchAsync(batchId, modelConfig, null);
+    }
+
+    /**
+     * Partial re-run: when {@code onlyFileIds} is non-empty, only those appraisal files are
+     * reprocessed and superseded; all other files keep their results + reviewer state, and the
+     * batch status is recomputed from every active result. Empty/null = full-batch run.
+     */
+    @Async("qcTaskExecutor")
+    public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId, QCModelConfig modelConfig,
+                                                                    java.util.Set<Long> onlyFileIds) {
         long asyncStarted = System.nanoTime();
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         log.info(TimelineLog.event("admin_batches", "java_qc_async_worker_start",
@@ -144,7 +155,7 @@ public class QCProcessingService {
             // Call via self (proxy) so transactional helper calls inside processBatch
             // still go through Spring AOP. processBatch itself intentionally does not
             // keep one transaction open during the long Python OCR call.
-            QCProcessingSummary result = self.processBatch(batchId, safeModelConfig);
+            QCProcessingSummary result = self.processBatch(batchId, safeModelConfig, onlyFileIds);
             log.info(TimelineLog.event("admin_batches", "java_qc_async_worker_complete",
                     "batch_id", batchId,
                     "status", result.batchStatus(),
@@ -278,7 +289,19 @@ public class QCProcessingService {
     }
 
     public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId, QCModelConfig modelConfig) {
+        return processBatch(batchId, modelConfig, null);
+    }
+
+    /**
+     * Process (or partially re-process) a batch. When {@code onlyFileIds} is non-empty, only those
+     * appraisal files are processed; their prior results are superseded while every other file's
+     * results and reviewer state are untouched, and the final batch status is recomputed from ALL
+     * active results (not just the processed subset).
+     */
+    public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId, QCModelConfig modelConfig,
+                                                     java.util.Set<Long> onlyFileIds) {
         long batchStarted = System.nanoTime();
+        boolean partial = onlyFileIds != null && !onlyFileIds.isEmpty();
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         batchQcStartedAt.putIfAbsent(batchId, Instant.now());
         log.info(TimelineLog.event("admin_batches", "java_qc_batch_start",
@@ -298,8 +321,21 @@ public class QCProcessingService {
         businessEventService.batchEvent("BATCH_QC_STARTED", null, batch, "STARTED", Map.of("model", safeModelConfig.label()));
         updateProgress(batchId, "matching", "Matching appraisal, engagement, and contract files", 0, 1, true, safeModelConfig);
 
-        // Get matched file pairs
+        // Get matched file pairs (partial re-run: keep only the requested appraisal files)
         List<FilePair> pairs = fileMatchingService.getMatchedPairs(batchId);
+        if (partial) {
+            pairs = pairs.stream()
+                    .filter(p -> p.getAppraisal() != null && onlyFileIds.contains(p.getAppraisal().getId()))
+                    .toList();
+            // None of the requested files matched → do NOT error the whole batch; restore status
+            // from the (untouched) active results and return.
+            if (pairs.isEmpty()) {
+                BatchStatus restored = recomputeBatchStatusFromActiveResults(batchId);
+                self.saveFinalBatchStatus(batchId, restored, null);
+                updateProgress(batchId, "complete", "No matching files to re-run", 0, 1, false, safeModelConfig);
+                return new QCProcessingSummary(0, 0, 0, 0, 0, restored);
+            }
+        }
         log.info(TimelineLog.event("admin_batches", "java_qc_matching_complete",
                 "batch_id", batchId,
                 "matched_pairs", pairs.size(),
@@ -387,7 +423,11 @@ public class QCProcessingService {
             }
         }
 
-        BatchStatus newStatus = determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
+        // Partial re-run: the processed subset is not the whole batch, so the final status must
+        // reflect EVERY file's active result (re-run + untouched), not just the subset counts.
+        BatchStatus newStatus = partial
+                ? recomputeBatchStatusFromActiveResults(batchId)
+                : determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
         String finalError = null;
         if (newStatus == BatchStatus.ERROR) {
             finalError = fileErrors.isEmpty()
@@ -1075,6 +1115,25 @@ public class QCProcessingService {
 
         // Mixed results or partial errors — send to reviewer
         return BatchStatus.REVIEW_PENDING;
+    }
+
+    /**
+     * Recompute the batch status from EVERY active (non-superseded) result — used after a partial
+     * re-run, where the processed subset is not representative of the whole batch. A batch is
+     * COMPLETED only when no active result still needs reviewer work; any active non-AUTO_PASS
+     * result without a final decision keeps it REVIEW_PENDING (so the untouched files' review work
+     * is preserved). No active results at all → ERROR.
+     */
+    private BatchStatus recomputeBatchStatusFromActiveResults(Long batchId) {
+        List<QCResult> active = qcResultRepository.findByBatchId(batchId).stream()
+                .filter(r -> r.getSupersededAt() == null)
+                .toList();
+        if (active.isEmpty()) {
+            return BatchStatus.ERROR;
+        }
+        boolean anyPending = active.stream()
+                .anyMatch(r -> r.getQcDecision() != QCDecision.AUTO_PASS && r.getFinalDecision() == null);
+        return anyPending ? BatchStatus.REVIEW_PENDING : BatchStatus.COMPLETED;
     }
 
     private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file, QCModelConfig modelConfig,

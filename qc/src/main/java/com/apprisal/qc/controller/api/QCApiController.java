@@ -180,6 +180,64 @@ public class QCApiController {
     }
 
     /**
+     * Partial re-run: re-process ONLY the given appraisal files (by BatchFile id). Their prior
+     * results are superseded; every other file in the batch keeps its results and reviewer state.
+     * Use this to fix a few files in a large batch without wiping review work on the rest.
+     */
+    @PostMapping("/process/{batchId}/files")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> processFiles(
+            @PathVariable @NonNull Long batchId,
+            @RequestBody Map<String, Object> body) {
+        // Parse the requested appraisal file ids.
+        java.util.Set<Long> fileIds = new java.util.LinkedHashSet<>();
+        Object raw = body != null ? body.get("fileIds") : null;
+        if (raw instanceof java.util.List<?> list) {
+            for (Object o : list) {
+                try { fileIds.add(Long.valueOf(String.valueOf(o))); } catch (NumberFormatException ignore) { }
+            }
+        }
+        if (fileIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "message", "fileIds is required — a non-empty list of appraisal file ids to re-run."));
+        }
+        QCModelConfig modelConfig = new QCModelConfig(
+                body.get("provider") instanceof String p ? p : null,
+                body.get("textModel") instanceof String t ? t : null,
+                body.get("visionModel") instanceof String v ? v : null);
+
+        var batchOpt = batchRepository.findById(batchId);
+        if (batchOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        if (batchOpt.get().getStatus() == BatchStatus.QC_PROCESSING) {
+            return ResponseEntity.ok(Map.of(
+                "message", "Batch is already being processed", "batchId", batchId, "status", "QC_PROCESSING",
+                "pollUrl", "/api/admin/batches/" + batchId + "/status"));
+        }
+        // Same pre-flight as a full run: reject if Python is down BEFORE claiming the batch.
+        if (!pythonClientService.isHealthy()) {
+            return ResponseEntity.status(503).body(Map.of(
+                "message", "QC service is unavailable — the re-run was not started.", "batchId", batchId,
+                "serviceAvailable", false));
+        }
+        if (!qcProcessingService.claimBatchForProcessing(batchId, modelConfig)) {
+            return ResponseEntity.ok(Map.of(
+                "message", "Batch could not be claimed for QC", "batchId", batchId,
+                "pollUrl", "/api/admin/batches/" + batchId + "/status"));
+        }
+        long activeReviewSignals = qcRuleResultRepository.countActiveReviewPresenceForBatch(
+                batchId, java.time.LocalDateTime.now().minusMinutes(30));
+        qcProcessingService.processBatchAsync(batchId, modelConfig, fileIds);
+        log.info(TimelineLog.event("admin_batches", "java_qc_partial_rerun_accepted",
+                "batch_id", batchId, "file_count", fileIds.size(), "reviewer_active", activeReviewSignals > 0));
+        return ResponseEntity.accepted().body(Map.of(
+            "message", "Partial QC re-run started", "batchId", batchId, "fileCount", fileIds.size(),
+            "reviewerActive", activeReviewSignals > 0,
+            "pollUrl", "/api/admin/batches/" + batchId + "/status"));
+    }
+
+    /**
      * Best-effort stop for a running QC job.
      * If Python is already processing a request, Java interrupts the worker and
      * prevents any late result from being saved when control returns.
