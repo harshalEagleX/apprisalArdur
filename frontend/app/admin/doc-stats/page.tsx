@@ -32,7 +32,7 @@ export default function DocStatsPage() {
   const [view, setView] = useState<View>("appraisals");
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto">
+    <div className="w-full max-w-[1800px] p-6 lg:p-8">
       <header className="mb-5">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-500/25 bg-indigo-600/15">

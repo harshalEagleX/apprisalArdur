@@ -24,7 +24,7 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ✅ Hide passed rules by default — new "Needs attention" view (fail+needs-review) is the
   default; passes are an opt-in tab (key 1=attention,2=fail,3=review,4=pass,5=all).
 - ✅ Progress as hero — wide bar + prominent count + "N left/all decided"; Submit turns green when ready.
-- ⬜ Evidence-first ordering: Finding → Evidence → Decision controls.
+- ✅ Evidence-first ordering already in place — EvidenceCompare (finding+evidence) renders before the decision controls; verified.
 - ✅ Confidence framed qualitatively (High/Moderate/Low + secondary %); low confidence flagged amber.
 - ✅ Override-to-Pass guarded — Confirm-Fail is now the wider/primary action; Override is muted, narrower, reason-gated.
 - ✅ Keyboard review mode already present (F/P decide, J/K/N navigate, C comment, A ack, S submit, [/] docs) — verified.
@@ -35,12 +35,12 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ⬜ Reviewer-facing language: Finding/Issue/No-issue (keep rule ids in a detail/diagnostics view).
 
 ## Phase 3 — Admin density & hierarchy
-- ⬜ Batches: 3-tier row hierarchy (id/status/progress primary), richer progress (ETA, current
-  file, engine, errors), bulk-action toolbar on selection.
-- ⬜ Tables everywhere (Users, Clients, DocStats batch) with density modes; fill 80–90% width.
+- ✅ Bulk-action toolbar already present (Run QC / Delete / Assign on selection). 3-tier row
+  hierarchy + richer progress (ETA/current-file) still TODO.
+- 🟡 Width: Users/Clients/Batches/DocStats now fill to 1800px (was 1200–1500 left-aligned/centered). Density modes + Clients-as-table still TODO.
 - ⬜ Users table: add Status/Last-login/Org/Actions. Clients: stats card (users/batches/files/
   success/last-activity) instead of one empty card.
-- ⬜ Sidebar ≤220px, collapsible to ~72px. Reduce decorative grid background to ≤10%.
+- ✅ Sidebar ≤220px (w-[220px]) + already collapsible. Grid overlay already 3.2% (within rule).
 - ⬜ Overview: group 8 metrics → Pipeline/Resources/Health; remove the Workflow-Visibility
   duplication; richer Recent Activity row; bigger reviewer-workload table.
 - ⬜ Empty states that educate (no bare 0s); skeleton loading states; breadcrumbs; ⌘K global search.

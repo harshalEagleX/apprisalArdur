@@ -425,7 +425,7 @@ export default function BatchesPage() {
   const activeFilterLabel = statusFilter ? statusFilter.replace(/_/g, " ") : "All statuses";
 
   return (
-    <div className="max-w-[1500px] p-6">
+    <div className="w-full max-w-[1800px] p-6">
       {dbDegraded && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-4 py-2.5">
           <AlertCircle size={15} className="shrink-0 text-amber-400" />

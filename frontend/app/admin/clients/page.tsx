@@ -36,7 +36,7 @@ export default function ClientsPage() {
   const activeCount = clients.filter(c => (c.status ?? "ACTIVE") === "ACTIVE").length;
 
   return (
-    <div className="max-w-[1400px] p-6">
+    <div className="w-full max-w-[1800px] p-6">
       <div data-guide="admin-clients-header" className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Tenant registry</div>
