@@ -44,6 +44,21 @@ public class VerificationService {
     private final BusinessEventService businessEventService;
     private final PythonClientService pythonClientService;
 
+    /**
+     * Whether a FAIL→Pass override must be approved by a SECOND reviewer (two-person rule).
+     * Defaults true (compliance-safe for prod). Set false for single-reviewer deployments,
+     * where the requester may approve their own override — otherwise a solo reviewer is
+     * permanently deadlocked ("N left" never clears because no second reviewer exists).
+     * The frontend reads this via the review config so its messaging matches the backend.
+     */
+    @org.springframework.beans.factory.annotation.Value("${qc.override.require-second-approval:true}")
+    private boolean requireSecondApprovalForOverride;
+
+    /** Whether a FAIL→Pass override needs a second reviewer's approval (frontend reads this so its messaging matches). */
+    public boolean isSecondApprovalRequiredForOverride() {
+        return requireSecondApprovalForOverride;
+    }
+
     public VerificationService(QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
             BatchRepository batchRepository,
@@ -733,7 +748,11 @@ public class VerificationService {
 
         if (Boolean.TRUE.equals(ruleResult.getOverridePending())) {
             User requestedBy = ruleResult.getOverrideRequestedBy();
-            if (requestedBy != null && Objects.equals(requestedBy.getId(), reviewer.getId())) {
+            // Two-person rule: the requester cannot approve their own override — UNLESS the
+            // deployment runs with the second-approval policy disabled (single-reviewer setup),
+            // in which case a solo reviewer would otherwise be permanently blocked.
+            if (requireSecondApprovalForOverride
+                    && requestedBy != null && Objects.equals(requestedBy.getId(), reviewer.getId())) {
                 throw new IllegalStateException("FAIL override requires approval from a second reviewer.");
             }
             ruleResult.setReviewerVerified(true);

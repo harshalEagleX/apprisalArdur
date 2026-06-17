@@ -7,7 +7,7 @@ import {
   Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search, Maximize2, Minimize2, RefreshCw,
 } from "lucide-react";
 import {
-  getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus,
+  getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus, getReviewConfig,
   type BatchFile, type DocumentMatch, type QCRuleResult,
 } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
@@ -197,6 +197,7 @@ export default function VerifyFilePage() {
   const returnTo = safeReviewerQueuePath(searchParams.get("returnTo"));
 
   const [rules, setRules]               = useState<QCRuleResult[]>([]);
+  const [requireSecondApproval, setRequireSecondApproval] = useState(true);
   const [loading, setLoading]           = useState(true);
   const [filter, setFilter]             = useState<Filter>("all");
   const [ruleQuery, setRuleQuery]       = useState("");
@@ -313,6 +314,13 @@ export default function VerifyFilePage() {
     const timer = window.setTimeout(() => { void loadRules(); }, 0);
     return () => window.clearTimeout(timer);
   }, [loadRules]);
+
+  useEffect(() => {
+    // Mirror the backend override policy so the override messaging matches (single- vs two-reviewer).
+    getReviewConfig()
+      .then(c => setRequireSecondApproval(c.requireSecondApprovalForOverride))
+      .catch(() => { /* keep the safe default (true) */ });
+  }, []);
 
   useEffect(() => {
     getQCFileInfo(qcResultId)
@@ -769,6 +777,7 @@ export default function VerifyFilePage() {
       onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
       onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
       commentRef={node => { commentRefs.current[rule.id] = node; }}
+      requireSecondApproval={requireSecondApproval}
     />
   );
 

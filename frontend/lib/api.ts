@@ -619,6 +619,10 @@ export const getQCResults = (batchId: number) =>
 export const getQCRules = (qcResultId: number) =>
   apiFetch<QCRuleResult[]>(`/api/reviewer/qc/${qcResultId}/rules`);
 
+/** Review policy flags the UI mirrors so its messaging matches the backend. */
+export const getReviewConfig = () =>
+  apiFetch<{ requireSecondApprovalForOverride: boolean }>("/api/reviewer/config");
+
 export const getQCProgress = (qcResultId: number) =>
   apiFetch<{ totalRules: number; totalToVerify: number; pending: number; canSubmit: boolean }>(
     `/api/reviewer/qc/${qcResultId}/progress`

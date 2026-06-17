@@ -67,6 +67,16 @@ public class ReviewerApiController {
         this.objectMapper = objectMapper;
     }
 
+    // ── Review config (policy flags the UI must mirror) ───────────────────────
+
+    /** Policy flags the reviewer UI mirrors so its messaging/affordances match the backend. */
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getReviewConfig() {
+        return ResponseEntity.ok(Map.of(
+            "requireSecondApprovalForOverride", verificationService.isSecondApprovalRequiredForOverride()
+        ));
+    }
+
     // ── Submitted queue (recently completed by this reviewer) ─────────────────
 
     @GetMapping("/qc/results/submitted")

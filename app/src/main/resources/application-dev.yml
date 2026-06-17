@@ -26,6 +26,12 @@ spring:
       ddl-auto: update
     show-sql: false
 
+# Single-reviewer dev/testing: let a reviewer approve their own FAIL→Pass override.
+# Prod keeps the two-person rule (default true) for compliance.
+qc:
+  override:
+    require-second-approval: false
+
 logging:
   level:
     com.apprisal: DEBUG

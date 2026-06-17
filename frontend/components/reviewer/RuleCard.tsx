@@ -73,6 +73,8 @@ export interface RuleCardProps {
   onComment: (c: string) => void;
   commentRef: (node: HTMLTextAreaElement | null) => void;
   saveNotice?: { text: string; tone: "success" | "error" | "info" } | null;
+  /** Whether a FAIL→Pass override needs a SECOND reviewer (mirrors the backend policy). */
+  requireSecondApproval?: boolean;
 }
 
 export const RuleCard = memo(function RuleCard({
@@ -90,6 +92,7 @@ export const RuleCard = memo(function RuleCard({
   onAcknowledge,
   onComment,
   commentRef,
+  requireSecondApproval = true,
 }: RuleCardProps) {
   const normalizedStatus = ruleStatus(rule.status);
   const [expanded, setExpanded] = useState(
@@ -304,13 +307,19 @@ export const RuleCard = memo(function RuleCard({
               {isFail && (
                 <div className="text-[11px] text-red-200 bg-red-950/18 border border-red-500/25 rounded-lg px-2.5 py-2">
                   <strong>Confirm Fail</strong> to acknowledge this finding — it stays as a failure in the final report.
-                  To override to PASS, enter a specific reason of at least 20 characters; a second reviewer must approve it before sign-off.
+                  To override to PASS, enter a specific reason of at least 20 characters
+                  {requireSecondApproval ? "; a second reviewer must approve it before sign-off." : "."}
                 </div>
               )}
               {rule.overridePending && (
                 <div className="text-[11px] text-slate-200 bg-slate-950/18 border border-slate-500/25 rounded-lg px-2.5 py-2">
-                  Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
-                  different reviewer must press Override to Pass to approve it.
+                  {requireSecondApproval ? (
+                    <>Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
+                    different reviewer must press Override to Pass to approve it.</>
+                  ) : (
+                    <>Override requested by {rule.overrideRequestedBy ?? "a reviewer"}. Press
+                    Override to Pass to approve it (single-reviewer mode).</>
+                  )}
                 </div>
               )}
 
