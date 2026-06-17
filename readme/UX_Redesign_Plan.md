@@ -41,8 +41,9 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ✅ Clients dense TABLE with real per-client stats (batches/files/success/last-activity) via a
   new grouped /api/admin/clients/stats endpoint (no N+1). Users table extra columns still TODO.
 - ✅ Sidebar ≤220px (w-[220px]) + already collapsible. Grid overlay already 3.2% (within rule).
-- ⬜ Overview: group 8 metrics → Pipeline/Resources/Health; remove the Workflow-Visibility
-  duplication; richer Recent Activity row; bigger reviewer-workload table.
+- ✅ Overview: removed the Workflow-Visibility duplication — flat metric row trimmed 8→4
+  (resources+health); pipeline stages live only in the actionable Workflow section.
+- ⬜ Overview: richer Recent Activity row; bigger reviewer-workload table.
 - ⬜ Empty states that educate (no bare 0s); skeleton loading states; breadcrumbs; ⌘K global search.
 
 ## Phase 4 — DocStats: operator-first

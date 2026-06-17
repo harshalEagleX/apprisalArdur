@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Package, Users, AlertCircle, CheckCircle2, Clock, Loader, Building2,
+  Package, Users, AlertCircle, CheckCircle2, Loader, Building2,
   ArrowRight, Upload, UserPlus, Activity, ShieldAlert, CalendarDays,
 } from "lucide-react";
 import { getAdminDashboard, type Batch, type User } from "@/lib/api";
@@ -113,17 +113,15 @@ export default function AdminOverviewPage() {
         </div>
       )}
 
-      {/* Decision metrics */}
+      {/* Resources & health — the pipeline-stage counts (running / awaiting / in-review /
+          completed) live in the actionable Workflow visibility section below, so they're not
+          repeated here. This row is the at-a-glance "resources + health" summary only. */}
       <div data-guide="admin-overview-metrics" className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(10.75rem,1fr))] gap-3">
         {loading ? (
-          Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
+          Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)
         ) : (
           <>
             <StatCard label="Total batches"    value={n("totalBatches")}   icon={Package}      color="slate" />
-            <StatCard label="QC running"       value={n("pendingOcr")}     icon={Loader}       color="indigo" />
-            <StatCard label="Awaiting review"  value={n("pendingReview")}  icon={Clock}        color="amber" />
-            <StatCard label="In review"        value={n("inReview")}       icon={Clock}        color="amber" />
-            <StatCard label="Completed"        value={n("completed")}      icon={CheckCircle2} color="green" />
             <StatCard label="Errors"           value={n("errors")}         icon={AlertCircle}  color="red" />
             <StatCard label="Active reviewers" value={n("reviewerCount")}  icon={Users}        color="blue" />
             <StatCard label="Client orgs"      value={n("clientOrganizations")} icon={Building2} color="slate" />
