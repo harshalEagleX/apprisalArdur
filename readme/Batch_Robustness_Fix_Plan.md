@@ -63,4 +63,22 @@
 
 ---
 
-*Status: Phase 1 implemented in this pass (see commit). Phases 2–5 staged.*
+## Status (as of 2026-06-17)
+
+| Phase | Item | State | Where |
+|-------|------|-------|-------|
+| **1** | D3 supersede-aware `assertDocumentCurrent` | ✅ shipped | `VerificationService` (commit 4183754) |
+| **1** | D2 guard on submit/accept/reject | ✅ shipped | `VerificationService` (4183754) |
+| **1** | A1 `QC_RESULT_SUPERSEDED` audit event | ✅ shipped | `QCProcessingService.persistPythonResult` (4183754) |
+| **1** | U1 stale `ollama·llava:7b` DB scrub | ✅ shipped | `scripts/scrub_legacy_model_labels.sql` (998aca5), applied to dev DB |
+| **2** | U1b coherent progress message | ✅ shipped | `QCProcessingService.updateProgress` (998aca5) |
+| **2** | U1b explicit **stuck** indicator (no-progress + stale `updatedAt` ≥ 4 min) | ✅ shipped | `BatchRow.tsx` (dbcaa96) |
+| **3** | R1 per-file partial re-run (backend) | ✅ shipped | `POST /api/qc/process/{batchId}/files` (eb2700e) |
+| **3** | R1 per-file re-run (frontend button) | ✅ shipped | `BatchHistoryDrawer.tsx` + `api.processQCFiles` (57045ac) |
+| **3** | R2 carry review lock to new result | ⬜ open | `persistPythonResult` still ends at `REVIEW_PENDING` without lock carry |
+| **4** | Re-run history surface (per-file run chains) | ✅ shipped | `BatchHistoryDrawer` (pre-existing chain view) |
+| **4** | Status taxonomy / file-set grouping polish | 🟡 partial | stuck badge + per-file controls done; multi-set grouping in audit still flat (X1) |
+| **5** | Re-run supersede guard test on real Postgres | ✅ shipped | `RerunGuardIntegrationTests` (3c601f5) — acceptAll/rejectAll reject superseded; active query excludes it |
+| **5** | Broader e2e (in-review 409, N-of-50 partial, stuck-worker, double-click) | ⬜ open | manual smoke verified; automation pending |
+
+**Remaining:** R2 (lock carry), X1 (multi-set audit grouping), and the broader Phase-5 e2e suite.
