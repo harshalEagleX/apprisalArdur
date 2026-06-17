@@ -68,8 +68,10 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
     const nextErrors: typeof fieldErrors = {};
     if (!f.name.toLowerCase().endsWith(".zip")) {
       nextErrors.file = "Only ZIP archives are accepted.";
-    } else if (f.size > 50 * 1024 * 1024) {
-      nextErrors.file = "ZIP file must be 50 MB or smaller.";
+    } else if (f.size > 256 * 1024 * 1024) {
+      // The ZIP envelope matches the backend (256 MB) since it holds several appraisal
+      // files; the real guard is per-file (50 MB), enforced server-side on extraction.
+      nextErrors.file = "ZIP archive must be 256 MB or smaller (each file inside is capped at 50 MB).";
     }
     setFieldErrors(prev => ({ ...prev, file: nextErrors.file }));
     if (!nextErrors.file) {
@@ -192,7 +194,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h2 id="upload-dialog-title" className="text-sm font-semibold text-white">Upload batch</h2>
-            <p id="upload-dialog-description" className="text-[11px] text-slate-500 mt-0.5">ZIP must contain appraisal and engagement folders. Contracts are optional.</p>
+            <p id="upload-dialog-description" className="text-[11px] text-slate-500 mt-0.5">ZIP must contain appraisal and engagement folders. Contracts are optional. PDF files only — each capped at 50&nbsp;MB.</p>
           </div>
           {!uploading && (
             <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300" aria-label="Close upload dialog">

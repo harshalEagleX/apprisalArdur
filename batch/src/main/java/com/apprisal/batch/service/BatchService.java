@@ -64,6 +64,10 @@ public class BatchService {
     @Value("${app.storage.path:./uploads}")
     private String storagePath;
 
+    /** Per-file size cap (MB). Files in the ZIP larger than this are excluded with a clear note. */
+    @Value("${app.upload.max-file-mb:50}")
+    private long maxUploadFileMb;
+
     public BatchService(BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             QCResultRepository qcResultRepository,
@@ -387,6 +391,9 @@ public class BatchService {
         // Non-PDF files are catalogued (so nothing is silently dropped) but excluded
         // from the extraction pipeline, which only handles PDFs.
         List<String> excludedNonPdf = new ArrayList<>();
+        // Files over the per-file cap (default 50 MB) are excluded with a clear note rather than
+        // silently processed — appraisals run 5–50 MB, so this catches corrupt/runaway files.
+        List<String> oversizeFiles = new ArrayList<>();
 
         try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
             ZipEntry entry;
@@ -458,6 +465,15 @@ public class BatchService {
                     filename = filePath.getFileName().toString();
                 }
                 Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                long fileBytes = Files.size(filePath);
+                if (fileBytes > maxUploadFileMb * 1024L * 1024L) {
+                    Files.deleteIfExists(filePath);
+                    oversizeFiles.add(filename + " (" + (fileBytes / (1024 * 1024)) + " MB)");
+                    log.warn("Excluding oversize file '{}' ({} MB > {} MB cap) from batch {}",
+                            filename, fileBytes / (1024 * 1024), maxUploadFileMb, batch.getParentBatchId());
+                    zis.closeEntry();
+                    continue;
+                }
                 String contentHash = computeSha256(filePath);
                 String qualityFlags = documentQualityFlags(fileType, filename, contentHash, batch.getFiles());
 
@@ -498,6 +514,14 @@ public class BatchService {
             batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
             log.info("Batch {} catalogued {} non-PDF file(s) excluded from extraction",
                     batch.getParentBatchId(), excludedNonPdf.size());
+        }
+
+        if (!oversizeFiles.isEmpty()) {
+            String note = oversizeFiles.size() + " file(s) exceeded the " + maxUploadFileMb
+                    + " MB per-file cap and were excluded: " + String.join(", ", oversizeFiles);
+            String existing = batch.getIntakeWarnings();
+            batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+            log.warn("Batch {} excluded {} oversize file(s)", batch.getParentBatchId(), oversizeFiles.size());
         }
     }
 

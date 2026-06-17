@@ -52,8 +52,12 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: ${MAX_UPLOAD_FILE_SIZE:25MB}
-      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:25MB}
+      # The uploaded multipart IS the batch ZIP, which holds several appraisal files of
+      # 5–50 MB each — so the envelope must be generous. The real guard is per-FILE: each
+      # extracted document is capped at MAX_UPLOAD_PER_FILE_MB (default 50 MB) and must be a
+      # PDF, enforced in BatchService on extraction.
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:256MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:256MB}
 
 server:
   tomcat:
