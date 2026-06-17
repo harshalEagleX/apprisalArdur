@@ -330,6 +330,7 @@ public class VerificationService {
             @NonNull User reviewer,
             String overallNotes) {
         QCResult qcResult = getForVerification(qcResultId);
+        assertDocumentCurrent(qcResult);   // D2: never finalize a superseded result
 
         // Update each rule result
         for (java.util.Map.Entry<Long, Boolean> entry : decisions.entrySet()) {
@@ -371,6 +372,7 @@ public class VerificationService {
     @Transactional
     public QCResult acceptAll(@NonNull Long qcResultId, @NonNull User reviewer, String notes) {
         QCResult qcResult = getForVerification(qcResultId);
+        assertDocumentCurrent(qcResult);   // D2: never bulk-pass a superseded result
         List<QCRuleResult> items = getVerificationItems(qcResultId);
 
         LocalDateTime verifiedAt = LocalDateTime.now();
@@ -398,6 +400,7 @@ public class VerificationService {
     @Transactional
     public QCResult rejectAll(@NonNull Long qcResultId, @NonNull User reviewer, String reason) {
         QCResult qcResult = getForVerification(qcResultId);
+        assertDocumentCurrent(qcResult);   // D2: never bulk-fail a superseded result
 
         qcResult.setFinalDecision(FinalDecision.FAIL);
         qcResult.setReviewedBy(reviewer);
@@ -675,6 +678,15 @@ public class VerificationService {
     private void assertDocumentCurrent(QCResult qcResult) {
         if (qcResult == null || qcResult.getBatchFile() == null) {
             return;
+        }
+        // A re-run supersedes this result (same file, new QC pass). Reviewer writes to a
+        // superseded result would be silently lost (not carried to the new result), so block
+        // them with a clear "reload" signal. This catches the same-file re-run that the
+        // hash/version check below cannot see.
+        if (qcResult.getSupersededAt() != null) {
+            throw new IllegalStateException(
+                "This QC report was re-processed by a newer QC run and is no longer the current "
+                + "version. Reload the latest results before continuing.");
         }
         String processedHash = qcResult.getSourceDocumentHash();
         String currentHash = qcResult.getBatchFile().getContentHash();

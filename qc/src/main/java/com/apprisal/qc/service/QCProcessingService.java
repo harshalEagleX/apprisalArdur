@@ -810,6 +810,21 @@ public class QCProcessingService {
                 log.warn("Failed to publish supersede event for result {}: {}",
                         previousActive.getId(), pubEx.getMessage());
             }
+            // A1: durable audit record of the re-run so the audit graph/timeline is never blind
+            // to it (the WS event above is transient). One event per superseded file.
+            try {
+                Map<String, Object> rerunPayload = new LinkedHashMap<>();
+                rerunPayload.put("superseded_result_id", previousActive.getId());
+                rerunPayload.put("new_result_id", qcResult.getId());
+                rerunPayload.put("filename", appraisal.getFilename());
+                rerunPayload.put("had_reviewer_decisions", previousActive.getFinalDecision() != null);
+                businessEventService.record("QC_RESULT_SUPERSEDED", null, "java", "RERUN",
+                        "QCResult", previousActive.getId(), batchId, appraisal.getId(),
+                        qcResult.getId(), null, rerunPayload);
+            } catch (Exception evEx) {
+                log.warn("Failed to record QC_RESULT_SUPERSEDED audit event for result {}: {}",
+                        previousActive.getId(), evEx.getMessage());
+            }
         }
         log.info(TimelineLog.event("admin_batches", "java_qc_result_saved",
                 "batch_id", batchId,
