@@ -181,9 +181,8 @@ class DocStatsIntegrationTests {
                 .slowestRuleId("SCA-14").slowestRuleName("Comp quality").slowestRuleMs(9.5)
                 .llmCalls(1).llmInferenceMs(8.0).llmThrottleWaitMs(2.0).rateLimitHits(0)
                 .build();
-        d.addStage(new DocStatStage("subject_llm", "Subject/contract gap-fill (LLM)",
-                totalMs - 50, 95.0, 1, 8.0, 2.0, 0));
-        d.addStage(new DocStatStage("rules", "QC rule evaluation", 12.0, 5.0, 0, 0.0, 0.0, 1));
+        d.addStage(new DocStatStage("subject_llm", totalMs - 50, 95.0, 1, 8.0, 2.0, 0));
+        d.addStage(new DocStatStage("rules", 12.0, 5.0, 0, 0.0, 0.0, 1));
         d.addSection(new DocStatSection("SALES_COMPARISON", "Sales Comparison", 10.0, 1, 80.0, 0));
         d.addSection(new DocStatSection("SUBJECT", "Subject", 2.0, 1, 20.0, 1));
         d.addRule(new DocStatRule("SCA-14", "Comp quality", "SALES_COMPARISON", "VERIFY",
