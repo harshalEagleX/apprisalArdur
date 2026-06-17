@@ -250,6 +250,95 @@ class RerunGuardIntegrationTests {
         }
     }
 
+    /**
+     * R1 headline: a partial re-run of a multi-file batch must supersede ONLY the re-run files and
+     * leave every other file's active result — and any reviewer decision on it — completely
+     * untouched. Drives the real per-file persist path (persistPythonResult) for a 2-of-4 subset
+     * and asserts the isolation: the 2 re-run files gain a new active result (prior superseded),
+     * while the 2 untouched files keep their single active result, including a finalized PASS.
+     */
+    @Test
+    void partialRerun_supersedesOnlySubset_leavesOthersAndTheirDecisionsUntouched() {
+        String tag = "PARTIAL_IT_" + UUID.randomUUID().toString().substring(0, 8);
+        long batchId = 0;
+        long[] fileIds = new long[4];
+        long[] priorResultIds = new long[4];
+
+        try {
+            long[] capturedBatch = new long[1];
+            tx.executeWithoutResult(s -> {
+                Client client = clientRepository.save(Client.builder()
+                        .name("Partial IT").code(tag).status("ACTIVE").build());
+                User reviewer = userRepository.save(User.builder()
+                        .username(tag).password("x").role(Role.REVIEWER).fullName("Partial Reviewer").build());
+                Batch batch = batchRepository.save(Batch.builder()
+                        .parentBatchId(tag).client(client).status(BatchStatus.REVIEW_PENDING)
+                        .createdBy(reviewer).build());
+                capturedBatch[0] = batch.getId();
+                for (int i = 0; i < 4; i++) {
+                    BatchFile file = batchFileRepository.save(BatchFile.builder()
+                            .batch(batch).fileType(FileType.APPRAISAL).filename(tag + "-" + i + ".pdf")
+                            .status(FileStatus.COMPLETED).build());
+                    QCResult r = QCResult.builder()
+                            .batchFile(file).qcDecision(QCDecision.TO_VERIFY).totalRules(2)
+                            .build();
+                    r.setProcessedAt(LocalDateTime.now().minusMinutes(5));
+                    // File 3 is already finalized by the reviewer — its decision must survive.
+                    if (i == 3) {
+                        r.setFinalDecision(FinalDecision.PASS);
+                        r.setReviewedBy(reviewer);
+                        r.setReviewedAt(LocalDateTime.now().minusMinutes(2));
+                    }
+                    r = qcResultRepository.save(r);
+                    fileIds[i] = file.getId();
+                    priorResultIds[i] = r.getId();
+                }
+            });
+            batchId = capturedBatch[0];
+
+            // Partial re-run: only files 0 and 1 (simulates the per-file persist the partial path runs).
+            qcProcessingService.persistPythonResult(fileIds[0], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
+            qcProcessingService.persistPythonResult(fileIds[1], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
+
+            // Re-run files: prior superseded, a NEW active result exists (history of 2).
+            for (int i : new int[]{0, 1}) {
+                assertThat(qcResultRepository.findById(priorResultIds[i]).orElseThrow().getSupersededAt())
+                        .as("re-run file %s prior result superseded", i).isNotNull();
+                assertThat(qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(fileIds[i]))
+                        .as("re-run file %s has two runs", i).hasSize(2);
+                assertThat(qcResultRepository.findByBatchFileId(fileIds[i]).orElseThrow().getId())
+                        .as("re-run file %s active result is the new one", i).isNotEqualTo(priorResultIds[i]);
+            }
+
+            // Untouched files: still exactly one active result, same id, not superseded.
+            for (int i : new int[]{2, 3}) {
+                assertThat(qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(fileIds[i]))
+                        .as("untouched file %s still has one run", i).hasSize(1);
+                QCResult active = qcResultRepository.findByBatchFileId(fileIds[i]).orElseThrow();
+                assertThat(active.getId()).as("untouched file %s active result unchanged", i).isEqualTo(priorResultIds[i]);
+                assertThat(active.getSupersededAt()).as("untouched file %s not superseded", i).isNull();
+            }
+            // The finalized decision on file 3 survived the partial re-run intact.
+            assertThat(qcResultRepository.findByBatchFileId(fileIds[3]).orElseThrow().getFinalDecision())
+                    .as("file 3 reviewer PASS preserved").isEqualTo(FinalDecision.PASS);
+        } finally {
+            final long bId = batchId;
+            tx.executeWithoutResult(s -> {
+                processingMetricsRepository.deleteByBatchId(bId);
+                for (long fid : fileIds) {
+                    if (fid == 0) continue;
+                    qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(fid)
+                            .forEach(qcResultRepository::delete);
+                    batchFileRepository.findById(fid).ifPresent(batchFileRepository::delete);
+                }
+                batchRepository.findById(bId).ifPresent(batchRepository::delete);
+                userRepository.findByUsername(tag).ifPresent(userRepository::delete);
+                clientRepository.findAll().stream().filter(c -> tag.equals(c.getCode()))
+                        .forEach(clientRepository::delete);
+            });
+        }
+    }
+
     /** Minimal Python QC response for driving a re-run persist (no timing/docStats block). */
     private static PythonQCResponse syntheticResponse() {
         return new PythonQCResponse(

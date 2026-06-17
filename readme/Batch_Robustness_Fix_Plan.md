@@ -75,10 +75,11 @@
 | **2** | U1b explicit **stuck** indicator (no-progress + stale `updatedAt` ≥ 4 min) | ✅ shipped | `BatchRow.tsx` (dbcaa96) |
 | **3** | R1 per-file partial re-run (backend) | ✅ shipped | `POST /api/qc/process/{batchId}/files` (eb2700e) |
 | **3** | R1 per-file re-run (frontend button) | ✅ shipped | `BatchHistoryDrawer.tsx` + `api.processQCFiles` (57045ac) |
-| **3** | R2 carry review lock to new result | ⬜ open | `persistPythonResult` still ends at `REVIEW_PENDING` without lock carry |
+| **3** | R2 carry review lock to new result | ✅ shipped | `QCProcessingService.carryReviewLock` + `anyActiveReviewLock` IN_REVIEW upgrade (commit 07fbd84); proven by `RerunGuardIntegrationTests` |
 | **4** | Re-run history surface (per-file run chains) | ✅ shipped | `BatchHistoryDrawer` (pre-existing chain view) |
 | **4** | Status taxonomy / file-set grouping polish | 🟡 partial | stuck badge + per-file controls done; multi-set grouping in audit still flat (X1) |
 | **5** | Re-run supersede guard test on real Postgres | ✅ shipped | `RerunGuardIntegrationTests` (3c601f5) — acceptAll/rejectAll reject superseded; active query excludes it |
-| **5** | Broader e2e (in-review 409, N-of-50 partial, stuck-worker, double-click) | ⬜ open | manual smoke verified; automation pending |
+| **5** | Partial re-run isolation (N-of-M subset) on real Postgres | ✅ shipped | `RerunGuardIntegrationTests.partialRerun_*` (2-of-4: only the subset superseded; others + a finalized PASS untouched) |
+| **5** | Remaining e2e (in-review 409, stuck-worker, double-click) | ⬜ open | manual smoke verified; automation pending |
 
-**Remaining:** R2 (lock carry), X1 (multi-set audit grouping), and the broader Phase-5 e2e suite.
+**Remaining:** X1 (multi-set audit grouping), and the remaining Phase-5 e2e (in-review 409 via the live controller path, stuck-worker recovery, double-click guard).
