@@ -11,6 +11,8 @@ export interface BatchRowProps {
   batch: Batch;
   isLoading: boolean;
   progress: BatchProgress | undefined;
+  /** Client-tracked epoch ms when QC polling began for this batch (for elapsed + ETA). */
+  startedMs?: number;
   reviewers: User[];
   reviewerWorkload: Record<string, number>;
   onProcessQC: (batch: Batch) => void;
@@ -28,6 +30,7 @@ export const BatchRow = memo(function BatchRow({
   batch,
   isLoading,
   progress,
+  startedMs,
   reviewers,
   reviewerWorkload,
   onProcessQC,
@@ -42,6 +45,15 @@ export const BatchRow = memo(function BatchRow({
   const b = batch;
   const pct = progress ? (progress.smoothedPercent ?? progress.percent) : 0;
   const subLabel = progress?.subStage ? progress.subStage.replace(/_/g, " ") : null;
+
+  // Elapsed + naive ETA for a running batch (re-evaluated each poll re-render).
+  // ETA is a linear projection from progress so far — only shown once it's meaningful.
+  const pctClamped = Math.max(0, Math.min(100, pct));
+  const elapsedSec = startedMs ? Math.max(0, Math.round((Date.now() - startedMs) / 1000)) : null;
+  const etaSec = elapsedSec != null && pctClamped > 4 && pctClamped < 100
+    ? Math.round((elapsedSec * (100 - pctClamped)) / pctClamped)
+    : null;
+  const fmtDur = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
 
   // "Stuck" heuristic: QC is flagged in-flight but there are NO live progress
   // frames AND the batch row hasn't been touched for a while. A healthy long
@@ -138,6 +150,12 @@ export const BatchRow = memo(function BatchRow({
               {progress.current}/{progress.total} appraisal set{progress.total === 1 ? "" : "s"} ·{" "}
               {b.fileCount ?? b.files?.length ?? 0} files · {progress.stage.replace(/_/g, " ")}
             </div>
+            {(elapsedSec != null || etaSec != null) && (
+              <div className="mt-0.5 text-[10px] text-slate-500 tabular-nums">
+                {elapsedSec != null && <>elapsed {fmtDur(elapsedSec)}</>}
+                {etaSec != null && <span className="text-slate-400"> · ~{fmtDur(etaSec)} left</span>}
+              </div>
+            )}
             {subLabel && (
               <div
                 className="mt-0.5 text-[10px] text-slate-300 max-w-[170px] truncate"

@@ -292,7 +292,7 @@ export default function BatchesPage() {
     window.history.replaceState(null, "", params.toString() ? `/admin/batches?${params}` : "/admin/batches");
   }, [debouncedSearch, page, statusFilter]);
 
-  const { progress, startPolling, stopPolling } = useBatchPolling(batches, () => {
+  const { progress, startedAt, startPolling, stopPolling } = useBatchPolling(batches, () => {
     void load();
   });
 
@@ -598,6 +598,7 @@ export default function BatchesPage() {
                   batch={b}
                   isLoading={actionLoading.has(b.id) || bulkLoading}
                   progress={progress[b.id]}
+                  startedMs={startedAt[b.id]}
                   reviewers={reviewers}
                   reviewerWorkload={reviewerWorkload}
                   onProcessQC={handleProcessQC}
