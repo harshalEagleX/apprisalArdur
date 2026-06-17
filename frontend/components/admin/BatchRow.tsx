@@ -43,6 +43,16 @@ export const BatchRow = memo(function BatchRow({
   const pct = progress ? (progress.smoothedPercent ?? progress.percent) : 0;
   const subLabel = progress?.subStage ? progress.subStage.replace(/_/g, " ") : null;
 
+  // "Stuck" heuristic: QC is flagged in-flight but there are NO live progress
+  // frames AND the batch row hasn't been touched for a while. A healthy long
+  // run keeps streaming progress, so requiring both conditions avoids false
+  // positives on slow-but-alive jobs. When true, the worker likely died or the
+  // job was lost — the admin can Stop and start again.
+  const STUCK_GRACE_MIN = 4;
+  const minsSinceUpdate = b.updatedAt ? (Date.now() - Date.parse(b.updatedAt)) / 60000 : 0;
+  const maybeStuck =
+    b.status === "QC_PROCESSING" && !progress && minsSinceUpdate >= STUCK_GRACE_MIN;
+
   const spinnerSvg = (
     <svg
       className="animate-spin h-3 w-3"
@@ -144,6 +154,17 @@ export const BatchRow = memo(function BatchRow({
             )}
           </div>
         )}
+        {maybeStuck && (
+          <div
+            className="mt-1.5 flex max-w-[190px] items-start gap-1 rounded-md border border-amber-500/30 bg-amber-950/30 px-1.5 py-1"
+            title={`No progress for ${Math.floor(minsSinceUpdate)} min. The QC worker may have stopped or the job was lost. Stop this run and start it again, or check the worker.`}
+          >
+            <AlertTriangle size={10} className="mt-0.5 flex-shrink-0 text-amber-400" />
+            <span className="text-[10px] leading-tight text-amber-300">
+              No progress for {Math.floor(minsSinceUpdate)} min — may be stuck
+            </span>
+          </div>
+        )}
         {b.errorMessage &&
           (b.status === "ERROR" || b.status === "VALIDATION_FAILED") && (
             <button
@@ -202,11 +223,14 @@ export const BatchRow = memo(function BatchRow({
             </button>
           )}
 
-          {/* Processing spinner (no progress yet) */}
+          {/* Processing spinner (no progress yet) — turns amber if it looks stuck */}
           {b.status === "QC_PROCESSING" && !progress && (
-            <span className="text-[11px] text-slate-400 flex items-center gap-1">
-              {spinnerSvg}
-              Processing
+            <span
+              className={`text-[11px] flex items-center gap-1 ${maybeStuck ? "text-amber-400" : "text-slate-400"}`}
+              title={maybeStuck ? "No progress for a while — use Stop, then Run QC again" : undefined}
+            >
+              {maybeStuck ? <AlertTriangle size={12} /> : spinnerSvg}
+              {maybeStuck ? "Stuck?" : "Processing"}
             </span>
           )}
 
