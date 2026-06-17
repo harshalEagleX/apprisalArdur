@@ -80,6 +80,8 @@
 | **4** | Status taxonomy / file-set grouping polish | 🟡 partial | stuck badge + per-file controls done; multi-set grouping in audit still flat (X1) |
 | **5** | Re-run supersede guard test on real Postgres | ✅ shipped | `RerunGuardIntegrationTests` (3c601f5) — acceptAll/rejectAll reject superseded; active query excludes it |
 | **5** | Partial re-run isolation (N-of-M subset) on real Postgres | ✅ shipped | `RerunGuardIntegrationTests.partialRerun_*` (2-of-4: only the subset superseded; others + a finalized PASS untouched) |
-| **5** | Remaining e2e (in-review 409, stuck-worker, double-click) | ⬜ open | manual smoke verified; automation pending |
+| **5** | Double-click / concurrent-trigger guard | ✅ shipped | `RerunGuardIntegrationTests.concurrentClaim_*` — atomic `markQcProcessingIfTriggerable`: first claim wins (1), second is a no-op (0) |
+| — | Re-run while a reviewer is active | ✅ by design | NOT a 409 — the controller returns `reviewerActive:true` as a soft warning and proceeds; safety is enforced at the persistence layer (D2/D3 supersede guards + R2 lock carry), which is tested. The frontend surfaces the warning in the re-run toast. |
+| **5** | Stuck-worker recovery | ⬜ open | UI signal shipped (BatchRow stuck badge); automated recovery e2e needs Celery state, pending |
 
-**Remaining:** X1 (multi-set audit grouping), and the remaining Phase-5 e2e (in-review 409 via the live controller path, stuck-worker recovery, double-click guard).
+**Remaining:** X1 (multi-set audit grouping), and stuck-worker recovery automation (the UI signal is shipped; the recovery e2e needs Celery state).

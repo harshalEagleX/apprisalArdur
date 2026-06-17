@@ -339,6 +339,47 @@ class RerunGuardIntegrationTests {
         }
     }
 
+    /**
+     * Double-click / concurrent-trigger guard: the atomic claim flips a batch to QC_PROCESSING
+     * only from a triggerable state, so two requests that both saw REVIEW_PENDING cannot both
+     * launch a worker. Proves the DB-level primitive ({@code markQcProcessingIfTriggerable}) that
+     * backs claimBatchForProcessing across processes: first claim wins (1 row), second is a no-op
+     * (0 rows) because the batch is now QC_PROCESSING.
+     */
+    @Test
+    void concurrentClaim_atomicGuard_onlyFirstClaimWins() {
+        String tag = "CLAIM_IT_" + UUID.randomUUID().toString().substring(0, 8);
+        long[] ids = new long[1]; // batchId
+
+        try {
+            tx.executeWithoutResult(s -> {
+                Client client = clientRepository.save(Client.builder()
+                        .name("Claim IT").code(tag).status("ACTIVE").build());
+                User user = userRepository.save(User.builder()
+                        .username(tag).password("x").role(Role.ADMIN).fullName("Claim IT").build());
+                Batch batch = batchRepository.save(Batch.builder()
+                        .parentBatchId(tag).client(client).status(BatchStatus.REVIEW_PENDING)
+                        .createdBy(user).build());
+                ids[0] = batch.getId();
+            });
+
+            int first = tx.execute(s -> batchRepository.markQcProcessingIfTriggerable(ids[0], LocalDateTime.now()));
+            int second = tx.execute(s -> batchRepository.markQcProcessingIfTriggerable(ids[0], LocalDateTime.now()));
+
+            assertThat(first).as("first claim wins").isEqualTo(1);
+            assertThat(second).as("second claim is rejected — already QC_PROCESSING").isEqualTo(0);
+            assertThat(batchRepository.findById(ids[0]).orElseThrow().getStatus())
+                    .isEqualTo(BatchStatus.QC_PROCESSING);
+        } finally {
+            tx.executeWithoutResult(s -> {
+                batchRepository.findById(ids[0]).ifPresent(batchRepository::delete);
+                userRepository.findByUsername(tag).ifPresent(userRepository::delete);
+                clientRepository.findAll().stream().filter(c -> tag.equals(c.getCode()))
+                        .forEach(clientRepository::delete);
+            });
+        }
+    }
+
     /** Minimal Python QC response for driving a re-run persist (no timing/docStats block). */
     private static PythonQCResponse syntheticResponse() {
         return new PythonQCResponse(
