@@ -5,13 +5,15 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
 🟠 product-grade gap · 🟡 polish.
 
 ## A. Navigation / workflow breaks
-- 🔴 **`/admin/overrides` is orphaned + unreachable.** "Pending Overrides" is where a SECOND
+- ✅ **FIXED — `/admin/overrides` now in the admin nav** (Overrides, ShieldCheck). Admin/supervisor is the override approver (route is ROLE_ADMIN by design).
+- ~~🔴 `/admin/overrides` orphaned~~ (was) "Pending Overrides" is where a SECOND
   reviewer approves a FAIL→Pass override — the core of the two-person rule. It has **no nav
   link** in either AdminLayout or ReviewerLayout, and it sits under `/admin` even though the
   approver is a *reviewer*. So in multi-reviewer mode the approval step is a dead end (you can
   only reach it by typing the URL). Fix: add it to the reviewer nav (and/or surface a "N
   overrides awaiting your approval" entry point), and confirm a reviewer role can open it.
-- 🔴 **`/qc-review` is dead code.** Zero references anywhere; a legacy QC review page superseded
+- ✅ **FIXED — `/qc-review` now redirects** to /reviewer/queue (was dead demo code).
+- ~~🔴 `/qc-review` dead code~~ (was) Zero references anywhere; a legacy QC review page superseded
   by `/reviewer/verify/[id]`. Remove it (or redirect) — it's a maintenance/confusion trap.
 - 🟠 **Client rows don't drill down.** The new Clients table has real stats but rows aren't
   clickable — there's no client-detail view (its batches/users/activity). Needs a route +

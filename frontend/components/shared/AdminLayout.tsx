@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Users, Building2,
-  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer,
+  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, ShieldCheck,
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
@@ -15,6 +15,7 @@ import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideToolti
 const NAV = [
   { href: "/admin",          label: "Overview",   Icon: LayoutDashboard },
   { href: "/admin/batches",  label: "Batches",    Icon: Package },
+  { href: "/admin/overrides", label: "Overrides",  Icon: ShieldCheck },
   { href: "/admin/users",    label: "Users",      Icon: Users },
   { href: "/admin/clients",  label: "Clients",    Icon: Building2 },
   { href: "/analytics",      label: "Analytics",  Icon: BarChart2 },
