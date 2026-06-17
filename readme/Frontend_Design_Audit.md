@@ -65,4 +65,3 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
 4. 🟠 **Client detail** route + `GET /api/admin/clients/{id}` → clickable client rows.
 5. 🟠 **Breadcrumbs** + 🟠 **⌘K global search**.
 6. 🟡 Analytics empty-states; DocStats → Diagnostics sub-tab; reviewer Finding/Issue language.
-</content>
