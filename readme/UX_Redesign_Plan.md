@@ -23,10 +23,10 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 ## Phase 2 — Reviewer workspace (highest product value)
 - ✅ Hide passed rules by default — new "Needs attention" view (fail+needs-review) is the
   default; passes are an opt-in tab (key 1=attention,2=fail,3=review,4=pass,5=all).
-- ⬜ Progress as hero (large bar + "46/47 · 1 decision remaining").
+- ✅ Progress as hero — wide bar + prominent count + "N left/all decided"; Submit turns green when ready.
 - ⬜ Evidence-first ordering: Finding → Evidence → Decision controls.
 - ⬜ Confidence framed safely ("High confidence · evidence available", not bare "100%").
-- ⬜ Override-to-Pass visually secondary to Confirm-Fail (guard high-risk action).
+- ✅ Override-to-Pass guarded — Confirm-Fail is now the wider/primary action; Override is muted, narrower, reason-gated.
 - ⬜ Keyboard review mode: F/P confirm, N/J/K navigate.
 - ⬜ PDF ↔ finding sync (jump + highlight evidence box) — bbox plumbing already exists.
 - ⬜ Queue as a dense table (Priority/File/Client/Rules/Failures/Assigned/Age/Action).

@@ -323,16 +323,17 @@ export const RuleCard = memo(function RuleCard({
                 </div>
               )}
 
-              {/* Fail rules: Confirm Fail (primary) + Override to Pass (secondary) */}
+              {/* Fail rules: Confirm Fail is the PRIMARY (safe, expected) action — wider + emphasized.
+                  Override to Pass is the high-risk exception: narrower, muted, gated on a reason. */}
               {isFail && (
                 <div className="flex gap-2">
                   <button
                     onClick={() => onDecision("FAIL")}
                     disabled={!canFail}
-                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    className={`flex-[1.5] flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
                       decision === "FAIL"
                         ? "bg-red-600 text-white"
-                        : "bg-[#161B22] hover:bg-red-950/35 hover:text-red-200 text-slate-400 border border-white/10"
+                        : "bg-red-950/30 border border-red-500/30 text-red-200 hover:bg-red-950/50"
                     }`}
                   >
                     {saving ? spinnerSvg : <X size={12} />} Confirm Fail
@@ -340,11 +341,11 @@ export const RuleCard = memo(function RuleCard({
                   <button
                     onClick={() => onDecision("PASS")}
                     disabled={!canPass}
-                    title={!overrideReasonOk ? "Add a specific override reason (min 20 chars) to enable" : undefined}
-                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    title={!overrideReasonOk ? "Add a specific override reason (min 20 chars) to enable" : "High-risk: override this failure to Pass"}
+                    className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-[11px] font-medium transition-colors disabled:opacity-40 ${
                       decision === "PASS"
-                        ? "bg-green-600 text-white"
-                        : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
+                        ? "bg-green-600 text-white font-semibold"
+                        : "bg-transparent hover:bg-green-950/30 hover:text-green-200 text-slate-500 border border-white/10"
                     }`}
                   >
                     {saving ? spinnerSvg : <Check size={12} />} Override to Pass

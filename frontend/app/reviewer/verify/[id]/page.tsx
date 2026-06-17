@@ -854,11 +854,20 @@ export default function VerifyFilePage() {
             <CountBadge label="Needs Review" count={counts.review} style="text-amber-400 bg-amber-950/50 border-amber-800/50" />
           </div>
           {progress && progress.totalToVerify > 0 && (
-            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-              <div className="w-20 h-1.5 bg-[#0B0F14] rounded-full overflow-hidden">
-                <div className="h-full bg-slate-500 rounded-full transition-all" style={{ width: `${reviewProgress}%` }} />
+            <div className="hidden md:flex items-center gap-2.5 flex-shrink-0">
+              {/* Review progress is the hero status — wide bar + prominent count + "left" cue. */}
+              <div className="w-40 h-2 bg-[#0B0F14] rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${progress.pending === 0 ? "bg-green-500" : "bg-slate-400"}`}
+                  style={{ width: `${reviewProgress}%` }}
+                />
               </div>
-              <span className="text-[11px] text-slate-500 font-mono">{reviewedCount}/{progress.totalToVerify}</span>
+              <span className="text-xs font-semibold text-slate-200 font-mono tabular-nums">
+                {reviewedCount}/{progress.totalToVerify}
+              </span>
+              <span className={`text-[11px] font-medium ${progress.pending === 0 ? "text-green-400" : "text-amber-400"}`}>
+                {progress.pending === 0 ? "all decided" : `${progress.pending} left`}
+              </span>
               <span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-green-400" : "bg-slate-600"}`} title={realtimeConnected ? "Live updates connected" : "Live updates reconnecting"} />
             </div>
           )}
@@ -884,7 +893,11 @@ export default function VerifyFilePage() {
             {focusMode ? "Exit focus" : "Focus"}
           </button>
           <button onClick={() => void handleSubmit()} disabled={!progress?.canSubmit || submitting || offline || !sessionToken}
-            className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40">
+            className={`flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md border px-4 text-xs font-semibold text-white transition-colors disabled:opacity-40 ${
+              progress?.canSubmit && !submitting
+                ? "border-green-400/30 bg-green-600 hover:bg-green-500"
+                : "border-slate-400/30 bg-slate-600 hover:bg-slate-500"
+            }`}>
             {submitting ? <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : null}
             {submitting ? "Submitting…" : progress?.pending ? `Submit (${progress.pending} left)` : "Submit review"}
           </button>
