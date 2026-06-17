@@ -185,3 +185,93 @@ def add4_mc(ctx: QCContext):
     return RuleResult(rule_id="ADD-4", checklist_num="ADD", section="addendum",
                       status=RuleStatus.VERIFY, message=qc_config.template("ADD-4-mc"),
                       fields_involved=mc_fields, template_id="ADD-4-mc", evidence=ev, confidence=0.6)
+
+
+# ===========================================================================
+# FHA overlay coverage (UAD 2.6 audit gaps). Every rule is FHA-scoped via
+# applies_when=_is_fha, and the condition/heating/utility ones are signal-gated
+# so they do not add review noise to a clean FHA report.
+# ===========================================================================
+
+@rule(id="FHA-1", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA Minimum Property Requirements confirmed")
+def fha1_mpr(ctx: QCContext):
+    # MPR compliance is a reviewer judgment on FHA assignments → VERIFY reminder.
+    return RuleResult(rule_id="FHA-1", checklist_num="FHA", section="fha",
+                      status=RuleStatus.VERIFY, message=qc_config.template("FHA-1-mpr"),
+                      fields_involved=["property_condition"], template_id="FHA-1-mpr",
+                      evidence=[ctx.appraisal.evidence("property_condition")], confidence=0.4)
+
+
+@rule(id="FHA-4", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA/HUD certification statement present")
+def fha4_statement(ctx: QCContext):
+    return RuleResult(rule_id="FHA-4", checklist_num="FHA", section="fha",
+                      status=RuleStatus.VERIFY, message=qc_config.template("FHA-4-statement"),
+                      fields_involved=["fha_case_number"], template_id="FHA-4-statement",
+                      evidence=[ctx.appraisal.evidence("fha_case_number")], confidence=0.4)
+
+
+@rule(id="FHA-6", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA repairs reported subject-to")
+def fha6_repairs(ctx: QCContext):
+    cond = str(ctx.appraisal.value("condition_rating")
+               or ctx.appraisal.value("property_condition") or "").upper()
+    adverse = str(ctx.appraisal.value("adverse_site_conditions") or "").lower()
+    ev = [ctx.appraisal.evidence("condition_rating"),
+          ctx.appraisal.evidence("adverse_site_conditions")]
+    signal = ("C5" in cond or "C6" in cond) or any(
+        w in adverse for w in ("repair", "deficien", "subject to", "subject-to"))
+    if not signal:
+        return RuleResult(rule_id="FHA-6", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS, fields_involved=["condition_rating"], evidence=ev)
+    return RuleResult(rule_id="FHA-6", checklist_num="FHA", section="fha",
+                      status=RuleStatus.VERIFY, message=qc_config.template("FHA-6-repairs"),
+                      fields_involved=["condition_rating", "adverse_site_conditions"],
+                      template_id="FHA-6-repairs", evidence=ev, confidence=0.5)
+
+
+@rule(id="FHA-7", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA space heater not primary heat")
+def fha7_space_heater(ctx: QCContext):
+    heating = str(ctx.appraisal.value("heating") or "").lower()
+    ev = [ctx.appraisal.evidence("heating")]
+    if heating and any(t in heating for t in (
+            "space heater", "spaceheater", "space-heater", "wall heater", "portable heater")):
+        return RuleResult(rule_id="FHA-7", checklist_num="FHA", section="fha",
+                          status=RuleStatus.VERIFY, message=qc_config.template("FHA-7-spaceheater"),
+                          fields_involved=["heating"], template_id="FHA-7-spaceheater",
+                          evidence=ev, confidence=0.6)
+    return RuleResult(rule_id="FHA-7", checklist_num="FHA", section="fha",
+                      status=RuleStatus.PASS, fields_involved=["heating"], evidence=ev)
+
+
+@rule(id="FHA-12", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA well/septic compliance")
+def fha12_well_septic(ctx: QCContext):
+    water = str(ctx.appraisal.value("utilities_water") or "").lower()
+    sewer = str(ctx.appraisal.value("utilities_sewer") or "").lower()
+    ev = [ctx.appraisal.evidence("utilities_water"), ctx.appraisal.evidence("utilities_sewer")]
+    if any(s in (water + " " + sewer) for s in ("private", "well", "septic")):
+        return RuleResult(rule_id="FHA-12", checklist_num="FHA", section="fha",
+                          status=RuleStatus.VERIFY, message=qc_config.template("FHA-12-wellseptic"),
+                          fields_involved=["utilities_water", "utilities_sewer"],
+                          template_id="FHA-12-wellseptic", evidence=ev, confidence=0.5)
+    return RuleResult(rule_id="FHA-12", checklist_num="FHA", section="fha",
+                      status=RuleStatus.PASS,
+                      fields_involved=["utilities_water", "utilities_sewer"], evidence=ev)
+
+
+@rule(id="FHA-13", num="FHA", section="fha", phase=8, applies_when=_is_fha,
+      name="FHA appliances present/operational")
+def fha13_appliances(ctx: QCContext):
+    appl = ["appliance_refrigerator", "appliance_range_oven", "appliance_dishwasher",
+            "appliance_disposal", "appliance_microwave", "appliance_washer_dryer"]
+    ev = [ctx.appraisal.evidence(f) for f in appl]
+    if any(str(ctx.appraisal.value(f) or "").strip() for f in appl):
+        # Appliances captured → operability is a photo/judgment call; pass here.
+        return RuleResult(rule_id="FHA-13", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS, fields_involved=appl, evidence=ev)
+    return RuleResult(rule_id="FHA-13", checklist_num="FHA", section="fha",
+                      status=RuleStatus.VERIFY, message=qc_config.template("FHA-13-appliances"),
+                      fields_involved=appl, template_id="FHA-13-appliances", evidence=ev, confidence=0.5)

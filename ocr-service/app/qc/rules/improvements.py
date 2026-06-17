@@ -227,3 +227,65 @@ def i12_additions(ctx: QCContext):
                         evidence=[ctx.appraisal.evidence(f)], confidence=0.6)
     return _res("I-12", "53", RuleStatus.PASS,
                 message="", fields=list(_NARRATIVE_FIELDS))
+
+
+# ---- I-5 utilities: heating + cooling described ----------------------------
+
+@rule(id="I-5", num="44", section="improvements", phase=1, name="Heating and cooling described")
+def i5_utilities(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return []
+    heating = str(ctx.appraisal.value("heating") or "").strip()
+    cooling = str(ctx.appraisal.value("cooling") or "").strip()
+    ev = [ctx.appraisal.evidence("heating"), ctx.appraisal.evidence("cooling")]
+    missing = [lbl for v, lbl in ((heating, "Heating"), (cooling, "Cooling")) if not v]
+    if not missing:
+        return [_res("I-5", "44", RuleStatus.PASS, fields=["heating", "cooling"], evidence=ev)]
+    # Missing a utility field is usually an extraction gap, not an appraiser error → VERIFY.
+    return [_res("I-5", "44", RuleStatus.VERIFY,
+                 message=qc_config.template("I-5-utilities", value=", ".join(missing)),
+                 fields=["heating", "cooling"], template_id="I-5-utilities",
+                 evidence=ev, confidence=0.6)]
+
+
+# ---- I-6 appliances reported ----------------------------------------------
+
+_APPLIANCE_FIELDS = [
+    "appliance_refrigerator", "appliance_range_oven", "appliance_disposal",
+    "appliance_dishwasher", "appliance_microwave", "appliance_washer_dryer",
+]
+
+
+@rule(id="I-6", num="45", section="improvements", phase=1, name="Appliances reported")
+def i6_appliances(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return []
+    present_any = any(str(ctx.appraisal.value(f) or "").strip() for f in _APPLIANCE_FIELDS)
+    ev = [ctx.appraisal.evidence(f) for f in _APPLIANCE_FIELDS]
+    if present_any:
+        return [_res("I-6", "45", RuleStatus.PASS, fields=_APPLIANCE_FIELDS, evidence=ev)]
+    # No appliance captured at all → likely an extraction gap; flag for confirmation.
+    return [_res("I-6", "45", RuleStatus.VERIFY,
+                 message=qc_config.template("I-6-appliances"),
+                 fields=_APPLIANCE_FIELDS, template_id="I-6-appliances",
+                 evidence=ev, confidence=0.5)]
+
+
+# ---- I-8 additional features / amenities ----------------------------------
+
+_AMENITY_FIELDS = ["fireplace_count", "porch_patio_deck", "additional_features"]
+
+
+@rule(id="I-8", num="48", section="improvements", phase=2, name="Additional features described")
+def i8_features(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return []
+    captured = any(str(ctx.appraisal.value(f) or "").strip() for f in _AMENITY_FIELDS)
+    ev = [ctx.appraisal.evidence(f) for f in _AMENITY_FIELDS]
+    if captured:
+        return [_res("I-8", "48", RuleStatus.PASS, fields=_AMENITY_FIELDS, evidence=ev)]
+    # Narrative line not reliably extracted → low-confidence reviewer reminder only.
+    return [_res("I-8", "48", RuleStatus.VERIFY,
+                 message=qc_config.template("I-8-features"),
+                 fields=_AMENITY_FIELDS, template_id="I-8-features",
+                 evidence=ev, confidence=0.4)]

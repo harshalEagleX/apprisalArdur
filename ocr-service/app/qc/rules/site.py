@@ -266,3 +266,25 @@ def st10_adverse(ctx: QCContext):
                 message=qc_config.template("ST-10-adverse"),
                 fields=["adverse_site_conditions"], template_id="ST-10-adverse",
                 evidence=ev, confidence=0.6)
+
+
+# ---- ST-9 utilities/off-site typical for the market area --------------------
+# Complements ST-7 (which prompts the well/septic description): ST-9 prompts the
+# market-typicality + marketability judgment, and only fires when there is an
+# atypical signal (private water/sewer) so it does not add review noise.
+
+@rule(id="ST-9", num="33", section="site", phase=4, name="Utilities/off-site typical for market")
+def st9_typical(ctx: QCContext):
+    if not ctx.appraisal.present:
+        return []
+    water = str(ctx.appraisal.value("utilities_water") or "").lower()
+    sewer = str(ctx.appraisal.value("utilities_sewer") or "").lower()
+    ev = [ctx.appraisal.evidence("utilities_water"), ctx.appraisal.evidence("utilities_sewer")]
+    atypical = any(s in (water + " " + sewer) for s in ("private", "well", "septic"))
+    if not atypical:
+        return _res("ST-9", "33", RuleStatus.PASS,
+                    fields=["utilities_water", "utilities_sewer"], evidence=ev)
+    return _res("ST-9", "33", RuleStatus.VERIFY,
+                message=qc_config.template("ST-9-typical"),
+                fields=["utilities_water", "utilities_sewer"], template_id="ST-9-typical",
+                evidence=ev, confidence=0.5)

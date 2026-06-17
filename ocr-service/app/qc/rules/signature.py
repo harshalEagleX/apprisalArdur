@@ -158,3 +158,18 @@ def sig3_license_state(ctx: QCContext):
 def sig2_appraiser_name(ctx: QCContext):
     return H.cross_doc_match(ctx, "SIG-2", "G", "signature", "appraiser_name", "SIG-2-field",
                              authority="engagement", kind="name", label="Appraiser name")
+
+
+# ---- SIG-4 appraiser email present -----------------------------------------
+
+@rule(id="SIG-4", num="103", section="signature", phase=2, name="Appraiser email present")
+def sig4_email(ctx: QCContext):
+    email = str(ctx.appraisal.value("appraiser_email") or "").strip()
+    ev = [ctx.appraisal.evidence("appraiser_email")]
+    if "@" in email and "." in email.split("@")[-1]:
+        return RuleResult(rule_id="SIG-4", checklist_num="103", section="signature",
+                          status=RuleStatus.PASS, fields_involved=["appraiser_email"], evidence=ev)
+    return RuleResult(rule_id="SIG-4", checklist_num="103", section="signature",
+                      status=RuleStatus.VERIFY, message=qc_config.template("SIG-4-email"),
+                      fields_involved=["appraiser_email"], template_id="SIG-4-email",
+                      evidence=ev, confidence=0.6)

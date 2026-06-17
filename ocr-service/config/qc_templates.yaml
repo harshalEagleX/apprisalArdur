@@ -219,3 +219,16 @@ DOC-1-expired: "Please provide an updated copy of your License, as the copy prov
 M-1-location: "Location map must show the subject and all comparables; please provide/revise."
 M-3-plat:     "Plat Map is required as site dimensions could not be provided on page 1."
 M-4-flood:    "Flood Map is required as the subject is located in a Flood Zone."
+
+# ---- Coverage-audit additions (UAD 2.6 gaps; functional wording authored here) ----
+I-5-utilities:     "In the improvements section, the following heating/cooling field(s) are not described: {value}. Please complete."
+I-6-appliances:    "In the improvements section, no kitchen appliances are indicated. Please report the appliances present (refrigerator, range/oven, dishwasher, disposal, microwave, washer/dryer)."
+I-8-features:      "Please confirm any additional features / amenities (fireplace, porch/patio/deck, pool, etc.) are described in the improvements section, or state 'None'."
+ST-9-typical:      "Please confirm the utilities and off-site improvements are typical for the market area; if not, describe and comment on marketability."
+SIG-4-email:       "The appraiser's email address is required and is missing or unreadable; please provide."
+FHA-1-mpr:         "FHA assignment: please confirm the subject meets HUD Minimum Property Requirements (MPR/MPS), or itemize the deficiencies."
+FHA-4-statement:   "FHA assignment: the required HUD/FHA certification statement could not be located; please confirm it is present."
+FHA-6-repairs:     "FHA assignment: repairs/conditions are indicated; the appraisal must be reported 'subject to' completion and the items described."
+FHA-7-spaceheater: "FHA assignment: a space heater appears to be the primary heat source. FHA does not accept space heaters as the sole heating system; please address."
+FHA-12-wellseptic: "FHA assignment: subject uses a private well and/or septic system; please confirm distances/compliance with HUD requirements."
+FHA-13-appliances: "FHA assignment: please confirm the kitchen appliances are present and operational."
