@@ -209,6 +209,42 @@ export default function DocStatDetailPage() {
           tone={(data.rateLimitHits ?? 0) > 0 ? "text-red-300" : "text-amber-300"} />
       </div>
 
+      {/* "So what?" — interpret the dominant cost and recommend an action, so the numbers
+          drive a decision instead of just reporting milliseconds. */}
+      {(data.totalMs ?? 0) > 0 && (() => {
+        const total = data.totalMs ?? 0;
+        const pctT = Math.round(((data.llmThrottleWaitMs ?? 0) / total) * 100);
+        const pctI = Math.round(((data.llmInferenceMs ?? 0) / total) * 100);
+        const pctE = Math.round(((data.ruleEngineMs ?? 0) / total) * 100);
+        let tone = "border-white/10 bg-[#11161C]/60 text-slate-300";
+        let headline: string; let rec: string;
+        if (pctT >= 30) {
+          tone = "border-amber-500/30 bg-amber-950/20 text-amber-200";
+          headline = `${pctT}% of processing was spent waiting on the AI rate limit.`;
+          rec = "Raise GROQ_TPM_LIMIT (if your Groq plan allows) or reduce concurrent QC jobs so requests aren't throttled.";
+        } else if (pctI >= 40) {
+          tone = "border-sky-500/30 bg-sky-950/20 text-sky-200";
+          headline = `${pctI}% of processing was AI analysis (${data.llmCalls ?? 0} call${(data.llmCalls ?? 0) === 1 ? "" : "s"}).`;
+          rec = "Reduce prompt size or pre-filter candidates before the LLM to cut inference time.";
+        } else if (pctE >= 50) {
+          headline = `${pctE}% of processing was the local rule engine.`;
+          rec = "Mostly local compute — no AI-provider bottleneck. Profile the slowest rules below if you need to trim it.";
+        } else {
+          tone = "border-green-500/25 bg-green-950/15 text-green-200";
+          headline = "No single stage dominates — this run is healthy.";
+          rec = "Rule engine, AI analysis, and rate-limit wait are balanced.";
+        }
+        return (
+          <div className={`mb-6 flex items-start gap-2.5 rounded-xl border p-4 ${tone}`}>
+            <Info size={15} className="mt-0.5 flex-shrink-0 opacity-80" />
+            <div>
+              <div className="text-sm font-semibold">{headline}</div>
+              <div className="mt-0.5 text-xs opacity-80">{rec}</div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Before/after vs the run this superseded (same file re-QC'd) */}
       {compare?.previous && compare.delta && (
         <div className="mb-6 rounded-xl border border-white/10 bg-[#11161C]/60 p-4">

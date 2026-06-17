@@ -339,6 +339,44 @@ function TrendPanel() {
   if (loading) return <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-4"><TableSkeleton rows={6} cols={3} /></div>;
   if (rows.length === 0) return <EmptyState icon={TrendingUp} title="No runs to trend yet" description="The trend builds up as QC runs accumulate — re-run a batch to see if an optimization landed." />;
 
+  // A line with 1–6 points isn't a trend — it reads as broken. Below 7 runs, show the
+  // honest latest-vs-previous comparison instead of drawing a misleading chart.
+  if (rows.length < 7) {
+    const latest = rows[rows.length - 1];
+    const prev = rows.length >= 2 ? rows[rows.length - 2] : null;
+    const pct = prev && prev.totalMs > 0 ? Math.round(((latest.totalMs - prev.totalMs) / prev.totalMs) * 100) : null;
+    return (
+      <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
+          <TrendingUp size={15} className="text-indigo-300" /> Processing-time trend
+        </h2>
+        <p className="mb-4 text-[11px] text-slate-500">
+          Only {rows.length} run{rows.length === 1 ? "" : "s"} recorded — a trend line needs at least 7. Showing latest vs previous instead.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Latest run</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums text-white">{(latest.totalMs / 1000).toFixed(1)}s</div>
+          </div>
+          {prev && (
+            <div className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Previous run</div>
+              <div className="mt-1 text-lg font-semibold tabular-nums text-slate-300">{(prev.totalMs / 1000).toFixed(1)}s</div>
+            </div>
+          )}
+          {pct != null && (
+            <div className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Change</div>
+              <div className={`mt-1 text-lg font-semibold tabular-nums ${pct <= 0 ? "text-green-300" : "text-amber-300"}`}>
+                {pct > 0 ? "+" : ""}{pct}%
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // chart in seconds for readability; index the runs chronologically
   const data = rows.map((r, i) => ({
     idx: i + 1,

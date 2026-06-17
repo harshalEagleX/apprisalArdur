@@ -46,10 +46,11 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ⬜ Empty states that educate (no bare 0s); skeleton loading states; breadcrumbs; ⌘K global search.
 
 ## Phase 4 — DocStats: operator-first
-- ⬜ Reframe metrics to "so what" (e.g. "61% time waiting for AI → raise Groq limit").
+- ✅ DocStats detail: actionable "so what" insight banner (dominant cost + recommendation).
 - ⬜ Human-readable stage workflow; severity ranking (🔴/🟡/🟢).
 - ⬜ Move per-rule telemetry under a Diagnostics area (not primary nav).
-- ⬜ Rule-ranking: add recommendations. Trend: require ≥7 points or show "not enough history".
+- ✅ Trend now shows latest-vs-previous (with Δ%) under 7 runs instead of a misleading line.
+- ⬜ Rule-ranking: add recommendations. Stage workflow rename + move per-rule telemetry to Diagnostics.
 
 ## Phase 5 — Cross-cutting
 - ⬜ Color semantics pass (fail=red, review=amber, pass=neutral; purple=brand only) — within
