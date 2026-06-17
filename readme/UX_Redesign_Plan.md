@@ -16,8 +16,8 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 ## Phase 1 — Non-overlap / on-demand overlays (the "VERY IMPORTANT NOTE")
 - ✅ ActivityMonitor: default to a small pill, expand on demand, height-bounded scroll panel,
   true minimize, remembered. Never blocks content.
-- ⬜ Audit/align ProductWatermark + Toasts so overlays never collide with each other or content
-  (reserve safe-area, stack, or dock).
+- ✅ ProductWatermark moved to bottom-LEFT + low z (was bottom-right colliding with the
+  ActivityMonitor); pointer-events-none so it can never block. Toasts already top-stacked.
 - ⬜ Move activity into a top-nav Activity Center / bell as the longer-term home.
 
 ## Phase 2 — Reviewer workspace (highest product value)
@@ -31,7 +31,8 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ⬜ PDF ↔ finding sync (jump + highlight evidence box) — bbox plumbing already exists.
 - ⬜ Queue as a dense table (Priority/File/Client/Rules/Failures/Assigned/Age/Action).
 - ✅ Trimmed reviewer queue stat tiles 5 → 3 (Pending / With failures / Completed by you).
-- ⬜ Submitted-result screen: closure summary + Download/Copy-language/Request-re-review.
+- ✅ Submitted screen: closure summary card (reviewed/confirmed/overrides/passed). Copy-rejection-
+  language + Request-re-review already present. (PDF Download still TODO.)
 - ⬜ Reviewer-facing language: Finding/Issue/No-issue (keep rule ids in a detail/diagnostics view).
 
 ## Phase 3 — Admin density & hierarchy
