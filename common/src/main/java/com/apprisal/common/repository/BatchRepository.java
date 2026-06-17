@@ -49,7 +49,10 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
                                    @Param("search") String search,
                                    Pageable pageable);
 
-    @EntityGraph(attributePaths = {"files", "client"})
+    // assignedReviewer must be fetched too: toSummary() maps it after the session
+    // closes (open-in-view=false), so a missing fetch throws LazyInitializationException
+    // and 500s the single-batch GET for any batch that has a reviewer assigned.
+    @EntityGraph(attributePaths = {"files", "client", "assignedReviewer"})
     Optional<Batch> findWithFilesById(Long id);
 
     List<Batch> findByClientId(Long clientId);
