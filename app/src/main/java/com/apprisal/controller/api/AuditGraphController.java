@@ -83,11 +83,12 @@ public class AuditGraphController {
             log.info("[graph/overview] batch {} → {} files, {} qcResults",
                 b.getId(), files.size(), qcrs.size());
 
-            String apprNodeId = appraisalNodeId(files);
+            Map<String, String> apprByOrder = appraisalNodeIdsByOrderId(files);
+            String soleAppr = soleAppraisalNodeId(files);
             for (BatchFile file : files) {
                 QCResult qcr = qcByFileId.get(file.getId());
                 nodes.add(fileNode(file, qcr, b));
-                linkFileByRole(links, "batch_" + b.getId(), apprNodeId, file);
+                linkFileByRole(links, "batch_" + b.getId(), apprByOrder, soleAppr, file);
 
                 if (qcr != null) {
                     appendSessionDecisionNodes(nodes, links, "file_" + file.getId(), qcr, false);
@@ -128,11 +129,12 @@ public class AuditGraphController {
 
         log.info("[graph/batch] {} → {} files, {} qcResults", batchId, files.size(), qcrs.size());
 
-        String apprNodeId = appraisalNodeId(files);
+        Map<String, String> apprByOrder = appraisalNodeIdsByOrderId(files);
+        String soleAppr = soleAppraisalNodeId(files);
         for (BatchFile file : files) {
             QCResult qcr = qcByFileId.get(file.getId());
             nodes.add(fileNode(file, qcr, batch));
-            linkFileByRole(links, "batch_" + batchId, apprNodeId, file);
+            linkFileByRole(links, "batch_" + batchId, apprByOrder, soleAppr, file);
 
             if (qcr != null) {
                 appendSessionDecisionNodes(nodes, links, "file_" + file.getId(), qcr, false);
@@ -171,9 +173,14 @@ public class AuditGraphController {
             // drawer's "Full file journey" is meaningful instead of a dead end.
             if (batch != null
                     && file.getFileType() != com.apprisal.common.entity.FileType.APPRAISAL) {
-                BatchFile appraisal = batchFileRepository.findByBatchId(batch.getId()).stream()
+                List<BatchFile> appraisals = batchFileRepository.findByBatchId(batch.getId()).stream()
                     .filter(f -> f.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL)
-                    .findFirst().orElse(null);
+                    .toList();
+                // Prefer the appraisal of THIS file's set (shared orderId); fall back to the first.
+                BatchFile appraisal = appraisals.stream()
+                    .filter(f -> file.getOrderId() != null && file.getOrderId().equals(f.getOrderId()))
+                    .findFirst()
+                    .orElse(appraisals.isEmpty() ? null : appraisals.get(0));
                 if (appraisal != null) {
                     QCResult apprQcr = qcResultRepository.findByBatchFileId(appraisal.getId()).orElse(null);
                     nodes.add(fileNode(appraisal, apprQcr, batch));
@@ -217,12 +224,13 @@ public class AuditGraphController {
             List<QCResult>  qcrs  = qcResultRepository.findByBatchId(batch.getId());
             Map<Long, QCResult> qcByFileId = buildQcByFileId(qcrs);
 
-            String apprNodeId = appraisalNodeId(files);
+            Map<String, String> apprByOrder = appraisalNodeIdsByOrderId(files);
+            String soleAppr = soleAppraisalNodeId(files);
             for (BatchFile file : files) {
                 String fileNodeId = "file_" + file.getId();
                 QCResult qcr = qcByFileId.get(file.getId());
                 if (seen.add(fileNodeId)) nodes.add(fileNode(file, qcr, batch));
-                linkFileByRole(links, batchNodeId, apprNodeId, file);
+                linkFileByRole(links, batchNodeId, apprByOrder, soleAppr, file);
                 if (qcr != null) appendSessionDecisionNodes(nodes, links, fileNodeId, qcr, false);
             }
         }
@@ -287,12 +295,13 @@ public class AuditGraphController {
             String batchNodeId = "batch_" + batch.getId();
             if (seen.add(batchNodeId)) nodes.add(batchNode(batch));
 
-            String apprNodeId = appraisalNodeId(files);
+            Map<String, String> apprByOrder = appraisalNodeIdsByOrderId(files);
+            String soleAppr = soleAppraisalNodeId(files);
             for (BatchFile file : files) {
                 String fileNodeId = "file_" + file.getId();
                 QCResult qcr = qcByFileId.get(file.getId());
                 if (seen.add(fileNodeId)) nodes.add(fileNode(file, qcr, batch));
-                linkFileByRole(links, batchNodeId, apprNodeId, file);
+                linkFileByRole(links, batchNodeId, apprByOrder, soleAppr, file);
                 if (qcr != null) appendSessionDecisionNodes(nodes, links, fileNodeId, qcr, false);
                 if (nodes.size() >= 300) break;
             }
@@ -521,29 +530,58 @@ public class AuditGraphController {
         return l;
     }
 
-    /** Node id of the batch's appraisal (its primary document), or null. */
-    private static String appraisalNodeId(List<BatchFile> files) {
-        return files.stream()
+    /**
+     * Map each appraisal set's orderId → its appraisal node id. A batch can hold MANY appraisal
+     * sets (engagement/contract are matched to an appraisal by shared orderId — same key the QC
+     * file-matching uses), so a supporting doc must attach to the appraisal of ITS set, not the
+     * first appraisal in the batch. Appraisals with a blank orderId are skipped here (they still
+     * link to the batch as their own set anchor).
+     */
+    private static Map<String, String> appraisalNodeIdsByOrderId(List<BatchFile> files) {
+        Map<String, String> byOrder = new HashMap<>();
+        for (BatchFile f : files) {
+            if (f.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL
+                    && f.getOrderId() != null && !f.getOrderId().isBlank()) {
+                byOrder.putIfAbsent(f.getOrderId(), "file_" + f.getId());
+            }
+        }
+        return byOrder;
+    }
+
+    /** The sole appraisal's node id when the batch has exactly one — else null. */
+    private static String soleAppraisalNodeId(List<BatchFile> files) {
+        List<BatchFile> appraisals = files.stream()
             .filter(f -> f.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL)
-            .findFirst()
-            .map(f -> "file_" + f.getId())
-            .orElse(null);
+            .toList();
+        return appraisals.size() == 1 ? "file_" + appraisals.get(0).getId() : null;
     }
 
     /**
-     * Link a file into the graph by its real role: the batch CONTAINS the appraisal
-     * (its primary document); a supporting doc SUPPORTS that appraisal rather than
-     * hanging flat off the batch, so the graph reads as one document set and a
-     * supporting doc's journey leads through the appraisal it backs.
+     * Link a file into the graph by its real role within its appraisal SET: the batch CONTAINS each
+     * appraisal (each set's primary document); a supporting doc SUPPORTS the appraisal that shares
+     * its orderId, so a multi-set batch reads as N grouped sets rather than every supporting doc
+     * hanging off the first appraisal. Falls back to the sole appraisal (single-set batches) and,
+     * failing that, to a flat CONTAINS link so a file is never orphaned.
      */
     private void linkFileByRole(List<Map<String, Object>> links, String batchNodeId,
-                                String appraisalNodeId, BatchFile file) {
+                                Map<String, String> appraisalsByOrder, String soleAppraisalNodeId,
+                                BatchFile file) {
         String fileNodeId = "file_" + file.getId();
         boolean isAppraisal = file.getFileType() == com.apprisal.common.entity.FileType.APPRAISAL;
-        if (isAppraisal || appraisalNodeId == null || appraisalNodeId.equals(fileNodeId)) {
+        if (isAppraisal) {
             links.add(link(batchNodeId, fileNodeId, "CONTAINS", null));
+            return;
+        }
+        // Supporting doc: attach to the appraisal of its own set (by orderId), then the sole
+        // appraisal, then fall back to the batch so it is never left floating.
+        String anchor = file.getOrderId() != null ? appraisalsByOrder.get(file.getOrderId()) : null;
+        if (anchor == null) {
+            anchor = soleAppraisalNodeId;
+        }
+        if (anchor != null && !anchor.equals(fileNodeId)) {
+            links.add(link(fileNodeId, anchor, "SUPPORTS", null));
         } else {
-            links.add(link(fileNodeId, appraisalNodeId, "SUPPORTS", null));
+            links.add(link(batchNodeId, fileNodeId, "CONTAINS", null));
         }
     }
 
