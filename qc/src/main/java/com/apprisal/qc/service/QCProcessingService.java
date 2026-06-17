@@ -333,7 +333,10 @@ public class QCProcessingService {
                     throw new RuntimeException("Python OCR service unavailable");
                 }
 
-                updateProgress(batchId, "python", "Running OCR and QC rules for " + pair.getAppraisal().getFilename(), index, pairs.size(), true, safeModelConfig);
+                // Neutral top-level label so it never contradicts the sub-stage (which carries
+                // the precise queued/started/running state). "Running OCR" while the sub-stage
+                // says "queued — waiting for worker" was the confusing 2%+queued+running display.
+                updateProgress(batchId, "python", "Processing " + pair.getAppraisal().getFilename(), index, pairs.size(), true, safeModelConfig);
                 log.info(TimelineLog.event("admin_batches", "java_qc_file_start",
                         "batch_id", batchId,
                         "batch_file_id", pair.getAppraisal().getId(),
