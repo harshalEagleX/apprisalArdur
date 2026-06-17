@@ -428,6 +428,11 @@ public class QCProcessingService {
         BatchStatus newStatus = partial
                 ? recomputeBatchStatusFromActiveResults(batchId)
                 : determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
+        // R2: if a re-run carried a live reviewer lock onto a new result, the batch must stay
+        // IN_REVIEW rather than fall back to the grabbable REVIEW_PENDING queue under the holder.
+        if (newStatus == BatchStatus.REVIEW_PENDING && anyActiveReviewLock(batchId)) {
+            newStatus = BatchStatus.IN_REVIEW;
+        }
         String finalError = null;
         if (newStatus == BatchStatus.ERROR) {
             finalError = fileErrors.isEmpty()
@@ -817,11 +822,19 @@ public class QCProcessingService {
         // extraction fix) does not silently discard their work. Findings that are
         // new, gone, or whose status changed are left pending and re-queued for
         // re-examination.
+        User carriedLockHolder = null;
         if (isRerun && previousActive != null) {
             int carried = migrateReviewerDecisions(previousActive, qcResult);
             if (carried > 0) {
                 log.info("Carried {} reviewer decision(s) from superseded result {} to the rerun for file {}",
                         carried, previousActive.getId(), appraisal.getFilename());
+            }
+            // R2: keep the active reviewer's lock so a re-run doesn't drop the file back into the
+            // grabbable queue under them (another reviewer could otherwise claim the new result).
+            carriedLockHolder = carryReviewLock(previousActive, qcResult);
+            if (carriedLockHolder != null) {
+                log.info("Carried review lock (held by {}) from superseded result {} to the rerun for file {}",
+                        carriedLockHolder.getUsername(), previousActive.getId(), appraisal.getFilename());
             }
         }
 
@@ -861,6 +874,7 @@ public class QCProcessingService {
                 rerunPayload.put("new_result_id", qcResult.getId());
                 rerunPayload.put("filename", appraisal.getFilename());
                 rerunPayload.put("had_reviewer_decisions", previousActive.getFinalDecision() != null);
+                rerunPayload.put("lock_carried_to", carriedLockHolder != null ? carriedLockHolder.getUsername() : null);
                 businessEventService.record("QC_RESULT_SUPERSEDED", null, "java", "RERUN",
                         "QCResult", previousActive.getId(), batchId, appraisal.getId(),
                         qcResult.getId(), null, rerunPayload);
@@ -1134,6 +1148,45 @@ public class QCProcessingService {
         boolean anyPending = active.stream()
                 .anyMatch(r -> r.getQcDecision() != QCDecision.AUTO_PASS && r.getFinalDecision() == null);
         return anyPending ? BatchStatus.REVIEW_PENDING : BatchStatus.COMPLETED;
+    }
+
+    /**
+     * R2: when a re-run supersedes a result that a reviewer is actively holding, carry the lock
+     * onto the new result so a <em>different</em> reviewer cannot grab it in the window before the
+     * original reviewer reloads. The session token is intentionally NOT carried — the old session
+     * lives on the old (now superseded) result; when the same reviewer re-opens the new result,
+     * {@code beginReviewSession} mints a fresh token and the lockedBy == reviewer check lets them
+     * straight back in. Returns the lock holder if a live lock was carried, else null.
+     */
+    private User carryReviewLock(QCResult previous, QCResult fresh) {
+        if (previous == null) {
+            return null;
+        }
+        User holder = previous.getReviewLockedBy();
+        var expiry = previous.getReviewLockExpiresAt();
+        boolean activeLock = holder != null && expiry != null && expiry.isAfter(AppTime.now());
+        if (!activeLock) {
+            return null;
+        }
+        fresh.setReviewLockedBy(holder);
+        fresh.setReviewLockExpiresAt(expiry);
+        fresh.setReviewStartedAt(previous.getReviewStartedAt());
+        fresh.setReviewLastActiveAt(previous.getReviewLastActiveAt());
+        return holder;
+    }
+
+    /**
+     * True when any active (non-superseded) result in the batch is held by a live reviewer lock.
+     * Used after a re-run to keep the batch IN_REVIEW (not back in the grabbable REVIEW_PENDING
+     * queue) when a lock was carried onto a new result.
+     */
+    private boolean anyActiveReviewLock(Long batchId) {
+        var now = AppTime.now();
+        return qcResultRepository.findByBatchId(batchId).stream()
+                .filter(r -> r.getSupersededAt() == null)
+                .anyMatch(r -> r.getReviewLockedBy() != null
+                        && r.getReviewLockExpiresAt() != null
+                        && r.getReviewLockExpiresAt().isAfter(now));
     }
 
     private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file, QCModelConfig modelConfig,
