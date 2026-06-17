@@ -35,11 +35,11 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ⬜ Reviewer-facing language: Finding/Issue/No-issue (keep rule ids in a detail/diagnostics view).
 
 ## Phase 3 — Admin density & hierarchy
-- ✅ Bulk-action toolbar already present (Run QC / Delete / Assign on selection). 3-tier row
-  hierarchy + richer progress (ETA/current-file) still TODO.
+- ✅ Bulk-action toolbar already present. Richer progress (elapsed + ETA) shipped. 3-tier row
+  visual hierarchy still TODO.
 - 🟡 Width: Users/Clients/Batches/DocStats now fill to 1800px (was 1200–1500 left-aligned/centered). Density modes + Clients-as-table still TODO.
-- ⬜ Users table: add Status/Last-login/Org/Actions. Clients: stats card (users/batches/files/
-  success/last-activity) instead of one empty card.
+- 🟡 Clients now a dense TABLE (was sparse 4-col card grid). Per-client stats (batches/files/
+  success/last-activity) + Users table extra columns need a backend aggregation endpoint — TODO.
 - ✅ Sidebar ≤220px (w-[220px]) + already collapsible. Grid overlay already 3.2% (within rule).
 - ⬜ Overview: group 8 metrics → Pipeline/Resources/Health; remove the Workflow-Visibility
   duplication; richer Recent Activity row; bigger reviewer-workload table.

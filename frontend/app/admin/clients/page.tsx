@@ -98,32 +98,48 @@ export default function ClientsPage() {
           />
         </div>
       ) : (
-        <div data-guide="admin-clients-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(c => (
-            <div key={c.id} className="rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.16)] transition-colors hover:border-slate-500/25">
-              {/* Avatar */}
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#161B22]">
-                <span className="text-base font-bold text-slate-300">{c.name[0].toUpperCase()}</span>
-              </div>
-              <div className="font-semibold text-slate-200 text-sm">{c.name}</div>
-              <div className="text-xs text-slate-500 font-mono mt-0.5">{c.code}</div>
-              <div className="mt-3 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-medium ${
-                  c.status === "ACTIVE"
-                    ? "bg-green-950/40 border-green-500/25 text-green-200"
-                    : "bg-[#161B22] border-white/10 text-slate-500"
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${c.status === "ACTIVE" ? "bg-green-400" : "bg-slate-500"}`} />
-                  {c.status ?? "Active"}
-                </span>
-              </div>
-              {c.createdAt && (
-                <div className="text-[11px] text-slate-600 mt-3">
-                  Added {new Date(c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                </div>
-              )}
-            </div>
-          ))}
+        // Dense table over a sparse card grid: scans better and scales to many tenants.
+        <div data-guide="admin-clients-grid" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-2.5 font-medium">Client</th>
+                <th className="px-4 py-2.5 font-medium">Code</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium">Added</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {filtered.map(c => (
+                <tr key={c.id} className="transition-colors hover:bg-white/[0.03]">
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/10 bg-[#161B22] text-xs font-bold text-slate-300">
+                        {c.name[0].toUpperCase()}
+                      </span>
+                      <span className="font-medium text-slate-200">{c.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{c.code}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                      c.status === "ACTIVE"
+                        ? "bg-green-950/40 border-green-500/25 text-green-200"
+                        : "bg-[#161B22] border-white/10 text-slate-500"
+                    }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${c.status === "ACTIVE" ? "bg-green-400" : "bg-slate-500"}`} />
+                      {c.status ?? "Active"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">
+                    {c.createdAt
+                      ? new Date(c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
