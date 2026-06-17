@@ -18,8 +18,12 @@ spring:
 
   jpa:
     hibernate:
-      # Dev follows the same no-Flyway rule: Hibernate updates Java-owned tables.
-      ddl-auto: create
+      # Dev follows the same no-Flyway rule: Hibernate UPDATES Java-owned tables in
+      # place. NEVER use `create`/`create-drop` here — those DROP every table on each
+      # boot, so every dev restart (the README runs with -Dspring.profiles.active=dev)
+      # silently wipes all data. Must stay `update` to match the prod profile and the
+      # CLAUDE.md DB policy.
+      ddl-auto: update
     show-sql: false
 
 logging:
