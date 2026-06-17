@@ -25,9 +25,9 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
   default; passes are an opt-in tab (key 1=attention,2=fail,3=review,4=pass,5=all).
 - ✅ Progress as hero — wide bar + prominent count + "N left/all decided"; Submit turns green when ready.
 - ⬜ Evidence-first ordering: Finding → Evidence → Decision controls.
-- ⬜ Confidence framed safely ("High confidence · evidence available", not bare "100%").
+- ✅ Confidence framed qualitatively (High/Moderate/Low + secondary %); low confidence flagged amber.
 - ✅ Override-to-Pass guarded — Confirm-Fail is now the wider/primary action; Override is muted, narrower, reason-gated.
-- ⬜ Keyboard review mode: F/P confirm, N/J/K navigate.
+- ✅ Keyboard review mode already present (F/P decide, J/K/N navigate, C comment, A ack, S submit, [/] docs) — verified.
 - ⬜ PDF ↔ finding sync (jump + highlight evidence box) — bbox plumbing already exists.
 - ⬜ Queue as a dense table (Priority/File/Client/Rules/Failures/Assigned/Age/Action).
 - ⬜ Trim reviewer queue summary cards 7 → 3 (Pending / Needs-review / Completed today).

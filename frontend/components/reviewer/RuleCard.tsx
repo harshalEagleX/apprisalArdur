@@ -257,11 +257,22 @@ export const RuleCard = memo(function RuleCard({
             </div>
           )}
 
-          {rule.confidence != null && (
-            <div className="text-[11px] text-slate-500 font-mono">
-              Confidence {Math.round(Number(rule.confidence) * 100)}%
-            </div>
-          )}
+          {rule.confidence != null && (() => {
+            // Frame confidence qualitatively so a bare "100%" doesn't invite blind trust.
+            // Low confidence is flagged amber (verify carefully); the raw % is secondary.
+            const c = Number(rule.confidence);
+            const band = c >= 0.85
+              ? { label: "High confidence", cls: "text-slate-300" }
+              : c >= 0.6
+                ? { label: "Moderate confidence", cls: "text-slate-300" }
+                : { label: "Low confidence — verify carefully", cls: "text-amber-300" };
+            return (
+              <div className={`flex items-center gap-1.5 text-[11px] ${band.cls}`}>
+                <span className="font-medium">{band.label}</span>
+                <span className="font-mono text-slate-500">· {Math.round(c * 100)}%</span>
+              </div>
+            );
+          })()}
 
           {isVerify && (
             <details className="rounded-lg border border-white/10 bg-[#0B0F14]/55 px-2.5 py-2 text-xs text-slate-400">
