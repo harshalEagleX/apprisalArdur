@@ -387,7 +387,7 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
       ) : (
         <div className="divide-y divide-slate-800">
           {recentBatches.slice(0, 6).map(b => (
-            <Link key={b.id} href="/admin/batches" className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.04]">
+            <Link key={b.id} href={`/admin/batches/${b.id}`} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.04]">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-slate-300 truncate">{b.parentBatchId}</span>

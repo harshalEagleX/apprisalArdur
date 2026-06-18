@@ -1,5 +1,6 @@
 "use client";
 import React, { memo } from "react";
+import Link from "next/link";
 import { Play, RefreshCw, Square, Trash2, AlertTriangle, AlertCircle, UserPlus, History } from "lucide-react";
 import type { Batch, User } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
@@ -98,14 +99,15 @@ export const BatchRow = memo(function BatchRow({
         )}
       </td>
 
-      {/* Batch ID */}
+      {/* Batch ID — drills into the per-file detail page */}
       <td className="px-4 py-3">
-        <div
-          className="font-mono text-xs text-slate-200 max-w-[190px] truncate"
+        <Link
+          href={`/admin/batches/${b.id}`}
+          className="block font-mono text-xs text-slate-200 max-w-[190px] truncate transition-colors hover:text-white hover:underline"
           title={b.parentBatchId}
         >
           {b.parentBatchId}
-        </div>
+        </Link>
         {b.status === "ERROR" && (
           <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-red-300">
             <AlertTriangle size={10} /> Retry available

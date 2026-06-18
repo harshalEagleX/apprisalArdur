@@ -76,7 +76,7 @@ export default function ClientDetailPage() {
                 {data.recentBatches.map(b => (
                   <tr key={b.id} className="transition-colors hover:bg-white/[0.03]">
                     <td className="px-4 py-2.5">
-                      <Link href={`/admin/batches`} className="font-medium text-slate-200 hover:text-white">{b.parentBatchId ?? `Batch #${b.id}`}</Link>
+                      <Link href={`/admin/batches/${b.id}`} className="font-medium text-slate-200 hover:text-white hover:underline">{b.parentBatchId ?? `Batch #${b.id}`}</Link>
                       <div className="text-[11px] text-slate-500">{b.fileCount} file{b.fileCount === 1 ? "" : "s"}</div>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-slate-400">{b.status?.replace(/_/g, " ")}</td>
