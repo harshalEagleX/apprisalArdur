@@ -45,7 +45,7 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ✅ Overview: removed the Workflow-Visibility duplication — flat metric row trimmed 8→4
   (resources+health); pipeline stages live only in the actionable Workflow section.
 - ⬜ Overview: richer Recent Activity row; bigger reviewer-workload table.
-- ⬜ Empty states that educate (no bare 0s); skeleton loading states; breadcrumbs; ⌘K global search.
+- 🟡 Empty states: ✅ Analytics empty-state + ✅ breadcrumbs on Clients/DocStats detail. ⌘K global search + more empty/loading states still TODO.
 
 ## Phase 4 — DocStats: operator-first
 - ✅ DocStats detail: actionable "so what" insight banner (dominant cost + recommendation).

@@ -176,11 +176,15 @@ export default function DocStatDetailPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
-      {/* Back + header */}
-      <Link href="/admin/doc-stats" className="mb-4 inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200">
-        <ArrowLeft size={14} /> DocStats
-      </Link>
+    <div className="w-full max-w-[1800px] p-6 lg:p-8">
+      {/* Breadcrumb */}
+      <nav className="mb-4 flex items-center gap-1.5 text-xs text-slate-500">
+        <Link href="/admin/doc-stats" className="inline-flex items-center gap-1 transition-colors hover:text-slate-300">
+          <ArrowLeft size={12} /> DocStats
+        </Link>
+        <span className="text-slate-600">/</span>
+        <span className="max-w-[280px] truncate text-slate-300" title={data.filename ?? undefined}>{data.filename ?? "Document"}</span>
+      </nav>
 
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">

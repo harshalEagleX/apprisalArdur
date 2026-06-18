@@ -39,7 +39,8 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
 - ~~🟠 No client-detail endpoint~~ (was) `clientBatchStats` powers
   the table totals, but there's no `GET /api/admin/clients/{id}` returning that client's
   batches/users/recent activity for a drill-in page.
-- 🟡 **Analytics shows raw `0`/`—` on an empty system** (endpoints exist; data is just empty).
+- ✅ **FIXED — Analytics now shows an educational empty-state** (Upload CTA) when no files are processed, instead of a wall of zeros.
+- ~~🟡 Analytics shows raw 0~~ (was) (endpoints exist; data is just empty).
   Not a missing API — needs an educational empty-state ("No processed files yet — upload a
   batch"), per the review.
 - 🟡 **DocStats per-rule telemetry is primary nav.** The per-rule timing table is engineer-grade
