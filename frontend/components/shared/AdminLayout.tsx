@@ -21,6 +21,10 @@ const NAV = [
   { href: "/admin/clients",  label: "Clients",    Icon: Building2 },
   { href: "/analytics",      label: "Analytics",  Icon: BarChart2 },
   { href: "/admin/doc-stats", label: "DocStats",  Icon: Timer },
+];
+
+// Secondary / insights nav — lower operational utility, visually demoted
+const NAV_SECONDARY = [
   { href: "/admin/audit",    label: "Audit Graph", Icon: Network },
 ];
 
@@ -352,6 +356,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-slate-400" />}
                 <Icon size={16} className={`flex-shrink-0 ${active ? "text-slate-300" : "text-slate-600 group-hover:text-slate-300"}`} />
                 {!narrow && <span className="truncate">{label}</span>}
+              </Link>
+            );
+          })}
+
+          {/* Secondary / insights — demoted below primary ops nav */}
+          {!narrow && (
+            <div className="mt-4 border-t border-white/[0.06] pt-3">
+              <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-700">Insights</div>
+            </div>
+          )}
+          {narrow && <div className="mt-3 border-t border-white/[0.06]" />}
+          {NAV_SECONDARY.map(({ href, label, Icon }) => {
+            const active = pathname === href || pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                title={narrow ? label : undefined}
+                className={`group relative flex items-center gap-3 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                  active
+                    ? "bg-slate-600/15 text-slate-300 font-medium"
+                    : "text-slate-600 hover:text-slate-300 hover:bg-white/[0.04]"
+                }`}
+              >
+                {active && <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r bg-slate-500" />}
+                <Icon size={14} className={`flex-shrink-0 ${active ? "text-slate-400" : "text-slate-700 group-hover:text-slate-400"}`} />
+                {!narrow && <span className="truncate text-[13px]">{label}</span>}
               </Link>
             );
           })}
