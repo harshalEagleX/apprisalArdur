@@ -29,36 +29,47 @@ Legend: ✅ shipped · 🟡 in progress · ⬜ planned
 - ✅ Override-to-Pass guarded — Confirm-Fail is now the wider/primary action; Override is muted, narrower, reason-gated.
 - ✅ Keyboard review mode already present (F/P decide, J/K/N navigate, C comment, A ack, S submit, [/] docs) — verified.
 - ⬜ PDF ↔ finding sync (jump + highlight evidence box) — bbox plumbing already exists.
-- ⬜ Queue as a dense table (Priority/File/Client/Rules/Failures/Assigned/Age/Action).
-- ✅ Trimmed reviewer queue stat tiles 5 → 3 (Pending / With failures / Completed by you).
-- ✅ Submitted screen: closure summary card (reviewed/confirmed/overrides/passed). Copy-rejection-
-  language + Request-re-review already present. (PDF Download still TODO.)
-- ⬜ Reviewer-facing language: Finding/Issue/No-issue (keep rule ids in a detail/diagnostics view).
+- ✅ Queue as a dense table: priority dot / file+QC# / Issues / Uncertain / Clear / Age /
+  action button (red for files with issues, neutral otherwise). Replaced card stack.
+- ✅ Trimmed reviewer queue stat tiles 5 → 3 (Pending / With issues / Completed by you).
+- ✅ Submitted screen: closure summary card + Copy-rejection + Request-re-review present.
+- ✅ Reviewer-facing language throughout: Finding/Issue/No-issue (queue filter "Has issues",
+  verify tabs Issues/Uncertain/No issues, RuleCard buttons reframed).
 
 ## Phase 3 — Admin density & hierarchy
-- ✅ Bulk-action toolbar already present. Richer progress (elapsed + ETA) shipped. 3-tier row
-  visual hierarchy still TODO.
-- 🟡 Width: Users/Clients/Batches/DocStats now fill to 1800px (was 1200–1500 left-aligned/centered). Density modes + Clients-as-table still TODO.
-- ✅ Clients dense TABLE with real per-client stats (batches/files/success/last-activity) via a
-  new grouped /api/admin/clients/stats endpoint (no N+1). Users table extra columns still TODO.
-- ✅ Sidebar ≤220px (w-[220px]) + already collapsible. Grid overlay already 3.2% (within rule).
-- ✅ Overview: removed the Workflow-Visibility duplication — flat metric row trimmed 8→4
-  (resources+health); pipeline stages live only in the actionable Workflow section.
-- ⬜ Overview: richer Recent Activity row; bigger reviewer-workload table.
-- 🟡 Empty states: ✅ Analytics empty-state + ✅ breadcrumbs on Clients/DocStats detail. ⌘K global search + more empty/loading states still TODO.
+- ✅ Bulk-action toolbar already present. Richer progress (elapsed + ETA) shipped.
+- ✅ Width: all pages fill to 1800px. Clients-as-table shipped.
+- ✅ Clients dense TABLE with real per-client stats (batches/files/success/last-activity).
+- ✅ Sidebar ≤220px (w-[220px]) + collapsible.
+- ✅ Overview: removed Workflow-Visibility duplication; pipeline stages in Workflow only.
+- ✅ Overview: Recent Activity rows show fileCount badge + assignedReviewer name alongside
+  client + status; rows link directly to /admin/batches/{id} (batch detail).
+- ✅ Batch detail drill-in page: /admin/batches/[id] — breadcrumb, header, intake-warnings
+  banner, 4 stat tiles, per-file table (severity dot, QC status, issues/review/clear counts,
+  size), error message panel. Batch ID cell in BatchRow now links through.
+- ✅ ⌘K global command palette (CommandPalette): searches batches/clients/users, arrow-key
+  navigation, Enter to go, Esc to close, ⌘K trigger in sidebar nav.
+- ✅ Empty states: Analytics + breadcrumbs on Clients/DocStats detail pages.
 
 ## Phase 4 — DocStats: operator-first
-- ✅ DocStats detail: actionable "so what" insight banner (dominant cost + recommendation).
-- ⬜ Human-readable stage workflow; severity ranking (🔴/🟡/🟢).
-- ⬜ Move per-rule telemetry under a Diagnostics area (not primary nav).
-- ✅ Trend now shows latest-vs-previous (with Δ%) under 7 runs instead of a misleading line.
-- ⬜ Rule-ranking: add recommendations. Stage workflow rename + move per-rule telemetry to Diagnostics.
+- ✅ DocStats detail: actionable "so what" insight banner.
+- ✅ DocStats detail: Overview/Diagnostics tab bar — per-rule timing moves to Diagnostics;
+  pipeline stages + QC sections stay in Overview.
+- ✅ Severity ranking in Rule Ranking tab: colored dots (🔴 ≥1000ms / 🟡 ≥300ms / 🟢 <300ms),
+  bar fill matches severity, recommendation line under each high/medium cost rule,
+  legend in header counts high/medium/low rules.
+- ✅ Stage labels are already human-readable via stageLabels.ts (STAGE_LABELS map).
+- ✅ Trend shows latest-vs-previous (Δ%) when < 7 runs.
 
 ## Phase 5 — Cross-cutting
-- ⬜ Color semantics pass (fail=red, review=amber, pass=neutral; purple=brand only) — within
-  the existing palette, no new colors.
+- ✅ Color semantics already correct in StatusBadge: fail=red, review=amber, pass=green,
+  neutral=slate. No new colors introduced.
+- ✅ Reviewer language reframe: queue "Failures"→"Has issues", verify tabs
+  Fail→Issues / Needs Review→Uncertain / Pass→No issues; RuleCard buttons
+  "Confirm Fail"→"Confirm issue", "Override to Pass"→"Override — no issue",
+  "Save Pass"→"No issue", "Save Fail"→"Issue found".
+- ✅ Audit Graph demoted from primary ops nav to "Insights" secondary group.
 - ⬜ Accessibility contrast pass (≥ WCAG AA on metadata/confidence/timestamps).
-- ⬜ Per-screen "one primary action".
 
 ## Open question for the user
 - **File handling at scale:** files are 5–50 MB, 100+/day. Decide upload constraints + filters

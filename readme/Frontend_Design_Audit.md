@@ -19,9 +19,9 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
 - ~~🟠 Client rows don't drill down~~ (was) The new Clients table has real stats but rows aren't
   clickable — there's no client-detail view (its batches/users/activity). Needs a route +
   endpoint (see C).
-- 🟠 **Batch rows have no full detail view.** Actions (Run/Stop/Assign/History) are inline, and
-  the History drawer shows runs, but there's no single "batch detail" (file list + per-file
-  status + results) — the row is a control strip, not a drill-in.
+- ✅ **FIXED — /admin/batches/[id] batch detail page** — file list + per-file QC status +
+  issues/review/clear counts + severity dot + size + intake warnings + error message. Batch ID
+  in BatchRow links through; Recent Activity and client drill-in link directly to the detail page.
 - 🟡 **Analytics lives at `/analytics`, not `/admin/analytics`.** Inconsistent with every other
   admin route; the nav points outside the `/admin` tree.
 
@@ -43,18 +43,20 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
 - ~~🟡 Analytics shows raw 0~~ (was) (endpoints exist; data is just empty).
   Not a missing API — needs an educational empty-state ("No processed files yet — upload a
   batch"), per the review.
-- 🟡 **DocStats per-rule telemetry is primary nav.** The per-rule timing table is engineer-grade
-  diagnostics; product-wise it belongs behind a Diagnostics sub-tab, not top-level.
+- ✅ **FIXED — DocStats per-rule table is now behind a Diagnostics tab** — Overview tab shows
+  pipeline stages + QC sections; Diagnostics tab shows the engineer-grade per-rule timing table.
 
 ## C. Placement / IA ambiguities
 - 🟠 **No breadcrumbs** anywhere — on a detail page (DocStats/[id], verify/[id]) there's no
   "where am I / how do I get back to the parent list" cue beyond a single back link.
-- 🟠 **No global (⌘K) search** — each page has its own search box; no cross-entity jump
-  (batch/file/reviewer/client/address/loan#).
-- 🟡 **Audit Graph is a top-level nav peer** of Batches/Users. The reviews rate it low on
-  operational utility; consider demoting it under an "Insights"/secondary group.
-- 🟡 **Reviewer language is "Rules/Pass/Fail"** throughout; reviewers think
-  "Findings/Issue/No-issue". (Keep rule IDs in the evidence/detail view.)
+- ✅ **FIXED — ⌘K global command palette** — searches batches (parentBatchId), clients
+  (name/code), and users (fullName/username/email). Arrow-key navigation + Enter/Esc. Triggered
+  from sidebar ⌘K button or keyboard shortcut. Debounced parallel fetch, 5 results per type.
+- ✅ **FIXED — Audit Graph demoted** to a secondary "Insights" group at the bottom of the
+  admin sidebar, visually distinct from the primary operations nav.
+- ✅ **FIXED — Reviewer language reframed** to Issue/No-issue throughout: queue filter "Has
+  issues", stat tile "With issues", section labels, verify page tabs (Issues/Uncertain/No issues),
+  RuleCard buttons (Confirm issue / Override — no issue / No issue / Issue found).
 
 ## E. Security (found during audit)
 - ✅ **FIXED — `/api/admin/users` leaked the bcrypt password hash.** Added WRITE_ONLY to User.password so it's never serialized to API responses.
