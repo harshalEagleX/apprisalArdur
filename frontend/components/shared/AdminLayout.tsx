@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Users, Building2,
-  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, ShieldCheck,
+  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, ShieldCheck, Search,
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
 import ActivityMonitor from "./ActivityMonitor";
 import DeviceGate from "./DeviceGate";
+import { CommandPalette } from "./CommandPalette";
 import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideTooltip";
 
 const NAV = [
@@ -226,8 +227,9 @@ function adminGuideFor(pathname: string) {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [narrow, setNarrow]     = useState(false);
-  const [signingOut, setSigning] = useState(false);
+  const [narrow, setNarrow]         = useState(false);
+  const [signingOut, setSigning]     = useState(false);
+  const [paletteOpen, setPalette]    = useState(false);
   const guide = adminGuideFor(pathname);
 
   useEffect(() => {
@@ -237,6 +239,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     syncSidebar();
     window.addEventListener("resize", syncSidebar);
     return () => window.removeEventListener("resize", syncSidebar);
+  }, []);
+
+  // ⌘K / Ctrl+K opens the command palette
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPalette(p => !p);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   async function handleSignOut() {
@@ -301,6 +315,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav */}
         <nav className="flex-1 p-2 space-y-1 mt-1">
+          {/* ⌘K search trigger */}
+          <button
+            onClick={() => setPalette(true)}
+            title="Global search (⌘K)"
+            className={`mb-2 flex w-full items-center gap-2 rounded-lg border border-white/10 bg-[#161B22]/80 px-3 py-2 text-[11px] text-slate-500 transition-colors hover:border-slate-500/40 hover:text-slate-300 ${narrow ? "justify-center px-2" : ""}`}
+          >
+            <Search size={13} className="shrink-0 text-slate-400" />
+            {!narrow && (
+              <>
+                <span className="flex-1 text-left">Search…</span>
+                <kbd className="rounded border border-white/10 bg-[#0B0F14] px-1 text-[10px]">⌘K</kbd>
+              </>
+            )}
+          </button>
           {!narrow && (
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-[#161B22]/80 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
               <BrainCircuit size={13} className="shrink-0 text-slate-300" />
@@ -357,9 +385,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </main>
 
-      {/* Global notifications */}
+      {/* Global notifications + command palette */}
       <ToastContainer />
       <ActivityMonitor />
+      <CommandPalette open={paletteOpen} onClose={() => setPalette(false)} />
     </div>
     </DeviceGate>
   );
