@@ -17,6 +17,7 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import { toast } from "@/lib/toast";
 
 type SortKey = "ms" | "ruleId" | "section" | "status";
+type DetailTab = "overview" | "diagnostics";
 
 /** Sortable table header — hoisted out of the page so it isn't recreated on render. */
 function SortTh({ k, children, right, sortKey, onSort }: {
@@ -110,6 +111,7 @@ export default function DocStatDetailPage() {
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [compare, setCompare] = useState<DocStatCompare | null>(null);
   const [loading, setLoad]  = useState(true);
+  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [ruleSearch, setRuleSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("ms");
   const [sortAsc, setSortAsc] = useState(false);
@@ -203,6 +205,29 @@ export default function DocStatDetailPage() {
         {data.qcDecision && <StatusBadge status={data.qcDecision} />}
       </header>
 
+      {/* Tab bar — Overview (pipeline+sections) vs Diagnostics (per-rule timing) */}
+      <div className="mb-5 flex items-center gap-1 border-b border-white/10">
+        {(["overview", "diagnostics"] as DetailTab[]).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setDetailTab(tab)}
+            className={`relative -mb-px flex items-center gap-1.5 px-3.5 py-2 text-sm capitalize transition-colors ${
+              detailTab === tab ? "text-white" : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            {tab === "overview" ? <Layers size={13} /> : <Search size={13} />}
+            {tab === "overview" ? "Overview" : "Diagnostics"}
+            {tab === "diagnostics" && data.rules.length > 0 && (
+              <span className="ml-1 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
+                {data.rules.length} rules
+              </span>
+            )}
+            {detailTab === tab && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-t bg-indigo-400" />}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview tab: headline numbers + insight + compare + pipeline + sections */}
       {/* Headline numbers — total, rule engine, and the Groq inference/throttle split */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <HeadStat icon={Timer} label="Total time"   value={fmtMs(data.totalMs)} hint="end-to-end" tone="text-white" />
@@ -267,86 +292,94 @@ export default function DocStatDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Pipeline stages */}
-        <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
-          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <Layers size={15} className="text-indigo-300" /> Pipeline stages
-          </h2>
-          <p className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-500">
-            <Info size={11} /> Stages run one after another — total time is their sum. Blue = AI analysis, amber = waiting on the AI rate limit; red = slower than expected.
-          </p>
-          <div className="space-y-3">
-            {data.stages.length === 0 && <p className="text-xs text-slate-500">No stage timings recorded.</p>}
-            {data.stages.map((s) => (
-              <StageBar key={s.stage} s={s} max={stageMax} threshold={thresholds[s.stage]} />
-            ))}
-          </div>
-        </section>
-
-        {/* QC sections */}
-        <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
-          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <Gauge size={15} className="text-indigo-300" /> QC sections
-          </h2>
-          <p className="mb-4 text-[11px] text-slate-500">Rule-engine time by section (% of rule engine).</p>
-          <div className="space-y-3">
-            {data.sections.length === 0 && <p className="text-xs text-slate-500">No section timings recorded.</p>}
-            {data.sections.map((s) => (
-              <Bar key={s.section} label={s.label} ms={s.ms} pct={s.pctOfRules} max={sectionMax} sub={`${s.ruleCount} rules`} />
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {/* Per-rule table */}
-      <section className="mt-6 overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Cpu size={15} className="text-indigo-300" /> Per-rule timing
-            <span className="text-[11px] font-normal text-slate-500">({sortedRules.length} of {data.rules.length})</span>
-          </h2>
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              value={ruleSearch}
-              onChange={(e) => setRuleSearch(e.target.value)}
-              placeholder="Filter rules…"
-              className="h-8 w-56 rounded-md border border-white/10 bg-[#0c1014] pl-8 pr-2 text-xs text-white placeholder:text-slate-600 focus:border-indigo-500/40 focus:outline-none"
-            />
-          </div>
-        </div>
-        <div className="max-h-[520px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-[#11161C] text-[11px] uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-white/10">
-                <SortTh k="ruleId" sortKey={sortKey} onSort={toggleSort}>Rule</SortTh>
-                <th className="px-4 py-2.5 text-left font-medium">Name</th>
-                <SortTh k="section" sortKey={sortKey} onSort={toggleSort}>Section</SortTh>
-                <SortTh k="status" sortKey={sortKey} onSort={toggleSort}>Status</SortTh>
-                <th className="px-4 py-2.5 text-right font-medium">AI</th>
-                <SortTh k="ms" right sortKey={sortKey} onSort={toggleSort}>Time</SortTh>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRules.map((r: DocStatRule, i) => (
-                <tr key={`${r.ruleId}-${i}`} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
-                  <td className="px-4 py-2.5 font-mono text-[12px] text-slate-300">{r.ruleId}</td>
-                  <td className="px-4 py-2.5 text-slate-400 max-w-[300px] truncate">{r.ruleName}</td>
-                  <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.section}</td>
-                  <td className="px-4 py-2.5">{r.status ? <StatusBadge status={r.status} size="xs" /> : "—"}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-[12px]">
-                    {r.llmCalls > 0
-                      ? <span className="text-sky-300" title={`${r.llmCalls} AI call(s), ${fmtMs(r.throttleMs)} waiting on rate limit`}>{r.llmCalls}× · {fmtMs(r.llmMs)}</span>
-                      : <span className="text-slate-600">—</span>}
-                  </td>
-                  <td className={`px-4 py-2.5 text-right tabular-nums ${durationTone(r.ms)}`}>{fmtMs(r.ms)}</td>
-                </tr>
+      {detailTab === "overview" && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Pipeline stages */}
+          <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
+              <Layers size={15} className="text-indigo-300" /> Pipeline stages
+            </h2>
+            <p className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-500">
+              <Info size={11} /> Stages run one after another — total time is their sum. Blue = AI analysis, amber = waiting on the AI rate limit; red = slower than expected.
+            </p>
+            <div className="space-y-3">
+              {data.stages.length === 0 && <p className="text-xs text-slate-500">No stage timings recorded.</p>}
+              {data.stages.map((s) => (
+                <StageBar key={s.stage} s={s} max={stageMax} threshold={thresholds[s.stage]} />
               ))}
-            </tbody>
-          </table>
+            </div>
+          </section>
+
+          {/* QC sections */}
+          <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
+              <Gauge size={15} className="text-indigo-300" /> QC sections
+            </h2>
+            <p className="mb-4 text-[11px] text-slate-500">Rule-engine time by section (% of rule engine).</p>
+            <div className="space-y-3">
+              {data.sections.length === 0 && <p className="text-xs text-slate-500">No section timings recorded.</p>}
+              {data.sections.map((s) => (
+                <Bar key={s.section} label={s.label} ms={s.ms} pct={s.pctOfRules} max={sectionMax} sub={`${s.ruleCount} rules`} />
+              ))}
+            </div>
+          </section>
         </div>
-      </section>
+      )}
+
+      {detailTab === "diagnostics" && (
+        <section className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+                <Cpu size={15} className="text-indigo-300" /> Per-rule timing
+                <span className="text-[11px] font-normal text-slate-500">({sortedRules.length} of {data.rules.length})</span>
+              </h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Engineer-grade breakdown — how long each rule took and whether AI was involved.
+              </p>
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                value={ruleSearch}
+                onChange={(e) => setRuleSearch(e.target.value)}
+                placeholder="Filter rules…"
+                className="h-8 w-56 rounded-md border border-white/10 bg-[#0c1014] pl-8 pr-2 text-xs text-white placeholder:text-slate-600 focus:border-indigo-500/40 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="max-h-[620px] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-[#11161C] text-[11px] uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-white/10">
+                  <SortTh k="ruleId" sortKey={sortKey} onSort={toggleSort}>Rule</SortTh>
+                  <th className="px-4 py-2.5 text-left font-medium">Name</th>
+                  <SortTh k="section" sortKey={sortKey} onSort={toggleSort}>Section</SortTh>
+                  <SortTh k="status" sortKey={sortKey} onSort={toggleSort}>Finding</SortTh>
+                  <th className="px-4 py-2.5 text-right font-medium">AI</th>
+                  <SortTh k="ms" right sortKey={sortKey} onSort={toggleSort}>Time</SortTh>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRules.map((r: DocStatRule, i) => (
+                  <tr key={`${r.ruleId}-${i}`} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
+                    <td className="px-4 py-2.5 font-mono text-[12px] text-slate-300">{r.ruleId}</td>
+                    <td className="px-4 py-2.5 text-slate-400 max-w-[300px] truncate">{r.ruleName}</td>
+                    <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.section}</td>
+                    <td className="px-4 py-2.5">{r.status ? <StatusBadge status={r.status} size="xs" /> : "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-[12px]">
+                      {r.llmCalls > 0
+                        ? <span className="text-sky-300" title={`${r.llmCalls} AI call(s), ${fmtMs(r.throttleMs)} waiting on rate limit`}>{r.llmCalls}× · {fmtMs(r.llmMs)}</span>
+                        : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums ${durationTone(r.ms)}`}>{fmtMs(r.ms)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

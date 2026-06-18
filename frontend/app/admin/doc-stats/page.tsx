@@ -256,6 +256,22 @@ function BatchesPanel() {
   );
 }
 
+/* ── Rule ranking helpers ──────────────────────────────────────────────────── */
+function ruleSeverity(avgMs: number): { dot: string; label: string } {
+  if (avgMs >= 1000) return { dot: "bg-red-400",   label: "High" };
+  if (avgMs >= 300)  return { dot: "bg-amber-400", label: "Medium" };
+  return               { dot: "bg-green-400",  label: "Low" };
+}
+
+function ruleRecommendation(r: DocStatRuleRank): string {
+  if (r.avgMs >= 1000 && r.pctLlm > 60) return "Shrink prompt or pre-filter candidates before the AI call";
+  if (r.avgMs >= 1000 && r.pctLlm < 10) return "Profile local rule logic — this rule is CPU-heavy without AI";
+  if (r.avgMs >= 500 && r.pctLlm > 40)  return "Consider caching AI results or batching calls";
+  if (r.avgConfidence < 0.6)             return "Low extraction confidence — improve document quality or prompts";
+  if (r.pctLlm > 80)                     return "Almost always calls AI — add a fast local pre-check to skip easy cases";
+  return "";
+}
+
 /* ── Rule ranking: cumulative across the corpus ───────────────────────────── */
 function RankingPanel() {
   const [rows, setRows] = useState<DocStatRuleRank[]>([]);
@@ -273,50 +289,85 @@ function RankingPanel() {
   if (rows.length === 0) return <EmptyState icon={ListOrdered} title="No rule timings yet" description="Cumulative rule ranking builds up as QC runs accumulate." />;
 
   const maxAvg = Math.max(...rows.map(r => r.avgMs), 1);
+  const highCount = rows.filter(r => r.avgMs >= 1000).length;
+  const medCount  = rows.filter(r => r.avgMs >= 300 && r.avgMs < 1000).length;
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
-      <div className="border-b border-white/10 px-4 py-2.5 text-[11px] text-slate-500">
-        Average evaluation time per rule across every measured run — where to focus optimization. LLM% = share of runs where the rule made a Groq call.
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
+        <span className="text-[11px] text-slate-500">
+          Average evaluation time per rule across every measured run. LLM% = share of runs that called Groq.
+        </span>
+        <div className="flex items-center gap-3 text-[11px]">
+          {highCount > 0 && (
+            <span className="flex items-center gap-1.5 text-red-300">
+              <span className="h-2 w-2 rounded-full bg-red-400" /> {highCount} high-cost
+            </span>
+          )}
+          {medCount > 0 && (
+            <span className="flex items-center gap-1.5 text-amber-300">
+              <span className="h-2 w-2 rounded-full bg-amber-400" /> {medCount} medium
+            </span>
+          )}
+          <span className="flex items-center gap-1.5 text-green-300">
+            <span className="h-2 w-2 rounded-full bg-green-400" /> {rows.length - highCount - medCount} low
+          </span>
+        </div>
       </div>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-2.5 font-medium w-2" title="Severity"></th>
             <th className="px-4 py-2.5 font-medium">Rule</th>
             <th className="px-4 py-2.5 font-medium">Section</th>
             <th className="px-4 py-2.5 font-medium text-right">Avg time</th>
             <th className="px-4 py-2.5 font-medium">Distribution</th>
-            <th className="px-4 py-2.5 font-medium text-right">AI calls</th>
             <th className="px-4 py-2.5 font-medium text-right">AI %</th>
             <th className="px-4 py-2.5 font-medium text-right" title="Average rule confidence">Conf.</th>
             <th className="px-4 py-2.5 font-medium text-right">Runs</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.ruleId} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
-              <td className="px-4 py-2.5">
-                <div className="font-mono text-[12px] text-slate-300">{r.ruleId}</div>
-                <div className="text-[11px] text-slate-500 truncate max-w-[260px]">{r.ruleName}</div>
-              </td>
-              <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.section}</td>
-              <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${durationTone(r.avgMs)}`}>{fmtMs(r.avgMs)}</td>
-              <td className="px-4 py-2.5">
-                <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/[0.04]">
-                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-500/70 to-sky-400/70"
-                    style={{ width: `${Math.max(2, (r.avgMs / maxAvg) * 100)}%` }} />
-                </div>
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-400">{r.llmCalls}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums">
-                <span className={r.pctLlm > 0 ? "text-amber-300" : "text-slate-600"}>{r.pctLlm}%</span>
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-400">
-                {(r.avgConfidence * 100).toFixed(0)}%
-              </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{r.runs}</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const sev = ruleSeverity(r.avgMs);
+            const rec = ruleRecommendation(r);
+            return (
+              <tr key={r.ruleId} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
+                <td className="px-4 py-2.5">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${sev.dot}`}
+                    title={`${sev.label} cost`}
+                  />
+                </td>
+                <td className="px-4 py-2.5 max-w-[260px]">
+                  <div className="font-mono text-[12px] text-slate-300">{r.ruleId}</div>
+                  <div className="text-[11px] text-slate-500 truncate">{r.ruleName}</div>
+                  {rec && (
+                    <div className="mt-0.5 text-[10px] text-indigo-300/80 truncate max-w-[240px]" title={rec}>
+                      ↳ {rec}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-[12px] text-slate-500">{r.section}</td>
+                <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${durationTone(r.avgMs)}`}>{fmtMs(r.avgMs)}</td>
+                <td className="px-4 py-2.5">
+                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/[0.04]">
+                    <div
+                      className={`h-full rounded-full ${r.avgMs >= 1000 ? "bg-red-500/70" : r.avgMs >= 300 ? "bg-amber-500/70" : "bg-gradient-to-r from-indigo-500/70 to-sky-400/70"}`}
+                      style={{ width: `${Math.max(2, (r.avgMs / maxAvg) * 100)}%` }}
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums">
+                  <span className={r.pctLlm > 0 ? "text-amber-300" : "text-slate-600"}>{r.pctLlm}%</span>
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-slate-400">
+                  {(r.avgConfidence * 100).toFixed(0)}%
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{r.runs}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

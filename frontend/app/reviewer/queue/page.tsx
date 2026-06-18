@@ -360,7 +360,7 @@ export default function ReviewerQueuePage() {
           Per-file failure/verify breakdowns live on each queue row below. */}
       <div className="mb-4 grid grid-cols-3 gap-2">
         <QueueStat icon={FileText} label="Pending reviews" value={stats.total} tone="slate" />
-        <QueueStat icon={ShieldAlert} label="With failures" value={stats.failures} tone="red" />
+        <QueueStat icon={ShieldAlert} label="With issues" value={stats.failures} tone="red" />
         <QueueStat icon={Archive} label="Completed by you" value={stats.submitted} tone="green" />
       </div>
 
@@ -399,7 +399,7 @@ export default function ReviewerQueuePage() {
                     : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
                 }`}
               >
-                {next === "all" ? "All" : next === "failures" ? "Failures" : "Review only"}
+                {next === "all" ? "All" : next === "failures" ? "Has issues" : "Review only"}
               </button>
             ))}
           </div>
@@ -454,7 +454,7 @@ export default function ReviewerQueuePage() {
               <section>
                 <div className="flex items-center gap-2 mb-2 px-1">
                   <AlertCircle size={12} className="text-red-400" />
-                  <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Requires attention — has failures</span>
+                  <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">Has issues — requires a decision</span>
                 </div>
                 <QueueList items={urgent} selectedId={selectedId} returnTo={queueReturnPath} onSelect={setSelectedId} />
               </section>
@@ -514,9 +514,9 @@ function SubmittedReviews({ items, returnTo }: { items: SubmittedReviewItem[]; r
                 </div>
               </div>
               <div className="flex items-center gap-4 flex-shrink-0">
-                <RuleStat label="Pass" count={item.passedCount} color="text-green-400" />
-                <RuleStat label="Fail" count={item.failedCount} color="text-red-400" />
-                <RuleStat label="Rules" count={item.totalRules} color="text-slate-400" />
+                <RuleStat label="Clear" count={item.passedCount} color="text-green-400" />
+                <RuleStat label="Issues" count={item.failedCount} color="text-red-400" />
+                <RuleStat label="Total" count={item.totalRules} color="text-slate-400" />
               </div>
               <a
                 href={`/reviewer/submitted/${item.id}?returnTo=${encodeURIComponent(returnTo)}`}
@@ -591,76 +591,105 @@ function QueueSignal({ icon: Icon, label, value }: {
 
 function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[]; selectedId: number | null; returnTo: string; onSelect: (id: number) => void }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)] divide-y divide-white/10">
-      {items.map(item => {
-        const total      = item.totalRules;
-        const passRate   = total > 0 ? Math.round((item.passedCount / total) * 100) : 0;
-        const hasFailure = item.failedCount > 0;
-        const actionLabel = hasFailure ? "Review failures" : "Review";
-        const filename = queueFilename(item);
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <th className="w-2 px-3 py-2"></th>
+            <th className="px-3 py-2 font-medium">File</th>
+            <th className="px-3 py-2 text-center font-medium">
+              <span className="text-red-400">Fail</span>
+            </th>
+            <th className="px-3 py-2 text-center font-medium">
+              <span className="text-amber-400">Review</span>
+            </th>
+            <th className="px-3 py-2 text-center font-medium">
+              <span className="text-green-400">Pass</span>
+            </th>
+            <th className="hidden px-3 py-2 font-medium sm:table-cell">Age</th>
+            <th className="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/[0.05]">
+          {items.map(item => {
+            const total      = item.totalRules;
+            const passRate   = total > 0 ? Math.round((item.passedCount / total) * 100) : 0;
+            const hasFailure = item.failedCount > 0;
+            const filename   = queueFilename(item);
+            const isSelected = selectedId === item.id;
 
-        return (
-          <div
-            id={`queue-item-${item.id}`}
-            key={item.id}
-            onMouseEnter={() => onSelect(item.id)}
-            className={`flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-white/[0.03] md:flex-row md:items-center ${hasFailure ? "bg-red-950/5" : ""} ${selectedId === item.id ? "ring-1 ring-slate-500/60 ring-inset" : ""}`}
-          >
-            {/* File icon */}
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${hasFailure ? "bg-red-950/50 border border-red-500/25" : "bg-[#161B22] border border-white/10"}`}>
-              <svg className={`w-4 h-4 ${hasFailure ? "text-red-400" : "text-slate-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-            </div>
+            return (
+              <tr
+                id={`queue-item-${item.id}`}
+                key={item.id}
+                onMouseEnter={() => onSelect(item.id)}
+                className={`cursor-default transition-colors hover:bg-white/[0.03] ${hasFailure ? "bg-red-950/[0.04]" : ""} ${isSelected ? "ring-1 ring-inset ring-slate-500/50" : ""}`}
+              >
+                {/* Priority dot */}
+                <td className="px-3 py-2.5">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${hasFailure ? "bg-red-400" : item.verifyCount > 0 ? "bg-amber-400" : "bg-green-400"}`}
+                    title={hasFailure ? "Has failures" : item.verifyCount > 0 ? "Needs review" : "All pass"}
+                  />
+                </td>
 
-            {/* File info */}
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-slate-200 truncate" title={filename}>{filename}</div>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
-                <span className="text-[11px] text-slate-500">
-                  Processed {formatProcessedAt(item.processedAt)}
-                </span>
-                {item.cacheHit && (
-                  <span className="text-[10px] bg-[#161B22] border border-white/10 text-slate-500 px-1.5 py-0.5 rounded font-mono">cached</span>
-                )}
-              </div>
-            </div>
+                {/* File */}
+                <td className="min-w-0 max-w-[260px] px-3 py-2.5">
+                  <div className="truncate font-medium text-slate-200" title={filename}>{filename}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
+                    {item.cacheHit && <span className="rounded bg-[#161B22] border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">cached</span>}
+                  </div>
+                </td>
 
-            {/* Rule summary */}
-            <div className="flex items-center gap-4 flex-shrink-0">
-              <RuleStat label="Pass"   count={item.passedCount}  color="text-green-400" />
-              <RuleStat label="Fail"   count={item.failedCount}  color="text-red-400" />
-              <RuleStat label="Review" count={item.verifyCount}  color="text-amber-400" />
-              <div className="flex flex-col items-end gap-1 w-16">
-                <span className="text-[10px] text-slate-600 font-mono">{passRate}% pass</span>
-                <div className="w-full h-1 bg-[#0B0F14] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full" style={{
-                    width: `${passRate}%`,
-                    background: passRate >= 80 ? "#22c55e" : passRate >= 50 ? "#f59e0b" : "#ef4444",
-                  }} />
-                </div>
-              </div>
-            </div>
+                {/* Counts */}
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`text-sm font-bold tabular-nums ${item.failedCount > 0 ? "text-red-300" : "text-slate-600"}`}>
+                    {item.failedCount}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`text-sm font-bold tabular-nums ${item.verifyCount > 0 ? "text-amber-300" : "text-slate-600"}`}>
+                    {item.verifyCount}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-sm font-bold tabular-nums text-slate-400">{item.passedCount}</span>
+                    <div className="h-1 w-12 overflow-hidden rounded-full bg-[#0B0F14]">
+                      <div className="h-full rounded-full" style={{
+                        width: `${passRate}%`,
+                        background: passRate >= 80 ? "#22c55e" : passRate >= 50 ? "#f59e0b" : "#ef4444",
+                      }} />
+                    </div>
+                  </div>
+                </td>
 
-            {/* Decision badge */}
-            <div className="hidden md:block flex-shrink-0">
-              <StatusBadge status={item.qcDecision} size="xs" />
-            </div>
+                {/* Age */}
+                <td className="hidden px-3 py-2.5 text-[11px] text-slate-500 sm:table-cell">
+                  {formatProcessedAt(item.processedAt)}
+                </td>
 
-            {/* Action */}
-            <a
-              href={reviewHref(item.id, returnTo)}
-              onFocus={() => onSelect(item.id)}
-              aria-keyshortcuts="Enter"
-              className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-slate-500 md:min-w-[126px]"
-            >
-              {actionLabel} <ChevronRight size={13} />
-            </a>
-          </div>
-        );
-      })}
+                {/* Action */}
+                <td className="px-3 py-2.5 text-right">
+                  <a
+                    href={reviewHref(item.id, returnTo)}
+                    onFocus={() => onSelect(item.id)}
+                    aria-keyshortcuts="Enter"
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-white transition-colors ${
+                      hasFailure
+                        ? "border border-red-500/30 bg-red-950/50 hover:bg-red-950/80"
+                        : "border border-slate-400/30 bg-slate-700 hover:bg-slate-600"
+                    }`}
+                  >
+                    {hasFailure ? "Review" : "Verify"} <ChevronRight size={12} />
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

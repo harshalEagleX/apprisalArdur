@@ -389,8 +389,26 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
           {recentBatches.slice(0, 6).map(b => (
             <Link key={b.id} href="/admin/batches" className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.04]">
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-mono text-slate-300 truncate">{b.parentBatchId}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">{b.client?.name ?? "—"}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-slate-300 truncate">{b.parentBatchId}</span>
+                  {(b.fileCount ?? b.files?.length ?? 0) > 0 && (
+                    <span className="shrink-0 rounded bg-[#161B22] px-1.5 py-0.5 text-[10px] text-slate-500">
+                      {b.fileCount ?? b.files?.length} file{(b.fileCount ?? b.files?.length ?? 0) === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
+                  <span>{b.client?.name ?? "—"}</span>
+                  {b.assignedReviewer && (
+                    <>
+                      <span className="text-slate-700">·</span>
+                      <span className="flex items-center gap-1">
+                        <Users size={10} className="text-slate-600" />
+                        {b.assignedReviewer.fullName ?? b.assignedReviewer.username}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               <StatusBadge status={b.status} />
               <div className="text-[11px] text-slate-600 flex-shrink-0">

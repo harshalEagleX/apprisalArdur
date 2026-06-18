@@ -987,9 +987,9 @@ export default function VerifyFilePage() {
                     aria-keyshortcuts={f === "attention" ? "1" : f === "fail" ? "2" : f === "verify" ? "3" : f === "pass" ? "4" : "5"}
                     className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${filter === f ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"}`}>
                     {f === "attention" ? `Needs attention (${counts.fail + counts.review})`
-                      : f === "fail" ? `Fail (${counts.fail})`
-                      : f === "verify" ? `Needs Review (${counts.review})`
-                      : f === "pass" ? `Pass (${counts.pass})`
+                      : f === "fail" ? `Issues (${counts.fail})`
+                      : f === "verify" ? `Uncertain (${counts.review})`
+                      : f === "pass" ? `No issues (${counts.pass})`
                       : `All (${counts.total})`}
                   </button>
                 ))}
