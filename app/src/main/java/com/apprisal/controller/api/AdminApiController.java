@@ -254,6 +254,51 @@ public class AdminApiController {
         return ResponseEntity.ok(out);
     }
 
+    /** Client drill-in: the client + its rollup stats, recent batches, and its users. */
+    @GetMapping("/clients/{id}")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ResponseEntity<?> getClientDetail(@PathVariable @NonNull Long id) {
+        var clientOpt = clientService.findById(id);
+        if (clientOpt.isEmpty()) return ResponseEntity.notFound().build();
+        Client c = clientOpt.get();
+        long batches = batchRepository.countByClientId(id);
+        long completed = batchRepository.countByClientIdAndStatus(id, com.apprisal.common.entity.BatchStatus.COMPLETED);
+
+        List<Map<String, Object>> recent = batchRepository.findTop5ByClientIdOrderByCreatedAtDesc(id).stream()
+            .map(b -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", b.getId());
+                m.put("parentBatchId", b.getParentBatchId());
+                m.put("status", b.getStatus() != null ? b.getStatus().name() : null);
+                m.put("fileCount", b.getFileCount());
+                m.put("createdAt", b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
+                return m;
+            }).toList();
+
+        List<Map<String, Object>> users = userService.findByClientId(id).stream()
+            .map(u -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", u.getId());
+                m.put("username", u.getUsername());
+                m.put("fullName", u.getFullName());
+                m.put("role", u.getRole() != null ? u.getRole().name() : null);
+                m.put("active", u.getActive());
+                return m;
+            }).toList();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("batches", batches);
+        stats.put("completed", completed);
+        stats.put("successRate", batches > 0 ? Math.round((completed * 100.0) / batches) : null);
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("client", c);
+        out.put("stats", stats);
+        out.put("recentBatches", recent);
+        out.put("users", users);
+        return ResponseEntity.ok(out);
+    }
+
     @PostMapping("/clients")
     public ResponseEntity<?> createClient(@RequestBody Map<String, String> request,
             @AuthenticationPrincipal UserPrincipal principal) {

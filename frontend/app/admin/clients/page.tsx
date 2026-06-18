@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { Plus, Building2, Search, CheckCircle2, XCircle } from "lucide-react";
 import type { ComponentType } from "react";
 import { getClients, getClientStats, type Client, type ClientStat } from "@/lib/api";
@@ -124,7 +125,7 @@ export default function ClientsPage() {
                       <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/10 bg-[#161B22] text-xs font-bold text-slate-300">
                         {c.name[0].toUpperCase()}
                       </span>
-                      <span className="font-medium text-slate-200">{c.name}</span>
+                      <Link href={`/admin/clients/${c.id}`} className="font-medium text-slate-200 transition-colors hover:text-white hover:underline">{c.name}</Link>
                     </div>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{c.code}</td>

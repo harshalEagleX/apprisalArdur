@@ -304,6 +304,16 @@ export interface ClientStat {
 export const getClientStats = () =>
   apiFetch<Record<string, ClientStat>>("/api/admin/clients/stats");
 
+export interface ClientDetail {
+  client: Client;
+  stats: { batches: number; completed: number; successRate: number | null };
+  recentBatches: { id: number; parentBatchId: string; status: string; fileCount: number; createdAt: string | null }[];
+  users: { id: number; username: string; fullName: string | null; role: string; active: boolean }[];
+}
+/** Client drill-in: the client + stats + recent batches + its users. */
+export const getClientDetail = (id: number) =>
+  apiFetch<ClientDetail>(`/api/admin/clients/${id}`);
+
 export const createClient = (name: string, code: string) =>
   apiFetch<Client>("/api/admin/clients", { method: "POST", body: JSON.stringify({ name, code }) });
 

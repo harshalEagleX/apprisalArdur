@@ -15,7 +15,8 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
 - ✅ **FIXED — `/qc-review` now redirects** to /reviewer/queue (was dead demo code).
 - ~~🔴 `/qc-review` dead code~~ (was) Zero references anywhere; a legacy QC review page superseded
   by `/reviewer/verify/[id]`. Remove it (or redirect) — it's a maintenance/confusion trap.
-- 🟠 **Client rows don't drill down.** The new Clients table has real stats but rows aren't
+- ✅ **FIXED — client rows now link to `/admin/clients/{id}`** (detail page: stats, recent batches, users) via new `GET /api/admin/clients/{id}`.
+- ~~🟠 Client rows don't drill down~~ (was) The new Clients table has real stats but rows aren't
   clickable — there's no client-detail view (its batches/users/activity). Needs a route +
   endpoint (see C).
 - 🟠 **Batch rows have no full detail view.** Actions (Run/Stop/Assign/History) are inline, and
@@ -34,7 +35,8 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
   delete users (`createUser`/`updateUser`/`deleteUser`) but cannot reset a password or
   deactivate without deleting. Needs `POST /api/admin/users/{id}/reset-password` and a status
   toggle. ("Delete" as the only off-switch is dangerous for an audit system.)
-- 🟠 **No client-detail / client-scoped batch endpoint for the UI.** `clientBatchStats` powers
+- ✅ **FIXED — `GET /api/admin/clients/{id}`** added (client + stats + recent batches + users).
+- ~~🟠 No client-detail endpoint~~ (was) `clientBatchStats` powers
   the table totals, but there's no `GET /api/admin/clients/{id}` returning that client's
   batches/users/recent activity for a drill-in page.
 - 🟡 **Analytics shows raw `0`/`—` on an empty system** (endpoints exist; data is just empty).
