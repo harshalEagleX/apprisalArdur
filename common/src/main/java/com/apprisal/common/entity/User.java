@@ -16,6 +16,9 @@ public class User {
     @Column(unique = true, nullable = false)
     private String username;
 
+    // WRITE_ONLY: the bcrypt hash is never serialized to API responses (was leaking in
+    // /api/admin/users), but can still be bound from inbound JSON if needed.
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String password;
 
@@ -38,6 +41,15 @@ public class User {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    // Active = can sign in. Lets an admin deactivate a user without deleting (safer for an
+    // audit system). Nullable so ddl-auto:update can add the column to a table with existing
+    // rows without a NOT NULL violation; getActive() treats null as active (true).
+    @Column(name = "active")
+    private Boolean active = true;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
 
     public User() {
     }
@@ -134,6 +146,22 @@ public class User {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Boolean getActive() {
+        return active == null || active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
+    }
+
+    public LocalDateTime getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public void setLastLoginAt(LocalDateTime lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
     }
 
     // Builder pattern

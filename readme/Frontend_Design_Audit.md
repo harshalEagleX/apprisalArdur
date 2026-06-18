@@ -25,10 +25,12 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
   admin route; the nav points outside the `/admin` tree.
 
 ## B. Missing APIs / data gaps (block product-grade detail)
-- 🟠 **User has no `status` / `lastLoginAt`.** `User` = {id, username, email, fullName, role,
+- ✅ **FIXED — User now has `active` + `lastLoginAt`** (populated on login); Users table shows Status + Last-login.
+- ~~🟠 User has no status/lastLoginAt~~ (was) `User` = {id, username, email, fullName, role,
   client, createdAt}. The reviews ask for Status + Last-login columns — both need new entity
   fields + population (track `lastLoginAt` on authenticate; an `enabled`/`status` flag).
-- 🟠 **No admin password-reset or enable/disable user endpoint.** Admins can create / edit /
+- ✅ **FIXED — `POST /users/{id}/reset-password` + `/users/{id}/status`** added; Users table has Reset-password + Activate/Deactivate actions; deactivated users blocked at login (UserPrincipal.isEnabled).
+- ~~🟠 No reset/deactivate~~ (was) Admins can create / edit /
   delete users (`createUser`/`updateUser`/`deleteUser`) but cannot reset a password or
   deactivate without deleting. Needs `POST /api/admin/users/{id}/reset-password` and a status
   toggle. ("Delete" as the only off-switch is dangerous for an audit system.)
@@ -50,6 +52,9 @@ detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 break
   operational utility; consider demoting it under an "Insights"/secondary group.
 - 🟡 **Reviewer language is "Rules/Pass/Fail"** throughout; reviewers think
   "Findings/Issue/No-issue". (Keep rule IDs in the evidence/detail view.)
+
+## E. Security (found during audit)
+- ✅ **FIXED — `/api/admin/users` leaked the bcrypt password hash.** Added WRITE_ONLY to User.password so it's never serialized to API responses.
 
 ## D. Confirmed-good (no action — verified during audit)
 - Reviewer queue rows correctly deep-link to `/reviewer/verify/{id}` (and submitted → submitted view).

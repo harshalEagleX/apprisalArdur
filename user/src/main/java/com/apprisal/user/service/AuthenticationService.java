@@ -55,6 +55,8 @@ public class AuthenticationService {
                                                 request.username(),
                                                 request.password()));
                 User user = repository.findByUsername(request.username()).orElseThrow();
+                user.setLastLoginAt(java.time.LocalDateTime.now());
+                repository.save(Objects.requireNonNull(user));
                 return jwtUtils.generateToken(new UserPrincipal(Objects.requireNonNull(user)));
         }
 }

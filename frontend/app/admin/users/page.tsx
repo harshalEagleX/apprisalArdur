@@ -2,10 +2,10 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Search, Plus, Users as UsersIcon, ChevronLeft, ChevronRight,
-  ShieldCheck, ClipboardCheck, Pencil, Trash2, XCircle,
+  ShieldCheck, ClipboardCheck, Pencil, Trash2, XCircle, KeyRound, Power,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { getUsers, deleteUser, type User } from "@/lib/api";
+import { getUsers, deleteUser, resetUserPassword, setUserStatus, type User } from "@/lib/api";
 import UserModal from "@/components/admin/UserModal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { TableSkeleton } from "@/components/shared/Skeleton";
@@ -47,6 +47,25 @@ export default function UsersPage() {
       toast.success(`User "${deleteTarget.username}" removed`);
       setDelete(null); load();
     } catch (e) { toast.error("Delete failed", String(e)); }
+  }
+
+  async function handleResetPassword(u: User) {
+    const pw = window.prompt(`Set a new password for ${u.username} (min 8 characters):`);
+    if (pw == null) return;
+    if (pw.length < 8) { toast.error("Password too short", "Must be at least 8 characters."); return; }
+    try {
+      await resetUserPassword(u.id, pw);
+      toast.success("Password reset", `A new password was set for ${u.username}.`);
+    } catch (e) { toast.error("Reset failed", String(e)); }
+  }
+
+  async function handleToggleActive(u: User) {
+    const next = !(u.active ?? true);
+    try {
+      await setUserStatus(u.id, next);
+      toast.success(next ? "User activated" : "User deactivated", u.username);
+      load();
+    } catch (e) { toast.error("Status change failed", e instanceof Error ? e.message : String(e)); }
   }
 
   const filtered = search
@@ -106,17 +125,17 @@ export default function UsersPage() {
         <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-[#0B0F14]/80">
-              {["User", "Role", "Client org", "Added", ""].map(h => (
-                <th key={h} className={`sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${!h ? "w-24 text-right" : ""}`}>{h}</th>
+              {["User", "Role", "Client org", "Status", "Last login", "Added", ""].map(h => (
+                <th key={h} className={`sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${!h ? "w-32 text-right" : ""}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
             {loading ? (
-              <tr><td colSpan={5} className="p-0"><TableSkeleton rows={6} cols={5} /></td></tr>
+              <tr><td colSpan={7} className="p-0"><TableSkeleton rows={6} cols={7} /></td></tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={7}>
                   <EmptyState icon={UsersIcon} title={search ? "No users match your search" : "No users yet"}
                     description={!search ? "Add an admin or reviewer to get started." : undefined}
                     action={!search ? (
@@ -142,11 +161,39 @@ export default function UsersPage() {
                 <td className="px-4 py-3 text-xs text-slate-400">
                   {u.client?.name ?? <span className="text-slate-600">—</span>}
                 </td>
+                <td className="px-4 py-3">
+                  {(u.active ?? true) ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-green-300"><span className="h-1.5 w-1.5 rounded-full bg-green-400" />Active</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-slate-500" />Inactive</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {u.lastLoginAt
+                    ? new Date(u.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                    : <span className="text-slate-600">Never</span>}
+                </td>
                 <td className="px-4 py-3 text-xs text-slate-500">
                   {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => handleResetPassword(u)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-300"
+                      aria-label={`Reset password for ${u.username}`}
+                      title="Reset password"
+                    >
+                      <KeyRound size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleToggleActive(u)}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors ${(u.active ?? true) ? "text-slate-400 hover:bg-amber-950/40 hover:text-amber-300" : "text-slate-500 hover:bg-green-950/40 hover:text-green-300"}`}
+                      aria-label={`${(u.active ?? true) ? "Deactivate" : "Activate"} ${u.username}`}
+                      title={(u.active ?? true) ? "Deactivate user" : "Activate user"}
+                    >
+                      <Power size={14} />
+                    </button>
                     <button
                       onClick={() => setEditUser(u)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-300"

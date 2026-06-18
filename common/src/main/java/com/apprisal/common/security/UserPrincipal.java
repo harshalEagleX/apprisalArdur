@@ -53,7 +53,8 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        // Deactivated users are blocked at authentication (Spring throws DisabledException).
+        return user.getActive();
     }
 
     public @org.springframework.lang.NonNull User getUser() {

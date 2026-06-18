@@ -133,6 +133,16 @@ public class UserService {
     }
 
     @Transactional
+    public User setActive(@NonNull Long id, boolean active) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        user.setActive(active);
+        User saved = userRepository.save(user);
+        log.info("Set user '{}' active={}", user.getUsername(), active);
+        return saved;
+    }
+
+    @Transactional
     public void delete(Long id) {
         if (id == null) {
             throw new ValidationException("id", "User ID is required");

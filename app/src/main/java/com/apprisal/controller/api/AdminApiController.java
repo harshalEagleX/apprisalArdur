@@ -174,6 +174,39 @@ public class AdminApiController {
         }
     }
 
+    /** Admin resets a user's password (audited). Safer than the delete-and-recreate workaround. */
+    @PostMapping("/users/{id}/reset-password")
+    public ResponseEntity<?> resetUserPassword(@PathVariable @NonNull Long id,
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            String newPassword = (String) request.get("password");
+            userService.updatePassword(id, newPassword);
+            auditLogService.logEntity(principal.getUser(), "USER_PASSWORD_RESET", "User", id);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Activate / deactivate a user (deactivated users can't sign in) — the safe alternative to delete. */
+    @PostMapping("/users/{id}/status")
+    public ResponseEntity<?> setUserStatus(@PathVariable @NonNull Long id,
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            boolean active = Boolean.TRUE.equals(request.get("active"));
+            if (id.equals(principal.getUser().getId()) && !active) {
+                return ResponseEntity.badRequest().body(Map.of("error", "You cannot deactivate your own account."));
+            }
+            User user = userService.setActive(id, active);
+            auditLogService.logEntity(principal.getUser(), active ? "USER_ACTIVATED" : "USER_DEACTIVATED", "User", id);
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/users/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable @NonNull Long id,
             @AuthenticationPrincipal UserPrincipal principal) {

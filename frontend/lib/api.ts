@@ -285,6 +285,14 @@ export const updateUser = (id: number, data: Partial<User> & { clientId?: number
 export const deleteUser = (id: number) =>
   apiFetch(`/api/admin/users/${id}`, { method: "DELETE" });
 
+/** Admin resets a user's password (audited). */
+export const resetUserPassword = (id: number, password: string) =>
+  apiFetch(`/api/admin/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) });
+
+/** Activate / deactivate a user — deactivated users can't sign in. */
+export const setUserStatus = (id: number, active: boolean) =>
+  apiFetch<User>(`/api/admin/users/${id}/status`, { method: "POST", body: JSON.stringify({ active }) });
+
 // ── Admin: Clients ────────────────────────────────────────────────────────────
 export const getClients = () => apiFetch<Client[]>("/api/admin/clients");
 
@@ -827,6 +835,8 @@ export interface User {
   role: "ADMIN" | "REVIEWER";
   client?: { id: number; name: string; code: string };
   createdAt?: string;
+  active?: boolean;
+  lastLoginAt?: string;
 }
 
 export interface Client {
