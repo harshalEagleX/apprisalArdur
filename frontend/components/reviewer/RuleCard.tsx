@@ -317,19 +317,19 @@ export const RuleCard = memo(function RuleCard({
               )}
               {isFail && (
                 <div className="text-[11px] text-red-200 bg-red-950/18 border border-red-500/25 rounded-lg px-2.5 py-2">
-                  <strong>Confirm Fail</strong> to acknowledge this finding — it stays as a failure in the final report.
-                  To override to PASS, enter a specific reason of at least 20 characters
-                  {requireSecondApproval ? "; a second reviewer must approve it before sign-off." : "."}
+                  <strong>Confirm issue</strong> to acknowledge this finding — it stays as an issue in the final report.
+                  To override to no-issue, enter a specific reason (at least 20 characters)
+                  {requireSecondApproval ? "; a second reviewer must approve the override before sign-off." : "."}
                 </div>
               )}
               {rule.overridePending && (
                 <div className="text-[11px] text-slate-200 bg-slate-950/18 border border-slate-500/25 rounded-lg px-2.5 py-2">
                   {requireSecondApproval ? (
                     <>Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
-                    different reviewer must press Override to Pass to approve it.</>
+                    different reviewer must approve the no-issue override.</>
                   ) : (
                     <>Override requested by {rule.overrideRequestedBy ?? "a reviewer"}. Press
-                    Override to Pass to approve it (single-reviewer mode).</>
+                    Override — no issue to approve it (single-reviewer mode).</>
                   )}
                 </div>
               )}
@@ -347,19 +347,19 @@ export const RuleCard = memo(function RuleCard({
                         : "bg-red-950/30 border border-red-500/30 text-red-200 hover:bg-red-950/50"
                     }`}
                   >
-                    {saving ? spinnerSvg : <X size={12} />} Confirm Fail
+                    {saving ? spinnerSvg : <X size={12} />} Confirm issue
                   </button>
                   <button
                     onClick={() => onDecision("PASS")}
                     disabled={!canPass}
-                    title={!overrideReasonOk ? "Add a specific override reason (min 20 chars) to enable" : "High-risk: override this failure to Pass"}
+                    title={!overrideReasonOk ? "Add a specific override reason (min 20 chars) to enable" : "High-risk: override this finding to No-issue"}
                     className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-[11px] font-medium transition-colors disabled:opacity-40 ${
                       decision === "PASS"
                         ? "bg-green-600 text-white font-semibold"
                         : "bg-transparent hover:bg-green-950/30 hover:text-green-200 text-slate-500 border border-white/10"
                     }`}
                   >
-                    {saving ? spinnerSvg : <Check size={12} />} Override to Pass
+                    {saving ? spinnerSvg : <Check size={12} />} Override — no issue
                   </button>
                 </div>
               )}
@@ -376,7 +376,7 @@ export const RuleCard = memo(function RuleCard({
                         : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
                     }`}
                   >
-                    {saving ? spinnerSvg : <Check size={12} />} Save Pass
+                    {saving ? spinnerSvg : <Check size={12} />} No issue
                   </button>
                   <button
                     onClick={() => onDecision("FAIL")}
@@ -387,7 +387,7 @@ export const RuleCard = memo(function RuleCard({
                         : "bg-[#161B22] hover:bg-red-950/35 hover:text-red-200 text-slate-400 border border-white/10"
                     }`}
                   >
-                    {saving ? spinnerSvg : <X size={12} />} Save Fail
+                    {saving ? spinnerSvg : <X size={12} />} Issue found
                   </button>
                 </div>
               )}
@@ -398,7 +398,7 @@ export const RuleCard = memo(function RuleCard({
                 onChange={e => onComment(e.target.value)}
                 placeholder={
                   isFail
-                    ? "Reason for override to Pass — be specific (minimum 20 characters). Leave blank to Confirm Fail."
+                    ? "Reason for no-issue override — be specific (minimum 20 characters). Leave blank to confirm issue."
                     : "Add a comment (optional)..."
                 }
                 rows={2}
@@ -406,7 +406,7 @@ export const RuleCard = memo(function RuleCard({
               />
               {decision && (
                 <div className="text-[10px] text-slate-600">
-                  {isFail ? "Decision stored — Confirm Fail or Override to Pass." : "Comments are stored when you press Save Pass or Save Fail."}
+                  {isFail ? "Decision stored — Confirm issue or Override — no issue." : "Comments are stored when you press No issue or Issue found."}
                 </div>
               )}
             </div>
