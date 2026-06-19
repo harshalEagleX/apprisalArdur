@@ -191,7 +191,15 @@ def match_text(
 ) -> MatchResult:
     """
     Compare two text values for cross-document equivalence.
-    kind: "address" | "name" | "generic" selects the normalizer.
+    kind: "address" | "name" | "company" | "generic" selects the normalizer.
+
+    For "company" comparisons (lender / AMC names), the normalized strings must
+    be IDENTICAL to receive a "match" verdict.  Corporate-designator differences
+    ("Champions Funding" vs "Champions Funding, LLC") are handled by
+    normalize_company(), so they still match.  But any difference in the core
+    name tokens — including one-character typos like "Fundings" vs "Funding" —
+    is capped at "review" so it surfaces for human confirmation.  Fuzzy scoring
+    for company names was silently hiding these discrepancies.
     """
     if kind == "address":
         na, nb = normalize_address(a), normalize_address(b)
@@ -199,6 +207,13 @@ def match_text(
         na, nb = normalize_name(a), normalize_name(b)
     elif kind == "company":
         na, nb = normalize_company(a), normalize_company(b)
+        if not na or not nb:
+            return MatchResult(0.0, "review", na, nb)
+        if na == nb:
+            return MatchResult(1.0, "match", na, nb)
+        # Names differ after stripping designators → always surface for review.
+        score = jaro_winkler(na, nb)
+        return MatchResult(round(score, 4), "review", na, nb)
     else:
         na, nb = normalize_basic(a), normalize_basic(b)
     if not na or not nb:

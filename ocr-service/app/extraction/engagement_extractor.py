@@ -45,23 +45,66 @@ _STATE_ABBR = {
 }
 _ABBRS = set(_STATE_ABBR.values())
 
-# canonical field -> ordered list of label variants (lowercased, no trailing colon)
+# canonical field -> ordered list of label variants (lowercased, no trailing colon).
+# Variants are sorted longest-first in _LABEL_LOOKUP so the most specific label
+# wins when a line could match multiple synonyms.
+#
+# Common AMC order-form label variations observed across Equity Solutions USA,
+# ASAP Appraisals, and similar AMC templates are included here. Add new variants
+# as new AMC templates are onboarded — never delete existing ones.
 _LABELS: Dict[str, List[str]] = {
-    "_property_block": ["property address", "property", "subject property", "address"],
-    "county": ["property county", "county"],
-    "borrower_name": ["borrower name", "borrower", "borrower(s)", "applicant"],
-    "co_borrower_name": ["co-borrower name", "co-borrower", "coborrower"],
-    "lender_name": ["lender on report", "client", "lender", "lender/client", "client name"],
-    "lender_address": ["lender address", "client address"],
-    "form_type": ["form", "product", "report type", "order type"],
-    "loan_type": ["loan type"],
-    "assignment_type": ["intended use", "transaction type", "loan purpose"],
-    "file_id": ["file id", "order number", "order #", "file #"],
-    "loan_number": ["loan #", "loan number", "loan no"],
-    "fha_case_number": ["fha case number", "fha case #", "case number"],
+    "_property_block": [
+        "property address", "subject property address", "subject property",
+        "property location", "property", "address", "subject address",
+    ],
+    "county": ["property county", "county", "subject county"],
+    "borrower_name": [
+        "borrower name(s)", "borrower name", "borrower(s)", "borrower",
+        "applicant name", "applicant(s)", "applicant",
+        "client name", "mortgagor",
+    ],
+    "co_borrower_name": [
+        "co-borrower name(s)", "co-borrower name", "co-borrower(s)",
+        "co-borrower", "coborrower name", "coborrower",
+        "co applicant", "co-applicant",
+    ],
+    "lender_name": [
+        "lender on report", "lender/client", "lender / client",
+        "client", "lender", "client name",
+        "intended user", "mortgagee",
+    ],
+    "lender_address": ["lender address", "client address", "lender/client address"],
+    "form_type": [
+        "form", "product", "report type", "order type",
+        "appraisal type", "form type", "product type",
+    ],
+    "loan_type": [
+        "loan type", "loan product", "financing type", "mortgage type",
+    ],
+    "assignment_type": [
+        "intended use", "transaction type", "loan purpose",
+        "purpose of appraisal", "purpose", "order type",
+    ],
+    "file_id": [
+        "file id", "order number", "order #", "file #",
+        "reference #", "reference number", "order no",
+        "order id", "amc order #", "amc order number",
+        "eqs order #", "eqs order number",
+    ],
+    "loan_number": [
+        "loan #", "loan number", "loan no", "loan id",
+        "lender loan #", "lender loan number",
+    ],
+    "fha_case_number": ["fha case number", "fha case #"],
     "legal_description": ["legal description"],
-    "appraiser_name": ["appraiser", "vendor"],
-    "amc_reg_number": ["amc reg. number", "amc reg number", "amc registration"],
+    "appraiser_name": [
+        "appraiser", "vendor", "appraiser name",
+        "assigned appraiser", "appraisal company",
+    ],
+    "amc_reg_number": [
+        "amc reg. number", "amc reg number", "amc registration",
+        "amc reg #", "amc license",
+    ],
 }
 
 _LABEL_LOOKUP = sorted(

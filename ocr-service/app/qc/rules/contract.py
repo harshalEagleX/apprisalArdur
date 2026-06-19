@@ -21,11 +21,25 @@ from app.qc.result import RuleStatus
 _CONTRACT_FIELDS = ["contract_price", "contract_date", "did_analyze_contract",
                     "has_financial_assistance", "financial_assistance_amount"]
 
+# On a refinance the "did not analyze" checkbox is expected to be marked (no contract
+# to analyze); only PURCHASE-specific data fields should be empty.
+_REFI_BLANK_FIELDS = ["contract_price", "contract_date",
+                      "has_financial_assistance", "financial_assistance_amount"]
+
 
 # UAD sale-type vocabulary the contract analysis must identify (C-1).
 _SALE_TYPES = re.compile(
     r"(arm'?s[\s-]*length|non[\s-]*arm'?s[\s-]*length|reo\b|short\s*sale|"
     r"court[\s-]*ordered|estate\s*sale|foreclosure)", re.I)
+
+# Phrases in the appraiser's contract analysis that indicate the contract
+# provided was NOT fully executed by all parties.
+_UNEXECUTED_RE = re.compile(
+    r"(not\s+(signed|executed|a\s+fully)|not\s+fully\s+executed|"
+    r"unsigned|without\s+(all\s+)?signatures?|awaiting\s+(all\s+)?signatures?|"
+    r"executed\s+at\s+closing|will\s+be\s+executed)",
+    re.I,
+)
 
 
 def _is_purchase(ctx: QCContext) -> bool:
@@ -39,17 +53,42 @@ def _is_refi(ctx: QCContext) -> bool:
 _res = H.section_result("contract")
 
 
+# ---- C-EXEC contract must be fully executed by all parties -----------------
+# Engagement letters (e.g. Equity Solutions USA) explicitly instruct:
+# "STOP AND NOTIFY if a fully signed contract was not attached." When the
+# appraiser's own contract analysis states the contract is unsigned or will
+# be executed at closing, escalate to HOLD immediately.
+
+@rule(id="C-EXEC", num="13b", section="contract", phase=1,
+      applies_when=_is_purchase, name="Contract fully executed by all parties")
+def c_exec_executed(ctx: QCContext):
+    commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
+    ev = [ctx.appraisal.evidence("contract_analysis_comment")]
+    if not commentary:
+        return _res("C-EXEC", "13b", RuleStatus.NOT_APPLICABLE,
+                    message="No contract analysis commentary extracted; C-1 governs.",
+                    fields=["contract_analysis_comment"], evidence=ev)
+    if _UNEXECUTED_RE.search(commentary):
+        return _res("C-EXEC", "13b", RuleStatus.HOLD,
+                    message=qc_config.template("C-EXEC-unsigned"),
+                    fields=["contract_analysis_comment"],
+                    template_id="C-EXEC-unsigned", evidence=ev)
+    return _res("C-EXEC", "13b", RuleStatus.PASS,
+                fields=["contract_analysis_comment"], evidence=ev)
+
+
 # ---- C-1 contract analysis / sale type / value variance / refi-blank -------
 
 @rule(id="C-1", num="14", section="contract", phase=2,
       name="Contract analyzed (purchase) / section blank (refinance)")
 def c1_analyze(ctx: QCContext):
     if _is_refi(ctx):
-        populated = [f for f in _CONTRACT_FIELDS if ctx.appraisal.value(f)]
+        # On a refinance, the appraiser is EXPECTED to mark "I did not analyze the
+        # contract for sale" (no contract exists). Only the purchase-data fields
+        # (contract price/date/concessions) should be empty — NOT did_analyze_contract.
+        # Using _REFI_BLANK_FIELDS avoids a false FAIL on the "did not analyze" checkbox.
+        populated = [f for f in _REFI_BLANK_FIELDS if ctx.appraisal.value(f)]
         if populated:
-            # a populated contract section on a CONFIRMED refinance is a hard
-            # FAIL; on an uncertain transaction-type read it is the type
-            # detection that needs confirming, not the section
             txn_conf = max(ctx.appraisal.confidence("assignment_type"),
                            ctx.engagement.confidence("assignment_type"),
                            ctx.engagement.confidence("intended_use"))

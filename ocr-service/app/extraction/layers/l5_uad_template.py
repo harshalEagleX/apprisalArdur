@@ -270,12 +270,20 @@ def _extract_neighborhood_grid(pdf_path: Path) -> Dict[str, str]:
     Strategy: anchor on the row labels Low / High / Pred. — these words
     only appear inside the One-Unit Housing price/age grid on this form.
 
-    For each Low/High/Pred. word found, the price value is the nearest
-    plausible numeric word to the LEFT on the same visual row, and the
-    age value is the nearest plausible numeric word to the RIGHT.
+    Form layout (URAR 1004/1073 — the label sits BETWEEN price and age):
+        [PRICE $000]  [Low / High / Pred.]  [AGE yrs]
 
-    Plausibility ranges keep land-use percentage values (which sit
-    further right in adjacent columns) out of the age slot.
+    PRICE = nearest numeric word to the LEFT of the label (within 80 px).
+    AGE   = nearest numeric word to the RIGHT of the label (within 40 px).
+
+    Both distance caps prevent numbers from adjacent rows bleeding in
+    when rows are tightly spaced. The Y-tolerance is kept tight (±3 px)
+    for the same reason — relaxing it to ±6 caused the "High" row's age
+    value (e.g. 101) to appear in the "Low" row's price slot.
+
+    Post-extraction sanity checks discard implausible swaps:
+      - price_low > price_high  →  both dropped (misread)
+      - price_low < 10          →  likely an age value leaked into price slot
     """
     results: Dict[str, str] = {}
     try:
@@ -317,12 +325,12 @@ def _extract_neighborhood_grid(pdf_path: Path) -> Dict[str, str]:
                     label_y_mid = (w["top"] + w["bottom"]) / 2
 
                     # Candidate numeric words on the SAME visual row.
-                    # Y tolerance ±6 px handles small baseline differences
-                    # between the label and its neighboring numeric cells.
+                    # Y-tolerance tightened to ±3 px (was ±6 px) to prevent
+                    # numbers from adjacent rows bleeding into the wrong slot.
                     same_row = []
                     for nw in words:
                         nwy = (nw["top"] + nw["bottom"]) / 2
-                        if abs(nwy - label_y_mid) > 6:
+                        if abs(nwy - label_y_mid) > 3:
                             continue
                         txt = nw["text"].replace(",", "").strip()
                         if not re.fullmatch(r"\d+(?:\.\d+)?", txt):
@@ -337,11 +345,14 @@ def _extract_neighborhood_grid(pdf_path: Path) -> Dict[str, str]:
                         continue
 
                     # PRICE = nearest number to the LEFT of the label,
-                    # value in $000 (range 1..5000 covers $1k..$5M).
+                    # value in $000 (range 10..5000 covers $10k..$5M).
+                    # Cap at 80 px distance — the price column sits close to
+                    # the label; a farther number is from a different column.
                     left_candidates = [
-                        (label_x_lo - x1, val)  # distance from label-left
+                        (label_x_lo - x1, val)
                         for x0, x1, val in same_row
-                        if x1 < label_x_lo and 1 <= val <= 5000
+                        if x1 < label_x_lo and 10 <= val <= 5000
+                        and (label_x_lo - x1) <= 80
                     ]
                     if left_candidates and price_field not in results:
                         left_candidates.sort()  # smallest distance first
@@ -370,6 +381,18 @@ def _extract_neighborhood_grid(pdf_path: Path) -> Dict[str, str]:
 
     except Exception as exc:
         logger.debug("L5 neighborhood grid extraction failed: %s", exc)
+
+    # Sanity-check: if price_low > price_high both were likely misread; drop
+    # them so the N-3 rule VERIFYs rather than fires on garbage data.
+    try:
+        pl = float(results.get("price_low", 0) or 0)
+        ph = float(results.get("price_high", 0) or 0)
+        if pl and ph and pl > ph:
+            logger.debug("N-grid sanity: price_low(%s) > price_high(%s) — dropping both", pl, ph)
+            results.pop("price_low", None)
+            results.pop("price_high", None)
+    except (ValueError, TypeError):
+        pass
 
     return results
 
@@ -759,14 +782,18 @@ _US_STATES = {
 }
 
 
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+
+
 def _extract_appraiser_credentials(pdf_path: Path) -> Dict[str, str]:
     """Appraiser certification page (left/Appraiser column, x<300):
       - appraiser_license       : value after "State Certification #"/"State License #"
       - appraiser_license_state : the standalone "State <XX>" 2-letter code line.
+      - appraiser_email         : any email address found on the cert page.
     The license STATE drives the "appraiser licensed in the property's state" rule."""
-    import re
+    import re as _re
     _COL = 300
-    lic_re = re.compile(r"^[A-Z]{0,3}-?\d{3,}[-A-Z]*$")
+    lic_re = _re.compile(r"^[A-Z]{0,3}-?\d{3,}[-A-Z]*$")
     results: Dict[str, str] = {}
     try:
         import fitz
@@ -776,6 +803,11 @@ def _extract_appraiser_credentials(pdf_path: Path) -> Dict[str, str]:
             txt = " ".join(w[4] for w in words)
             if "Certification" not in txt or "Expiration" not in txt:
                 continue  # not the cert page
+            # Email — scan full page text (email may span the whole width).
+            if "appraiser_email" not in results:
+                m = _EMAIL_RE.search(txt)
+                if m:
+                    results["appraiser_email"] = m.group(0).lower()
             for i, w in enumerate(words):
                 if w[0] >= _COL:
                     continue
@@ -1010,6 +1042,58 @@ def _extract_pud_checked(pdf_path: Path) -> Dict[str, str]:
     return results
 
 
+def _extract_uspap_addendum(pdf_path: Path) -> Dict[str, str]:
+    """Deterministic (no-LLM) extraction of USPAP addendum fields.
+
+    The USPAP addendum page contains:
+      - "Appraisal Report" / "Restricted Appraisal Report" checkboxes
+      - "Reasonable Exposure Time" fill-in
+      - "I have / I have not" prior-services disclosure
+
+    This extractor runs as an L5 fallback so ADD-9 does not regress when
+    the LLM tier is unavailable or times out.
+    """
+    _EXPOSURE_RE = re.compile(
+        r"[Rr]easonable\s+[Ee]xposure\s+[Tt]ime[^:]*[:\-]?\s*([^\n]{3,80})"
+    )
+    _PRIOR_RE = re.compile(
+        r"I\s+have\s+(not\s+)?performed\s+services[^\n]{0,120}", re.I
+    )
+    results: Dict[str, str] = {}
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        for page_idx in range(len(doc)):
+            text = doc[page_idx].get_text("text")
+            low = text.lower()
+            if "exposure time" not in low and "restricted appraisal" not in low:
+                continue
+            # Report type: look for the radio button label text.
+            if "appraisal_report_type" not in results:
+                if "restricted appraisal report" in low:
+                    results["appraisal_report_type"] = "Restricted Appraisal Report"
+                elif "appraisal report" in low:
+                    results["appraisal_report_type"] = "Appraisal Report"
+            # Reasonable exposure time: extract the text after the label.
+            if "reasonable_exposure_time" not in results:
+                m = _EXPOSURE_RE.search(text)
+                if m:
+                    val = m.group(1).strip().rstrip(".")
+                    if val and len(val) > 2:
+                        results["reasonable_exposure_time"] = val
+            # Prior services.
+            if "prior_services_performed" not in results:
+                m = _PRIOR_RE.search(text)
+                if m:
+                    results["prior_services_performed"] = m.group(0).strip()
+            if results:
+                break
+        doc.close()
+    except Exception as exc:
+        logger.debug("L5 USPAP addendum extraction failed: %s", exc)
+    return results
+
+
 def extract_with_uad_template(pdf_path: Path) -> Dict[str, str]:
     """
     Run all UAD template-based extraction methods.
@@ -1032,6 +1116,7 @@ def extract_with_uad_template(pdf_path: Path) -> Dict[str, str]:
         ("neighborhood_name", _extract_neighborhood_name),
         ("land_use", _extract_land_use_percentages),
         ("pud_checked", _extract_pud_checked),
+        ("uspap_addendum", _extract_uspap_addendum),
     ]
 
     for name, fn in extractors:

@@ -37,7 +37,7 @@ S-12-listing: "The subject was offered for sale in the twelve months prior to th
 S-2-contract-buyer: "The purchase contract lists additional buyer(s) {value} who do not appear on the order form. Confirm whether a co-borrower should be added."
 
 # ---- Contract ----
-C-1-refi-blank: "The assignment is meant for a refinance transaction; per the UAD requirements, the contract section should be left blank."
+C-1-refi-blank: "The assignment is a refinance transaction; the contract price, date, and concession fields should not be populated (no purchase contract exists). The 'did not analyze the contract for sale' checkbox is expected to be marked. Please confirm the transaction type and revise the contract section accordingly."
 C-2-price:    "In the contract section Contract Price noted as ${a}; however, the purchase contract shows ${b}. Please verify."
 C-2-date:     "In the contract section Contract Date noted as {a}; however, the purchase contract shows {b}. Please verify."
 C-3-datasource: "Please provide data source for \"Is the property seller the owner of public record?\" under contract section."
@@ -51,6 +51,7 @@ C-4-contradict: "Financial assistance is marked 'No'; however, a concession amou
 C-4-desc:     "Financial assistance is marked 'Yes'; please provide the total dollar amount and a description of the items to be paid by any party on behalf of the borrower."
 C-5-personal: "The purchase contract includes personal property items ({value}); please address in the report whether these items were assigned any contributory value."
 C-1-txn-unknown: "The transaction type could not be confirmed from the documents; please verify whether the contract section should be left blank."
+C-EXEC-unsigned: "The appraiser's contract analysis indicates the purchase contract provided was NOT fully executed by all parties. Per engagement letter instructions, this file must be STOPPED and returned to the AMC/client for a fully-signed contract before the appraisal can be accepted. Do not proceed until a fully executed contract is received."
 
 # ---- Neighborhood ----
 N-1-checkbox: "In the neighborhood section checkbox is missing for {field}, please revise."
@@ -83,6 +84,8 @@ SCA-grid-zero: "Difference from subject to comp {comp} for {field} is not adjust
 SCA-net15:    "Please address Comps {value} exceeding 15% net adjustments."
 SCA-gross25:  "Please address Comps {value} exceeding 25% gross adjustments; these comparables may be too dissimilar — provide commentary or stronger comps."
 SCA-PSH-subj: "The subject transferred {months} month(s) before the effective date; please analyze and reconcile this prior sale/transfer with the opinion of value."
+SCA-PSH-largegain: "The subject's prior sale ({months} months ago) was ${prior:,}; the current opinion of value is ${current:,} — a {gain}% increase. This magnitude of appreciation in a short period requires explicit, specific analysis: what changed (renovation, market correction, etc.) and how does it support the current value conclusion? Boilerplate language is not sufficient."
+SCA-PSH-Q-quality: "The subject's prior sale/listing history analysis appears to only state dates and amounts. The engagement letter requires a substantive explanation of how the prior listing/sale relates to the current opinion of value — including the list-to-sale price relationship, days on market context, and what this implies about current marketability. Please expand the prior-sale analysis narrative."
 SCA-FLIP-comp: "Comp {comp} resold within {months} month(s) of its sale date; please confirm the transaction was arm's-length and comment on the rapid resale."
 SCA-25-newconst: "The subject appears to be new construction; please confirm at least one comparable is from a competing development (or comment on the dated-sale exception)."
 SCA-26-gla: "The subject GLA ({subj} sf) is not bracketed by the comparable GLAs ({lo}-{hi} sf); please confirm the comparables support the subject's size."
@@ -101,8 +104,10 @@ SCA-zf-same: "Comp {comp} {field} matches the subject but a {field} adjustment (
 SCA-ac-inconsistent: "Comp {comp} {field} ({value}) matches other comparables that received a ${a} {field} adjustment, but no adjustment was applied here; confirm adjustments are applied consistently or explain the difference."
 SCA-bracket:  "Market Value is not bracketed by the adjusted sale prices of the comps. Please revise accordingly."
 SCA-bracket-na: "Adjusted sale prices could not be confirmed from the sales comparison grid, so bracketing could not be tested automatically. Please verify the opinion of value falls within the range of the adjusted comparable sale prices shown in the grid."
+SCA-BR2-below: "Only {have} of the comparable adjusted sale price(s) meet or exceed the final opinion of value of ${value:,}; the engagement letter requires a minimum of {need}. Please add a comparable with an adjusted value at or above the opinion, or provide specific commentary supporting the value conclusion."
 SCA-2-count:  "A minimum of {required} comparable sales is required for this value. Only {value} closed comparable sale(s) were identified in the grid; please verify the remaining comparables were extracted."
 SCA-2-listings: "Only {have} active/listing comparable(s) were identified ({sales} closed sales found); a minimum of {need} active listing(s) is required. Add the required listing comparables or document why none are available."
+SCA-2-listings-decl: "Only {have} active/listing comparable(s) were identified ({sales} closed sales found); the neighborhood shows a declining or over-supplied market, which triggers the engagement letter's mandatory listing/pending comparable requirement. Add a current listing or pending sale to the grid, or provide a specific explanation why none is available — this is a written client requirement, not a preference."
 SCA-4-prox:   "Please provide Proximity to Subject (distance in miles and direction) for comp {comp} under the sales grid section."
 SCA-5-ds:     "Please have a data source (MLS name, MLS #, DOM) for comp {comp} under the sales grid section."
 SCA-5-dom:    "Comp {comp} days-on-market ({dom}) exceeds the neighborhood marketing time ({mt}); confirm the longer marketing period is addressed or the comparable remains appropriate."
@@ -161,6 +166,8 @@ I-2-foundation: "Please complete the Foundation description in the improvements 
 I-34-materials: "Please complete the materials/condition descriptions in the improvements section ({value} missing); fields that do not apply must state 'None', not be left blank."
 I-9-grid:     "The Condition rating in the improvements section ({a}) does not match the sales grid subject column ({b}); please reconcile."
 I-9-effage:   "A {value} condition rating with an effective age equal to the actual age appears inconsistent; please verify the effective age."
+I-9-noupdate: "The report claims an effective age of {eff} years vs an actual age of {actual} years (a {gap}-year improvement), yet the narrative mentions no updates or original condition. Please reconcile: either identify what was updated to justify the reduced effective age, or revise the effective age to better reflect the actual improvement history."
+I-SMCO-missing: "The engagement letter requires confirmation that smoke and carbon monoxide detectors meet local code requirements. No reference to smoke or CO detectors was found in the report narrative. Please add a comment confirming detector compliance per local code."
 I-10-adverse: "Physical deficiencies or adverse conditions affecting livability are indicated; please confirm the described items genuinely affect livability and are addressed with commentary."
 I-12-addition: "The report commentary references an addition or conversion ({value}); please confirm the permit status, conformity with the original structure, and marketability impact are addressed."
 I-7-roomcount: "Please complete the Above Grade room count (Total Rooms, Bedrooms, Baths, GLA) in the improvements section."
@@ -202,8 +209,10 @@ ADD-4-mc:     "The 1004MC Market Conditions Addendum is required for FHA/USDA lo
 # ---- Commentary / NLP (advisory) ----
 N-6-blank:    "The Neighborhood Description must be completed with a description specific to the area."
 N-6-canned:   "The Neighborhood Description appears to contain canned/generic commentary ({hits}); please make it specific to the subject area."
+N-6-generic:  "The Neighborhood Description does not appear to contain property-specific facts (named streets, landmarks, proximity to amenities, or local market characteristics). Please add specific details that identify this actual neighborhood rather than describing a generic residential area."
 N-7-see1004mc: "Market Conditions commentary states to 'See 1004MC' or defers to the addendum; per UAD this section must contain the actual market analysis. Please revise."
 N-7-blank:    "Market Conditions must be completed with the actual market analysis."
+N-7-generic:  "The Market Conditions commentary appears to only restate the checkbox answers in prose without citing specific market data. Please include actual metrics — such as days on market, absorption rate, months supply, or median price trend figures — to support the conclusions."
 ADD-1-canned: "{field} appears to contain canned/generic commentary ({hits}); commentary must be specific to this report."
 RECON-terms:  "Reconciliation commentary uses a prohibited term ({hits}). Terms like 'equal weight/consideration' and 'weighted average' should not be used; discuss how the sales were weighted to derive the value."
 

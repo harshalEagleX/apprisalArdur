@@ -9,15 +9,35 @@ and any conflict is material.
 
 from __future__ import annotations
 
+import re
+
 from app.qc.context import QCContext
 from app.qc.registry import rule
 from app.qc.result import RuleResult, RuleStatus
+
+# FHA case numbers follow the format: digits-digits (e.g. "051-8234567").
+# They always contain a hyphen and are never purely numeric.
+_FHA_CASE_RE = re.compile(r"^\d{2,3}-\d{7}$")
+
+
+def _is_fha_case_number(value: str) -> bool:
+    """Return True only when the value looks like a genuine FHA case number.
+    Purely-numeric strings (lender order/tracking numbers) are excluded."""
+    if not value:
+        return False
+    v = value.strip()
+    return bool(_FHA_CASE_RE.match(v))
 
 
 @rule(id="G-1", num="B", section="global", phase=2, name="Loan-type consistency (engagement vs appraisal)")
 def g1_loan_type(ctx: QCContext):
     eng_loan = ctx.loan_type
-    fha_markers = ctx.appraisal.value("fha_case_number")
+    # Check both the appraisal and engagement for an FHA case number.
+    # Validate format: FHA numbers contain a hyphen (e.g. "051-8234567");
+    # purely-numeric lender tracking numbers are never FHA case numbers.
+    appr_case = ctx.appraisal.value("fha_case_number") or ""
+    eng_case = ctx.engagement.value("fha_case_number") or ""
+    fha_markers = _is_fha_case_number(appr_case) or _is_fha_case_number(eng_case)
     ev = [ctx.engagement.evidence("loan_type"), ctx.appraisal.evidence("fha_case_number")]
     if not ctx.has_engagement:
         return RuleResult(rule_id="G-1", checklist_num="B", section="global",

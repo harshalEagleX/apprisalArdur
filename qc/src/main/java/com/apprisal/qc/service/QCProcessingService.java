@@ -262,6 +262,39 @@ public class QCProcessingService {
         });
     }
 
+    /**
+     * Mark the supporting files (engagement letter, contract) in a pair as
+     * COMPLETED after the appraisal has been processed successfully.
+     *
+     * Supporting files never had their FileStatus updated — they stayed PENDING
+     * indefinitely even when successfully sent to and extracted by the Python
+     * service. This made workbook reports misleadingly show "PENDING" for
+     * engagement letters that were in fact processed, causing auditors to
+     * conclude the files were "never extracted."
+     *
+     * Isolated in REQUIRES_NEW so a failure here never rolls back the already-
+     * persisted QCResult for the appraisal.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markSupportingFilesProcessed(@NonNull FileMatchingService.FilePair pair) {
+        if (pair.hasEngagement() && pair.getEngagement().getId() != null) {
+            batchFileRepository.findById(pair.getEngagement().getId()).ifPresent(f -> {
+                if (f.getStatus() == FileStatus.PENDING) {
+                    f.setStatus(FileStatus.COMPLETED);
+                    log.debug("Engagement letter {} marked COMPLETED", f.getFilename());
+                }
+            });
+        }
+        if (pair.hasContract() && pair.getContract().getId() != null) {
+            batchFileRepository.findById(pair.getContract().getId()).ifPresent(f -> {
+                if (f.getStatus() == FileStatus.PENDING) {
+                    f.setStatus(FileStatus.COMPLETED);
+                    log.debug("Contract file {} marked COMPLETED", f.getFilename());
+                }
+            });
+        }
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveFinalBatchStatus(@NonNull Long batchId, @NonNull BatchStatus status, String errorMessage) {
         Batch batch = batchRepository.findById(batchId)
@@ -384,6 +417,15 @@ public class QCProcessingService {
                 // processFilePair intentionally keeps the long Python call outside a DB transaction.
                 QCResult result = self.processFilePair(pair, safeModelConfig);
                 throwIfCancelled(batchId);
+                // Mark engagement letter and contract as COMPLETED now that the pair
+                // has been successfully processed. Best-effort: a failure here must
+                // not undo the already-persisted QCResult (hence the separate tx).
+                try {
+                    self.markSupportingFilesProcessed(pair);
+                } catch (Exception suppEx) {
+                    log.warn("Failed to update supporting-file status for appraisal {}: {}",
+                            pair.getAppraisal().getFilename(), suppEx.getMessage());
+                }
                 switch (result.getQcDecision()) {
                     case AUTO_PASS -> autoPassCount++;
                     case TO_VERIFY -> toVerifyCount++;

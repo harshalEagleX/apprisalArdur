@@ -69,22 +69,38 @@ def _comp_rows(ctx: QCContext) -> List[Dict[str, float]]:
         sp = normalize_currency(ctx.appraisal.value(f"comp_{i}_sale_price"))
         if sp is None:
             continue
+        sale_date = str(ctx.appraisal.value(f"comp_{i}_sale_date") or "").lower()
+        financing = str(ctx.appraisal.value(f"comp_{i}_sale_financing") or "").lower()
+        explicit_flag = str(ctx.appraisal.value(f"comp_{i}_is_listing") or "").lower()
+        # A comparable is a listing/active offering when:
+        #   (a) UAD Date of Sale contains "active"  (closed sales carry "s.../c..." dates), OR
+        #   (b) the financing / concessions cell contains "listing" (e.g. "Listing -11,900"), OR
+        #   (c) an explicit is_listing flag was set by extraction.
+        is_listing = (
+            "active" in sale_date
+            or "listing" in financing
+            or explicit_flag in {"true", "yes", "1"}
+        )
         rows.append({
             "i": i,
             "sale_price": sp,
             "net": normalize_currency(ctx.appraisal.value(f"comp_{i}_net_adjustment")),
             "adjusted": normalize_currency(ctx.appraisal.value(f"comp_{i}_adjusted_sale_price")),
-            # A comparable is a listing/active offering when its Date of Sale is
-            # UAD "Active" (closed sales carry "s.../c..." dates). Fall back to an
-            # explicit is_listing flag if extraction ever sets one.
-            "is_listing": "active" in str(ctx.appraisal.value(f"comp_{i}_sale_date") or "").lower()
-                          or str(ctx.appraisal.value(f"comp_{i}_is_listing") or "").lower()
-                          in {"true", "yes", "1"},
+            "is_listing": is_listing,
         })
     return rows
 
 
 # ---- SCA-2 comparables required -------------------------------------------
+
+def _market_is_declining(ctx: QCContext) -> bool:
+    """True when the neighborhood/market indicators suggest a declining or
+    over-supplied market — the engagement letter's declining-market clause then
+    makes a listing/pending comp MANDATORY (not just best-practice)."""
+    ds = str(ctx.appraisal.value("demand_supply") or "").lower()
+    pv = str(ctx.appraisal.value("property_values") or "").lower()
+    return "over" in ds or "declin" in pv
+
 
 @rule(id="SCA-2", num="54", section="sales_comparison", phase=3, name="Minimum comparable sales")
 def sca2_required(ctx: QCContext):
@@ -93,7 +109,7 @@ def sca2_required(ctx: QCContext):
     listings = [r for r in rows if r["is_listing"]]
     val = normalize_currency(ctx.appraisal.value("appraised_value")) or 0
     required = 4 if val >= 1_000_000 else 3
-    min_listings = int(qc_config.semantic("sca2_min_listings", 2))
+    min_listings = int(qc_config.semantic("sca2_min_listings", 1))
     ev = [ctx.appraisal.evidence(f"comp_{i}_sale_price") for i in range(1, 4)]
     # Too few closed sales — extraction may have missed comps, so VERIFY not FAIL.
     if len(sales) < required:
@@ -102,14 +118,16 @@ def sca2_required(ctx: QCContext):
                           message=qc_config.template("SCA-2-count", value=len(sales), required=required),
                           fields_involved=["comp_N_sale_price"], template_id="SCA-2-count",
                           evidence=ev, confidence=0.6)
-    # Enough closed sales but too few active/listing comparables — a determinate
-    # deficiency (the grid is well-extracted since the sales are all present).
+    # Enough closed sales but too few active/listing comparables.
     if min_listings > 0 and len(listings) < min_listings:
+        declining = _market_is_declining(ctx)
+        template_id = "SCA-2-listings-decl" if declining else "SCA-2-listings"
         return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
                           status=RuleStatus.FAIL,
-                          message=qc_config.template("SCA-2-listings", have=len(listings),
+                          message=qc_config.template(template_id, have=len(listings),
                                                      need=min_listings, sales=len(sales)),
-                          fields_involved=["comp_N_sale_price"], template_id="SCA-2-listings", evidence=ev)
+                          fields_involved=["comp_N_sale_price", "demand_supply"],
+                          template_id=template_id, evidence=ev)
     return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
                       status=RuleStatus.PASS, fields_involved=["comp_N_sale_price"], evidence=ev)
 
@@ -389,6 +407,43 @@ def sca_bracket(ctx: QCContext):
                       status=RuleStatus.VERIFY, message=qc_config.template("SCA-bracket"),
                       fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
                       template_id="SCA-bracket", evidence=ev, confidence=0.6)
+
+
+# ---- SCA-BR2 Champions Funding: ≥2 adjusted prices at/above final value ----
+# Champions Funding's engagement letter adds a SEPARATE, STRICTER bracketing
+# test: at least 2 of the comparable adjusted sale prices must be equal to or
+# greater than the final opinion of value. This is distinct from SCA-BR (which
+# only verifies the value falls BETWEEN the min and max adjusted price).
+# Config key: sca_br2_min_above (default 2) — the minimum count.
+
+@rule(id="SCA-BR2", num="78b", section="sales_comparison", phase=3,
+      name="Min comps with adjusted value at/above final opinion (lender overlay)")
+def sca_bracket_above(ctx: QCContext):
+    rows = _comp_rows(ctx)
+    val = normalize_currency(ctx.appraisal.value("appraised_value"))
+    ev = [ctx.appraisal.evidence("appraised_value")] + \
+         [ctx.appraisal.evidence(f"comp_{i}_adjusted_sale_price") for i in _comp_indices(ctx)]
+    adj = [r["adjusted"] for r in rows if r["adjusted"] is not None and not r["is_listing"]]
+    if val is None or len(adj) < 2:
+        return RuleResult(rule_id="SCA-BR2", checklist_num="78b", section="sales_comparison",
+                          status=RuleStatus.VERIFY,
+                          message="Adjusted sale prices could not be read to test the lender's "
+                                  "bracketing requirement; please verify at least 2 comps have "
+                                  "adjusted prices at or above the final value.",
+                          fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
+                          evidence=ev, confidence=0.5)
+    min_above = int(qc_config.semantic("sca_br2_min_above", 2))
+    above = [a for a in adj if a >= val]
+    if len(above) >= min_above:
+        return RuleResult(rule_id="SCA-BR2", checklist_num="78b", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["appraised_value"], evidence=ev)
+    return RuleResult(rule_id="SCA-BR2", checklist_num="78b", section="sales_comparison",
+                      status=RuleStatus.FAIL,
+                      message=qc_config.template("SCA-BR2-below",
+                                                 have=len(above), need=min_above,
+                                                 value=int(val)),
+                      fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
+                      template_id="SCA-BR2-below", evidence=ev)
 
 
 # ---------------------------------------------------------------------------
@@ -740,13 +795,17 @@ def sca10_rights(ctx: QCContext):
 def sca_subject_prior_sale(ctx: QCContext):
     """A prior sale/transfer of the SUBJECT within the look-back window (36 months)
     must be analyzed and reconciled with the opinion of value (UAD/Fannie/FHA). A
-    recent prior transfer near the effective date is a value-support red flag."""
+    recent prior transfer near the effective date is a value-support red flag.
+
+    When the prior sale price is known and the implied value increase is large
+    (≥ sca_psh_large_gain_pct, default 30%), the message is escalated to make the
+    magnitude explicit — a 60%+ increase in ~13 months (as observed in Sebring FL)
+    is not the same risk level as a 10% appreciation over 3 years."""
     window = int(qc_config.semantic("comp_resale_window_months", 36))
     eff = _effective_ym(ctx)
     d = _parse_full_date(ctx.appraisal.value("subject_grid_prior_sale_date"))
     ev = [ctx.appraisal.evidence("subject_grid_prior_sale_date"), ctx.appraisal.evidence("effective_date")]
     if d is None:
-        # No prior sale/transfer recorded → nothing to reconcile (clean).
         return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["subject_grid_prior_sale_date"], evidence=ev)
     if eff is None:
@@ -756,6 +815,26 @@ def sca_subject_prior_sale(ctx: QCContext):
                           fields_involved=["subject_grid_prior_sale_date", "effective_date"], evidence=ev, confidence=0.5)
     months = (eff[0] - d[0]) * 12 + (eff[1] - d[1])
     if 0 <= months <= window:
+        # Check for a large implied value gain — escalate with gain magnitude
+        prior_price = normalize_currency(ctx.appraisal.value("subject_grid_prior_sale_price"))
+        current_val = normalize_currency(ctx.appraisal.value("appraised_value"))
+        gain_threshold = float(qc_config.semantic("sca_psh_large_gain_pct", 30.0))
+        ev2 = ev + [ctx.appraisal.evidence("appraised_value"),
+                    ctx.appraisal.evidence("subject_grid_prior_sale_price")]
+        if prior_price and current_val and prior_price > 0:
+            gain_pct = (current_val - prior_price) / prior_price * 100.0
+            if gain_pct >= gain_threshold:
+                return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
+                                  status=RuleStatus.VERIFY,
+                                  message=qc_config.template("SCA-PSH-largegain",
+                                                             months=months,
+                                                             gain=int(gain_pct),
+                                                             prior=int(prior_price),
+                                                             current=int(current_val)),
+                                  fields_involved=["subject_grid_prior_sale_date",
+                                                   "subject_grid_prior_sale_price",
+                                                   "appraised_value"],
+                                  template_id="SCA-PSH-largegain", evidence=ev2, confidence=0.9)
         return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
                           status=RuleStatus.VERIFY,
                           message=qc_config.template("SCA-PSH-subj", months=months),
@@ -763,6 +842,57 @@ def sca_subject_prior_sale(ctx: QCContext):
                           evidence=ev, confidence=0.7)
     return RuleResult(rule_id="SCA-PSH", checklist_num="80", section="sales_comparison",
                       status=RuleStatus.PASS, fields_involved=["subject_grid_prior_sale_date"], evidence=ev)
+
+
+# ---- SCA-PSH-Q subject sale/listing history analysis quality ----------------
+# Engagement letter: "Simply typing dates and amounts does not meet USPAP
+# requirements. Explain how the listings, contracts, and sales relate to each
+# other and to the opinion of value."
+# Fire only when a prior sale exists within the window (otherwise not applicable).
+
+_PSH_ANALYSIS_TERMS = re.compile(
+    r"(below\s+(list|asking)|above\s+(list|asking)|days?\s+on\s+market|dom\b|"
+    r"indicat(es?|ive)|reflect(s|ing)|consistent\s+with|supports?|"
+    r"compet(itive|ition)|market(ing)?\s+(time|condition)|"
+    r"list[\s-]*to[\s-]*(sale|contract)|gap\s+between|percent|%)",
+    re.I)
+
+
+@rule(id="SCA-PSH-Q", num="80b2", section="sales_comparison", phase=5,
+      name="Subject sale history analysis is substantive")
+def sca_subject_prior_sale_quality(ctx: QCContext):
+    """When a prior sale/listing exists within the look-back window, the analysis
+    must go beyond bare dates and amounts — the engagement letter (Equity Solutions
+    USA / Champions Funding) explicitly warns that 'simply typing dates and amounts
+    does not meet USPAP requirements.' Check the sales-comparison or reconciliation
+    narrative for substantive analysis keywords."""
+    window = int(qc_config.semantic("comp_resale_window_months", 36))
+    eff = _effective_ym(ctx)
+    d = _parse_full_date(ctx.appraisal.value("subject_grid_prior_sale_date"))
+    if d is None or eff is None:
+        return RuleResult(rule_id="SCA-PSH-Q", checklist_num="80b2", section="sales_comparison",
+                          status=RuleStatus.NOT_APPLICABLE,
+                          message="No prior sale/transfer within the look-back window; quality check not applicable.")
+    months = (eff[0] - d[0]) * 12 + (eff[1] - d[1])
+    if months < 0 or months > window:
+        return RuleResult(rule_id="SCA-PSH-Q", checklist_num="80b2", section="sales_comparison",
+                          status=RuleStatus.NOT_APPLICABLE,
+                          message="No prior sale/transfer within the look-back window; quality check not applicable.")
+    # Prior sale IS within the window — check narrative quality.
+    narrative = " ".join(str(ctx.appraisal.value(f) or "") for f in (
+        "sales_comparison_summary", "final_reconciliation_comment",
+        "contract_analysis_comment", "market_conditions_commentary"))
+    ev = [ctx.appraisal.evidence("sales_comparison_summary"),
+          ctx.appraisal.evidence("subject_grid_prior_sale_date")]
+    if _PSH_ANALYSIS_TERMS.search(narrative):
+        return RuleResult(rule_id="SCA-PSH-Q", checklist_num="80b2", section="sales_comparison",
+                          status=RuleStatus.PASS,
+                          fields_involved=["sales_comparison_summary"], evidence=ev)
+    return RuleResult(rule_id="SCA-PSH-Q", checklist_num="80b2", section="sales_comparison",
+                      status=RuleStatus.VERIFY,
+                      message=qc_config.template("SCA-PSH-Q-quality"),
+                      fields_involved=["sales_comparison_summary", "subject_grid_prior_sale_date"],
+                      template_id="SCA-PSH-Q-quality", evidence=ev, confidence=0.6)
 
 
 # ---- SCA-FLIP comparable resale within 36 months (non-arm's-length flag) ---

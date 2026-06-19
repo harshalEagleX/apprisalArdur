@@ -156,6 +156,29 @@ def i9_condition(ctx: QCContext):
                             template_id="I-9-effage", confidence=0.6,
                             evidence=[ctx.appraisal.evidence("condition_rating"),
                                       ctx.appraisal.evidence("effective_age")]))
+        # Improvement claimed (eff_age significantly < actual) but the appraiser's
+        # own narrative says "no update" — an internal inconsistency that needs
+        # reconciliation (MIRA Finding B equivalent: C3 + eff_age 10 vs actual 18
+        # with "no updates in 15 years" comment). Surface when the gap >= 5 years.
+        improvement_gap = actual - eff_age
+        if improvement_gap >= 5:
+            narrative = " ".join(str(ctx.appraisal.value(f) or "")
+                                 for f in ("market_conditions_commentary",
+                                           "sales_comparison_summary",
+                                           "neighborhood_description")).lower()
+            no_update_signal = bool(re.search(
+                r"no\s+update|not\s+been\s+updated|original\s+(condition|kitchen|bath|floor)"
+                r"|dated\s+(kitchen|bath|interior)|no\s+renovation|unupdated",
+                narrative, re.I))
+            if no_update_signal:
+                out.append(_res("I-9", "50", RuleStatus.VERIFY,
+                                message=qc_config.template("I-9-noupdate",
+                                                           eff=eff_age, actual=actual,
+                                                           gap=improvement_gap),
+                                fields=["effective_age", "condition_rating"],
+                                template_id="I-9-noupdate", confidence=0.7,
+                                evidence=[ctx.appraisal.evidence("effective_age"),
+                                          ctx.appraisal.evidence("condition_rating")]))
     return out
 
 
@@ -289,3 +312,40 @@ def i8_features(ctx: QCContext):
                  message=qc_config.template("I-8-features"),
                  fields=_AMENITY_FIELDS, template_id="I-8-features",
                  evidence=ev, confidence=0.4)]
+
+
+# ---- I-SMCO smoke/CO detector compliance commentary ------------------------
+# Equity Solutions USA / Champions Funding engagement letter explicitly requires
+# "Smoke and Carbon Monoxide Detectors: per local code requirements" to be
+# noted in the report. This is a written, repeating checklist item.
+# Strategy: scan the full-page narrative text for detector-related keywords.
+# Advisory level (VERIFY, never FAIL) because the commentary may appear in a
+# section the extractor didn't capture — the reviewer confirms.
+
+_DETECTOR_RE = re.compile(
+    r"\b(smoke\s*det(ector)?|carbon\s*monoxide|co\s*det(ector)?|"
+    r"detector\s*code|per\s+(local\s+)?code)\b",
+    re.I)
+
+_NARRATIVE_SOURCES = (
+    "sales_comparison_summary", "final_reconciliation_comment",
+    "market_conditions_commentary", "contract_analysis_comment",
+    "neighborhood_description",
+)
+
+
+@rule(id="I-SMCO", num="49b", section="improvements", phase=4,
+      name="Smoke/CO detector code compliance noted")
+def i_smco(ctx: QCContext):
+    """Engagement letter (Equity Solutions USA) requires a note confirming
+    smoke and CO detectors meet local code requirements. Check all narrative
+    fields for detector-related keywords; flag for reviewer when absent."""
+    narrative = " ".join(str(ctx.appraisal.value(f) or "") for f in _NARRATIVE_SOURCES)
+    ev = [ctx.appraisal.evidence("sales_comparison_summary")]
+    if _DETECTOR_RE.search(narrative):
+        return _res("I-SMCO", "49b", RuleStatus.PASS,
+                    fields=list(_NARRATIVE_SOURCES), evidence=ev)
+    return _res("I-SMCO", "49b", RuleStatus.VERIFY,
+                message=qc_config.template("I-SMCO-missing"),
+                fields=list(_NARRATIVE_SOURCES),
+                template_id="I-SMCO-missing", evidence=ev, confidence=0.5)

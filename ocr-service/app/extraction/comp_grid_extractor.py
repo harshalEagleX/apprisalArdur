@@ -210,8 +210,13 @@ def extract_comp_grid(pdf_path) -> Tuple[Dict[str, str], Dict[str, Dict]]:
                         out[f"comp_{ci}_{suffix}"] = _clean(suffix, val)
                         positions[f"comp_{ci}_{suffix}"] = {"page": page_no, "bbox": _norm_box(vbox, pw, ph)}
                     adj, _ = _value_in_band(words, y, half, nxt - 8)
-                    if adj and re.search(r"[+\-]?\$?\d", adj):
-                        m = re.search(r"[+\-]?\$?[\d,]+", adj)
+                    # Require an explicit +/- sign: real UAD adjustments always carry
+                    # one. Stray digits from adjacent value cells (e.g. "Q4" quality
+                    # or "46" actual-age) never have a sign, so this guard eliminates
+                    # the fabricated "$1"/"$4" false-positive adjustment bug.
+                    # Use [-+] and [$]? to avoid Python 3.13 regex escape issues.
+                    if adj and re.search(r"[-+][$]?\d", adj):
+                        m = re.search(r"[-+][$]?[\d,]+", adj)
                         if m:
                             out[f"comp_{ci}_{suffix}_adjustment"] = m.group(0).replace("$", "").replace(",", "")
 

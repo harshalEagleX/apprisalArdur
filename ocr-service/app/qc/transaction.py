@@ -285,17 +285,32 @@ def _overlay_subject_llm(rs, pdf, dtype):
     if not llm_groq.groq_extraction_available():
         return rs
     from app.core.result import ExtractionResult, ExtractionResultSet
-    from app.extraction.subject_llm_extractor import (
+    from app.extraction.form_llm_extractor import (
         GAP_FIELDS, ALWAYS_REFILL, SUBJECT_LLM_VERSION, extract_gap_fields_llm)
 
     existing = {name: r for name, r in rs}
-    # A field is re-extracted when it is missing/blank OR it is a narrative field
-    # the deterministic layer reads confidently-wrong (ALWAYS_REFILL) — those carry
-    # a non-blank label fragment, so a blank trigger alone would never fix them.
+
+    # "See attached addenda" cross-reference detection: when the deterministic
+    # layer captured a deferred cross-reference string instead of the actual field
+    # value, treat the field as missing so the LLM re-extracts from the full doc.
+    # This fixes the Sebring false-positives where N-6/R-1b/S-4a each read the
+    # literal "See attached addenda." text instead of following the pointer.
+    import re as _re
+    _SEE_ADDENDA = _re.compile(
+        r"^\s*see\s+(attached\s+)?(addend|supplement|exhibit|attach)", _re.I)
+
+    def _is_see_addenda(r) -> bool:
+        return r is not None and r.found and _SEE_ADDENDA.match(str(r.value or ""))
+
+    # A field is re-extracted when:
+    #   • it is missing/blank, OR
+    #   • it is an ALWAYS_REFILL narrative (deterministic reads label text, not fill-in), OR
+    #   • its current value is a "See attached addenda" cross-reference (deferred pointer)
     missing = [f for f in GAP_FIELDS
                if f not in existing or not existing[f].found
                or not str(existing[f].value or "").strip()
-               or f in ALWAYS_REFILL]
+               or f in ALWAYS_REFILL
+               or _is_see_addenda(existing.get(f))]
     if not missing:
         return rs
     try:

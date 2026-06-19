@@ -142,9 +142,17 @@ def r2_asis(ctx: QCContext):
                       evidence=ev, confidence=0.6)
 
 
-# ---- CA-1 opinion of site value present (required in every report) --------
+# ---- CA-1 opinion of site value present (required for detached properties) -
+# Condominiums (Form 1073) do not have a standalone cost-approach site value
+# in the same way — the engagement letter requirement is explicit: "detached
+# properties only." Skip the check for 1073 to avoid false positives.
 
-@rule(id="CA-1", num="92", section="cost_approach", phase=1, name="Opinion of site value present")
+def _is_detached(ctx: QCContext) -> bool:
+    return ctx.form_type not in ("1073",)
+
+
+@rule(id="CA-1", num="92", section="cost_approach", phase=1,
+      applies_when=_is_detached, name="Opinion of site value present")
 def ca1_site_value(ctx: QCContext):
     val = ctx.appraisal.value("site_value_estimate")
     ev = [ctx.appraisal.evidence("site_value_estimate")]

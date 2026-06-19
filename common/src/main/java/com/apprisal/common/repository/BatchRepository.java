@@ -63,7 +63,8 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
      * assertClientAccess() can read client.id safely on a detached object.
      */
     @EntityGraph(attributePaths = {"client"})
-    Optional<Batch> findByIdWithClient(Long id);
+    @Query("SELECT b FROM Batch b WHERE b.id = :id")
+    Optional<Batch> findByIdWithClient(@Param("id") Long id);
 
     List<Batch> findByClientId(Long clientId);
 

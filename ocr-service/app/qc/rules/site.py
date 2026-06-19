@@ -132,9 +132,15 @@ def st4_view(ctx: QCContext):
                         message=qc_config.template("ST-4-view"),
                         fields=["site_view"], template_id="ST-4-view",
                         evidence=ev, confidence=0.7))
-    # the same view must appear in the SCA grid subject column
+    # the same view must appear in the SCA grid subject column.
+    # Normalize away trailing UAD field-separator semicolons before comparing:
+    # "N;Res" and "N;Res;" are the same value — the trailing ";" is a formatting
+    # artifact, not a content difference (caused a false VERIFY in production).
+    def _norm_view(v: str) -> str:
+        return re.sub(r"[; ]+$", "", v.replace(" ", "")).lower()
+
     grid = (ctx.appraisal.value("subject_grid_view") or "").strip()
-    if grid and val and grid.replace(" ", "").lower() != val.replace(" ", "").lower():
+    if grid and val and _norm_view(grid) != _norm_view(val):
         out.append(_res("ST-4", "29", RuleStatus.VERIFY,
                         message=qc_config.template("ST-4-grid", a=val, b=grid),
                         fields=["site_view", "subject_grid_view"],

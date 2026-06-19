@@ -29,6 +29,20 @@ def _pass(rule_id, num, section, field, ev):
 
 
 # ---- N-6 neighborhood description present + specific ----------------------
+# Two-tier check:
+#   Tier 1 (deterministic): blank / too-short / canned phrases
+#   Tier 2 (Groq, only when Tier 1 passes): is the narrative PROPERTY-SPECIFIC?
+#   A generic sentence that happens not to match any canned phrase still fails
+#   the quality bar the engagement letter and USPAP require.
+
+def _groq_specific(text: str, question: str) -> bool:
+    """Return True when Groq judges the text as sufficiently specific."""
+    try:
+        from app.extraction.llm_groq import assess_text
+        return bool(assess_text(text, question))
+    except Exception:
+        return True   # if Groq unavailable, don't penalise (P-6)
+
 
 @rule(id="N-6", num="24", section="neighborhood", phase=5, name="Neighborhood description specific")
 def n6_description(ctx: QCContext):
@@ -40,6 +54,18 @@ def n6_description(ctx: QCContext):
     if a.canned_hits:
         return _verify("N-6", "24", "neighborhood", field, "N-6-canned",
                        {"hits": ", ".join(a.canned_hits[:3])}, ev)
+    # Groq quality gate: a narrative that passes the canned-phrase filter can still
+    # be generic ("The subject is in a stable residential neighborhood.") — ask the
+    # model whether it contains property-specific facts.
+    specific = _groq_specific(
+        a.text,
+        "Does this neighborhood description contain property-SPECIFIC facts — named "
+        "streets, landmarks, or area names that identify the actual neighborhood, "
+        "proximity to amenities, or local market characteristics — rather than only "
+        "generic statements that could apply to any residential neighborhood?",
+    )
+    if not specific:
+        return _verify("N-6", "24", "neighborhood", field, "N-6-generic", {}, ev, conf=0.6)
     return _pass("N-6", "24", "neighborhood", field, ev)
 
 
@@ -54,6 +80,18 @@ def n7_market(ctx: QCContext):
         return _verify("N-7", "25", "neighborhood", field, "N-7-see1004mc", {}, ev, conf=0.75)
     if a.blank or a.too_short:
         return _verify("N-7", "25", "neighborhood", field, "N-7-blank", {}, ev)
+    # Groq quality gate: market conditions commentary must cite actual market data
+    # (DOM, absorption rate, price trends, months supply, etc.), not just re-state
+    # the checkbox answers in prose form.
+    substantive = _groq_specific(
+        a.text,
+        "Does this market conditions commentary cite SPECIFIC market data or metrics — "
+        "such as days on market, absorption rate, months supply, median price trend, "
+        "or specific price/volume figures — rather than only restating the checkbox "
+        "answers in prose ('property values are stable, demand/supply is in balance')?",
+    )
+    if not substantive:
+        return _verify("N-7", "25", "neighborhood", field, "N-7-generic", {}, ev, conf=0.6)
     return _pass("N-7", "25", "neighborhood", field, ev)
 
 

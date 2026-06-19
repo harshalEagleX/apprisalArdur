@@ -30,6 +30,10 @@ semantic:
   remaining_economic_life_min: 30  # FHA/VA minimum years
   depreciation_band_pp: 15.0       # tolerated gap (pp) vs age-life depreciation baseline (CA-3)
   signature_gap_days: 30           # signature more than N days after effective date → VERIFY
+  sca2_min_listings: 1            # Champions Funding: "at least 1 current listing and/or pending sale"
+  sca2_min_listings_declining: 1  # same threshold under declining-market/over-supply trigger
+  sca_br2_min_above: 2            # Champions Funding: min adjusted comps at/above final value
+  sca_psh_large_gain_pct: 30.0   # prior-sale value increase % that triggers SCA-PSH escalation
 
 # Subject-section content validation (S-4 / S-5). Editable per experience (P-4).
 subject:
