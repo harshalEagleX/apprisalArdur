@@ -63,7 +63,7 @@ public class BatchApiController {
         if (adminClient == null) {
             return Optional.empty(); // super-admin: no restriction
         }
-        return batchRepository.findById(batchId).map(batch -> {
+        return batchRepository.findByIdWithClient(batchId).map(batch -> {
             if (batch.getClient() == null || !adminClient.getId().equals(batch.getClient().getId())) {
                 return Optional.<ResponseEntity<?>>of(ResponseEntity.status(403)
                         .body(Map.of("error", "ACCESS_DENIED",

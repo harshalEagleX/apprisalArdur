@@ -80,13 +80,14 @@ public class DashboardService {
                                 .collect(java.util.stream.Collectors.toList());
                 metrics.put("recentBatches", recentBatches);
 
-                // Reviewers with workload — project to plain maps (avoid LAZY User associations).
+                // Reviewers with workload — one GROUP BY query replaces N+1 per-reviewer COUNT.
                 List<User> reviewers = userService.findByRole(Role.REVIEWER);
                 Map<Long, Long> reviewerWorkload = new HashMap<>();
+                for (Object[] row : qcResultRepository.countPendingWorkGroupedByReviewer()) {
+                        reviewerWorkload.put((Long) row[0], (Long) row[1]);
+                }
                 List<Map<String, Object>> reviewerList = new java.util.ArrayList<>();
                 for (User reviewer : reviewers) {
-                        long activeCount = qcResultRepository.countPendingReviewerWorkForReviewer(reviewer.getId());
-                        reviewerWorkload.put(reviewer.getId(), activeCount);
                         Map<String, Object> rv = new HashMap<>();
                         rv.put("id",       reviewer.getId());
                         rv.put("username", reviewer.getUsername());

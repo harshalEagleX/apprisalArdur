@@ -106,14 +106,33 @@ public class AdminApiController {
 
     // ── User Management ───────────────────────────────────────────────────────
 
+    /** Project a User entity to the fields declared in the TypeScript User interface. */
+    private Map<String, Object> userToMap(User u) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id",          u.getId());
+        m.put("username",    u.getUsername());
+        m.put("email",       u.getEmail());
+        m.put("fullName",    u.getFullName());
+        m.put("role",        u.getRole() != null ? u.getRole().name() : null);
+        m.put("active",      u.getActive());
+        m.put("createdAt",   u.getCreatedAt() != null ? u.getCreatedAt().toString() : null);
+        m.put("lastLoginAt", u.getLastLoginAt() != null ? u.getLastLoginAt().toString() : null);
+        // client is EAGER on User, so getClient() is always safe to call here
+        m.put("client", u.getClient() != null
+                ? Map.of("id", u.getClient().getId(),
+                         "name", u.getClient().getName() != null ? u.getClient().getName() : "",
+                         "code", u.getClient().getCode() != null ? u.getClient().getCode() : "")
+                : null);
+        return m;
+    }
+
     @GetMapping("/users")
     public ResponseEntity<?> getUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         var pg = userService.findAll(PageRequest.of(page, size, Sort.by("id").descending()));
-        // Return a stable map — Page<User> serialization is unstable across Spring Data versions
         return ResponseEntity.ok(Map.of(
-            "content",       pg.getContent(),
+            "content",       pg.getContent().stream().map(this::userToMap).toList(),
             "totalPages",    pg.getTotalPages(),
             "number",        pg.getNumber(),
             "totalElements", pg.getTotalElements()
@@ -123,7 +142,7 @@ public class AdminApiController {
     @GetMapping("/users/{id}")
     public ResponseEntity<?> getUser(@PathVariable @NonNull Long id) {
         return userService.findById(id)
-                .map(ResponseEntity::ok)
+                .map(u -> ResponseEntity.ok((Object) userToMap(u)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -147,7 +166,7 @@ public class AdminApiController {
             Client client = clientId != null ? clientService.findById(clientId).orElse(null) : null;
             User user = userService.create(username, password, role, email, fullName, client);
             auditLogService.logEntity(principal.getUser(), "USER_CREATED", "User", user.getId());
-            return ResponseEntity.ok(user);
+            return ResponseEntity.ok(userToMap(user));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -173,7 +192,7 @@ public class AdminApiController {
 
             User user = userService.update(id, email, fullName, role, client);
             auditLogService.logEntity(principal.getUser(), "USER_UPDATED", "User", id);
-            return ResponseEntity.ok(user);
+            return ResponseEntity.ok(userToMap(user));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

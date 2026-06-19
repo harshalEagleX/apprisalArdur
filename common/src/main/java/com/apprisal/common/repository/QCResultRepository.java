@@ -214,6 +214,22 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     long countPendingReviewerWorkForReviewer(@Param("reviewerId") Long reviewerId);
 
     /**
+     * Aggregate pending reviewer work across ALL reviewers in ONE query.
+     * Returns [reviewerId, count] pairs — use instead of the per-reviewer loop
+     * to avoid N+1 when the admin dashboard loads reviewer workload cards.
+     */
+    @Query("""
+        SELECT qr.batchFile.batch.assignedReviewer.id, COUNT(qr)
+        FROM QCResult qr
+        WHERE qr.qcDecision <> 'AUTO_PASS'
+          AND qr.finalDecision IS NULL
+          AND qr.supersededAt IS NULL
+          AND qr.batchFile.batch.assignedReviewer IS NOT NULL
+        GROUP BY qr.batchFile.batch.assignedReviewer.id
+        """)
+    List<Object[]> countPendingWorkGroupedByReviewer();
+
+    /**
      * 30 most-recently-submitted results across all reviewers.
      */
     @Query("""

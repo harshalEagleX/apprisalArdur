@@ -55,6 +55,16 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     @EntityGraph(attributePaths = {"files", "client", "assignedReviewer"})
     Optional<Batch> findWithFilesById(Long id);
 
+    /**
+     * Lightweight load for access-control checks that only need batch.client.
+     * findById() opens and closes its own implicit transaction, so the returned
+     * entity is detached; calling batch.getClient() on a LAZY association then
+     * throws LazyInitializationException. This variant eagerly joins client so
+     * assertClientAccess() can read client.id safely on a detached object.
+     */
+    @EntityGraph(attributePaths = {"client"})
+    Optional<Batch> findByIdWithClient(Long id);
+
     List<Batch> findByClientId(Long clientId);
 
     Page<Batch> findByClientId(Long clientId, Pageable pageable);
