@@ -736,6 +736,15 @@ export type QCDiffFinding = {
   previousSeverity?: string | null;
 };
 
+export type QCDiffRevision = {
+  revision: number;
+  revisionType: string;
+  changedAt: string;
+  changedBy: string | null;
+  action: string;
+  changes: Record<string, { from: unknown; to: unknown }>;
+};
+
 export type QCResultDiff = {
   resultId: number;
   ruleEngineVersion: string | null;
@@ -749,6 +758,8 @@ export type QCResultDiff = {
   unchangedCount?: number;
   summary?: { added: number; removed: number; changed: number; unchanged: number };
   message?: string;
+  /** Envers entity-level revision trail for this QC run's QCResult record */
+  auditTrail?: QCDiffRevision[];
 };
 
 export type QCHistoryRun = {

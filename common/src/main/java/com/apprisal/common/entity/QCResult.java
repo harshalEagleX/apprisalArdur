@@ -10,11 +10,19 @@ import java.util.List;
 
 /**
  * QCResult entity storing the outcome of Python QC processing for a BatchFile.
- * 
+ *
  * Each appraisal file gets one QCResult with:
  * - qcDecision: AUTO_PASS, TO_VERIFY, or AUTO_FAIL (from Python rules)
  * - finalDecision: PASS or FAIL (after reviewer verification, if needed)
  * - Collection of QCRuleResults for individual rule outcomes
+ *
+ * @Audited: Envers writes ~4 revision rows per QC run (ADD on persist, MOD on each
+ * status transition) inside the REQUIRES_NEW transaction in QCProcessingService.
+ * The synchronous write cost (~5-10ms) is accepted because EnversAuditService now
+ * actively reads these revisions for the audit graph's QC_RUN node drawer and the
+ * getQCResultDiff() endpoint's auditTrail field — so the overhead has full return.
+ * If the write latency ever becomes a problem, move to @AuditTable + async flush
+ * rather than removing @Audited — the revision trail is operational data now.
  */
 @Audited
 @Entity
@@ -47,8 +55,13 @@ public class QCResult {
     @Column(name = "final_decision")
     private FinalDecision finalDecision;
 
-    // Full JSON blob from Python — large, write-once, redundant in audit revisions.
-    // The QCRuleResult rows carry the granular rule outcomes; this is raw data only.
+    // Full JSON blob from Python — excluded from Envers revision history (@NotAudited) because:
+    //  1. It is large (1–20 KB per run) and write-once — auditing it would triple aud table size.
+    //  2. The granular outcomes are already tracked in QCRuleResult rows.
+    //  3. The raw blob is always recoverable from the live qc_result row (superseded runs are
+    //     retained, not deleted) so no audit gap exists for dispute resolution.
+    // If raw engine output auditing is ever required, write it to BusinessEvent payloadJson
+    // (event type RAW_ENGINE_RESPONSE) rather than removing this @NotAudited annotation.
     @NotAudited
     @Column(name = "python_response", columnDefinition = "TEXT")
     private String pythonResponse;

@@ -295,6 +295,22 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     Optional<QCResult> findActiveByBatchFileId(@Param("batchFileId") Long batchFileId);
 
     /**
+     * Bulk-load the single active (non-superseded) QC result per file for many batches.
+     * JOIN FETCH batchFile so callers can access batchFile.id without LAZY loads.
+     * Replaces the N per-batch findByBatchId() calls in AuditGraphController, reducing
+     * graph overview from ~300 queries to 1.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile
+        LEFT JOIN FETCH qr.reviewedBy
+        LEFT JOIN FETCH qr.reviewLockedBy
+        WHERE qr.batchFile.batch.id IN :batchIds
+          AND qr.supersededAt IS NULL
+        """)
+    List<QCResult> findActiveByBatchIds(@Param("batchIds") List<Long> batchIds);
+
+    /**
      * All QC results for a batch file — active + all historical reruns —
      * ordered newest first. Used for the QC history panel.
      */
@@ -304,19 +320,6 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         ORDER BY qr.processedAt DESC
         """)
     List<QCResult> findAllByBatchFileIdOrderByProcessedAtDesc(@Param("batchFileId") Long batchFileId);
-
-    /**
-     * Full rerun chain for a given QCResult — walks the rerunOf linked list.
-     * Includes the provided result ID and all its ancestors, newest first.
-     */
-    @Query("""
-        SELECT qr FROM QCResult qr
-        WHERE qr.batchFile.id = (
-            SELECT r.batchFile.id FROM QCResult r WHERE r.id = :qcResultId
-        )
-        ORDER BY qr.processedAt DESC
-        """)
-    List<QCResult> findVersionHistoryByQcResultId(@Param("qcResultId") Long qcResultId);
 
     /**
      * Single-statement counter refresh used after every reviewer decision.

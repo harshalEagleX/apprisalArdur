@@ -1,8 +1,20 @@
 "use client";
-import { X, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, ExternalLink, History } from "lucide-react";
 import type { GraphNode, GraphLink, ViewMode } from "./types";
 import { NODE_COLOR, isSupportingPending } from "./types";
 import { displayName } from "@/lib/displayName";
+
+const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+
+interface Revision {
+  revision: number;
+  revisionType: string;
+  changedAt: string;
+  changedBy: string | null;
+  action: string;
+  changes: Record<string, { from: unknown; to: unknown }>;
+}
 
 interface Props {
   node: GraphNode;
@@ -92,11 +104,90 @@ function prettyKey(key: string): string {
   return key.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()).trim();
 }
 
+// ── Revision timeline (QC_RUN nodes only) ────────────────────────────────────
+
+function RevisionTimeline({ revisions, loading }: { revisions: Revision[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-1">
+        {[1, 2].map(i => (
+          <div key={i} className="h-10 rounded bg-white/4 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+  if (revisions.length === 0) return (
+    <p className="text-[11px] text-slate-600 italic">No Envers revisions recorded for this result.</p>
+  );
+
+  return (
+    <div className="space-y-1.5">
+      {revisions.map(r => {
+        const nChanges = Object.keys(r.changes).length;
+        return (
+          <div key={r.revision}
+            className="rounded border border-white/6 bg-white/3 px-2.5 py-2 space-y-0.5">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[11px] font-medium text-slate-200 leading-snug">{r.action}</span>
+              <span className="text-[10px] text-slate-600 shrink-0 font-mono">r{r.revision}</span>
+            </div>
+            {r.changedBy && (
+              <p className="text-[10px] text-slate-500">{displayName(r.changedBy)}</p>
+            )}
+            {r.changedAt && (
+              <p className="text-[10px] text-slate-600">
+                {new Date(r.changedAt).toLocaleString()}
+              </p>
+            )}
+            {nChanges > 0 && (
+              <div className="pt-1 space-y-0.5">
+                {Object.entries(r.changes).map(([field, { from, to }]) => (
+                  <div key={field} className="text-[10px] text-slate-500 leading-tight">
+                    <span className="text-slate-400">{field.replace(/([A-Z])/g, " $1").toLowerCase()}: </span>
+                    {from != null && <span className="line-through text-red-400/70">{String(from)}</span>}
+                    {from != null && to != null && <span className="text-slate-600"> → </span>}
+                    {to != null && <span className="text-green-400/80">{String(to)}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main drawer ───────────────────────────────────────────────────────────────
 export default function AuditNodeDrawer({
   node, links, onClose, onDrillBatch, onDrillFile, onViewMode,
 }: Props) {
   const color = NODE_COLOR[node.type as keyof typeof NODE_COLOR] ?? "#64748b";
+
+  const [revisions,   setRevisions]   = useState<Revision[]>([]);
+  const [revLoading,  setRevLoading]  = useState(false);
+  const [revExpanded, setRevExpanded] = useState(false);
+
+  useEffect(() => {
+    if (node.type !== "QC_RUN" || !node.meta.qcResultId) {
+      setRevisions([]);
+      return;
+    }
+    setRevisions([]);
+    setRevExpanded(false);
+  }, [node.id, node.type, node.meta.qcResultId]);
+
+  function loadRevisions() {
+    if (revisions.length > 0 || revLoading) { setRevExpanded(v => !v); return; }
+    setRevLoading(true);
+    setRevExpanded(true);
+    fetch(`${JAVA}/api/graph/revisions/qcresult/${String(node.meta.qcResultId)}`,
+      { credentials: "include" })
+      .then(r => r.ok ? (r.json() as Promise<Revision[]>) : [])
+      .then(setRevisions)
+      .catch(() => setRevisions([]))
+      .finally(() => setRevLoading(false));
+  }
 
   // Count directly connected nodes
   const connectedIds = new Set<string>();
@@ -180,6 +271,23 @@ export default function AuditNodeDrawer({
               </div>
             ))}
         </div>
+
+        {/* Envers revision history — QC_RUN nodes only */}
+        {node.type === "QC_RUN" && (
+          <div className="pt-3 border-t border-white/8 space-y-2">
+            <button
+              onClick={loadRevisions}
+              className="flex w-full items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <History size={11} />
+              <span className="flex-1 text-left">Revision History</span>
+              <span className="text-[10px]">{revExpanded ? "▲" : "▼"}</span>
+            </button>
+            {revExpanded && (
+              <RevisionTimeline revisions={revisions} loading={revLoading} />
+            )}
+          </div>
+        )}
 
         {/* Connected count */}
         <div className="pt-3 border-t border-white/8 text-[11px] text-slate-600">

@@ -225,7 +225,7 @@ public class AdminApiController {
             }
             User user = userService.setActive(id, active);
             auditLogService.logEntity(principal.getUser(), active ? "USER_ACTIVATED" : "USER_DEACTIVATED", "User", id);
-            return ResponseEntity.ok(user);
+            return ResponseEntity.ok(userToMap(user));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

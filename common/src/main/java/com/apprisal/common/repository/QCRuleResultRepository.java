@@ -52,6 +52,19 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
     long countSubjectAddressMismatches(@Param("qcResultId") Long qcResultId);
 
     /**
+     * Bulk version of countSubjectAddressMismatches — returns the IDs of QCResults
+     * that have at least one failing property_address rule. One query replaces the
+     * N per-file countSubjectAddressMismatches() loop in AuditGraphController.
+     */
+    @Query("""
+        SELECT DISTINCT rr.qcResult.id FROM QCRuleResult rr
+        WHERE rr.qcResult.id IN :qcResultIds
+          AND rr.targetField = 'property_address'
+          AND LOWER(rr.status) NOT IN ('pass', 'not_applicable')
+        """)
+    List<Long> findQcResultIdsWithAddressMismatch(@Param("qcResultIds") List<Long> qcResultIds);
+
+    /**
      * All rule results awaiting admin override approval (across all batches).
      * Used by the admin override queue.
      */

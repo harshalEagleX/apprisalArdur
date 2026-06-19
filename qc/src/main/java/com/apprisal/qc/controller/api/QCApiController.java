@@ -15,6 +15,7 @@ import com.apprisal.qc.service.PythonClientService;
 import com.apprisal.qc.service.QCModelConfig;
 import com.apprisal.qc.service.QCProcessingService;
 import com.apprisal.qc.service.StuckBatchReconciler;
+import com.apprisal.common.service.EnversAuditService;
 import com.apprisal.common.util.TimelineLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +48,7 @@ public class QCApiController {
     private final BatchFileRepository batchFileRepository;
     private final DocumentMatchRepository documentMatchRepository;
     private final StuckBatchReconciler reconciler;
+    private final EnversAuditService enversAuditService;
 
     public QCApiController(
             QCProcessingService qcProcessingService,
@@ -56,7 +58,8 @@ public class QCApiController {
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             DocumentMatchRepository documentMatchRepository,
-            StuckBatchReconciler reconciler) {
+            StuckBatchReconciler reconciler,
+            EnversAuditService enversAuditService) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
@@ -65,6 +68,7 @@ public class QCApiController {
         this.batchFileRepository = batchFileRepository;
         this.documentMatchRepository = documentMatchRepository;
         this.reconciler = reconciler;
+        this.enversAuditService = enversAuditService;
     }
 
     /**
@@ -600,6 +604,13 @@ public class QCApiController {
         body.put("summary", Map.of(
                 "added", added.size(), "removed", removed.size(),
                 "changed", changed.size(), "unchanged", unchanged));
+
+        // Envers field-level revision trail for this QCResult — shows when qcDecision,
+        // passedCount, reviewedAt etc. changed and who changed them. Complements the
+        // rule-level diff above (which compares QCRuleResult rows across two separate
+        // QC runs) with the entity-level audit history of the current run.
+        body.put("auditTrail", enversAuditService.getQCResultRevisions(qcResultId));
+
         return ResponseEntity.ok(body);
     }
 

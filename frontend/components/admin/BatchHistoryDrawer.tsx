@@ -7,6 +7,7 @@ import {
 import {
   getBatchById, getQCHistory, getQCResultDiff, downloadFindingsExport, processQCFiles,
   type Batch, type BatchFile, type QCHistoryRun, type QCResultDiff, type QCDiffFinding,
+  type QCDiffRevision,
 } from "@/lib/api";
 import { toast } from "@/lib/toast";
 
@@ -134,6 +135,36 @@ function RunDiff({ runId }: { runId: number }) {
             </div>
           )}
         </>
+      )}
+
+      {(diff.auditTrail ?? []).length > 0 && (
+        <div className="mt-2.5 border-t border-white/8 pt-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Revision trail
+          </div>
+          {(diff.auditTrail as QCDiffRevision[]).map(r => (
+            <div key={r.revision} className="mb-1 rounded border border-white/6 bg-white/2 px-2 py-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-medium text-slate-200">{r.action}</span>
+                <span className="font-mono text-[10px] text-slate-600">r{r.revision}</span>
+              </div>
+              {r.changedBy && <p className="text-[10px] text-slate-500">{r.changedBy}</p>}
+              <p className="text-[10px] text-slate-600">{new Date(r.changedAt).toLocaleString()}</p>
+              {Object.keys(r.changes).length > 0 && (
+                <div className="mt-0.5 space-y-0.5">
+                  {Object.entries(r.changes).map(([field, { from, to }]) => (
+                    <div key={field} className="text-[10px] text-slate-500">
+                      <span className="text-slate-400">{field}: </span>
+                      {from != null && <span className="line-through text-red-400/70">{String(from)}</span>}
+                      {from != null && to != null && <span className="text-slate-600"> → </span>}
+                      {to != null && <span className="text-green-400/80">{String(to)}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

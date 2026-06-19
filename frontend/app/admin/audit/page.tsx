@@ -23,9 +23,15 @@ const ForceGraph2D = dynamic(
 const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 async function fetchGraph(url: string): Promise<GraphData> {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw new Error(`Graph API ${r.status}`);
-  return r.json() as Promise<GraphData>;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const r = await fetch(url, { credentials: "include", signal: controller.signal });
+    if (!r.ok) throw new Error(`Graph API ${r.status}`);
+    return r.json() as Promise<GraphData>;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export default function AdminAuditPage() {

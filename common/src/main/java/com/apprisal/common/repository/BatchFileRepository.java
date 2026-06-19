@@ -60,4 +60,12 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
         GROUP BY bf.batch.client.id
         """)
     List<Object[]> clientFileCounts();
+
+    /**
+     * Bulk file load for multiple batches in one query.
+     * JOIN FETCH batch so callers can group by batch.id without LAZY loads.
+     * Replaces the N per-batch findByBatchId() calls in AuditGraphController.
+     */
+    @Query("SELECT f FROM BatchFile f JOIN FETCH f.batch WHERE f.batch.id IN :batchIds ORDER BY f.batch.id, f.id")
+    List<BatchFile> findByBatchIdIn(@Param("batchIds") List<Long> batchIds);
 }
