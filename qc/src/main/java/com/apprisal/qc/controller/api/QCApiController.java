@@ -275,10 +275,9 @@ public class QCApiController {
     @GetMapping("/results/{batchId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'REVIEWER')")
     @Transactional(readOnly = true)
-    public ResponseEntity<List<QCResult>> getBatchResults(
+    public ResponseEntity<List<Map<String, Object>>> getBatchResults(
             @PathVariable @NonNull Long batchId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        // FIX: distinguish "batch not found" (404) from "no results yet" (200 + [])
         if (!batchRepository.existsById(batchId)) {
             return ResponseEntity.notFound().build();
         }
@@ -289,7 +288,35 @@ public class QCApiController {
                 && !batchRepository.isReviewerAssigned(batchId, principal.getUser().getId())) {
             return ResponseEntity.status(403).build();
         }
-        List<QCResult> results = qcResultRepository.findByBatchId(batchId);
+        // Project to plain maps inside the @Transactional boundary so Jackson never
+        // encounters the LAZY associations (ruleResults, rerunOf, reviewedBy,
+        // reviewLockedBy) after the session closes (open-in-view is disabled).
+        // batchFile is JOIN FETCH'd by findActiveByBatchIdWithBatchFile.
+        List<Map<String, Object>> results = qcResultRepository.findActiveByBatchIdWithBatchFile(batchId)
+                .stream()
+                .map(r -> {
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("id",               r.getId());
+                    m.put("qcDecision",       r.getQcDecision() != null ? r.getQcDecision().name() : null);
+                    m.put("finalDecision",    r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
+                    m.put("totalRules",       r.getTotalRules());
+                    m.put("passedCount",      r.getPassedCount());
+                    m.put("failedCount",      r.getFailedCount());
+                    m.put("verifyCount",      r.getVerifyCount());
+                    m.put("manualPassCount",  r.getManualPassCount());
+                    m.put("errorCount",       r.getErrorCount());
+                    m.put("score",            null); // no score field on entity
+                    m.put("ruleEngineVersion", r.getRuleEngineVersion());
+                    m.put("missingDocuments", r.getMissingDocuments());
+                    m.put("processedAt",      r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
+                    m.put("reviewedAt",       r.getReviewedAt() != null ? r.getReviewedAt().toString() : null);
+                    m.put("batchFile", r.getBatchFile() != null
+                            ? Map.of("id", r.getBatchFile().getId(),
+                                     "filename", r.getBatchFile().getFilename() != null ? r.getBatchFile().getFilename() : "")
+                            : null);
+                    return m;
+                })
+                .collect(java.util.stream.Collectors.toList());
         return ResponseEntity.ok(results);
     }
 
@@ -479,6 +506,7 @@ public class QCApiController {
      */
     @GetMapping("/history/file/{batchFileId}")
     @PreAuthorize("hasAnyRole('ADMIN','REVIEWER')")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getQCHistoryForFile(
             @PathVariable @NonNull Long batchFileId) {
         List<com.apprisal.common.entity.QCResult> history =
@@ -516,6 +544,7 @@ public class QCApiController {
      */
     @GetMapping("/history/diff/{qcResultId}")
     @PreAuthorize("hasAnyRole('ADMIN','REVIEWER')")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> getQCResultDiff(
             @PathVariable @NonNull Long qcResultId) {
         var current = qcResultRepository.findById(qcResultId).orElse(null);
@@ -599,9 +628,9 @@ public class QCApiController {
             return ResponseEntity.notFound().build();
         }
 
-        List<QCResult> results = qcResultRepository.findByBatchId(batchId).stream()
-                .filter(r -> !r.isSuperseded())
-                .toList();
+        // findActiveByBatchIdWithBatchFile: supersededAt IS NULL + JOIN FETCH batchFile —
+        // eliminates both the in-memory superseded-filter race and the batchFile N+1.
+        List<QCResult> results = qcResultRepository.findActiveByBatchIdWithBatchFile(batchId);
 
         List<Map<String, Object>> documents = new java.util.ArrayList<>();
         int totalFindings = 0, totalFail = 0, totalWaived = 0;

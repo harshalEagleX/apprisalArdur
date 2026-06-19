@@ -62,10 +62,29 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     Optional<QCResult> findWithBatchFileAndBatchById(@Param("qcResultId") Long qcResultId);
 
     /**
-     * Find all QC results for a batch.
+     * Find all QC results for a batch (active + superseded).
+     * Used by the audit graph and audit log endpoints that need the full history.
+     * For the batch-detail API use {@link #findActiveByBatchIdWithBatchFile} instead.
      */
     @Query("SELECT qr FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId")
     List<QCResult> findByBatchId(@Param("batchId") Long batchId);
+
+    /**
+     * Find only the active (non-superseded) QC results for a batch, with batchFile
+     * eagerly loaded via JOIN FETCH so Jackson can serialize batchFile.id without a
+     * LazyInitializationException (open-in-view is disabled).
+     *
+     * Used by the batch-detail API ({@code GET /api/qc/results/{batchId}}) so that:
+     *   1. Superseded results from previous runs are excluded from stat-tile counts.
+     *   2. The resultMap on the frontend can match batchFile.id → QCResult correctly.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        JOIN FETCH qr.batchFile
+        WHERE qr.batchFile.batch.id = :batchId
+          AND qr.supersededAt IS NULL
+        """)
+    List<QCResult> findActiveByBatchIdWithBatchFile(@Param("batchId") Long batchId);
 
     @Query("SELECT COUNT(qr) FROM QCResult qr WHERE qr.batchFile.batch.id = :batchId")
     long countByBatchId(@Param("batchId") Long batchId);

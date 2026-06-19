@@ -3,14 +3,15 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock, FileText, Lightbulb, Scale, ShieldAlert, TrendingUp, Users } from "lucide-react";
 import { displayName } from "@/lib/displayName";
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
-
-async function api<T>(path: string): Promise<T> {
-  const r = await fetch(`${JAVA}${path}`, { credentials: "include" });
-  if (!r.ok) throw new Error(`${r.status}`);
-  return r.json();
-}
+import {
+  getAnalyticsOverview,
+  getAnalyticsOcr,
+  getAnalyticsMl,
+  getAnalyticsOperators,
+  getAnalyticsTrend,
+  getAnalyticsReviewSla,
+  getAnalyticsAnomalies,
+} from "@/lib/api";
 
 type Days = 7 | 30 | 90;
 
@@ -82,13 +83,13 @@ export default function AnalyticsPage() {
     setLoading(true); setError("");
     try {
       const [ov, o, m, op, tr, s, an] = await Promise.all([
-        api<Record<string,unknown>>(`/api/analytics/overview?days=${d}`),
-        api<Record<string,unknown>>(`/api/analytics/ocr?days=${d}`),
-        api<Record<string,unknown>>(`/api/analytics/ml?days=${d}`),
-        api<Record<string,unknown>>(`/api/analytics/operators?days=${d}`),
-        api<unknown[]>(`/api/analytics/trend?days=${d}`),
-        api<Record<string,unknown>>(`/api/analytics/review-sla`),
-        api<Record<string,unknown>>(`/api/analytics/anomalies?days=${d}`),
+        getAnalyticsOverview(d),
+        getAnalyticsOcr(d),
+        getAnalyticsMl(d),
+        getAnalyticsOperators(d),
+        getAnalyticsTrend(d),
+        getAnalyticsReviewSla(),
+        getAnalyticsAnomalies(d),
       ]);
       setOverview(ov); setOcr(o); setMl(m); setOperators(op); setTrend(tr);
       setSla(s); setAnomalies(an);

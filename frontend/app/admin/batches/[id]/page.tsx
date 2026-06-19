@@ -188,9 +188,8 @@ export default function BatchDetailPage() {
                     <td className="px-4 py-3 text-right">
                       {qc && (
                         <Link
-                          href={`${JAVA}/api/reviewer/qc/${qc.id}/rules`}
+                          href={`/reviewer/verify/${qc.id}`}
                           className="text-[11px] text-slate-500 transition-colors hover:text-indigo-300"
-                          target="_blank"
                         >
                           Rules ↗
                         </Link>

@@ -60,6 +60,7 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
         JOIN FETCH rr.qcResult qr
         JOIN FETCH qr.batchFile bf
         JOIN FETCH bf.batch b
+        LEFT JOIN FETCH rr.overrideRequestedBy
         WHERE rr.overridePending = true
         ORDER BY rr.overrideRequestedAt ASC
         """)

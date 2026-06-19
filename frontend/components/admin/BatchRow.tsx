@@ -302,8 +302,10 @@ export const BatchRow = memo(function BatchRow({
               </span>
             ))}
 
-          {/* QC history + version diff — only once QC has produced results */}
-          {(b.status === "COMPLETED" || b.status === "REVIEW_PENDING" || b.status === "IN_REVIEW") && (
+          {/* QC history + version diff — shown for every non-processing status.
+              A stopped (UPLOADED) or partial batch may still have prior QC results;
+              the history modal handles the empty-history case gracefully. */}
+          {b.status !== "QC_PROCESSING" && (
             <button
               onClick={() => onOpenHistory(b)}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-indigo-950/40 hover:text-indigo-300"

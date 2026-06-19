@@ -214,14 +214,15 @@ function FileHistory({ file, runs, onRerun, busy }: {
         <span className="truncate text-xs font-medium text-slate-200" title={file.filename}>{file.filename}</span>
         <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500">{file.fileType}</span>
         <div className="ml-auto flex items-center gap-2">
-          {/* Per-file re-run (only files that have been QC'd, i.e. appraisal files). Re-runs
-              ONLY this file; other files in the batch keep their results + review state. */}
+          {/* Per-file re-run (only appraisal files that have been QC'd). Re-runs the full
+              matched document set (appraisal + engagement + contract) through Python OCR; QC
+              findings are updated for this appraisal only — other appraisals keep their results. */}
           {onRerun && ordered.length > 0 && (
             <button
               type="button"
               onClick={() => onRerun(file.id)}
               disabled={busy}
-              title="Re-run QC for ONLY this file — its current result is superseded; every other file in the batch is left untouched"
+              title="Re-run QC for this appraisal — the matched document set is re-read by the OCR service; QC findings are updated for this file only"
               className="inline-flex items-center gap-1 rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-indigo-300 transition-colors hover:bg-white/[0.04] hover:text-indigo-200 disabled:opacity-50"
             >
               <RefreshCw size={10} className={busy ? "animate-spin" : ""} />
@@ -299,7 +300,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
         "Re-run started for this file",
         res.reviewerActive
           ? "A reviewer is active on this batch — they will be notified that this file was re-processed."
-          : "Only this file is re-processed; other files are untouched.",
+          : "The matched document set (appraisal + engagement + contract) is re-read by the OCR service. QC findings are updated for this appraisal file only.",
       );
       // Give the worker a moment, then refresh this file's run chain.
       window.setTimeout(() => { void loadHistory(batch.id); }, 2500);

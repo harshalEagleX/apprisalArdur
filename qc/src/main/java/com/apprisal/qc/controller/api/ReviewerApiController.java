@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * REST API for reviewer AJAX operations (auto-save, queue, progress).
@@ -434,6 +435,19 @@ public class ReviewerApiController {
                 ruleMap.put("bboxY",           rule.getBboxY());
                 ruleMap.put("bboxW",           rule.getBboxW());
                 ruleMap.put("bboxH",           rule.getBboxH());
+                // override approval actor — present on entity, missing from prior response
+                ruleMap.put("overrideApprovedBy", rule.getOverrideApprovedBy() != null ? displayName(rule.getOverrideApprovedBy()) : null);
+                ruleMap.put("overrideApprovedAt", rule.getOverrideApprovedAt() != null ? rule.getOverrideApprovedAt().toString() : null);
+                // Fields declared in the TypeScript QCRuleResult interface but not yet
+                // stored on the entity — send null so the frontend receives defined keys.
+                ruleMap.put("sourceDocuments",  null);
+                ruleMap.put("comparedFields",   null);
+                ruleMap.put("comparedValues",   null);
+                ruleMap.put("comparisonMethod", null);
+                ruleMap.put("decisionPath",     null);
+                ruleMap.put("exceptionType",    null);
+                ruleMap.put("stage",            null);
+                ruleMap.put("retryEligible",    null);
                 return ruleMap;
             }).toList();
 
@@ -823,6 +837,7 @@ public class ReviewerApiController {
      */
     @PostMapping("/admin/overrides/{ruleResultId}/decide")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    @Transactional
     public ResponseEntity<Map<String, Object>> decideOverride(
             @PathVariable Long ruleResultId,
             @RequestBody Map<String, Object> body,
@@ -832,7 +847,9 @@ public class ReviewerApiController {
             boolean approve = Boolean.TRUE.equals(body.get("approve"));
             String adminComment = body.containsKey("comment") ? String.valueOf(body.get("comment")) : "";
 
-            com.apprisal.common.entity.QCRuleResult rr = qcRuleResultRepository.findById(ruleResultId)
+            // findByIdForUpdate JOIN FETCHes qcResult (and batchFile) so the WebSocket
+            // topic path at the bottom of this method doesn't hit a LAZY proxy with no session.
+            com.apprisal.common.entity.QCRuleResult rr = qcRuleResultRepository.findByIdForUpdate(ruleResultId)
                     .orElseThrow(() -> new IllegalArgumentException("Rule result not found: " + ruleResultId));
 
             if (!Boolean.TRUE.equals(rr.getOverridePending())) {

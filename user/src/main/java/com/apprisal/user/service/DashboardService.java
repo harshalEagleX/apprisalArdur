@@ -58,19 +58,43 @@ public class DashboardService {
                 // Client organization count
                 metrics.put("clientOrganizations", clientService.count());
 
-                // Recent batches - efficient TopN query
-                List<Batch> recentBatches = batchRepository.findTop10ByOrderByCreatedAtDesc();
+                // Recent batches — project to plain maps so Jackson never sees LAZY
+                // associations (files, createdBy) after the transaction closes.
+                List<Map<String, Object>> recentBatches = batchRepository.findTop10ByOrderByCreatedAtDesc()
+                                .stream()
+                                .map(b -> {
+                                        Map<String, Object> m = new HashMap<>();
+                                        m.put("id",            b.getId());
+                                        m.put("parentBatchId", b.getParentBatchId());
+                                        m.put("status",        b.getStatus() != null ? b.getStatus().name() : null);
+                                        m.put("createdAt",     b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
+                                        m.put("fileCount",     b.getFileCount());
+                                        m.put("client", b.getClient() != null
+                                                ? Map.of("id", b.getClient().getId(), "name", b.getClient().getName() != null ? b.getClient().getName() : "")
+                                                : null);
+                                        m.put("assignedReviewer", b.getAssignedReviewer() != null
+                                                ? Map.of("id", b.getAssignedReviewer().getId(), "username", b.getAssignedReviewer().getUsername())
+                                                : null);
+                                        return m;
+                                })
+                                .collect(java.util.stream.Collectors.toList());
                 metrics.put("recentBatches", recentBatches);
 
-                // Reviewers with workload
+                // Reviewers with workload — project to plain maps (avoid LAZY User associations).
                 List<User> reviewers = userService.findByRole(Role.REVIEWER);
                 Map<Long, Long> reviewerWorkload = new HashMap<>();
+                List<Map<String, Object>> reviewerList = new java.util.ArrayList<>();
                 for (User reviewer : reviewers) {
                         long activeCount = qcResultRepository.countPendingReviewerWorkForReviewer(reviewer.getId());
                         reviewerWorkload.put(reviewer.getId(), activeCount);
+                        Map<String, Object> rv = new HashMap<>();
+                        rv.put("id",       reviewer.getId());
+                        rv.put("username", reviewer.getUsername());
+                        rv.put("fullName", reviewer.getFullName() != null ? reviewer.getFullName() : "");
+                        reviewerList.add(rv);
                 }
                 metrics.put("reviewerWorkload", reviewerWorkload);
-                metrics.put("reviewers", reviewers);
+                metrics.put("reviewers", reviewerList);
 
                 return metrics;
         }
@@ -103,8 +127,19 @@ public class DashboardService {
                 metrics.put("filesProcessing",
                                 batchFileRepository.countByClientIdAndStatus(clientId, FileStatus.PROCESSING));
 
-                // Recent batches - efficient TopN query
-                List<Batch> recentBatches = batchRepository.findTop5ByClientIdOrderByCreatedAtDesc(clientId);
+                // Recent batches — project to plain maps (same LAZY-safety pattern as admin dashboard).
+                List<Map<String, Object>> recentBatches = batchRepository.findTop5ByClientIdOrderByCreatedAtDesc(clientId)
+                                .stream()
+                                .map(b -> {
+                                        Map<String, Object> m = new HashMap<>();
+                                        m.put("id",            b.getId());
+                                        m.put("parentBatchId", b.getParentBatchId());
+                                        m.put("status",        b.getStatus() != null ? b.getStatus().name() : null);
+                                        m.put("createdAt",     b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
+                                        m.put("fileCount",     b.getFileCount());
+                                        return m;
+                                })
+                                .collect(java.util.stream.Collectors.toList());
                 metrics.put("recentBatches", recentBatches);
 
                 return metrics;
@@ -128,13 +163,7 @@ public class DashboardService {
                 // Total assigned batches count (for the stat card)
                 metrics.put("assignedBatches", pendingReview + inReview);
 
-                // Calculate total files across all assigned batches
-                List<Batch> allAssignedBatches = batchRepository.findByAssignedReviewerId(reviewerId);
-                long totalFiles = allAssignedBatches.stream()
-                                .filter(b -> b.getFiles() != null)
-                                .mapToLong(b -> b.getFiles().size())
-                                .sum();
-                metrics.put("totalFiles", totalFiles);
+                metrics.put("totalFiles", batchFileRepository.countByReviewerId(reviewerId));
 
                 return metrics;
         }

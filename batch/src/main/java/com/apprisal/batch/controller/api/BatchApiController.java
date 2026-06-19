@@ -138,14 +138,17 @@ public class BatchApiController {
         // fileCount from denormalized column — always accurate, no lazy-load required
         m.put("fileCount", b.getFileCount());
         if (includeFiles) {
-            m.put("files", b.getFiles().stream().map(f -> Map.of(
-                "id",       f.getId(),
-                "filename", f.getFilename(),
-                "fileType", f.getFileType() != null ? f.getFileType().name() : "",
-                "fileSize", f.getFileSize() != null ? f.getFileSize() : 0L,
-                "status",   f.getStatus() != null ? f.getStatus().name() : "",
-                "orderId",  f.getOrderId() != null ? f.getOrderId() : ""
-            )).toList());
+            m.put("files", b.getFiles().stream().map(f -> {
+                Map<String, Object> fm = new HashMap<>();
+                fm.put("id",                   f.getId());
+                fm.put("filename",              f.getFilename());
+                fm.put("fileType",              f.getFileType() != null ? f.getFileType().name() : "");
+                fm.put("fileSize",              f.getFileSize() != null ? f.getFileSize() : 0L);
+                fm.put("status",                f.getStatus() != null ? f.getStatus().name() : "");
+                fm.put("orderId",               f.getOrderId() != null ? f.getOrderId() : "");
+                fm.put("documentQualityFlags",  f.getDocumentQualityFlags());
+                return fm;
+            }).toList());
         } else {
             // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
             // returns (open-in-view=false). fileCount column has the accurate count.

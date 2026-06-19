@@ -241,9 +241,11 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     BatchStatusView findStatusById(@Param("id") Long id);
 
     // Efficient TopN queries for dashboards
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
     List<Batch> findTop10ByOrderByCreatedAtDesc();
 
     List<Batch> findTop5ByClientIdOrderByCreatedAtDesc(Long clientId);
 
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
     List<Batch> findTop10ByAssignedReviewerIdOrderByUpdatedAtDesc(Long reviewerId);
 }

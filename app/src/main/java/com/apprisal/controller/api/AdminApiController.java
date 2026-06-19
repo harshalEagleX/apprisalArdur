@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.lang.NonNull;
+import org.springframework.transaction.annotation.Transactional;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
 import javax.sql.DataSource;
@@ -27,6 +28,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Admin REST API — user management, client management.
@@ -36,6 +39,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin")
 public class AdminApiController {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminApiController.class);
 
     private final UserService userService;
     private final ClientService clientService;
@@ -314,6 +319,7 @@ public class AdminApiController {
     // ── Batch audit log for graph ─────────────────────────────────────────────
 
     @GetMapping("/batches/{id}/audit")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getBatchAuditLog(@PathVariable @NonNull Long id) {
         try {
             // Collect all QCResult IDs for files in this batch
@@ -337,6 +343,7 @@ public class AdminApiController {
             }
             return ResponseEntity.ok(result);
         } catch (Exception e) {
+            log.error("getBatchAuditLog failed for batch {}: {}", id, e.getMessage(), e);
             return ResponseEntity.ok(List.of());
         }
     }

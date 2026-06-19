@@ -41,6 +41,9 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
     @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.id = :batchId")
     long countByBatchId(@Param("batchId") Long batchId);
 
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.assignedReviewer.id = :reviewerId")
+    long countByReviewerId(@Param("reviewerId") Long reviewerId);
+
     long countByBatchIdAndFileType(Long batchId, FileType fileType);
 
     @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.id = :batchId AND bf.status = :status")

@@ -142,7 +142,12 @@ function AppraisalsPanel() {
                   <td className="px-4 py-3">
                     <Link href={`/admin/doc-stats/${d.id}`} className="block">
                       <div className="font-medium text-slate-200 group-hover:text-white truncate max-w-[240px]">{d.filename ?? "—"}</div>
-                      <div className="text-[11px] text-slate-500">{d.clientName ?? "—"}{d.batchId != null ? ` · batch #${d.batchId}` : ""}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {d.clientName ?? "—"}
+                        {d.batchId != null && (
+                          <> · <Link href={`/admin/batches/${d.batchId}`} className="hover:text-indigo-300 hover:underline" onClick={e => e.stopPropagation()}>batch #{d.batchId}</Link></>
+                        )}
+                      </div>
                     </Link>
                   </td>
                   <td className="px-4 py-3">{d.qcDecision ? <StatusBadge status={d.qcDecision} size="xs" /> : "—"}</td>
@@ -238,8 +243,10 @@ function BatchesPanel() {
           {rows.map((b) => (
             <tr key={b.batchId} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
               <td className="px-4 py-3">
-                <div className="font-medium text-slate-200">batch #{b.batchId}</div>
-                <div className="text-[11px] text-slate-500">{b.clientName}</div>
+                <Link href={`/admin/batches/${b.batchId}`} className="block hover:underline">
+                  <div className="font-medium text-slate-200 hover:text-white">batch #{b.batchId}</div>
+                  <div className="text-[11px] text-slate-500">{b.clientName}</div>
+                </Link>
               </td>
               <td className="px-3 py-3 text-right tabular-nums text-slate-400">{b.appraisalCount}</td>
               <Cell p={b.totalMs} />

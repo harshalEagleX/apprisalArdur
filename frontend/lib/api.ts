@@ -831,6 +831,7 @@ export const getRealtimeUrl = () =>
 // ── Analytics (ADMIN only) ────────────────────────────────────────────────────
 export const getAnalyticsOverview  = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/overview?days=${days}`);
 export const getAnalyticsOcr       = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/ocr?days=${days}`);
+export const getAnalyticsMl        = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/ml?days=${days}`);
 export const getAnalyticsOperators = (days = 30) => apiFetch<Record<string, unknown>>(`/api/analytics/operators?days=${days}`);
 export const getAnalyticsTrend     = (days = 30) => apiFetch<unknown[]>(`/api/analytics/trend?days=${days}`);
 export const getAnalyticsReviewSla = () => apiFetch<Record<string, unknown>>("/api/analytics/review-sla");
