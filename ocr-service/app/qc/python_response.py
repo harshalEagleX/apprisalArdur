@@ -332,6 +332,12 @@ def report_to_python_qc_response(
 
     action_items = [r["action_item"] for r in rule_results if r["review_required"]]
 
+    # Explicit blocking signal computed at the source of truth: any HOLD rule
+    # blocks the report. Emitting it here (rather than re-deriving it from the
+    # verify count in the UI) lets every client — reviewer UI, API, future
+    # automation — honour the blocking contract identically (remediation E1).
+    blocking_rules = [r.rule_id for r in report.results if r.status == RuleStatus.HOLD]
+
     return {
         "success": True,
         "processing_time_ms": processing_time_ms,
@@ -353,6 +359,8 @@ def report_to_python_qc_response(
         "vision_model": vision_model,
         "supporting_document_missing": bool(missing),
         "missing_supporting_documents": missing,
+        "blocking": bool(blocking_rules),
+        "blocking_rules": blocking_rules,
         "rule_results": rule_results,
         "action_items": action_items,
         "suggestions": [],
