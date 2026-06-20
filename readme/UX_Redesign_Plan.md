@@ -1,4 +1,4 @@
-# UX Redesign Plan — Ardur QC (enterprise-grade)
+# UX Redesign Plan — SHAL (enterprise-grade)
 
 Source: two Principal-Designer reviews (Admin 5.5/10, DocStats/Overview 6.8/10, Reviewer 7.6/10).
 Governing rules live in the **Enterprise UX** skill (`.claude/skills/enterprise-ux.md`).

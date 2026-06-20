@@ -1,4 +1,4 @@
-# Ardur Appraisal Management System
+# SHAL — Semantic Heuristic Appraisal Liaison (Appraisal Management System)
 
 A streamlined internal web application for mortgage underwriters to upload, process, and review US residential appraisal documents with automated OCR extraction and quality control validation.
 

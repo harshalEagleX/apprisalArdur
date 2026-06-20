@@ -1,4 +1,4 @@
-# Frontend Design Audit — Ardur QC (product-grade pass)
+# Frontend Design Audit — SHAL (product-grade pass)
 
 How the components/routes are wired, the ambiguities, and the **APIs still missing** for
 detail surfaces. Companion to `readme/UX_Redesign_Plan.md`. Severity: 🔴 breaks a workflow ·

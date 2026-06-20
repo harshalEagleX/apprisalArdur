@@ -1,4 +1,4 @@
-# Ardur Appraisal QC Frontend Workflow
+# SHAL (Semantic Heuristic Appraisal Liaison) Frontend Workflow
 
 This frontend is a Next.js 16 application for an appraisal quality-control platform. It is not a public marketing site; it is an authenticated operations workspace used by two real roles:
 

@@ -1,9 +1,9 @@
 ---
 name: Enterprise UX
-description: Apply the Ardur enterprise-UX design rules to every frontend change — operator-first, data-dense, decision-driving, non-overlapping. Use whenever building or reviewing admin/reviewer UI.
+description: Apply the SHAL enterprise-UX design rules to every frontend change — operator-first, data-dense, decision-driving, non-overlapping. Use whenever building or reviewing admin/reviewer UI.
 ---
 
-## Enterprise UX rules for Ardur QC
+## Enterprise UX rules for SHAL
 
 This product is an **Appraisal Quality Control platform** (Upload → OCR → QC → Review →
 Decision → Export). It competes with nCino, Blend, ICE/Encompass, Appraisal Firewall.

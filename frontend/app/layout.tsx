@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Appraisal QC",
-  description: "Appraisal quality control — upload PDFs, get instant compliance results",
+  title: "SHAL",
+  description: "SHAL — Semantic Heuristic Appraisal Liaison: appraisal quality control — upload PDFs, get instant compliance results",
 };
 
 export default function RootLayout({

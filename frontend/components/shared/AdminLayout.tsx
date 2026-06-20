@@ -282,10 +282,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {!narrow && (
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-lg border border-slate-500/25 bg-slate-600 flex-shrink-0 flex items-center justify-center shadow-[0_0_22px_rgba(226,232,240,0.22)]">
-                <span className="text-xs font-bold text-white">A</span>
+                <span className="text-xs font-bold text-white">S</span>
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-semibold leading-tight truncate text-white">Ardur QC</div>
+                <div className="text-sm font-semibold leading-tight truncate text-white" title="Semantic Heuristic Appraisal Liaison">SHAL</div>
                 <div className="text-[10px] text-slate-600 uppercase tracking-[0.18em]">Admin control</div>
               </div>
             </div>

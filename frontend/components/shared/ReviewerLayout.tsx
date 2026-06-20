@@ -120,10 +120,10 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
       >
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg border border-slate-500/25 bg-slate-600 flex items-center justify-center shadow-[0_0_22px_rgba(226,232,240,0.2)]">
-            <span className="text-[11px] font-bold">A</span>
+            <span className="text-[11px] font-bold">S</span>
           </div>
           <div className="hidden sm:block">
-            <span className="block text-sm font-semibold leading-tight text-white">Ardur QC</span>
+            <span className="block text-sm font-semibold leading-tight text-white" title="Semantic Heuristic Appraisal Liaison">SHAL</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Reviewer desk</span>
           </div>
         </div>

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Multi-agent Playwright simulation harness for Ardur Appraisal QC.",
+  "description": "Multi-agent Playwright simulation harness for SHAL (Semantic Heuristic Appraisal Liaison).",
   "scripts": {
     "test": "playwright test",
     "test:full-lifecycle": "playwright test src/runners/full-lifecycle.spec.ts --workers=1",

@@ -49,10 +49,11 @@ export default function LoginPage() {
         <section className="mx-auto w-full max-w-sm lg:mx-0">
           <div className="mb-7">
             <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-500/25 bg-slate-950/35 shadow-[0_0_28px_rgba(226,232,240,0.18)]">
-              <span className="text-base font-semibold text-white">A</span>
+              <span className="text-base font-semibold text-white">S</span>
             </div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">Secure workspace</div>
-            <h2 className="mt-2 text-2xl font-semibold tracking-normal text-white">Ardur Appraisal QC</h2>
+            <h2 className="mt-2 text-2xl font-semibold tracking-normal text-white">SHAL</h2>
+            <p className="mt-0.5 text-xs text-slate-500">Semantic Heuristic Appraisal Liaison</p>
             <p className="mt-1 text-sm text-slate-500">Sign in to continue your review or operations workflow.</p>
           </div>
 

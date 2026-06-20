@@ -1,5 +1,5 @@
 /**
- * Ardur Appraisal - Main JavaScript
+ * SHAL (Semantic Heuristic Appraisal Liaison) - Main JavaScript
  * Premium interactions and utilities
  */
 
@@ -584,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    console.log('🚀 Ardur Appraisal initialized');
+    console.log('🚀 SHAL initialized');
 });
 
 // Cleanup on page unload
