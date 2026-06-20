@@ -93,27 +93,9 @@ public class PythonClientService {
                 contractPath != null ? contractPath.getFileName() : "none",
                 safeModelConfig.label());
 
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
-
-        if (engagementPath != null) {
-            body.add("engagement_letter", new FileSystemResource(Objects.requireNonNull(engagementPath.toFile())));
-        }
-
-        if (contractPath != null) {
-            body.add("contract_file", new FileSystemResource(Objects.requireNonNull(contractPath.toFile())));
-        }
-        // Per-document ingestion status so Python's G-0 gate can distinguish a
-        // genuinely-absent engagement (NOT_PROVIDED → N/A) from one that exists but
-        // failed/awaits extraction (PENDING/EXTRACTION_FAILED → HOLD). Null = let
-        // Python use its safe default (absence → HOLD).
-        if (engagementStatus != null && !engagementStatus.isBlank()) {
-            body.add("engagement_status", engagementStatus);
-        }
-        body.add("model_provider", safeModelConfig.provider());
-        body.add("text_model", safeModelConfig.textModel());
-        body.add("vision_model", safeModelConfig.visionModel());
-        body.add("progress_token", progressToken);
+        MultiValueMap<String, Object> body =
+                buildBaseBody(appraisalPath, engagementPath, contractPath, engagementStatus, safeModelConfig);
+        body.add("progress_token", progressToken);   // sync path streams progress
         String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig);
         log.info(TimelineLog.event("admin_batches", "java_python_call_start",
                 "batch_id", batchId,
@@ -384,17 +366,8 @@ public class PythonClientService {
                 contractPath   != null ? contractPath.getFileName()   : "none",
                 cfg.label());
 
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
-        if (engagementPath != null)
-            body.add("engagement_letter", new FileSystemResource(engagementPath.toFile()));
-        if (contractPath != null)
-            body.add("contract_file", new FileSystemResource(contractPath.toFile()));
-        if (engagementStatus != null && !engagementStatus.isBlank())
-            body.add("engagement_status", engagementStatus);
-        body.add("model_provider", cfg.provider());
-        body.add("text_model",     cfg.textModel());
-        body.add("vision_model",   cfg.visionModel());
+        MultiValueMap<String, Object> body =
+                buildBaseBody(appraisalPath, engagementPath, contractPath, engagementStatus, cfg);
         String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, cfg);
 
         HttpHeaders headers = new HttpHeaders();
@@ -530,6 +503,37 @@ public class PythonClientService {
             log.warn("Python feedback sync skipped for document {} rule {}: {}",
                     feedback.documentId(), feedback.ruleId(), e.getMessage());
         }
+    }
+
+    /**
+     * Build the multipart body shared by the sync (/qc/process) and async
+     * (/qc/submit) calls: the document files, the per-document engagement status,
+     * and the model selection. The sync path additionally adds a progress_token;
+     * both then call {@link #appendProcessingContext}. Single source of truth for
+     * the Python form contract — field names live in exactly one place.
+     */
+    private MultiValueMap<String, Object> buildBaseBody(
+            Path appraisalPath, Path engagementPath, Path contractPath,
+            String engagementStatus, QCModelConfig cfg) {
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
+        if (engagementPath != null) {
+            body.add("engagement_letter", new FileSystemResource(Objects.requireNonNull(engagementPath.toFile())));
+        }
+        if (contractPath != null) {
+            body.add("contract_file", new FileSystemResource(Objects.requireNonNull(contractPath.toFile())));
+        }
+        // Per-document ingestion status so Python's G-0 gate can distinguish a
+        // genuinely-absent engagement (NOT_PROVIDED → N/A) from one that exists but
+        // failed/awaits extraction (PENDING/EXTRACTION_FAILED → HOLD). Null = let
+        // Python use its safe default (absence → HOLD).
+        if (engagementStatus != null && !engagementStatus.isBlank()) {
+            body.add("engagement_status", engagementStatus);
+        }
+        body.add("model_provider", cfg.provider());
+        body.add("text_model", cfg.textModel());
+        body.add("vision_model", cfg.visionModel());
+        return body;
     }
 
     private String appendProcessingContext(MultiValueMap<String, Object> body,
