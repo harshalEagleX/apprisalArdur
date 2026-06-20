@@ -37,6 +37,7 @@ def qc_process_task(
     vision_model: str = "",
     document_id: str = "",
     source_hash: str = "",
+    engagement_status: Optional[str] = None,
 ) -> dict:
     """Extract + run QC for one transaction; return the PythonQCResponse dict."""
     # Imported lazily so worker boot stays cheap and import errors surface per-task.
@@ -52,6 +53,7 @@ def qc_process_task(
             Path(contract_path) if contract_path else None,
             transaction_id=document_id or "transaction",
             persist=True,
+            engagement_status=engagement_status,
         )
         resp = report_to_python_qc_response(
             report,

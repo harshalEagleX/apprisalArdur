@@ -35,6 +35,15 @@ semantic:
   sca_br2_min_above: 2            # Champions Funding: min adjusted comps at/above final value
   sca_psh_large_gain_pct: 30.0   # prior-sale value increase % that triggers SCA-PSH escalation
 
+  # ---- Layer-B / Layer-C severity calibration (MIRA three-layer model) -------
+  # Judgment rules (adjustments, comp selection, market trend, dated comps) route
+  # through app/qc/layer_b.py. When the appraiser's narrative ADDRESSES the concern
+  # (Layer B = explained), the finding carries the "explained" confidence; when it
+  # does not, it carries the "unexplained" confidence. Lower confidence → the
+  # engine softens an asserted finding toward a confirm. Tune here without code.
+  layer_b_conf_explained: 0.4    # narrative addresses the concern → low-severity confirm
+  layer_b_conf_unexplained: 0.7  # no explanation found → full-severity VERIFY
+
 # Subject-section content validation (S-4 / S-5). Editable per experience (P-4).
 subject:
   # one-unit land use at/above this % makes an "Under 25%" built-up marking

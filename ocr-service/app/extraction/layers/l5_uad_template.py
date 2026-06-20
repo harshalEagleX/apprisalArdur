@@ -423,15 +423,32 @@ def _extract_gla_from_improvements(pdf_path: Path) -> Dict[str, str]:
             # Each word is (x0, y0, x1, y1, text, block, line, word_idx)
 
             # Find every "Square" word whose neighbors form
-            # "Square Feet of Gross Living Area".
-            anchors: List[tuple] = []
+            # "Square Feet of Gross Living Area [Above Grade]".
+            #
+            # The 1073 condo form has a decoy match: the HOA line reads
+            # "...annual assessment charge per square feet of gross living area = $"
+            # which also matches "square ... gross living area" but is NOT the GLA.
+            # The real improvements line uniquely ends in "Above Grade"; the HOA
+            # line ends in "= $". We prefer "above grade" anchors and, failing
+            # that, reject any anchor whose row carries HOA-assessment terms.
+            primary: List[tuple] = []   # tail contains "above grade" — authoritative
+            fallback: List[tuple] = []  # GLA phrase present, no HOA terms on the row
+            _HOA_TERMS = ("assessment", "charge", "annual", "per month", "per year")
             for i, w in enumerate(words):
                 if w[4].strip().lower() != "square":
                     continue
-                # Look ahead a few words for "Feet ... Gross Living Area"
-                tail = " ".join(words[j][4] for j in range(i, min(i + 7, len(words)))).lower()
-                if "feet" in tail and "gross living area" in tail:
-                    anchors.append((w[0], w[1]))  # (x, y) of "Square"
+                # Look ahead far enough to capture "...Gross Living Area Above Grade".
+                tail = " ".join(words[j][4] for j in range(i, min(i + 9, len(words)))).lower()
+                if not ("feet" in tail and "gross living area" in tail):
+                    continue
+                row_text = " ".join(
+                    x[4] for x in words if abs(x[1] - w[1]) < 5
+                ).lower()
+                if "above grade" in tail:
+                    primary.append((w[0], w[1]))
+                elif not any(t in row_text for t in _HOA_TERMS):
+                    fallback.append((w[0], w[1]))
+            anchors = primary or fallback
 
             for anchor_x, anchor_y in anchors:
                 # GLA number is on the same row, just to the LEFT of "Square".
@@ -457,6 +474,79 @@ def _extract_gla_from_improvements(pdf_path: Path) -> Dict[str, str]:
         doc.close()
     except Exception as exc:
         logger.debug("L5 GLA extraction failed: %s", exc)
+
+    return results
+
+
+# Subject-grid positive anchors. The positional extractors mis-read these by
+# column bleed (county got the State code, taxes got an APN fragment, total_rooms
+# got the bedroom count, site area got the $/sf rate). On the UAD form text layer
+# the labels and values land in SEPARATE blocks, so a "label value" regex fails —
+# these anchors instead use stable value-block adjacencies / narrative phrasing.
+# Reading them this way RECOVERS the real value instead of only suppressing the
+# wrong one.
+_ROOM_TRIPLET = re.compile(r"(\d{1,2})\n(\d{1,2})\n(\d{1,2}\.\d)\n([\d,]{3,6})\b")
+_COUNTY_IN = re.compile(r"\bin\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+County\b")
+_COUNTY_ANY = re.compile(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+County\b")
+_TAX_YEAR_VAL = re.compile(r"\b(?:19|20)\d\d\n([\d,]{3,6})\b")
+_SITE_AREA = re.compile(r"\d+\s*x\s*[\d.][\dx. ]*\n\s*([\d,]+)\s*(sf|ac|acres|sq)", re.I)
+_COUNTY_STOP = {"public record", "record", "the", "this", "subject"}
+
+
+def _extract_subject_grid_fields(pdf_path: Path) -> Dict[str, str]:
+    """Subject section + improvements row (page 1-4). On the UAD form the value
+    column is a separate text block from the label column, so each field is read
+    by a stable value-block adjacency rather than 'label value':
+      total_rooms/bedrooms/baths : the bound 'Rooms\\nBedrooms\\nBath\\nGLA' tuple
+        (read together so a transposition can't put the bedroom count in rooms)
+      county            : the name in 'in <X> County' (not the state code)
+      real_estate_taxes : the amount printed after the tax year
+      site_area/unit    : the area printed right after the site dimensions."""
+    results: Dict[str, str] = {}
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        text = "\n".join(doc[i].get_text("text") for i in range(min(4, len(doc))))
+        doc.close()
+    except Exception as exc:
+        logger.debug("L5 subject-grid extraction failed: %s", exc)
+        return results
+
+    # Room/bed/bath triplet — accept only when rooms >= bedrooms and GLA is plausible.
+    for m in _ROOM_TRIPLET.finditer(text):
+        rooms, beds, baths, gla = m.groups()
+        if int(rooms) >= int(beds) and int(gla.replace(",", "")) >= 400:
+            results["total_rooms"] = rooms
+            results["bedrooms"] = beds
+            results["baths"] = baths
+            break
+
+    # County — prefer 'in X County'; fall back to the most common 'X County'.
+    m = _COUNTY_IN.search(text)
+    county = m.group(1).strip() if m else None
+    if not county:
+        cands = [c.strip() for c in _COUNTY_ANY.findall(text)
+                 if c.strip().lower() not in _COUNTY_STOP and c.strip().upper() not in _US_STATES]
+        county = max(set(cands), key=cands.count) if cands else None
+    if county and county.upper() not in _US_STATES:
+        results["county"] = county
+
+    # Real-estate taxes — value printed after the tax year; reject APN fragments.
+    m = _TAX_YEAR_VAL.search(text)
+    if m:
+        try:
+            n = int(m.group(1).replace(",", ""))
+            if 100 <= n <= 1_000_000:
+                results["real_estate_taxes"] = str(n)
+        except ValueError:
+            pass
+
+    # Site area + unit — the number/unit immediately after the site dimensions.
+    m = _SITE_AREA.search(text)
+    if m:
+        results["site_area"] = m.group(1).replace(",", "")
+        u = m.group(2).lower()
+        results["site_area_unit"] = "ac" if u.startswith("ac") else "sf"
 
     return results
 
@@ -1107,6 +1197,7 @@ def extract_with_uad_template(pdf_path: Path) -> Dict[str, str]:
         ("yes_no", _extract_yes_no_fields),
         ("price_grid", _extract_neighborhood_grid),
         ("gla", _extract_gla_from_improvements),
+        ("subject_grid", _extract_subject_grid_fields),
         ("effective_date", _extract_effective_date_all_formats),
         ("contract_price", _extract_contract_price_all_formats),
         ("lender_name", _extract_lender_name_clean),

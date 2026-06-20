@@ -87,13 +87,18 @@ def n2_trends(ctx: QCContext):
     mca = _trend_direction(ctx.appraisal.value("mca_trend_median_sale_price")
                            or ctx.appraisal.value("mca_trend_total_sales"))
     if pv and mca and pv != mca:
-        out.append(_res("N-2", "20", RuleStatus.VERIFY,
-                        message=qc_config.template(
-                            "N-2-mca", a=ctx.appraisal.value("property_values"),
-                            b=ctx.appraisal.value("mca_trend_median_sale_price")
-                            or ctx.appraisal.value("mca_trend_total_sales")),
+        from app.qc import layer_b
+        _v = layer_b.assess(
+            ctx, concern="market_trend",
+            base_message=qc_config.template(
+                "N-2-mca", a=ctx.appraisal.value("property_values"),
+                b=ctx.appraisal.value("mca_trend_median_sale_price")
+                or ctx.appraisal.value("mca_trend_total_sales")),
+            facts="the page-1 trend checkbox disagrees with the 1004MC trend")
+        out.append(_res("N-2", "20", _v.status,
+                        message=_v.message, reasoning=_v.reasoning,
                         fields=["property_values", "mca_trend_median_sale_price"],
-                        template_id="N-2-mca", confidence=0.6,
+                        template_id="N-2-mca", confidence=_v.confidence,
                         evidence=[ctx.appraisal.evidence("property_values"),
                                   ctx.appraisal.evidence("mca_trend_median_sale_price")]))
     return out
@@ -121,11 +126,15 @@ def _range_check(ctx, field_lo, field_hi, field_pred, label):
     else:
         out.append(_res("N-3", "21", RuleStatus.PASS, fields=fields[:2], evidence=ev[:2]))
     if pred is not None and not (min(lo, hi) <= pred <= max(lo, hi)):
-        out.append(_res("N-3", "21", RuleStatus.VERIFY,
-                        message=qc_config.template("N-3-predominant", field=label,
-                                                   value=int(pred)),
+        from app.qc import layer_b
+        _v = layer_b.assess(
+            ctx, concern="market_trend",
+            base_message=qc_config.template("N-3-predominant", field=label, value=int(pred)),
+            facts=f"the predominant {label} falls outside the stated neighborhood range")
+        out.append(_res("N-3", "21", _v.status,
+                        message=_v.message, reasoning=_v.reasoning,
                         fields=[field_pred], template_id="N-3-predominant",
-                        evidence=[ev[2]], confidence=0.7))
+                        evidence=[ev[2]], confidence=_v.confidence))
     return out
 
 

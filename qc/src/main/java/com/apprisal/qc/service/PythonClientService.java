@@ -74,12 +74,13 @@ public class PythonClientService {
 
     public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath,
                                       QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback) {
-        return processQC(appraisalPath, engagementPath, contractPath, modelConfig, stageCallback, null, null, null, null);
+        return processQC(appraisalPath, engagementPath, contractPath, modelConfig, stageCallback, null, null, null, null, null);
     }
 
     public PythonQCResponse processQC(Path appraisalPath, Path engagementPath, Path contractPath,
                                       QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
-                                      Long batchId, Long batchFileId, Long qcResultId, String sourceHash) {
+                                      Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                      String engagementStatus) {
         String url = config.getUrl() + "/qc/process";
         long callStarted = System.nanoTime();
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
@@ -101,6 +102,13 @@ public class PythonClientService {
 
         if (contractPath != null) {
             body.add("contract_file", new FileSystemResource(Objects.requireNonNull(contractPath.toFile())));
+        }
+        // Per-document ingestion status so Python's G-0 gate can distinguish a
+        // genuinely-absent engagement (NOT_PROVIDED → N/A) from one that exists but
+        // failed/awaits extraction (PENDING/EXTRACTION_FAILED → HOLD). Null = let
+        // Python use its safe default (absence → HOLD).
+        if (engagementStatus != null && !engagementStatus.isBlank()) {
+            body.add("engagement_status", engagementStatus);
         }
         body.add("model_provider", safeModelConfig.provider());
         body.add("text_model", safeModelConfig.textModel());
@@ -359,12 +367,13 @@ public class PythonClientService {
      */
     public JobSubmitResponse submitQCJob(Path appraisalPath, Path engagementPath,
                                          Path contractPath, QCModelConfig modelConfig) {
-        return submitQCJob(appraisalPath, engagementPath, contractPath, modelConfig, null, null, null, null);
+        return submitQCJob(appraisalPath, engagementPath, contractPath, modelConfig, null, null, null, null, null);
     }
 
     public JobSubmitResponse submitQCJob(Path appraisalPath, Path engagementPath,
                                          Path contractPath, QCModelConfig modelConfig,
-                                         Long batchId, Long batchFileId, Long qcResultId, String sourceHash) {
+                                         Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                         String engagementStatus) {
         String url = config.getUrl() + "/qc/submit";
         QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         lastRetryCount.set(0);
@@ -381,6 +390,8 @@ public class PythonClientService {
             body.add("engagement_letter", new FileSystemResource(engagementPath.toFile()));
         if (contractPath != null)
             body.add("contract_file", new FileSystemResource(contractPath.toFile()));
+        if (engagementStatus != null && !engagementStatus.isBlank())
+            body.add("engagement_status", engagementStatus);
         body.add("model_provider", cfg.provider());
         body.add("text_model",     cfg.textModel());
         body.add("vision_model",   cfg.visionModel());

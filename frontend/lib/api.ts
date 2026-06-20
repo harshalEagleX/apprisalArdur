@@ -920,6 +920,9 @@ export interface QCRuleResult {
   status: string;
   message: string;
   actionItem?: string;
+  // JSON string from the QC pipeline: {checklist_num, template_id, fields, reasoning}.
+  // `reasoning` carries the Layer-B/C plain-language "why" for the reviewer.
+  details?: string | null;
   appraisalValue?: string;
   engagementValue?: string;
   confidence?: number | null;

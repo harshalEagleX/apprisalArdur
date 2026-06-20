@@ -130,3 +130,51 @@ def recon_terms(ctx: QCContext):
         return _verify("RECON-T", "90", "reconciliation", field, "RECON-terms",
                        {"hits": ", ".join(hits)}, ev, conf=0.7)
     return _pass("RECON-T", "90", "reconciliation", field, ev)
+
+
+# ---- ADD-X addenda cross-reference resolution status -----------------------
+#
+# When a narrative field extracted an "UNRESOLVED_REFERENCE" sentinel (the
+# addendum section was pointed to but couldn't be located), surface it as a
+# named VERIFY rather than letting downstream NLP rules run against a sentinel
+# string and produce accidental passes.  This rule must run at a higher phase
+# than ADD-1/ADD-2 so that resolved content reaches those rules first.
+
+_UNRESOLVED = "__UNRESOLVED_REFERENCE__"
+_ADDENDA_FIELDS = {
+    "sales_comparison_summary":    "Sales Comparison summary",
+    "final_reconciliation_comment": "Reconciliation commentary",
+    "neighborhood_description":     "Neighborhood description",
+    "legal_description":            "Legal description",
+}
+
+
+@rule(id="ADD-X", num="118b", section="addendum", phase=6,
+      name="Addenda cross-reference resolution")
+def addx_unresolved(ctx: QCContext):
+    """Flag fields where the main form contained a 'See attached addenda' stub
+    that could not be resolved to actual addendum content. The downstream NLP
+    rules (ADD-1, RECON-T) cannot meaningfully evaluate stub text — this rule
+    makes the gap visible rather than letting it produce an accidental PASS."""
+    out = []
+    for field, label in _ADDENDA_FIELDS.items():
+        val = ctx.appraisal.value(field) or ""
+        ev = [ctx.appraisal.evidence(field)]
+        if val == _UNRESOLVED:
+            out.append(RuleResult(
+                rule_id="ADD-X", checklist_num="118b", section="addendum",
+                status=RuleStatus.VERIFY,
+                message=(
+                    f"The '{label}' field contains a reference to the addenda "
+                    "('See attached addenda' or similar), but the matching addendum "
+                    "section could not be located in this document. Rules that depend "
+                    "on this field's content (ADD-1, ADD-2, RECON-T) cannot be "
+                    "validated until the content is available. Manually review the "
+                    "Supplemental Addendum for this commentary."
+                ),
+                fields_involved=[field], evidence=ev, confidence=0.4,
+            ))
+    return out if out else [RuleResult(
+        rule_id="ADD-X", checklist_num="118b", section="addendum",
+        status=RuleStatus.PASS, fields_involved=list(_ADDENDA_FIELDS),
+    )]

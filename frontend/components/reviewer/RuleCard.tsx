@@ -119,6 +119,19 @@ export const RuleCard = memo(function RuleCard({
     actionItemText !== (rule.verifyQuestion ?? "").trim() &&
     actionItemText !== (rule.rejectionText ?? "").trim();
   const isBlockingVerify = isVerify && sev === "BLOCKING";
+  // Layer-B/C reviewer reasoning (the "why"): the QC engine ships it inside the
+  // `details` JSON. It is also folded into the message, but surfacing it as a
+  // distinct, labelled line makes the engine's reasoning explicit for the reviewer.
+  const reasoningText: string = (() => {
+    try {
+      const d = rule.details ? JSON.parse(rule.details) : null;
+      const r = d && typeof d.reasoning === "string" ? d.reasoning.trim() : "";
+      // Don't duplicate when the message is already just the reasoning.
+      return r && r !== (rule.message ?? "").trim() ? r : "";
+    } catch {
+      return "";
+    }
+  })();
 
   const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : 0;
   const elapsedMs = presentedAt > 0 && now > 0 ? Math.max(0, now - presentedAt) : 0;
@@ -254,6 +267,16 @@ export const RuleCard = memo(function RuleCard({
             <div className="flex items-start gap-2 bg-amber-950/18 border border-amber-500/25 rounded-lg p-2.5 text-xs text-amber-200">
               <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
               <span className="leading-relaxed">{actionItemText}</span>
+            </div>
+          )}
+
+          {reasoningText && (
+            <div className="flex items-start gap-2 rounded-lg border border-sky-500/20 bg-sky-950/15 p-2.5 text-xs text-sky-200">
+              <CheckCircle2 size={11} className="flex-shrink-0 mt-0.5" />
+              <span className="leading-relaxed">
+                <span className="font-medium text-sky-300">Reasoning: </span>
+                {reasoningText}
+              </span>
             </div>
           )}
 

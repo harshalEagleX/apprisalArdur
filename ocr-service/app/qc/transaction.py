@@ -547,7 +547,7 @@ def _overlay_locate(rs, pdf):
 
 def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path=None,
                              transaction_id: Optional[str] = None, persist: bool = True,
-                             progress=None):
+                             progress=None, engagement_status: Optional[str] = None):
     """Run QC from explicit document paths (what the Java backend supplies via
     the multipart /qc/process call) rather than a folder layout. `progress` is an
     optional callable(stage:str, message:str, pct:float) for live updates.
@@ -617,11 +617,17 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
         sets["contract"] = _overlay_locate(con, Path(contract_path))
 
     _emit("rules", "Running quality checks", 85.0)
+    # When the engagement file was supplied but produced no extraction set, treat
+    # it as EXTRACTION_FAILED unless the caller said otherwise.
+    eng_status = engagement_status
+    if eng_status is None and engagement_path is not None and sets.get("engagement") is None:
+        eng_status = "EXTRACTION_FAILED"
     ctx = QCContext(
         transaction_id=transaction_id,
         appraisal=sets.get("appraisal"), engagement=sets.get("engagement"),
         contract=sets.get("contract"),
         structured_conf=qc_config.structured_conf, checkbox_conf=qc_config.checkbox_conf,
+        engagement_status=eng_status,
     )
     report = run_qc(ctx)
     _finish_stage()

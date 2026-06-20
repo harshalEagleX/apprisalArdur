@@ -55,6 +55,11 @@ EXTRACTION_LAYER_VERSION: str = os.getenv("EXTRACTION_LAYER_VERSION", "0.1.16")
 # OpenAI-compatible API. gpt-oss-120b is a reasoning model → force JSON output
 # with a low reasoning effort. Keys live in .env (gitignored), never in code.
 LLM_EXTRACTION_ENABLED: bool = os.getenv("LLM_EXTRACTION_ENABLED", "true").lower() in ("1", "true", "yes")
+# Layer-B reviewer reasoning: when enabled, Groq polishes the plain-language "why"
+# shown to the reviewer for judgment rules. Evaluative use ONLY — it never changes a
+# rule's pass/fail (that stays deterministic, CLAUDE.md §17). Opt-in (off by default)
+# so the rule engine and the baseline harness stay deterministic unless turned on.
+LAYER_B_LLM_ENABLED: bool = os.getenv("LAYER_B_LLM_ENABLED", "false").lower() in ("1", "true", "yes")
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")

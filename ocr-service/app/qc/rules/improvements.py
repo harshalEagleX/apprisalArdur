@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from app.qc import helpers as H
+from app.qc import layer_b
 from app.qc import matching
 from app.qc.config import qc_config
 from app.qc.context import QCContext
@@ -202,10 +203,12 @@ def i10_adverse(ctx: QCContext):
                     fields=["adverse_conditions"], evidence=ev, confidence=0.5)
     if val in {"false", "no", "0"}:
         return _res("I-10", "51", RuleStatus.PASS, fields=["adverse_conditions"], evidence=ev)
-    return _res("I-10", "51", RuleStatus.VERIFY,
-                message=qc_config.template("I-10-adverse"),
+    v = layer_b.assess(ctx, concern="adverse_condition",
+                       base_message=qc_config.template("I-10-adverse"),
+                       facts="an adverse livability condition was indicated")
+    return _res("I-10", "51", v.status, message=v.message, reasoning=v.reasoning,
                 fields=["adverse_conditions"], template_id="I-10-adverse",
-                evidence=ev, confidence=0.6)
+                evidence=ev, confidence=v.confidence)
 
 
 # ---- I-11 conformity to neighborhood (No → commentary) --------------------
@@ -222,9 +225,12 @@ def i11_conform(ctx: QCContext):
     if truthy:
         return _res("I-11", "52", RuleStatus.PASS,
                     fields=["conforms_to_neighborhood"], evidence=ev)
-    return _res("I-11", "52", RuleStatus.VERIFY, message=qc_config.template("I-11-conform"),
+    v = layer_b.assess(ctx, concern="conformity",
+                       base_message=qc_config.template("I-11-conform"),
+                       facts="the improvement is marked as not conforming to the neighborhood")
+    return _res("I-11", "52", v.status, message=v.message, reasoning=v.reasoning,
                 fields=["conforms_to_neighborhood"],
-                template_id="I-11-conform", evidence=ev, confidence=0.7)
+                template_id="I-11-conform", evidence=ev, confidence=v.confidence)
 
 
 # ---- I-12 additions / conversions referenced in commentary -------------------
@@ -332,6 +338,74 @@ _NARRATIVE_SOURCES = (
     "market_conditions_commentary", "contract_analysis_comment",
     "neighborhood_description",
 )
+
+
+# ---- IM-2 bedroom/bath/total-room triplet consistency ----------------------
+
+@rule(id="IM-2", num="40b", section="improvements", phase=1,
+      name="Bedroom / total-room count consistency")
+def im2_room_triplet(ctx: QCContext):
+    """The total room count must exceed the bedroom count.  When the inequality
+    is violated the values are likely transposed (a recurring extraction bug
+    where the bedroom-count cell position overlaps the total-rooms cell).
+
+    Hard rule: bedrooms < total_rooms.
+    Soft heuristic (confidence signal only, never standalone VERIFY):
+      total_rooms >= bedrooms + 2  (living room + kitchen are standard rooms).
+    Studio/efficiency units (0 bedrooms) are explicitly excluded — 0 < N is
+    always satisfied when any rooms exist, so the rule is vacuously satisfied.
+
+    When the inequality is violated, the rule surfaces a swap-recovery candidate
+    if swapping the two values resolves the inequality and produces a GLA ratio
+    that is more plausible than the current extraction — framed as a hypothesis
+    in the message, never auto-applied."""
+    rooms_raw = ctx.appraisal.value("total_rooms")
+    beds_raw  = ctx.appraisal.value("bedrooms")
+    gla_raw   = ctx.appraisal.value("gla")
+    ev = [ctx.appraisal.evidence("total_rooms"), ctx.appraisal.evidence("bedrooms")]
+    fields = ["total_rooms", "bedrooms"]
+
+    if rooms_raw is None or beds_raw is None:
+        return _res("IM-2", "40b", RuleStatus.NOT_APPLICABLE, fields=fields, evidence=ev)
+
+    rooms = _int_of(rooms_raw)
+    beds  = _int_of(beds_raw)
+    if rooms is None or beds is None:
+        return _res("IM-2", "40b", RuleStatus.NOT_APPLICABLE, fields=fields, evidence=ev)
+
+    # Studio/efficiency — 0 bedrooms is valid; hard inequality trivially holds.
+    if beds == 0:
+        return _res("IM-2", "40b", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    # Hard inequality satisfied.
+    if beds < rooms:
+        return _res("IM-2", "40b", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    # Inequality violated — build the swap-recovery hypothesis.
+    swap_msg = ""
+    gla = _int_of(gla_raw) if gla_raw else None
+    if gla and gla > 0:
+        # Current ratio (wrong) vs. swapped ratio (candidate).
+        # Plausible SFR footprint: GLA/site_area in [0.02, 0.9] using rooms-as-proxy.
+        # Simpler: after swap, beds-per-sqft should be reasonable (<1 per 300 sf).
+        swapped_rooms, swapped_beds = beds, rooms   # proposed swap
+        if swapped_beds < swapped_rooms:
+            sqft_per_bed_swapped = gla / swapped_beds if swapped_beds > 0 else 9999
+            sqft_per_bed_current = gla / beds if beds > 0 else 9999
+            if sqft_per_bed_swapped > sqft_per_bed_current:  # swap is more plausible
+                swap_msg = (
+                    f" Swapping produces total_rooms={swapped_rooms}, "
+                    f"bedrooms={swapped_beds} — consistent with GLA of {gla} sf "
+                    f"({sqft_per_bed_swapped:.0f} sf/bed vs current {sqft_per_bed_current:.0f} sf/bed)."
+                )
+
+    msg = (
+        f"Bedroom count ({beds}) is not less than total room count ({rooms}) — "
+        f"values may be transposed in the improvements grid.{swap_msg} "
+        f"Confirm on the improvements section of the appraisal."
+    )
+    return _res("IM-2", "40b", RuleStatus.VERIFY, message=msg,
+                fields=fields, evidence=ev, confidence=0.55)
 
 
 @rule(id="I-SMCO", num="49b", section="improvements", phase=4,

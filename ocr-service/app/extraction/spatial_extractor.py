@@ -533,14 +533,39 @@ class SpatialExtractor:
             return self._found(fd, dt, m.group(1).upper(), m.group(0), ExtractionMethod.DATA_PATTERN_ONLY, 0.78, 1)
         return self._not_found(fd, dt)
 
+    # VAL-1 Tier-1: positive reconciliation-label anchors. The final opinion of
+    # value is the amount printed against one of these labels — never the contract
+    # price. Matching here first stops the fragile cover-page-before-a-date
+    # heuristic (Pattern A) from grabbing the contract price that sits beside a
+    # date on TOTAL cover letters (the $320k-as-$356k bug).
+    _APPRAISED_VALUE_ANCHORS = re.compile(
+        r"(?:appraised\s+value\s+of\s+subject\s+property|"
+        r"indicated\s+value\s+by\s+sales\s+comparison\s+approach|"
+        r"opinion\s+of\s+value|current\s+market\s+value\s+is)"
+        r"[^\d$]{0,12}\$?\s*([\d,]{4,})",
+        re.I)
+
     def _structural_appraised_value(self, fd, page_maps, dt):
         """
-        Find appraised value using two structural patterns:
-        Pattern A: Cover letter format (Equity Solutions / TOTAL software):
-          page 1 has "[property address]\n[client]\n[amount]\n[date]"
-          The standalone amount immediately before a MM/DD/YYYY date is the appraised value.
-        Pattern B: Reconciliation page: two identical large amounts on consecutive lines.
+        Find appraised value, strongest signal first:
+        Tier 1: positive reconciliation-label anchor (_APPRAISED_VALUE_ANCHORS).
+        Pattern B: reconciliation page — two identical large amounts in sequence.
+        Pattern A (last resort): cover-letter amount immediately before a date —
+          fragile (can grab the contract price), so only used when nothing else hits.
         """
+        # Tier 1: positive label anchor — the reconciliation/opinion-of-value line.
+        for pn, wm in sorted(page_maps.items()):
+            text = wm.all_words_as_text()
+            for m in self._APPRAISED_VALUE_ANCHORS.finditer(text):
+                raw = m.group(1).replace(",", "")
+                try:
+                    v = float(raw)
+                except ValueError:
+                    continue
+                if 10000 < v < 100_000_000:
+                    return self._found(fd, dt, str(int(v)), m.group(0),
+                                       ExtractionMethod.POSITIONAL_ANCHOR, 0.93, pn)
+
         # Pattern A: cover letter — amount immediately before effective date on page 1-2
         for pn in [1, 2]:
             wm = page_maps.get(pn)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from app.qc import helpers as H
+from app.qc import layer_b
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.matching import normalize_currency
@@ -194,15 +195,19 @@ def st5_zoning(ctx: QCContext):
                     message=qc_config.template("ST-5-illegal-hold"),
                     fields=["zoning_compliance"], template_id="ST-5-illegal-hold", evidence=ev)
     if "non" in comp and "conform" in comp:
-        return _res("ST-5", "30", RuleStatus.VERIFY,
-                    message=qc_config.template("ST-5-nonconforming"),
+        v = layer_b.assess(ctx, concern="zoning",
+                           base_message=qc_config.template("ST-5-nonconforming"),
+                           facts="legal non-conforming zoning")
+        return _res("ST-5", "30", v.status, message=v.message, reasoning=v.reasoning,
                     fields=["zoning_compliance"], template_id="ST-5-nonconforming",
-                    evidence=ev, confidence=0.8)
+                    evidence=ev, confidence=v.confidence)
     if "no zoning" in comp:
-        return _res("ST-5", "30", RuleStatus.VERIFY,
-                    message=qc_config.template("ST-5-nozoning"),
+        v = layer_b.assess(ctx, concern="zoning",
+                           base_message=qc_config.template("ST-5-nozoning"),
+                           facts="no zoning classification")
+        return _res("ST-5", "30", v.status, message=v.message, reasoning=v.reasoning,
                     fields=["zoning_compliance"], template_id="ST-5-nozoning",
-                    evidence=ev, confidence=0.8)
+                    evidence=ev, confidence=v.confidence)
     return _res("ST-5", "30", RuleStatus.PASS, fields=["zoning_compliance"], evidence=ev)
 
 
@@ -268,10 +273,12 @@ def st10_adverse(ctx: QCContext):
                     fields=["adverse_site_conditions"], evidence=ev)
     # Yes (or a described condition) → the condition and its market impact need
     # commentary; no commentary field is extracted, so the reviewer confirms
-    return _res("ST-10", "34", RuleStatus.VERIFY,
-                message=qc_config.template("ST-10-adverse"),
+    v = layer_b.assess(ctx, concern="adverse_condition",
+                       base_message=qc_config.template("ST-10-adverse"),
+                       facts="an adverse site condition was indicated")
+    return _res("ST-10", "34", v.status, message=v.message, reasoning=v.reasoning,
                 fields=["adverse_site_conditions"], template_id="ST-10-adverse",
-                evidence=ev, confidence=0.6)
+                evidence=ev, confidence=v.confidence)
 
 
 # ---- ST-9 utilities/off-site typical for the market area --------------------
@@ -290,7 +297,130 @@ def st9_typical(ctx: QCContext):
     if not atypical:
         return _res("ST-9", "33", RuleStatus.PASS,
                     fields=["utilities_water", "utilities_sewer"], evidence=ev)
-    return _res("ST-9", "33", RuleStatus.VERIFY,
-                message=qc_config.template("ST-9-typical"),
+    v = layer_b.assess(ctx, concern="marketability",
+                       base_message=qc_config.template("ST-9-typical"),
+                       facts="private/atypical utilities (well/septic) may affect marketability")
+    return _res("ST-9", "33", v.status, message=v.message, reasoning=v.reasoning,
                 fields=["utilities_water", "utilities_sewer"], template_id="ST-9-typical",
-                evidence=ev, confidence=0.5)
+                evidence=ev, confidence=v.confidence)
+
+
+# ---- ST-1B site area magnitude plausibility ----------------------------------
+#
+# Four independent cross-signals, each weak alone but jointly strong. Any single
+# signal fires a VERIFY — never auto-FAIL, since this is an extraction-confidence
+# question. Rural/agricultural subjects suppress signal (4) because large acreage
+# is the expected case there, not evidence of a unit-confusion bug.
+
+def _is_rural(ctx: QCContext) -> bool:
+    loc = str(ctx.appraisal.value("location") or "").lower()
+    zoning = str(ctx.appraisal.value("zoning_description") or "").lower()
+    return "rural" in loc or "ag" in zoning or "agricultural" in zoning
+
+
+@rule(id="ST-1B", num="26b", section="site", phase=2, applies_when=_has_site_detail,
+      name="Site area magnitude plausibility (multi-signal)")
+def st1b_site_plausibility(ctx: QCContext):
+    """Cross-signal plausibility check for site area.
+
+    Catches the extraction bug where a per-sf dollar rate or adjacent OCR digit
+    is written into site_area with unit 'ac', producing an implausibly large
+    (or oddly small) acreage that a single global range cannot detect without
+    false-rejecting legitimate rural parcels.
+
+    Four signals (any triggers VERIFY):
+      1. Location=Urban/Suburban AND area > 1 ac — rare combination.
+      2. Lot-coverage ratio GLA/site_area_sf outside [0.02, 0.80] — zero-coverage
+         is the direct fingerprint of a $/sf value misread as acreage.
+      3. Decimal-shift test: area_ac × 43,560 lands near a round suburban-lot
+         sf value (5,000–20,000 sf) — classic dropped-unit footprint.
+      4. Comp-set delta: subject site area > 5× the median comp site area (same
+         unit assumed) — the strongest signal, suppressed for rural/ag subjects
+         because comps will also be large.
+    """
+    from statistics import median
+
+    area_raw  = ctx.appraisal.value("site_area")
+    unit_raw  = ctx.appraisal.value("site_area_unit")
+    gla_raw   = ctx.appraisal.value("gla")
+    ev = [ctx.appraisal.evidence("site_area"), ctx.appraisal.evidence("site_area_unit")]
+    fields = ["site_area", "site_area_unit", "gla"]
+
+    if not area_raw:
+        return _res("ST-1B", "26b", RuleStatus.NOT_APPLICABLE, fields=fields, evidence=ev)
+
+    try:
+        area = float(str(area_raw).replace(",", ""))
+    except (ValueError, TypeError):
+        return _res("ST-1B", "26b", RuleStatus.NOT_APPLICABLE, fields=fields, evidence=ev)
+
+    unit = str(unit_raw or "").lower().strip()
+    if not unit:
+        # Missing unit — ST-2 already fires for this; avoid double-flagging.
+        return _res("ST-1B", "26b", RuleStatus.NOT_APPLICABLE, fields=fields, evidence=ev)
+
+    # Normalise to square feet for cross-comparisons.
+    area_sf = area * _SQFT_PER_ACRE if unit.startswith("ac") else area
+    is_ac   = unit.startswith("ac")
+    is_rural = _is_rural(ctx)
+
+    signals: list[str] = []
+
+    # Signal 1 — Urban/suburban + large acreage.
+    loc = str(ctx.appraisal.value("location") or "").lower()
+    if is_ac and area > 1.0 and ("urban" in loc or "suburban" in loc):
+        signals.append(f"site area {area:.2f} ac is unusual for a {loc} location")
+
+    # Signal 2 — Lot-coverage ratio (GLA ÷ site_sf).
+    if gla_raw:
+        try:
+            gla = float(str(gla_raw).replace(",", ""))
+            if gla > 0 and area_sf > 0:
+                ratio = gla / area_sf
+                if ratio < 0.02 or ratio > 0.80:
+                    signals.append(
+                        f"lot-coverage ratio {ratio:.3f} (GLA {gla:.0f} sf ÷ "
+                        f"site {area_sf:.0f} sf) is outside the plausible [0.02, 0.80] band"
+                    )
+        except (ValueError, TypeError):
+            pass
+
+    # Signal 3 — Decimal-shift / dropped-unit fingerprint.
+    if is_ac:
+        sf_equivalent = area * _SQFT_PER_ACRE
+        if 4_000 <= sf_equivalent <= 25_000 and (sf_equivalent % 100) < 200:
+            signals.append(
+                f"area {area} ac × 43,560 = {sf_equivalent:.0f} sf — "
+                "this is typical of a suburban lot size; the 'ac' unit may be a "
+                "mis-tagged sf value (dropped unit suffix)"
+            )
+
+    # Signal 4 — Comp-set delta (suppressed for rural/ag).
+    if not is_rural:
+        comp_sizes: list[float] = []
+        for i in range(1, 7):
+            cs_raw = ctx.appraisal.value(f"comp_{i}_site_size")
+            if cs_raw:
+                try:
+                    comp_sizes.append(float(str(cs_raw).replace(",", "").split()[0]))
+                except (ValueError, TypeError):
+                    pass
+        if len(comp_sizes) >= 2:
+            med = median(comp_sizes)
+            if med > 0 and area_sf / med > 5:
+                signals.append(
+                    f"subject site area ({area_sf:.0f} sf) is "
+                    f"{area_sf/med:.1f}× the median comp site area ({med:.0f} sf)"
+                )
+
+    if not signals:
+        return _res("ST-1B", "26b", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    msg = (
+        f"Site area plausibility check — {len(signals)} signal(s) suggest the "
+        f"extracted value ({area} {unit}) may be an extraction error: "
+        + "; ".join(signals)
+        + ". Confirm the site area against the source document."
+    )
+    return _res("ST-1B", "26b", RuleStatus.VERIFY, message=msg,
+                fields=fields, evidence=ev, confidence=0.55)

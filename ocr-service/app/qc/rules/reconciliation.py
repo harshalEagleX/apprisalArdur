@@ -104,6 +104,84 @@ def r1b_weight(ctx: QCContext):
                 template_id="R-1-weight", evidence=ev, confidence=0.6)
 
 
+# ---- VAL-1 appraised value extraction integrity ----------------------------
+#
+# Distinct from R-2b (the COMPLIANCE advisory when value genuinely equals price).
+# VAL-1 is an EXTRACTION quality gate: it detects when the extracted appraised_value
+# is likely the contract price rather than the final opinion of value — the root
+# cause of the 191 Neeley $320k/$356k cascade (three false rule outcomes downstream).
+#
+# Four tiered signals (any triggers VERIFY, never FAIL — R-2b cannot run until
+# this resolves):
+#   T1  Label-anchor: appraised_value was extracted from a known "APPRAISED VALUE"
+#       anchor — confidence is authoritative, skip further checks.
+#   T2  Dual-occurrence: value appears on ≥ 2 of {reconciliation page, sig page,
+#       SCA narrative} — corroboration across sources raises confidence.
+#   T3  SCA bracket: appraised value falls inside or near the adjusted-comp range.
+#       Contract price isn't grid-derived, so it frequently falls outside.
+#   T4  Anti-pattern: extracted value == contract price AND outside T3 bracket
+#       → strong extraction-error signal.
+
+@rule(id="VAL-1", num="87b", section="reconciliation", phase=2,
+      name="Final opinion of value extraction integrity")
+def val1_appraised_value_integrity(ctx: QCContext):
+    av = normalize_currency(ctx.appraisal.value("appraised_value"))
+    cp = normalize_currency(ctx.appraisal.value("contract_price"))
+    ev = [ctx.appraisal.evidence("appraised_value"), ctx.appraisal.evidence("contract_price")]
+    fields = ["appraised_value", "contract_price"]
+
+    if av is None:
+        return _res("VAL-1", "87b", "reconciliation", RuleStatus.VERIFY,
+                    message="Appraised value could not be extracted from this document. "
+                            "Confirm the final opinion of value on the signature/certification page.",
+                    fields=fields, evidence=ev, confidence=0.0)
+
+    # T1: high-confidence label-anchor extraction → trust it.
+    av_conf = ctx.appraisal.confidence("appraised_value")
+    if av_conf >= 0.90:
+        return _res("VAL-1", "87b", "reconciliation", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    # T3: SCA grid bracket check.
+    comp_adj = []
+    for i in range(1, 7):
+        v = normalize_currency(ctx.appraisal.value(f"comp_{i}_adjusted_sale_price"))
+        if v and v > 0:
+            comp_adj.append(v)
+    inside_bracket = True
+    if len(comp_adj) >= 2:
+        lo, hi = min(comp_adj), max(comp_adj)
+        margin = (hi - lo) * 0.10 + 5000     # 10% of range + $5k tolerance
+        inside_bracket = (lo - margin) <= av <= (hi + margin)
+
+    # T4: anti-pattern — extracted value == contract price AND outside bracket.
+    if cp and abs(av - cp) < 1 and not inside_bracket:
+        return _res("VAL-1", "87b", "reconciliation", RuleStatus.VERIFY,
+                    message=(
+                        f"Extracted appraised value (${av:,.0f}) equals the contract price "
+                        f"(${cp:,.0f}) and falls outside the adjusted comparable range "
+                        f"(${min(comp_adj):,.0f}–${max(comp_adj):,.0f}). "
+                        "This pattern is consistent with the contract-price field being "
+                        "extracted as the final opinion of value. "
+                        "Manually confirm the appraiser's final opinion on the "
+                        "certification/signature page."
+                    ),
+                    fields=fields, evidence=ev, confidence=0.3)
+
+    # T3 alone: outside bracket at lower confidence.
+    if not inside_bracket and len(comp_adj) >= 2:
+        return _res("VAL-1", "87b", "reconciliation", RuleStatus.VERIFY,
+                    message=(
+                        f"Appraised value (${av:,.0f}) falls outside the adjusted comparable "
+                        f"range (${min(comp_adj):,.0f}–${max(comp_adj):,.0f}). "
+                        "Confirm the final opinion of value on the certification page."
+                    ),
+                    fields=fields, evidence=ev, confidence=0.6)
+
+    return _res("VAL-1", "87b", "reconciliation", RuleStatus.PASS,
+                fields=fields, evidence=ev)
+
+
 # ---- R-2b value == contract price exactly (appraisal-bias advisory) ---------
 
 @rule(id="R-2b", num="88", section="reconciliation", phase=3,
@@ -131,9 +209,26 @@ def r2b_bias(ctx: QCContext):
 
 @rule(id="R-2", num="91", section="reconciliation", phase=3, name="As-Is / Subject-To checked")
 def r2_asis(ctx: QCContext):
+    from app.qc import layer_b
     val = ctx.appraisal.value("appraisal_subject_to")
     ev = [ctx.appraisal.evidence("appraisal_subject_to")]
     if val and str(val).strip():
+        # Layer-B cross-reference (elevating, not softening): when the box reads
+        # "As Is" but the narrative describes a repair / completion / re-inspection,
+        # that contradiction is the deck-repair miss — the box is likely wrong.
+        if "as is" in str(val).lower() and layer_b.is_explained(ctx, "subject_to"):
+            v = layer_b.assess(
+                ctx, concern="subject_to",
+                base_message="The reconciliation 'As Is' box is checked, but the report "
+                             "narrative describes a repair, completion, or re-inspection "
+                             "condition.",
+                facts="'As Is' selected despite a Subject-To condition in the narrative",
+                explained_status=RuleStatus.VERIFY, unexplained_status=RuleStatus.VERIFY,
+                explained_conf=0.5, unexplained_conf=0.5)
+            return RuleResult(rule_id="R-2", checklist_num="91", section="reconciliation",
+                              status=RuleStatus.VERIFY, message=v.message, reasoning=v.reasoning,
+                              fields_involved=["appraisal_subject_to", "sales_comparison_summary"],
+                              evidence=ev, confidence=v.confidence)
         return RuleResult(rule_id="R-2", checklist_num="91", section="reconciliation",
                           status=RuleStatus.PASS, fields_involved=["appraisal_subject_to"], evidence=ev)
     return RuleResult(rule_id="R-2", checklist_num="91", section="reconciliation",

@@ -29,6 +29,59 @@ def _is_fha_case_number(value: str) -> bool:
     return bool(_FHA_CASE_RE.match(v))
 
 
+# ---- G-0 engagement letter completeness gate --------------------------------
+#
+# This must be phase=1 (lowest phase number) so it fires before any overlay
+# rule that reads engagement fields. When the engagement is absent, dependent
+# rules that check engagement values will see empty DocView fields and produce
+# meaningless NOT_APPLICABLE or false-PASS results — this gate makes that
+# structural gap BLOCKING (HOLD) rather than silent.
+#
+# Honest scope: v1 detects absence at the Python boundary (engagement_path=None
+# → DocView.present=False). Distinguishing PENDING vs NOT_PROVIDED vs
+# EXTRACTION_FAILED requires the Java/batch matcher to forward per-document
+# ingestion status, which is a deferred phase-2 item.
+
+@rule(id="G-0", num="B0", section="global", phase=1,
+      name="Engagement letter / order form present and extracted")
+def g0_engagement_present(ctx: QCContext):
+    ev = [ctx.engagement.evidence("loan_type")]
+    if ctx.has_engagement:
+        return RuleResult(rule_id="G-0", checklist_num="B0", section="global",
+                          status=RuleStatus.PASS,
+                          fields_involved=["loan_type"], evidence=ev)
+
+    # Engagement not present at the Python boundary. Branch on the ingestion status
+    # forwarded by the Java/batch matcher (Layer A — data existence):
+    #   NOT_PROVIDED         → genuinely no engagement for this workflow → N/A.
+    #   PENDING / FAILED /   → the document exists but isn't usable → BLOCKING HOLD.
+    #   None (not forwarded) → unknown → block, since silently passing overlay rules
+    #                          on missing authority data is the failure mode G-0 exists
+    #                          to prevent.
+    status = getattr(ctx, "engagement_status", None)
+    if status == "NOT_PROVIDED":
+        return RuleResult(rule_id="G-0", checklist_num="B0", section="global",
+                          status=RuleStatus.NOT_APPLICABLE,
+                          message="No engagement letter / order form is associated with this "
+                                  "transaction; lender-overlay rules do not apply.",
+                          fields_involved=["loan_type"], evidence=ev)
+    detail = {
+        "PENDING": "is still awaiting extraction (status: PENDING)",
+        "EXTRACTION_FAILED": "failed to extract (status: EXTRACTION_FAILED)",
+    }.get(status, "was not extracted")
+    return RuleResult(
+        rule_id="G-0", checklist_num="B0", section="global",
+        status=RuleStatus.HOLD,
+        message=(
+            f"The engagement letter / order form {detail}. "
+            "All lender-overlay rules (comp count minimum, site value requirement, "
+            "declining-market clause, AMC naming) cannot be evaluated without it. "
+            "Re-process after the engagement document is available."
+        ),
+        fields_involved=["loan_type"], evidence=ev,
+    )
+
+
 @rule(id="G-1", num="B", section="global", phase=2, name="Loan-type consistency (engagement vs appraisal)")
 def g1_loan_type(ctx: QCContext):
     eng_loan = ctx.loan_type

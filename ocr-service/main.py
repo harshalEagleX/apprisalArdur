@@ -171,6 +171,7 @@ async def qc_process(
     batch_file_id: Optional[str] = Form(None),
     qc_result_id: Optional[str] = Form(None),
     source_hash: Optional[str] = Form(None),
+    engagement_status: Optional[str] = Form(None),
 ):
     """
     Run the full transaction QC (appraisal + engagement + contract) and return
@@ -209,6 +210,7 @@ async def qc_process(
             appraisal, engagement, contract,
             transaction_id=(file.filename or "transaction"),
             persist=True, progress=_progress,
+            engagement_status=engagement_status,
         )
         resp = report_to_python_qc_response(
             report, ctx,
@@ -310,6 +312,7 @@ async def qc_submit(
     correlation_id: Optional[str] = Form(None),
     idempotency_key: Optional[str] = Form(None),
     source_hash: Optional[str] = Form(None),
+    engagement_status: Optional[str] = Form(None),
 ):
     """Enqueue a QC job on the Celery queue and return its job_id immediately.
 
@@ -357,6 +360,7 @@ async def qc_submit(
             "vision_model": vision_model,
             "document_id": file.filename or "",
             "source_hash": file_hash,
+            "engagement_status": engagement_status,
         })
     except Exception as exc:
         # Broker unreachable — clean up the temp uploads and fail clearly (503) so the

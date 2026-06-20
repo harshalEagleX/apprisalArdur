@@ -34,6 +34,15 @@ logger = logging.getLogger(__name__)
 # non-parenthesized form is the fallback for software that omits "(Rounded)".
 _TOTAL_ROUNDED = re.compile(r"total\s+living\s+area\s*\(rounded\)\s*:?\s*([\d,]+)", re.I)
 _TOTAL_ANY = re.compile(r"total\s+living\s+area[^\d]{0,20}([\d,]+)\s*sq", re.I)
+# Per-floor above-grade living-area subtotals on the TOTAL sketch "Area
+# Calculations Summary". Summing these recovers the grand total when the sketch
+# prints no explicit "Total Living Area (Rounded)" line in the text layer (the
+# 1,485.6 + 986.75 = 2,472 case the partial-floor bug used to mis-read as 1,496).
+# Garage/porch/basement/unfinished areas are deliberately excluded — they are NOT
+# floor-labelled and never above-grade GLA.
+_FLOOR_AREA = re.compile(
+    r"\b(?:first|second|third|fourth|upper|lower|main|ground|1st|2nd|3rd|4th)\s+"
+    r"floor\s*:?\s*([\d,]+\.?\d*)\s*sq", re.I)
 
 _VISION_PROMPT = (
     "This image is the Building Sketch page of a residential appraisal (TOTAL "
@@ -52,6 +61,41 @@ def _find_sketch_page(doc) -> Optional[int]:
     for i in range(doc.page_count):
         if "building sketch" in (doc[i].get_text() or "").lower():
             return i
+    return None
+
+
+def _sketch_pages_text(doc) -> str:
+    """Concatenated text of every 'Building Sketch' page (TOTAL splits multi-floor
+    sketches across 'Building Sketch (Page - N)' pages, so a single page misses
+    floors)."""
+    parts = []
+    for i in range(doc.page_count):
+        t = doc[i].get_text() or ""
+        if "building sketch" in t.lower():
+            parts.append(t)
+    return "\n".join(parts)
+
+
+def _text_total(doc) -> Optional[int]:
+    """Read the sketch total from the text layer (cheap-first, P-6): prefer an
+    explicit 'Total Living Area (Rounded)', else sum the per-floor subtotals.
+    Returns None when neither is present (image-only sketch → OCR/vision)."""
+    text = _sketch_pages_text(doc)
+    if not text:
+        return None
+    m = _TOTAL_ROUNDED.search(text) or _TOTAL_ANY.search(text)
+    if m:
+        try:
+            return _plausible(int(m.group(1).replace(",", "")))
+        except (TypeError, ValueError):
+            pass
+    floors = _FLOOR_AREA.findall(text)
+    if floors:
+        try:
+            total = sum(float(f.replace(",", "")) for f in floors)
+            return _plausible(int(round(total)))
+        except (TypeError, ValueError):
+            pass
     return None
 
 
@@ -137,15 +181,20 @@ def extract_sketch_gla(pdf_path) -> Dict[str, str]:
         idx = _find_sketch_page(doc)
         if idx is None:
             return {}
-        png = doc[idx].get_pixmap(matrix=fitz.Matrix(3, 3)).tobytes("png")  # ~216 DPI
+        # Text-layer first (cheap, exact): explicit total or summed floor subtotals.
+        val = _text_total(doc)
+        method = "sketch_text"
+        png = None if val is not None else \
+            doc[idx].get_pixmap(matrix=fitz.Matrix(3, 3)).tobytes("png")  # ~216 DPI
     except Exception as exc:
         logger.warning("Sketch render failed for %s: %s", name, exc)
         return {}
     finally:
         doc.close()
 
-    val = _ocr_total(png)
-    method = "sketch_ocr"
+    if val is None:
+        val = _ocr_total(png)
+        method = "sketch_ocr"
     if val is None:
         val = _vision_total(png)
         method = "sketch_vision"

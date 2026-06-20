@@ -228,6 +228,7 @@ batches:
           bedrooms:           {value: "0",                        verified_by: manual}
           baths:              {value: "1.0",                      verified_by: manual}
           gla:                {value: "425",                      verified_by: manual}
+          sketch_living_area: {value: "425",                      verified_by: manual}
           condition_rating:   {value: "C1",                       verified_by: manual}
           year_built:         {value: "2026",                     verified_by: manual}
           # Contract section
@@ -341,3 +342,44 @@ batches:
           borrower_name:      {value: "Danny Mauricio Ortega",    verified_by: inferred}
           lender_name:        {value: "Champions Funding, LLC",   verified_by: inferred}
           appraised_value:    {absent: true, notes: "1004D Final Inspection — no appraised value on this form"}
+
+  # ---------------------------------------------------------------------------
+  # #2321525499 — Equity Solutions / Champions Funding / Hess Appraisal
+  # AMC: equity_solutions_usa | Form 1004 | Bank of Tennessee
+  # Seeded for the 9-fix measurement pass — values from the independent audit.
+  # These are the fields the audit established as ground truth; several were
+  # extracted WRONG (noted), which is exactly what the fixes target.
+  # ---------------------------------------------------------------------------
+  "#2321525499":
+    amc_id: equity_solutions_usa
+    documents:
+      appraisal:
+        path: "sort/#2321525499/appraisal/191 Neeley Pl.pdf"
+        document_type: appraisal_report
+        is_scanned: false
+        notes: "Audit-established ground truth. Wrong-extraction notes mark the fix targets."
+        fields:
+          property_address:   {value: "191 Neeley Pl",   verified_by: manual}
+          city:               {value: "Blountville",      verified_by: manual}
+          state:              {value: "TN",               verified_by: manual}
+          zip_code:           {value: "37617",            verified_by: manual}
+          county:             {value: "Sullivan",         verified_by: manual, notes: "Was extracted 'TN' (state leaked a column)"}
+          year_built:         {value: "1984",             verified_by: manual}
+          total_rooms:        {value: "7",                verified_by: manual, notes: "Was extracted '3' (bedroom count)"}
+          bedrooms:           {value: "3",                verified_by: manual}
+          gla:                {value: "2472",             verified_by: manual}
+          sketch_living_area: {value: "2472",             verified_by: manual, notes: "Was extracted '1496' (first floor only)"}
+          site_area:          {value: "27311",            verified_by: manual, notes: "Was extracted '129.45' ($/sf rate)"}
+          site_area_unit:     {value: "sf",               verified_by: manual}
+          real_estate_taxes:  {value: "1297",             verified_by: manual, notes: "Was extracted '065' (APN fragment)"}
+          appraised_value:    {value: "356000",           verified_by: manual, notes: "Was extracted '320000' (contract price)"}
+          contract_price:     {value: "320000",           verified_by: manual}
+          appraiser_name:     {value: "Alden E. Hess",    verified_by: manual}
+          supervisory_appraiser_name: {absent: true,      verified_by: manual, notes: "Solo-signed; was extracted '24319' (a zip)"}
+
+      engagement:
+        path: "sort/#2321525499/engagement/EngagementLetter.pdf"
+        document_type: engagement_letter
+        is_scanned: false
+        fields:
+          lender_name:        {value: "Bank of Tennessee", verified_by: manual}

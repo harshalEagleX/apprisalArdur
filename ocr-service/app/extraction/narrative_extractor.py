@@ -74,6 +74,66 @@ def _sales_comparison_page(doc):
     return None
 
 
+# Referential stub patterns — when a field cell contains only a cross-reference
+# to the addenda rather than the actual content. Matching means the field must
+# be resolved from the Supplemental Addendum before NLP rules run on it.
+_SEE_ADDENDA_RE = re.compile(
+    r"^\s*(?:see\s+(?:attached|addend[au]m?|supplement)|"
+    r"refer\s+to\s+(?:addend[au]m?|supplement|attached)|"
+    r"per\s+(?:addend[au]m?|supplement)|"
+    r"addend[au]m?\s+attached)\s*\.?\s*$",
+    re.I,
+)
+
+
+def resolve_addendum_reference(
+    stub_text: str,
+    doc,
+    heading_hint: str,
+    *,
+    max_chars: int = 2000,
+) -> tuple[str | None, str]:
+    """When a field value is a referential stub, scan the document for the
+    Supplemental Addendum section that matches `heading_hint` and return the
+    prose content (up to `max_chars`) plus a provenance note.
+
+    Returns (resolved_text, resolution_outcome) where resolved_text is None
+    when the referenced section cannot be located (UNRESOLVED_REFERENCE).
+
+    Intentionally limited to one hop: if the addendum itself says "see exhibit,"
+    that outer reference is returned as UNRESOLVED_REFERENCE rather than
+    followed further.
+    """
+    heading_hint_lower = heading_hint.lower().strip()
+    best_page: int | None = None
+    best_score = 0
+
+    for i in range(doc.page_count):
+        page_text = (doc[i].get_text() or "").lower()
+        # Skip the primary form pages (likely where the stub appeared).
+        if "see attached" in page_text and len(page_text) < 300:
+            continue
+        # Simple token-overlap similarity between page heading tokens and hint.
+        page_words = set(re.findall(r"[a-z]{3,}", page_text[:400]))
+        hint_words = set(re.findall(r"[a-z]{3,}", heading_hint_lower))
+        score = len(page_words & hint_words)
+        if score > best_score:
+            best_score = score
+            best_page = i
+
+    if best_page is None or best_score < 2:
+        return None, "could not locate matching addendum section"
+
+    # Extract prose from the matched page, filtering boilerplate.
+    blocks = sorted(doc[best_page].get_text("blocks"), key=lambda b: (round(b[1]), b[0]))
+    prose = [b[4].replace("\n", " ").strip() for b in blocks if _is_prose(b[4])]
+    content = re.sub(r"\s{2,}", " ", " ".join(prose)).strip()[:max_chars]
+    if not content:
+        return None, "addendum section found but contained no extractable prose"
+
+    return content, f"resolved from addendum page {best_page + 1}"
+
+
 def extract_sca_narrative(pdf_path) -> Dict[str, str]:
     """Return {sales_comparison_summary, _narrative_page} or {} (P-6)."""
     try:
@@ -100,8 +160,23 @@ def extract_sca_narrative(pdf_path) -> Dict[str, str]:
         doc.close()
 
     prose = [b[4].replace("\n", " ").strip() for b in blocks]
-    prose = [t for t in prose if _is_prose(t)]
-    text = re.sub(r"\s{2,}", " ", " ".join(prose)).strip()
+    prose_filtered = [t for t in prose if _is_prose(t)]
+    text = re.sub(r"\s{2,}", " ", " ".join(prose_filtered)).strip()
+
+    # If the page text (before prose filtering) is a referential stub, resolve it.
+    raw_cell = re.sub(r"\s{2,}", " ", " ".join(t.replace("\n", " ").strip() for t in prose)).strip()
+    if len(text) < 40 and _SEE_ADDENDA_RE.match(raw_cell):
+        resolved, outcome = resolve_addendum_reference(
+            raw_cell, doc, heading_hint="sales comparison summary", max_chars=2000
+        )
+        if resolved:
+            logger.info("SCA narrative resolved from addenda for %s: %d chars (%s)",
+                        name, len(resolved), outcome)
+            return {"sales_comparison_summary": resolved, "_narrative_page": f"addendum ({outcome})"}
+        logger.info("SCA narrative stub unresolved for %s: %s", name, outcome)
+        return {"sales_comparison_summary": "__UNRESOLVED_REFERENCE__",
+                "_narrative_page": f"addendum ({outcome})"}
+
     if len(text) < 40:
         logger.info("SCA narrative not found (page %s) for %s", idx + 1 if idx is not None else "?", name)
         return {}

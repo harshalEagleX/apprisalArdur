@@ -222,12 +222,24 @@ def run_full_extraction(
     # L3 — PaddleOCR for scanned pages (only fills pages not covered by digital OCR)
     # PaddleOCR output feeds through spatial matching re-run (TODO: integrate fully)
 
+    # ── Early plausibility gate (before L5) ─────────────────────────────────
+    # Run after L1/L2/L4/L4b but BEFORE L5 so that an implausible high-confidence
+    # positional result (e.g. Camelot at 0.90 grabbing a wrong cell) has its
+    # effective_confidence demoted BEFORE L5's comparison — otherwise L5's correct
+    # positive-anchor value (0.89) would lose to the pre-demotion 0.90. (P-6)
+    from app.extraction.field_validators import validate_results
+    suppressed_early = validate_results(merged)
+
     # L5 — UAD template parser (fills Yes/No, grids, GLA, effective_date by known positions)
     l5 = raw.get("l5", {})
     for fname, result in l5.items():
         if hasattr(result, "found") and result.found:
             if fname not in merged or merged[fname].effective_confidence < _CONF["uad_template"]:
                 merged[fname] = result
+
+    # ── Final plausibility gate ──────────────────────────────────────────────
+    # A second pass after L5 catches any new implausible value L5 may introduce.
+    suppressed = suppressed_early + validate_results(merged)
 
     # ── Ensure every schema field has a result ──────────────────────────────
     result_set = ExtractionResultSet(
@@ -258,7 +270,7 @@ def run_full_extraction(
     layers_used = [k for k in ("l0", "l1", "l2", "l3", "l4", "l4b", "l5") if raw.get(k)]
 
     logger.info(
-        "Orchestrator: %s | %d/%d fields | layers=%s | %dms",
-        pdf_path.name, found, len(result_set), layers_used, elapsed,
+        "Orchestrator: %s | %d/%d fields | %d suppressed | layers=%s | %dms",
+        pdf_path.name, found, len(result_set), suppressed, layers_used, elapsed,
     )
     return result_set

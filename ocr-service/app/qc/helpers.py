@@ -35,11 +35,11 @@ def _conf_floor(ctx: QCContext, doc: str, field: str) -> float:
 
 
 def _mk(rule_id, num, section, status, message="", fields=None,
-        evidence=None, confidence=1.0, template_id=None) -> RuleResult:
+        evidence=None, confidence=1.0, template_id=None, reasoning=None) -> RuleResult:
     return RuleResult(
         rule_id=rule_id, checklist_num=num, section=section, status=status,
         message=message, fields_involved=fields or [], evidence=evidence or [],
-        confidence=confidence, template_id=template_id,
+        confidence=confidence, template_id=template_id, reasoning=reasoning,
     )
 
 
@@ -52,9 +52,10 @@ def section_result(section: str):
     """A RuleResult builder bound to one section: the shape every rule module
     was re-implementing as a private `_res`."""
     def _res(rule_id, num, status, message="", fields=None, evidence=None,
-             template_id=None, confidence=1.0) -> RuleResult:
+             template_id=None, confidence=1.0, reasoning=None) -> RuleResult:
         return _mk(rule_id, num, section, status, message=message, fields=fields,
-                   evidence=evidence, confidence=confidence, template_id=template_id)
+                   evidence=evidence, confidence=confidence, template_id=template_id,
+                   reasoning=reasoning)
     return _res
 
 

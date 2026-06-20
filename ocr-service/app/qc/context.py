@@ -81,6 +81,7 @@ class QCContext:
         contract: Optional[ExtractionResultSet] = None,
         structured_conf: float = DEFAULT_STRUCTURED_CONF,
         checkbox_conf: float = DEFAULT_CHECKBOX_CONF,
+        engagement_status: Optional[str] = None,
     ):
         self.transaction_id = transaction_id
         self.appraisal = DocView("appraisal", appraisal)
@@ -88,6 +89,12 @@ class QCContext:
         self.contract = DocView("contract", contract)
         self.structured_conf = structured_conf
         self.checkbox_conf = checkbox_conf
+        # Per-document ingestion status forwarded by the Java/batch matcher.
+        # Distinguishes a genuinely-absent engagement (NOT_PROVIDED) from one that
+        # exists but failed/awaits extraction (PENDING / EXTRACTION_FAILED) so the
+        # G-0 gate can NOT_APPLICABLE the former and HOLD the latter. None = the
+        # caller did not forward a status → treat absence as blocking (safe default).
+        self.engagement_status = (engagement_status or "").strip().upper() or None
 
     # -- document access --------------------------------------------------
     def doc(self, label: str) -> DocView:

@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List
 
+from app.qc import layer_b
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.matching import normalize_currency
@@ -72,21 +73,40 @@ def _comp_rows(ctx: QCContext) -> List[Dict[str, float]]:
         sale_date = str(ctx.appraisal.value(f"comp_{i}_sale_date") or "").lower()
         financing = str(ctx.appraisal.value(f"comp_{i}_sale_financing") or "").lower()
         explicit_flag = str(ctx.appraisal.value(f"comp_{i}_is_listing") or "").lower()
-        # A comparable is a listing/active offering when:
-        #   (a) UAD Date of Sale contains "active"  (closed sales carry "s.../c..." dates), OR
-        #   (b) the financing / concessions cell contains "listing" (e.g. "Listing -11,900"), OR
-        #   (c) an explicit is_listing flag was set by extraction.
-        is_listing = (
+        # Three independent classification signals — any one being True makes this
+        # a listing/active comp.  Cross-signal disagreement is tracked separately
+        # so SCA-2 can emit VERIFY instead of silently trusting Tier-1 alone.
+        #
+        # Tier 1 (keyword — existing): UAD Date of Sale "active" OR financing cell
+        #   "listing" OR explicit extraction flag.
+        t1 = (
             "active" in sale_date
             or "listing" in financing
             or explicit_flag in {"true", "yes", "1"}
         )
+        # Tier 2 (settlement-date structural): a settled/closed comp must have a
+        #   past sale date.  If the settlement field is blank or "N/A" the comp
+        #   is structurally inconsistent with "closed".
+        settle_raw = str(ctx.appraisal.value(f"comp_{i}_settlement_date") or "").strip()
+        t2_blank   = bool(not settle_raw or settle_raw.lower() in {"n/a", "na", "pending", "active"})
+        # Tier 3 (MLS status code in data-source citation — ACT / PEND / SLD).
+        datasrc = str(ctx.appraisal.value(f"comp_{i}_data_source") or "").lower()
+        t3_active  = bool("act;" in datasrc or ";act" in datasrc or "act)" in datasrc
+                         or "pend" in datasrc)
+        t3_closed  = bool("sld" in datasrc or "sold" in datasrc)
+
+        # Final classification: T1 says closed but T2 or T3 disagrees → ambiguous.
+        is_listing = t1
+        status_conflict = (not t1) and (t2_blank or t3_active)  # T1 says closed but structure says otherwise
         rows.append({
             "i": i,
             "sale_price": sp,
             "net": normalize_currency(ctx.appraisal.value(f"comp_{i}_net_adjustment")),
             "adjusted": normalize_currency(ctx.appraisal.value(f"comp_{i}_adjusted_sale_price")),
             "is_listing": is_listing,
+            "status_conflict": status_conflict,
+            "t2_blank": t2_blank,
+            "t3_active": t3_active,
         })
     return rows
 
@@ -111,6 +131,32 @@ def sca2_required(ctx: QCContext):
     required = 4 if val >= 1_000_000 else 3
     min_listings = int(qc_config.semantic("sca2_min_listings", 1))
     ev = [ctx.appraisal.evidence(f"comp_{i}_sale_price") for i in range(1, 4)]
+
+    # Cross-signal conflicts: T1 classified a comp as "closed" but the settlement-date
+    # or MLS-status signal disagrees. Surface these before the count-based FAIL so the
+    # reviewer can confirm classification before we assert a comp-count deficiency.
+    conflicts = [r for r in rows if r.get("status_conflict")]
+    if conflicts:
+        comp_ids = ", ".join(f"Comp {r['i']}" for r in conflicts)
+        reasons = []
+        for r in conflicts:
+            parts = []
+            if r.get("t2_blank"):
+                parts.append("settlement date blank/N/A")
+            if r.get("t3_active"):
+                parts.append("MLS status code suggests active/pending")
+            reasons.append(f"Comp {r['i']}: {'; '.join(parts)}")
+        return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
+                          status=RuleStatus.VERIFY,
+                          message=(
+                              f"{comp_ids} classified as closed sale(s) by cell text, "
+                              f"but structural signals disagree — {'; '.join(reasons)}. "
+                              "Confirm comp status from MLS source sheet before relying "
+                              "on the closed-sale count."
+                          ),
+                          fields_involved=["comp_N_sale_price", "comp_N_settlement_date"],
+                          evidence=ev, confidence=0.55)
+
     # Too few closed sales — extraction may have missed comps, so VERIFY not FAIL.
     if len(sales) < required:
         return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
@@ -118,16 +164,23 @@ def sca2_required(ctx: QCContext):
                           message=qc_config.template("SCA-2-count", value=len(sales), required=required),
                           fields_involved=["comp_N_sale_price"], template_id="SCA-2-count",
                           evidence=ev, confidence=0.6)
-    # Enough closed sales but too few active/listing comparables.
+    # Enough closed sales but too few active/listing comparables. Layer C: the
+    # engagement letter requires a listing, so an UNEXPLAINED shortfall is a FAIL;
+    # but "document why none are available" is the letter's own escape hatch, so an
+    # EXPLAINED shortfall is a VERIFY (confirm the explanation), not a FAIL.
     if min_listings > 0 and len(listings) < min_listings:
         declining = _market_is_declining(ctx)
         template_id = "SCA-2-listings-decl" if declining else "SCA-2-listings"
+        v = layer_b.assess(
+            ctx, concern="comp_selection",
+            base_message=qc_config.template(template_id, have=len(listings),
+                                            need=min_listings, sales=len(sales)),
+            facts="no current listing/pending comparable was included",
+            explained_status=RuleStatus.VERIFY, unexplained_status=RuleStatus.FAIL)
         return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
-                          status=RuleStatus.FAIL,
-                          message=qc_config.template(template_id, have=len(listings),
-                                                     need=min_listings, sales=len(sales)),
+                          status=v.status, message=v.message, reasoning=v.reasoning,
                           fields_involved=["comp_N_sale_price", "demand_supply"],
-                          template_id=template_id, evidence=ev)
+                          template_id=template_id, evidence=ev, confidence=v.confidence)
     return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
                       status=RuleStatus.PASS, fields_involved=["comp_N_sale_price"], evidence=ev)
 
@@ -162,11 +215,14 @@ def sca_net_adjustment(ctx: QCContext):
     if not over:
         return RuleResult(rule_id="SCA-NET", checklist_num="77", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["comp_N_net_adjustment"], evidence=ev)
+    v = layer_b.assess(
+        ctx, concern="large_adjustment",
+        base_message=qc_config.template("SCA-net15", value=", ".join(map(str, over))),
+        facts=f"comp(s) {', '.join(map(str, over))} with net adjustment over the 15% cap")
     return RuleResult(rule_id="SCA-NET", checklist_num="77", section="sales_comparison",
-                      status=RuleStatus.VERIFY,
-                      message=qc_config.template("SCA-net15", value=", ".join(map(str, over))),
+                      status=v.status, message=v.message, reasoning=v.reasoning,
                       fields_involved=["comp_N_net_adjustment"], template_id="SCA-net15",
-                      evidence=ev, confidence=0.65)
+                      evidence=ev, confidence=v.confidence)
 
 
 # ---- SCA-GROSS gross adjustment <= 25% of sale price ----------------------
@@ -196,11 +252,14 @@ def sca_gross_adjustment(ctx: QCContext):
     if not over:
         return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["comp_N_gross_adj_pct"], evidence=ev)
+    v = layer_b.assess(
+        ctx, concern="large_adjustment",
+        base_message=qc_config.template("SCA-gross25", value=", ".join(map(str, over))),
+        facts=f"comp(s) {', '.join(map(str, over))} with gross adjustment over the 25% cap")
     return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
-                      status=RuleStatus.VERIFY,
-                      message=qc_config.template("SCA-gross25", value=", ".join(map(str, over))),
+                      status=v.status, message=v.message, reasoning=v.reasoning,
                       fields_involved=["comp_N_gross_adj_pct"], template_id="SCA-gross25",
-                      evidence=ev, confidence=0.7)
+                      evidence=ev, confidence=v.confidence)
 
 
 # ---- SCA-3 address present (per comp, grid extractor) ---------------------
@@ -596,8 +655,15 @@ def _effective_ym(ctx):
 
 @rule(id="SCA-DC", num="60b", section="sales_comparison", phase=3, name="Comp sale within date currency window")
 def sca_date_currency(ctx: QCContext):
-    """Each comp should have sold within 12 months of the effective date; older
-    sales require commentary (VERIFY)."""
+    """Each comp should have sold within 12 months of the effective date.
+
+    Three-layer evaluation (MIRA A/B/C) via the shared layer_b engine:
+      Layer A — a parseable sale date must exist (else skip the comp).
+      Layer B — layer_b detects whether the narrative explains the use of an
+                older comp (limited inventory, best available, expanded search).
+      Layer C — explained → lower-severity confirm; unexplained → full VERIFY.
+    Never auto-FAIL — comp age is a judgment matter.
+    """
     eff = _effective_ym(ctx)
     out = []
     if eff is None:
@@ -610,11 +676,15 @@ def sca_date_currency(ctx: QCContext):
             continue
         months = (eff[0] - ym[0]) * 12 + (eff[1] - ym[1])
         if months > 12:
-            out.append(RuleResult(rule_id="SCA-DC", checklist_num="60b", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-DC-old", comp=i, months=months),
-                                  fields_involved=[f"comp_{i}_sale_date"], template_id="SCA-DC-old",
-                                  evidence=ev, confidence=0.7))
+            v = layer_b.assess(
+                ctx, concern="dated_comp",
+                base_message=qc_config.template("SCA-DC-old", comp=i, months=months),
+                facts=f"comp {i} sold {months} months before the effective date")
+            out.append(RuleResult(
+                rule_id="SCA-DC", checklist_num="60b", section="sales_comparison",
+                status=v.status, message=v.message, reasoning=v.reasoning,
+                fields_involved=[f"comp_{i}_sale_date", "sales_comparison_summary"],
+                template_id="SCA-DC-old", evidence=ev, confidence=v.confidence))
         else:
             out.append(RuleResult(rule_id="SCA-DC", checklist_num="60b", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_sale_date"], evidence=ev))
@@ -638,11 +708,15 @@ def sca_price_bracket(ctx: QCContext):
             out.append(RuleResult(rule_id="SCA-PR", checklist_num="79", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_sale_price"], evidence=ev))
         else:
+            _pv = layer_b.assess(
+                ctx, concern="comp_selection",
+                base_message=qc_config.template("SCA-PR-bracket", comp=i, a=int(sp), b=int(val)),
+                facts=f"comp {i} priced outside a reasonable bracket of the subject value")
             out.append(RuleResult(rule_id="SCA-PR", checklist_num="79", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-PR-bracket", comp=i, a=int(sp), b=int(val)),
+                                  status=_pv.status, reasoning=_pv.reasoning, confidence=_pv.confidence,
+                                  message=_pv.message,
                                   fields_involved=[f"comp_{i}_sale_price"], template_id="SCA-PR-bracket",
-                                  evidence=ev, confidence=0.6))
+                                  evidence=ev))
     return out
 
 
@@ -660,11 +734,15 @@ def sca7_concessions(ctx: QCContext):
         conc = int(m.group(1).replace(",", ""))
         adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_sale_financing_adjustment"))
         if conc > 0 and (adj is None or adj >= 0):
+            _cv = layer_b.assess(
+                ctx, concern="concession",
+                base_message=qc_config.template("SCA-7-conc", comp=i, a=conc),
+                facts=f"comp {i} shows a ${conc} concession with no offsetting adjustment")
             out.append(RuleResult(rule_id="SCA-7", checklist_num="59", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-7-conc", comp=i, a=conc),
+                                  status=_cv.status, reasoning=_cv.reasoning, confidence=_cv.confidence,
+                                  message=_cv.message,
                                   fields_involved=[f"comp_{i}_sale_financing"], template_id="SCA-7-conc",
-                                  evidence=ev, confidence=0.65))
+                                  evidence=ev))
         else:
             out.append(RuleResult(rule_id="SCA-7", checklist_num="59", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_sale_financing"], evidence=ev))
@@ -918,11 +996,15 @@ def sca_comp_resale(ctx: QCContext):
             ev = [ctx.appraisal.evidence(f"comp_{i}_prior_sale_date"),
                   ctx.appraisal.evidence(f"comp_{i}_sale_date")]
             flagged.append(i)
+            _fv = layer_b.assess(
+                ctx, concern="comp_selection",
+                base_message=qc_config.template("SCA-FLIP-comp", comp=i, months=months),
+                facts=f"comp {i} resold within {window} months (possible flip)")
             out.append(RuleResult(rule_id="SCA-FLIP", checklist_num="80b", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-FLIP-comp", comp=i, months=months),
+                                  status=_fv.status, reasoning=_fv.reasoning, confidence=_fv.confidence,
+                                  message=_fv.message,
                                   fields_involved=[f"comp_{i}_prior_sale_date"], template_id="SCA-FLIP-comp",
-                                  evidence=ev, confidence=0.7))
+                                  evidence=ev))
     # One PASS for observability when comps exist and none resold within the window.
     if idx and not flagged:
         out.append(RuleResult(rule_id="SCA-FLIP", checklist_num="80b", section="sales_comparison",
@@ -990,12 +1072,15 @@ def sca26_gla_bracket(ctx: QCContext):
     if min(glas) <= subj <= max(glas):
         return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["gla", "comp_N_gla"], evidence=ev)
+    v = layer_b.assess(
+        ctx, concern="comp_selection",
+        base_message=qc_config.template("SCA-26-gla", subj=int(subj),
+                                        lo=int(min(glas)), hi=int(max(glas))),
+        facts="the subject GLA is not bracketed by the comparable GLAs")
     return RuleResult(rule_id="SCA-26", checklist_num="82", section="sales_comparison",
-                      status=RuleStatus.VERIFY,
-                      message=qc_config.template("SCA-26-gla", subj=int(subj),
-                                                 lo=int(min(glas)), hi=int(max(glas))),
+                      status=v.status, message=v.message, reasoning=v.reasoning,
                       fields_involved=["gla", "comp_N_gla"], template_id="SCA-26-gla",
-                      evidence=ev, confidence=0.6)
+                      evidence=ev, confidence=v.confidence)
 
 
 # ---- SCA-23 listing comparables should carry a list-to-sale adjustment -----
@@ -1103,11 +1188,15 @@ def sca_zf_consistency(ctx: QCContext):
             if cv == subj or cv in ("similar", "sim"):
                 ev = [ctx.appraisal.evidence(f"comp_{i}_{field}"),
                       ctx.appraisal.evidence(f"comp_{i}_{field}_adjustment")]
+                _zv = layer_b.assess(
+                    ctx, concern="adjustment_consistency",
+                    base_message=qc_config.template("SCA-zf-same", comp=i, field=label, a=int(adj)),
+                    facts=f"comp {i} received a ${int(adj)} {label} adjustment despite matching the subject")
                 out.append(RuleResult(rule_id="SCA-ZF", checklist_num="76b", section="sales_comparison",
-                                      status=RuleStatus.VERIFY,
-                                      message=qc_config.template("SCA-zf-same", comp=i, field=label, a=int(adj)),
+                                      status=_zv.status, reasoning=_zv.reasoning, confidence=_zv.confidence,
+                                      message=_zv.message,
                                       fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
-                                      template_id="SCA-zf-same", evidence=ev, confidence=0.6))
+                                      template_id="SCA-zf-same", evidence=ev))
     if checked and not out:
         out.append(RuleResult(rule_id="SCA-ZF", checklist_num="76b", section="sales_comparison",
                               status=RuleStatus.PASS, fields_involved=["comp_N_*_adjustment"]))
@@ -1144,13 +1233,17 @@ def sca_adjustment_consistency(ctx: QCContext):
             for i in unadjusted:
                 ev = [ctx.appraisal.evidence(f"comp_{i}_{field}"),
                       ctx.appraisal.evidence(f"comp_{i}_{field}_adjustment")]
+                _av = layer_b.assess(
+                    ctx, concern="adjustment_consistency",
+                    base_message=qc_config.template("SCA-ac-inconsistent", comp=i, field=label,
+                                                    value=ctx.appraisal.value(f"comp_{i}_{field}"),
+                                                    a=peer_adj),
+                    facts=f"comp {i} got no {label} adjustment while peers received ${peer_adj}")
                 out.append(RuleResult(rule_id="SCA-AC", checklist_num="76c", section="sales_comparison",
-                                      status=RuleStatus.VERIFY,
-                                      message=qc_config.template("SCA-ac-inconsistent", comp=i, field=label,
-                                                                 value=ctx.appraisal.value(f"comp_{i}_{field}"),
-                                                                 a=peer_adj),
+                                      status=_av.status, reasoning=_av.reasoning, confidence=_av.confidence,
+                                      message=_av.message,
                                       fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
-                                      template_id="SCA-ac-inconsistent", evidence=ev, confidence=0.6))
+                                      template_id="SCA-ac-inconsistent", evidence=ev))
     return out
 
 

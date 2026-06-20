@@ -65,6 +65,7 @@ class RuleResult:
     evidence: List[Evidence] = field(default_factory=list)
     confidence: float = 1.0             # engine's confidence in THIS finding
     template_id: Optional[str] = None
+    reasoning: Optional[str] = None     # Layer-B/C plain-language "why" for the reviewer
 
     @property
     def is_exception(self) -> bool:

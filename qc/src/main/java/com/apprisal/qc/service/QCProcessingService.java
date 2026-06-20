@@ -676,7 +676,8 @@ public class QCProcessingService {
                         progressBatchId,
                         appraisal.getId(),
                         null,
-                        appraisal.getContentHash());
+                        appraisal.getContentHash(),
+                        engagementStatusFor(pair));
 
                 updateSubProgress(progressBatchId, "queued",
                         "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
@@ -703,7 +704,8 @@ public class QCProcessingService {
                         progressBatchId,
                         appraisal.getId(),
                         null,
-                        appraisal.getContentHash());
+                        appraisal.getContentHash(),
+                        engagementStatusFor(pair));
                 retryCount = pythonClient.getLastRetryCount();
                 throwIfCancelled(progressBatchId);
 
@@ -737,6 +739,22 @@ public class QCProcessingService {
         return result;
     }
 
+    /**
+     * Per-document ingestion status forwarded to Python's G-0 gate so it can tell a
+     * genuinely-absent engagement (NOT_PROVIDED → N/A) from one that exists but failed
+     * or still awaits extraction (PENDING / EXTRACTION_FAILED → HOLD). Returns null
+     * when the engagement is present/usable, letting Python extract it normally.
+     */
+    private static String engagementStatusFor(FilePair pair) {
+        if (pair == null || !pair.hasEngagement() || pair.getEngagement() == null) {
+            return "NOT_PROVIDED";
+        }
+        FileStatus s = pair.getEngagement().getStatus();
+        if (s == FileStatus.ERROR) return "EXTRACTION_FAILED";
+        if (s == FileStatus.PENDING) return "PENDING";
+        return null; // COMPLETED → the path is passed and Python will extract it
+    }
+
     private PythonQCResponse runSyncPythonQc(
             FilePair pair,
             QCModelConfig modelConfig,
@@ -757,7 +775,8 @@ public class QCProcessingService {
                 progressBatchId,
                 appraisal.getId(),
                 null,
-                appraisal.getContentHash());
+                appraisal.getContentHash(),
+                engagementStatusFor(pair));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
