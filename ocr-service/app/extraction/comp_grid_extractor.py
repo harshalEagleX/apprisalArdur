@@ -19,9 +19,12 @@ Output: {comp_<i>_<field>: value} for i = 1..N, using canonical field suffixes.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Feature label (lowercased, matched as a prefix of the row's label text) ->
 # canonical suffix. DESCRIPTIVE fields only — the currency columns (sale price,
@@ -166,7 +169,10 @@ def extract_comp_grid(pdf_path) -> Tuple[Dict[str, str], Dict[str, Dict]]:
     positions: Dict[str, Dict] = {}
     try:
         pdf = pdfplumber.open(str(Path(pdf_path)))
-    except Exception:
+    except Exception as exc:
+        # Entry-point swallow: a failed open means no comparable grid at all —
+        # log so the empty result is traceable, not silent.
+        logger.warning("Comp grid: could not open %s: %s", pdf_path, exc)
         return out, positions
     try:
         comp_base = 0

@@ -16,6 +16,7 @@ import { RuleCard } from "@/components/reviewer/RuleCard";
 import { RuleGroup } from "@/components/reviewer/RuleGroup";
 import { SignOffDialog } from "@/components/reviewer/SignOffDialog";
 import { cleanRuleValue, evidenceText } from "@/lib/ruleEvidence";
+import { ruleStatus, isReviewLikeStatus } from "@/lib/ruleStatus";
 import { useReviewSession } from "@/hooks/useReviewSession";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -52,11 +53,6 @@ type DecisionEvent = {
   reviewerVerified?: boolean | null; overridePending?: boolean; reviewerComment?: string;
 };
 
-function ruleStatus(status: string) {
-  const n = status.toLowerCase();
-  return n === "manual_pass" ? "MANUAL_PASS" : n;
-}
-
 // Reviewer rule groups, in report order, with a friendly label.
 const SECTION_ORDER = [
   "SUBJECT", "CONTRACT", "NEIGHBORHOOD", "SITE", "IMPROVEMENTS",
@@ -70,19 +66,6 @@ function sectionRank(s?: string): number {
 }
 function sectionLabel(s?: string): string {
   return (s ?? "OTHER").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function isReviewLikeStatus(status: string) {
-  return [
-    "verify",
-    "review",
-    "hold",
-    "extraction_failed",
-    "ocr_low_confidence",
-    "source_missing",
-    "system_error",
-    "cross_doc_mismatch",
-  ].includes(ruleStatus(status));
 }
 
 const SCA_GROUP_LABELS: Record<string, string> = {

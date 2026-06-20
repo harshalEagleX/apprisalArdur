@@ -230,7 +230,10 @@ def _extract_yes_no_fields(pdf_path: Path) -> Dict[str, str]:
     try:
         import fitz
         doc = fitz.open(str(pdf_path))
-    except Exception:
+    except Exception as exc:
+        # Entry-point swallow: if the document can't be opened the whole UAD
+        # template parse yields nothing — log so it isn't an invisible blank.
+        logger.warning("L5 UAD template: could not open %s: %s", pdf_path, exc)
         return results
 
     # Cache page words for repeat lookups.
@@ -816,7 +819,9 @@ def _extract_contract_date(pdf_path: Path) -> Dict[str, str]:
                     if date_re.match(w[4]):
                         mm, dd, yy = w[4].split("/")
                         yy = "20" + yy if len(yy) == 2 else yy
-                        results["contract_date"] = f"{int(mm):02d}/{int(dd):02d}/{yy}"
+                        # ISO (YYYY-MM-DD) to match every other date field and the
+                        # SIG-D / cross-date comparisons (which parse %Y-%m-%d).
+                        results["contract_date"] = f"{int(yy):04d}-{int(mm):02d}-{int(dd):02d}"
                         break
                 if "contract_date" in results:
                     break
@@ -854,7 +859,9 @@ def _extract_signature_date(pdf_path: Path) -> Dict[str, str]:
                 if cand:
                     mm, dd, yy = cand[0][4].split("/")
                     yy = "20" + yy if len(yy) == 2 else yy
-                    results["date_of_signature"] = f"{int(mm):02d}/{int(dd):02d}/{yy}"
+                    # ISO (YYYY-MM-DD) — SIG-D parses %Y-%m-%d to compare against the
+                    # effective date; MM/DD/YYYY here silently broke that comparison.
+                    results["date_of_signature"] = f"{int(yy):04d}-{int(mm):02d}-{int(dd):02d}"
                     break
             if "date_of_signature" in results:
                 break

@@ -13,49 +13,9 @@ import type { QCRuleResult } from "@/lib/api";
 import { EvidenceCompare } from "./EvidenceCompare";
 import { buildEvidenceModel } from "@/lib/ruleEvidence";
 import { failRejectionLanguage } from "@/lib/ruleLanguage";
+import { ruleStatus, isReviewLikeStatus, statusStyle, severityStyle } from "@/lib/ruleStatus";
 
 type Decision = "PASS" | "FAIL";
-
-const STATUS_STYLE: Record<string, { border: string; bg: string; text: string }> = {
-  pass:        { border: "border-green-500/20",  bg: "bg-green-950/10",  text: "text-green-200" },
-  fail:        { border: "border-red-500/20",    bg: "bg-red-950/10",    text: "text-red-200" },
-  verify:      { border: "border-amber-500/20",  bg: "bg-amber-950/5",  text: "text-amber-200" },
-  review:      { border: "border-amber-500/20",  bg: "bg-amber-950/10",  text: "text-amber-200" },
-  extraction_failed: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  ocr_low_confidence: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  source_missing: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  system_error: { border: "border-red-500/20", bg: "bg-red-950/10", text: "text-red-200" },
-  cross_doc_mismatch: { border: "border-red-500/20", bg: "bg-red-950/10", text: "text-red-200" },
-  hold: { border: "border-red-500/30", bg: "bg-red-950/15", text: "text-red-200" },
-  skipped: { border: "border-white/8", bg: "bg-white/[0.03]", text: "text-slate-400" },
-  not_executed: { border: "border-white/8", bg: "bg-white/[0.03]", text: "text-slate-400" },
-  not_applicable: { border: "border-white/8", bg: "bg-white/[0.03]", text: "text-slate-400" },
-  MANUAL_PASS: { border: "border-green-500/20",  bg: "bg-green-950/10",  text: "text-green-200" },
-};
-
-const SEV_STYLE: Record<string, string> = {
-  BLOCKING: "bg-red-950/50 border-red-500/25 text-red-200",
-  STANDARD: "bg-[#161B22] border-white/10 text-slate-400",
-  ADVISORY: "bg-[#161B22]/70 border-white/10 text-slate-500",
-};
-
-function ruleStatus(status: string): string {
-  const normalized = status.toLowerCase();
-  return normalized === "manual_pass" ? "MANUAL_PASS" : normalized;
-}
-
-function isReviewLikeStatus(status: string): boolean {
-  return [
-    "verify",
-    "review",
-    "hold",
-    "extraction_failed",
-    "ocr_low_confidence",
-    "source_missing",
-    "system_error",
-    "cross_doc_mismatch",
-  ].includes(status);
-}
 
 export interface RuleCardProps {
   rule: QCRuleResult;
@@ -100,7 +60,7 @@ export const RuleCard = memo(function RuleCard({
   );
   const [now, setNow] = useState(0);
 
-  const s = STATUS_STYLE[normalizedStatus] ?? STATUS_STYLE["verify"];
+  const s = statusStyle(normalizedStatus);
   const sev = rule.severity ?? "STANDARD";
   const isVerify = isReviewLikeStatus(normalizedStatus);
   const isFail = normalizedStatus === "fail";
@@ -202,7 +162,7 @@ export const RuleCard = memo(function RuleCard({
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-medium text-slate-200">{rule.ruleName}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${SEV_STYLE[sev] ?? SEV_STYLE.STANDARD}`}
+                className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${severityStyle(sev)}`}
               >
                 {sev}
               </span>
