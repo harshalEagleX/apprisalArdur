@@ -70,6 +70,13 @@ GROQ_REASONING_EFFORT: str = os.getenv("GROQ_REASONING_EFFORT", "low")
 # budget the client waits — so a multi-page grid is processed in steps rather
 # than 429-failing. Tune to your plan.
 GROQ_TPM_LIMIT: int = int(os.getenv("GROQ_TPM_LIMIT", "6000"))
+# Content-hash cache for deterministic (temperature=0) Groq text calls. Because the
+# call is keyed by the exact model + messages (which include the document text),
+# an identical re-run / duplicate doc returns the stored result for ZERO tokens —
+# the most direct relief for the GROQ_TPM ceiling. Long TTL is safe: same input ⇒
+# same output. CACHE_VERSION busts every entry when the result format changes.
+GROQ_CACHE_ENABLED: bool = os.getenv("GROQ_CACHE_ENABLED", "true").lower() in ("1", "true", "yes")
+GROQ_CACHE_TTL_SECONDS: int = int(os.getenv("GROQ_CACHE_TTL_SECONDS", str(7 * 24 * 3600)))
 # Force the SCA LLM extractor to run even when deterministic extraction looks ok
 # (A/B measurement). Default off → LLM runs only as a repair/fallback.
 SCA_LLM_ALWAYS: bool = os.getenv("SCA_LLM_ALWAYS", "false").lower() in ("1", "true", "yes")

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import collections
+import hashlib
 import json
 import logging
 import os
@@ -180,6 +181,55 @@ def _extract_json(text: Optional[str]) -> Optional[dict]:
         return None
 
 
+# ── Content-hash response cache (temperature=0 ⇒ deterministic, safe to cache) ──
+# Relieves the GROQ_TPM ceiling: an identical call (same model + messages + params)
+# returns the stored JSON for zero tokens. Redis-backed (shared across Celery
+# workers); a bounded in-process dict is the fallback when Redis is unavailable
+# (P-6 — caching never breaks the LLM path).
+_CACHE_VERSION = "1"               # bump to invalidate every entry on a format change
+_CACHE_PREFIX = "groq:cache:"
+_local_cache: "collections.OrderedDict[str, dict]" = collections.OrderedDict()
+_LOCAL_CACHE_MAX = 512
+
+
+def _cache_key(model: str, messages: List[dict], eff, max_tokens: int) -> str:
+    canonical = json.dumps(
+        {"v": _CACHE_VERSION, "model": model, "messages": messages,
+         "eff": eff or "", "max_tokens": max_tokens},
+        sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    )
+    return _CACHE_PREFIX + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _cache_get(key: str) -> Optional[dict]:
+    client = _redis()
+    if client is not None:
+        try:
+            raw = client.get(key)
+            if raw:
+                return json.loads(raw)
+        except Exception as exc:
+            logger.debug("Groq cache get failed (%s) — continuing uncached", exc)
+    val = _local_cache.get(key)
+    if val is not None:
+        _local_cache.move_to_end(key)
+    return val
+
+
+def _cache_set(key: str, value: dict) -> None:
+    client = _redis()
+    if client is not None:
+        try:
+            client.set(key, json.dumps(value), ex=max(1, config.GROQ_CACHE_TTL_SECONDS))
+            return
+        except Exception as exc:
+            logger.debug("Groq cache set failed (%s) — using in-process cache", exc)
+    _local_cache[key] = value
+    _local_cache.move_to_end(key)
+    while len(_local_cache) > _LOCAL_CACHE_MAX:
+        _local_cache.popitem(last=False)
+
+
 def chat_json(
     messages: List[dict],
     *,
@@ -209,6 +259,17 @@ def chat_json(
     eff = reasoning_effort if reasoning_effort is not None else config.GROQ_REASONING_EFFORT
     if eff:
         body["reasoning_effort"] = eff
+
+    # Content-hash cache: a previously-seen identical call returns its stored result
+    # for zero tokens and zero throttle wait — skip the model entirely.
+    cache_key = None
+    if config.GROQ_CACHE_ENABLED:
+        cache_key = _cache_key(model, messages, eff, max_tokens)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            logger.debug("Groq cache hit (%s) — 0 tokens", model)
+            return cached
+
     # Telemetry: separate throttle-wait (queue/rate-limit) from inference (model)
     # time so the admin docStats can tell a frequency problem from a size problem.
     est_tokens = 0
@@ -272,6 +333,8 @@ def chat_json(
             content = resp.json()["choices"][0]["message"]["content"]
             result = _extract_json(content)
             _emit_telemetry(ok=result is not None)
+            if result is not None and cache_key is not None:
+                _cache_set(cache_key, result)   # store deterministic result for reuse
             return result
         except Exception as exc:  # never break the pipeline (P-6)
             logger.warning("Groq %s attempt %d failed: %s", model, attempt + 1, exc)
