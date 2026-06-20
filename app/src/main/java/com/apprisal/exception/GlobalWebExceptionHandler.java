@@ -44,7 +44,9 @@ public class GlobalWebExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public String handleMaxUploadSize(MaxUploadSizeExceededException ex, RedirectAttributes redirectAttributes) {
         log.warn("File upload too large: {}", ex.getMessage());
-        redirectAttributes.addFlashAttribute("error", "File size exceeds maximum allowed limit (100MB)");
+        // No hardcoded number — the configured multipart cap and the service-side
+        // per-file cap can change independently; a literal here would silently drift.
+        redirectAttributes.addFlashAttribute("error", "File size exceeds the maximum allowed upload limit.");
         return "redirect:/client/upload";
     }
 
