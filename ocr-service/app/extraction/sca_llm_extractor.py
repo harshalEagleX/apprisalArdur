@@ -109,7 +109,7 @@ def _num(v) -> Optional[float]:
         return None
     try:
         return float(str(v).replace(",", "").replace("$", "").strip())
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -146,7 +146,7 @@ def _extract_page_comps(page_text: str):
             continue
         try:
             col = int(row.get("comp"))
-        except Exception:
+        except (ValueError, TypeError):
             col = 999
         vals = {f: _num(row.get(f)) for f in ("sale_price", "net_adjustment", "gross_adj_pct", "gla")}
         if vals["sale_price"] is None and vals["net_adjustment"] is None:

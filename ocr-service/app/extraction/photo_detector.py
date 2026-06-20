@@ -11,11 +11,14 @@ from caption phrases rather than a slow vision model. Findings are advisory
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Set
 
 import fitz
+
+logger = logging.getLogger(__name__)
 
 _FRONT = ("subject front", "front view", "front of subject", "front of the subject")
 _REAR = ("subject rear", "rear view", "rear of subject", "rear of the subject")
@@ -51,7 +54,8 @@ def detect_photos(pdf_path) -> PhotoPresence:
         doc = fitz.open(str(pdf_path))
         text = " ".join(doc[i].get_text("text") for i in range(len(doc))).lower()
         doc.close()
-    except Exception:
+    except Exception as exc:
+        logger.warning("Photo detector could not read %s: %s", pdf_path, exc)
         return PhotoPresence()
     p = PhotoPresence(
         has_front=_any(text, _FRONT),

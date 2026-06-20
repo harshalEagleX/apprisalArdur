@@ -148,7 +148,8 @@ def locate_fields(pdf_path, result_set: ExtractionResultSet) -> int:
                 pg = doc[pno - 1]
                 try:
                     wm: Optional[SpatialWordMap] = SpatialWordMap.from_fitz_page(pg, pno)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("field_locator: page %s word-map failed: %s", pno, exc)
                     wm = None
                 cache[pno] = (wm, float(pg.rect.width), float(pg.rect.height))
             else:
