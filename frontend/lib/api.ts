@@ -8,8 +8,7 @@
  */
 
 import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+import { JAVA } from "@/lib/config";
 
 function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
   const normalized: Record<string, string> = {};
@@ -828,6 +827,17 @@ export interface SubmittedQCResult {
 
 export const getSubmittedQueue = () =>
   apiFetch<SubmittedQCResult[]>("/api/reviewer/qc/results/submitted");
+
+/** Results currently assigned to the reviewer and awaiting a decision. */
+export const getReviewerPending = <T = unknown>() =>
+  apiFetch<T>("/api/reviewer/qc/results/pending");
+
+/** Submit a reviewer's final sign-off for a QC result. */
+export const submitReview = (qcResultId: number, notes: string, sessionToken: string) =>
+  apiFetch<Record<string, unknown>>(`/api/reviewer/qc/${qcResultId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ notes, sessionToken }),
+  });
 
 /**
  * WebSocket URL for the QC real-time channel.

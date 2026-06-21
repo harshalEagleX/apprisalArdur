@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import {
   getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus, getReviewConfig,
+  submitReview,
   type BatchFile, type DocumentMatch, type QCRuleResult,
 } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
@@ -17,148 +18,21 @@ import { RuleGroup } from "@/components/reviewer/RuleGroup";
 import { SignOffDialog } from "@/components/reviewer/SignOffDialog";
 import { cleanRuleValue, evidenceText } from "@/lib/ruleEvidence";
 import { ruleStatus, isReviewLikeStatus } from "@/lib/ruleStatus";
+import {
+  FILTERS, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, VIEWER_SCROLL_KEYS, clampZoom,
+  sectionRank, sectionLabel, ruleGroupKey, shouldGroupRule, groupLabelForRule,
+  isNotApplicable, focusForRule, safeReviewerQueuePath,
+  type Decision, type Filter, type RuleFocus, type ReviewProgress,
+  type DecisionEvent, type RuleRenderItem,
+} from "@/lib/reviewVerify";
 import { useReviewSession } from "@/hooks/useReviewSession";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 const PdfDocumentViewer = dynamic(() => import("./PdfDocumentViewer"), {
   ssr: false,
   loading: () => <PageSpinner label="Loading document viewer..." />,
 });
-
-type Decision = "PASS" | "FAIL";
-// "attention" = the default working view: failures + items needing review, passes hidden.
-// Passes are opt-in (the "Pass" tab) — they almost never need reviewer action and only add noise.
-type Filter = "attention" | "all" | "fail" | "verify" | "pass";
-const FILTERS: Filter[] = ["attention", "fail", "verify", "pass", "all"];
-const ZOOM_MIN = 0.6;
-const ZOOM_MAX = 1.8;
-const ZOOM_STEP = 0.1;
-const VIEWER_SCROLL_KEYS = new Set(["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "PageDown", "PageUp"]);
-
-function clampZoom(value: number) {
-  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 10) / 10));
-}
-
-type RuleFocus = {
-  ruleId: string; page: number; documentType: string; note: string;
-  bbox?: { x: number; y: number; w: number; h: number } | null;
-  located: boolean;
-};
-type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: number };
-type DecisionEvent = {
-  ruleResultId: number; decision: Decision; savedAt: string; status: string;
-  reviewerVerified?: boolean | null; overridePending?: boolean; reviewerComment?: string;
-};
-
-// Reviewer rule groups, in report order, with a friendly label.
-const SECTION_ORDER = [
-  "SUBJECT", "CONTRACT", "NEIGHBORHOOD", "SITE", "IMPROVEMENTS",
-  "SALES_COMPARISON", "RECONCILIATION", "COST_APPROACH", "INCOME",
-  "SIGNATURE", "ADDENDUM", "PHOTOS", "SKETCH", "MAPS", "DOCUMENTS",
-  "FHA", "USDA", "GLOBAL", "OTHER",
-];
-function sectionRank(s?: string): number {
-  const i = SECTION_ORDER.indexOf(s ?? "OTHER");
-  return i < 0 ? SECTION_ORDER.length : i;
-}
-function sectionLabel(s?: string): string {
-  return (s ?? "OTHER").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-
-const SCA_GROUP_LABELS: Record<string, string> = {
-  "SCA-3": "Comp address",
-  "SCA-4": "Proximity",
-  "SCA-5": "Data source",
-  "SCA-6": "Verification source",
-  "SCA-7": "Concession adjustment",
-  "SCA-8": "Date of sale",
-  "SCA-9": "Location",
-  "SCA-10": "Property rights",
-  "SCA-11": "Site size",
-  "SCA-12": "View",
-  "SCA-13": "Design / style",
-  "SCA-14": "Quality rating",
-  "SCA-16": "Condition rating",
-  "SCA-17": "Room count & GLA",
-  "SCA-18": "Basement",
-  "SCA-19": "Functional utility",
-  "SCA-20": "Heating / cooling",
-  "SCA-21": "Garage / carport",
-  "SCA-22": "Porch/patio/deck",
-  "SCA-23": "Listing adjustment",
-  "SCA-24": "Unique design",
-  "SCA-25": "New construction comp",
-  "SCA-26": "GLA bracketing",
-  "SCA-NET": "Net adjustment %",
-  "SCA-GROSS": "Gross adjustment %",
-  "SCA-ZF": "Zero-difference adjustment",
-  "SCA-AC": "Adjustment consistency",
-  "SCA-DC": "Date currency",
-  "SCA-FLIP": "Comp resale window",
-  "SCA-PR": "Sale price bracket",
-};
-
-function ruleGroupKey(rule: QCRuleResult) {
-  return `${rule.section ?? "OTHER"}::${rule.ruleId}`;
-}
-
-function shouldGroupRule(rule: QCRuleResult, count: number) {
-  return count > 1 && rule.ruleId.toUpperCase().startsWith("SCA-");
-}
-
-function groupLabelForRule(rule: QCRuleResult) {
-  const id = rule.ruleId.toUpperCase();
-  const configured = SCA_GROUP_LABELS[id];
-  if (configured) return configured;
-  const name = rule.ruleName?.trim();
-  if (!name || name.toUpperCase().endsWith(id)) return "Comparable check";
-  return name.replace(/^Sales Comparison\s+[—-]\s*/i, "");
-}
-
-type RuleRenderItem = {
-  key: string;
-  section?: string;
-  rules: QCRuleResult[];
-  grouped: boolean;
-  label?: string;   // override group title (e.g. a whole section collapsed as N/A)
-};
-
-function isNotApplicable(rule: QCRuleResult) {
-  return rule.status?.toLowerCase() === "not_applicable";
-}
-
-function focusForRule(rule: QCRuleResult): RuleFocus {
-  const backendPage = typeof rule.pdfPage === "number" && rule.pdfPage > 0 ? rule.pdfPage : null;
-  // A box is real only when all four are numbers AND it has positive area. The
-  // backend stores 0,0,0,0 to mean "page known, exact box unavailable" (the
-  // value could not be located precisely), which must scroll to the page
-  // WITHOUT drawing a zero-size highlight — per the MIRA page-level-only rule.
-  const hasBox =
-    [rule.bboxX, rule.bboxY, rule.bboxW, rule.bboxH].every(v => typeof v === "number") &&
-    (rule.bboxW as number) > 0 && (rule.bboxH as number) > 0;
-  if (!backendPage) {
-    return { ruleId: rule.ruleId, page: 1, documentType: "APPRAISAL", note: "Location not yet extracted", bbox: null, located: false };
-  }
-  return {
-    ruleId: rule.ruleId, page: backendPage, documentType: "APPRAISAL",
-    note: hasBox ? "OCR evidence location" : "Page located; field box unavailable",
-    bbox: hasBox ? { x: rule.bboxX as number, y: rule.bboxY as number, w: rule.bboxW as number, h: rule.bboxH as number } : null,
-    located: true,
-  };
-}
-
-function safeReviewerQueuePath(value: string | null) {
-  if (!value) return "/reviewer/queue";
-  try {
-    const decoded = decodeURIComponent(value);
-    return decoded.startsWith("/reviewer/queue") ? decoded : "/reviewer/queue";
-  } catch {
-    return value.startsWith("/reviewer/queue") ? value : "/reviewer/queue";
-  }
-}
 
 function CountBadge({ label, count, style }: { label: string; count: number; style: string }) {
   return <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${style}`}>{count} {label}</span>;
@@ -572,31 +446,18 @@ export default function VerifyFilePage() {
     setSubmitError("");
     setSubmitting(true);
     try {
-      const response = await fetch(`${JAVA}/api/reviewer/qc/${qcResultId}/submit`, {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: submitNotes.trim(), sessionToken }),
-      });
-      if (!response.ok) {
-        let msg = "Submit failed. Some rules may still need a decision.";
-        try {
-          const body = await response.json() as { error?: string; message?: string };
-          if (body.message) msg = body.message;
-          else if (body.error) msg = body.error;
-        } catch { /* ignore parse errors */ }
-        setSubmitError(msg);
-        setSubmitting(false);
-        // reload progress + rules so the reviewer can see what's still pending
-        void Promise.all([loadRules(), getQCProgress(qcResultId).then(setProgress).catch(() => undefined)]);
-        return;
-      }
-      // Success — close dialog then navigate so the browser can complete the fetch lifecycle
+      await submitReview(qcResultId, submitNotes.trim(), sessionToken);
+      // Success — close dialog then navigate so the browser can complete the lifecycle
       setSignoffOpen(false);
       window.location.href = `/reviewer/submitted/${qcResultId}?returnTo=${encodeURIComponent(returnTo)}`;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Network error during submit.";
+      const msg = err instanceof Error && err.message
+        ? err.message
+        : "Submit failed. Some rules may still need a decision.";
       setSubmitError(msg);
       setSubmitting(false);
+      // reload progress + rules so the reviewer can see what's still pending
+      void Promise.all([loadRules(), getQCProgress(qcResultId).then(setProgress).catch(() => undefined)]);
     }
   }
 

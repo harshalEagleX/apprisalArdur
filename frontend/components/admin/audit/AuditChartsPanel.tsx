@@ -6,14 +6,13 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { AnalyticsOverview, MlInsights, TrendPoint, SlaDashboard } from "./types";
+import { JAVA } from "@/lib/config";
 
 const TrendChart    = dynamic(() => import("./charts/TrendChart"),    { ssr: false });
 const DecisionDonut = dynamic(() => import("./charts/DecisionDonut"), { ssr: false });
 const FileVolumeBar = dynamic(() => import("./charts/FileVolumeBar"), { ssr: false });
 const OcrMethodBar  = dynamic(() => import("./charts/OcrMethodBar"),  { ssr: false });
 const OperatorBar   = dynamic(() => import("./charts/OperatorBar"),   { ssr: false });
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(`${JAVA}${path}`, { credentials: "include" });

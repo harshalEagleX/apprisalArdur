@@ -13,8 +13,6 @@ import EmptyState from "@/components/shared/EmptyState";
 import { toast } from "@/lib/toast";
 import { displayName } from "@/lib/displayName";
 
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
-
 export default function BatchDetailPage() {
   const params = useParams();
   const id = Number(params?.id);

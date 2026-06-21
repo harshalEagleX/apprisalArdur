@@ -5,6 +5,7 @@ import { Network, Maximize2, AlertCircle } from "lucide-react";
 import type { GraphData, GraphNode, ViewMode, BatchSummary } from "@/components/admin/audit/types";
 import { NODE_COLOR, NODE_SIZE, EDGE_COLOR, nodeStatusLabel } from "@/components/admin/audit/types";
 import { displayName } from "@/lib/displayName";
+import { JAVA } from "@/lib/config";
 import AuditSidebar     from "@/components/admin/audit/AuditSidebar";
 import AuditBreadcrumb  from "@/components/admin/audit/AuditBreadcrumb";
 import AuditNodeDrawer  from "@/components/admin/audit/AuditNodeDrawer";
@@ -19,8 +20,6 @@ const ForceGraph2D = dynamic(
   () => import("@/components/admin/AuditForceGraph"),
   { ssr: false, loading: () => <GraphSkeleton /> }
 );
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 async function fetchGraph(url: string): Promise<GraphData> {
   const controller = new AbortController();

@@ -4,8 +4,7 @@ import { X, ExternalLink, History } from "lucide-react";
 import type { GraphNode, GraphLink, ViewMode } from "./types";
 import { NODE_COLOR, isSupportingPending } from "./types";
 import { displayName } from "@/lib/displayName";
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+import { JAVA } from "@/lib/config";
 
 interface Revision {
   revision: number;

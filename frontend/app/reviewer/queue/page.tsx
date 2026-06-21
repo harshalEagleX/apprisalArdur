@@ -6,13 +6,12 @@ import {
   Archive,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { type QCResult } from "@/lib/api";
+import { getReviewerPending, getSubmittedQueue, type QCResult } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
 import { PageSpinner } from "@/components/shared/Spinner";
 
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 type QueueView = "all" | "failures" | "review";
 const QUEUE_VIEWS: QueueView[] = ["all", "failures", "review"];
 
@@ -82,20 +81,19 @@ export default function ReviewerQueuePage() {
     else setLoading(true);
     setError("");
     try {
-      const [pendingRes, submittedRes] = await Promise.all([
-        fetch(`${JAVA}/api/reviewer/qc/results/pending`, { credentials: "include" }),
-        fetch(`${JAVA}/api/reviewer/qc/results/submitted`, { credentials: "include" }),
-      ]);
-      if (!pendingRes.ok) { setError(`Server responded with ${pendingRes.status}`); return; }
-      const data: unknown = await pendingRes.json();
+      // Pending is the critical payload; the submitted list is best-effort
+      // (a failure there must not blank out the queue), so it gets its own catch.
+      const data = await getReviewerPending<unknown>();
       setItems(asArray<QCResult>(data));
       setStaleIds(new Set()); // a fresh load reflects the latest active results
-      if (submittedRes.ok) {
-        const submitted: unknown = await submittedRes.json();
+      try {
+        const submitted = await getSubmittedQueue();
         setSubmittedItems(asArray<SubmittedReviewItem>(submitted));
-      }
-    } catch {
-      setError("Could not reach the server. Is the backend running?");
+      } catch { /* non-critical — keep the previously loaded submitted list */ }
+    } catch (err) {
+      setError(err instanceof Error && err.message
+        ? err.message
+        : "Could not reach the server. Is the backend running?");
     } finally {
       setLoading(false);
       setRefreshing(false);

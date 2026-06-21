@@ -5,12 +5,10 @@ import {
   ArrowLeft, CheckCircle2, XCircle, AlertTriangle, FileText,
   RefreshCw, Send, ClipboardList, BookOpen, ChevronDown,
 } from "lucide-react";
-import { getQCRules, type QCRuleResult } from "@/lib/api";
+import { getQCRules, requestReReview as apiRequestReReview, type QCRuleResult } from "@/lib/api";
 import { buildEvidenceModel, cleanRuleValue, evidenceText, parseEvidence } from "@/lib/ruleEvidence";
 import { failRejectionLanguage } from "@/lib/ruleLanguage";
 import { PageSpinner } from "@/components/shared/Spinner";
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
 
 type TransactionType = "PURCHASE" | "REFINANCE" | "UNKNOWN";
 
@@ -95,13 +93,7 @@ export default function SubmittedReviewPage() {
     if (!reReviewReason.trim()) { setShowReasonBox(true); return; }
     setRequesting(true);
     try {
-      const res = await fetch(`${JAVA}/api/reviewer/qc/${qcResultId}/request-re-review`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reReviewReason.trim() }),
-      });
-      if (!res.ok) throw new Error("Request failed");
+      await apiRequestReReview(qcResultId, reReviewReason.trim());
       setReReviewDone(true);
     } catch {
       setError("Re-review request failed. Please try again.");

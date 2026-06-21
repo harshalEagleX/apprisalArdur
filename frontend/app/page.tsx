@@ -2,15 +2,12 @@
 import { useEffect } from "react";
 import { BrainCircuit, ShieldCheck } from "lucide-react";
 import Spinner from "@/components/shared/Spinner";
-
-const JAVA = process.env.NEXT_PUBLIC_JAVA_URL ?? "http://localhost:8080";
+import { getMe } from "@/lib/api";
 
 export default function RootPage() {
   useEffect(() => {
-    fetch(`${JAVA}/api/me`, { credentials: "include" })
-      .then(async r => {
-        if (!r.ok) { window.location.href = "/login"; return; }
-        const { role } = await r.json() as { role: string };
+    getMe()
+      .then(({ role }) => {
         if (role === "ADMIN") window.location.href = "/admin";
         else if (role === "REVIEWER") window.location.href = "/reviewer/queue";
         else window.location.href = "/login";
