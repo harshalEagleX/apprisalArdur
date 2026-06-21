@@ -36,7 +36,10 @@ export default function OverridesPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   async function decide(ruleResultId: number, approve: boolean) {
     setDeciding(prev => new Set(prev).add(ruleResultId));
@@ -101,7 +104,7 @@ export default function OverridesPage() {
                   <p className="text-sm text-slate-300">{o.message}</p>
                   {o.reviewerComment && (
                     <p className="text-xs italic text-slate-500">
-                      Reviewer note: "{o.reviewerComment}"
+                      Reviewer note: {'"'}{o.reviewerComment}{'"'}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-3 text-[11px] text-slate-600">

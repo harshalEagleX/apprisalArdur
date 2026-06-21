@@ -17,6 +17,13 @@ interface Props {
 type SortKey = "label" | "type" | "status";
 type SortDir = "asc" | "desc";
 
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (sortKey !== col) return <ChevronDown size={9} className="text-slate-700" />;
+  return sortDir === "asc"
+    ? <ChevronUp size={9} className="text-indigo-400" />
+    : <ChevronDown size={9} className="text-indigo-400" />;
+}
+
 function StatusBadge({ status, fileType }: { status: string; fileType?: string }) {
   // A supporting document (contract / engagement letter) is read for cross-document
   // checks but never QC'd on its own, so its file status stays PENDING forever.
@@ -88,13 +95,6 @@ export default function AuditListView({
     else { setSortKey(key); setSortDir("asc"); }
   }
 
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <ChevronDown size={9} className="text-slate-700" />;
-    return sortDir === "asc"
-      ? <ChevronUp size={9} className="text-indigo-400" />
-      : <ChevronDown size={9} className="text-indigo-400" />;
-  }
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#080C10]">
       {/* Toolbar */}
@@ -125,19 +125,19 @@ export default function AuditListView({
                 className="text-left px-2 py-2 cursor-pointer hover:text-slate-300 select-none"
                 onClick={() => toggleSort("label")}
               >
-                <span className="flex items-center gap-1">Label <SortIcon col="label" /></span>
+                <span className="flex items-center gap-1">Label <SortIcon col="label" sortKey={sortKey} sortDir={sortDir} /></span>
               </th>
               <th
                 className="text-left px-2 py-2 cursor-pointer hover:text-slate-300 select-none w-28"
                 onClick={() => toggleSort("type")}
               >
-                <span className="flex items-center gap-1">Type <SortIcon col="type" /></span>
+                <span className="flex items-center gap-1">Type <SortIcon col="type" sortKey={sortKey} sortDir={sortDir} /></span>
               </th>
               <th
                 className="text-left px-2 py-2 cursor-pointer hover:text-slate-300 select-none w-32"
                 onClick={() => toggleSort("status")}
               >
-                <span className="flex items-center gap-1">Status <SortIcon col="status" /></span>
+                <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /></span>
               </th>
               <th className="text-left px-2 py-2 w-24">Reviewer</th>
               <th className="text-left px-2 py-2 w-16">Rules</th>

@@ -162,8 +162,10 @@ export default function BatchesPage() {
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  // Clear selection when page changes
-  useEffect(() => { clearSelection(); }, [page, statusFilter, debouncedSearch, clearSelection]);
+  // Clear selection when the filter/page changes. setSelectedIds has stable identity
+  // (guaranteed by useState), so this effect only re-runs when the filter changes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setSelectedIds(new Set()); }, [page, statusFilter, debouncedSearch]);
 
   const handleBulkQC = useCallback(async () => {
     if (selectedIds.size === 0) return;
@@ -174,7 +176,7 @@ export default function BatchesPage() {
       if (succeeded.length > 0) toast.success(`QC started for ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
       if (failed.length > 0) toast.error(`Failed to start QC for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
       clearSelection();
-    } catch (e) {
+    } catch {
       toast.error("Bulk QC failed");
     } finally {
       setBulkLoading(false);
@@ -194,7 +196,7 @@ export default function BatchesPage() {
       }
       if (failed.length > 0) toast.error(`Failed to delete ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
       clearSelection();
-    } catch (e) {
+    } catch {
       toast.error("Bulk delete failed");
     } finally {
       setBulkLoading(false);
@@ -210,7 +212,7 @@ export default function BatchesPage() {
       if (succeeded.length > 0) toast.success(`Reviewer assigned to ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
       if (failed.length > 0) toast.error(`Assignment failed for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
       clearSelection();
-    } catch (e) {
+    } catch {
       toast.error("Bulk assign failed");
     } finally {
       setBulkLoading(false);

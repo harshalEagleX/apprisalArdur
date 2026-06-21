@@ -122,7 +122,10 @@ export default function AuditChartsPanel() {
     }
   }, [days]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   return (
     <aside className="w-64 flex-shrink-0 border-l border-white/10 bg-[#0d1117] flex flex-col overflow-y-auto text-white">

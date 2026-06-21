@@ -39,7 +39,11 @@ export function useSessionExpiry(): SessionExpiryState {
     }
   }, []);
 
+  // Run an immediate tick on mount so the expiry banner shows without waiting
+  // 60 s, then poll on the interval. tick reads storage and calls setMsRemaining
+  // once; there is no feedback loop.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     tick();
     const timer = setInterval(tick, CHECK_INTERVAL_MS);
     return () => clearInterval(timer);

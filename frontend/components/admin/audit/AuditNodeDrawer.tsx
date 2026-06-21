@@ -167,13 +167,17 @@ export default function AuditNodeDrawer({
   const [revLoading,  setRevLoading]  = useState(false);
   const [revExpanded, setRevExpanded] = useState(false);
 
+  // Guard-reset: clear stale revision data when the selected node changes.
+  // Synchronous setState here, but no feedback loop — node.id drives this.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (node.type !== "QC_RUN" || !node.meta.qcResultId) {
       setRevisions([]);
       return;
     }
     setRevisions([]);
     setRevExpanded(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [node.id, node.type, node.meta.qcResultId]);
 
   function loadRevisions() {

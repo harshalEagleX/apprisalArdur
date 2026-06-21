@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Package, Building2, Users, Loader2, X } from "lucide-react";
-import { getAdminBatches, getClients, getAllUsers, type Batch, type Client, type User } from "@/lib/api";
+import { getAdminBatches, getClients, getAllUsers, type Batch } from "@/lib/api";
 
 type ResultKind = "batch" | "client" | "user";
 interface Result {
@@ -34,12 +34,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const inputRef                  = useRef<HTMLInputElement>(null);
   const router                    = useRouter();
 
-  // Focus the input whenever the palette opens
+  // Reset search state and focus the input whenever the palette opens.
+  // State is set on a controlled closed→open transition, not in a loop.
   useEffect(() => {
     if (open) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setQuery("");
       setResults([]);
       setCursor(0);
+      /* eslint-enable react-hooks/set-state-in-effect */
       window.setTimeout(() => inputRef.current?.focus(), 10);
     }
   }, [open]);

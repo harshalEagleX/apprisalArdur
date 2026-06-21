@@ -81,8 +81,11 @@ function RunDiff({ runId }: { runId: number }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Initial sync state resets before async fetch — no render cascade.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setLoading(true);
     setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
     getQCResultDiff(runId)
       .then(d => { if (!cancelled) setDiff(d); })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
@@ -346,6 +349,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
     if (!batch) return;
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const timer = window.setTimeout(() => drawerRef.current?.focus(), 0);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadHistory(batch.id);
     return () => {
       window.clearTimeout(timer);

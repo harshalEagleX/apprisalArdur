@@ -16,13 +16,11 @@ const LS_KEY = "activityMonitor.expanded";
  */
 export default function ActivityMonitor() {
   const [jobs, setJobs]       = useState<ActiveJob[]>([]);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => {
+    try { return localStorage.getItem(LS_KEY) === "1"; } catch { return false; }
+  });
   const [now, setNow]         = useState(() => Date.now());
 
-  // Restore the user's last pill/panel choice so it isn't intrusive on every load.
-  useEffect(() => {
-    try { setExpanded(localStorage.getItem(LS_KEY) === "1"); } catch { /* ignore */ }
-  }, []);
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, expanded ? "1" : "0"); } catch { /* ignore */ }
   }, [expanded]);

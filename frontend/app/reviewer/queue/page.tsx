@@ -8,7 +8,6 @@ import {
 import type { ComponentType } from "react";
 import { getReviewerPending, getSubmittedQueue, type QCResult } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
 import { PageSpinner } from "@/components/shared/Spinner";
 

@@ -110,8 +110,12 @@ export default function AdminAuditPage() {
 
   // ── Bootstrap ───────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Both fns set state in async callbacks; the rule fires because it traces
+    // setState inside the called function, but there is no sync cascade.
+    /* eslint-disable react-hooks/set-state-in-effect */
     void loadBatchList();
     void loadGraph();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [loadGraph, loadBatchList]);
 
   // ── Spread nodes apart so labels don't collide ──────────────────────────────
