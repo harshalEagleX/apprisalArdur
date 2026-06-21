@@ -31,9 +31,14 @@ spring:
       # Java schema is managed directly by JPA/Hibernate. Do not wire Flyway,
       # Liquibase, or other third-party migration runners in this project.
       # Manual DB fixes stay manual; Python tables are reconciled separately
-      # through ocr-service/manage_db.py update. Use update here because the
-      # shared database is persistent across restarts, not disposable.
-      ddl-auto: update
+      # through ocr-service/manage_db.py update.
+      #
+      # Env-driven so production can run `validate` (Hibernate verifies the live
+      # schema matches the entities and refuses to silently auto-mutate it) once a
+      # reviewed DDL snapshot is applied, while dev keeps `update`. Default stays
+      # `update` so existing startup is unchanged. NEVER set create/create-drop on
+      # a shared DB — those drop every table on boot.
+      ddl-auto: ${JPA_DDL_AUTO:update}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
