@@ -1,10 +1,11 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getBatchStatus,
   getBatchQCProgress,
   type Batch,
 } from "@/lib/api";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { trackJob, updateJob, removeJob } from "@/lib/jobs";
 import { toast } from "@/lib/toast";
 import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
@@ -45,6 +46,10 @@ export function useBatchPolling(
   const [startedAt, setStartedAt] = useState<Record<number, number>>({});
   const pollingRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
   const pollingStartedPerfRef = useRef<Record<number, number>>({});
+  // Per-batch refresh fn so a WebSocket progress event can pull fresh state on
+  // demand; the active-batch ids drive the WS topic subscriptions below.
+  const refreshFnRef = useRef<Record<number, () => void>>({});
+  const [activeIds, setActiveIds] = useState<number[]>([]);
   // Keep a stable ref to the latest onBatchComplete to avoid stale closure in poll()
   const onBatchCompleteRef = useRef(onBatchComplete);
 
@@ -63,6 +68,8 @@ export function useBatchPolling(
       delete pollingRef.current[batchId];
     }
     delete pollingStartedPerfRef.current[batchId];
+    delete refreshFnRef.current[batchId];
+    setActiveIds(ids => ids.filter(x => x !== batchId));
     removeJob(jobKey);
     setProgress(p => {
       const n = { ...p };
@@ -216,10 +223,35 @@ export function useBatchPolling(
       }
     };
 
+    // WebSocket pushes a progress event the instant the backend records one
+    // (QCProcessingService publishes /topic/qc/batch/{id}/progress). On that
+    // signal we refresh immediately, so live updates no longer depend on the
+    // timer. The interval is now a slow safety net (reconnect gaps + terminal-
+    // status detection) rather than the primary mechanism — 2s -> 10s cuts the
+    // steady-state request volume ~5x per watched batch.
+    refreshFnRef.current[batchId] = () => { void poll(); };
+    setActiveIds(ids => (ids.includes(batchId) ? ids : [...ids, batchId]));
+
     void poll();
-    const interval = setInterval(poll, 2000);
+    const interval = setInterval(poll, 10000);
     pollingRef.current[batchId] = interval;
   }, [stopPolling]);
+
+  // Live progress over the existing WebSocket pub/sub (same channel the reviewer
+  // queue uses). A message on a batch's progress topic triggers an immediate
+  // refresh via that batch's poll fn; no payload mapping needed — the proven
+  // status+progress fetch supplies the data.
+  const progressTopics = useMemo(
+    () => activeIds.map(id => `/topic/qc/batch/${id}/progress`),
+    [activeIds],
+  );
+  useWebSocket(
+    progressTopics,
+    useCallback((topic: string) => {
+      const m = topic.match(/\/topic\/qc\/batch\/(\d+)\/progress/);
+      if (m) refreshFnRef.current[Number(m[1])]?.();
+    }, []),
+  );
 
   // Auto-start polling for any batch already in QC_PROCESSING when the list loads
   useEffect(() => {
