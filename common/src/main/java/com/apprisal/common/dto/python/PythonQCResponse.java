@@ -35,6 +35,10 @@ public record PythonQCResponse(
         @JsonProperty("vision_model")        String visionModel,
         @JsonProperty("supporting_document_missing") Boolean supportingDocumentMissing,
         @JsonProperty("missing_supporting_documents") List<String> missingSupportingDocuments,
+        // Explicit blocking signal computed by the engine from HOLD rules — the
+        // source of truth for the BLOCKED decision (remediation E1).
+        @JsonProperty("blocking")            Boolean blocking,
+        @JsonProperty("blocking_rules")      List<String> blockingRules,
         @JsonProperty("rule_results")        List<PythonRuleResult> ruleResults,
         @JsonProperty("action_items")        List<String> actionItems,
         List<String> suggestions,

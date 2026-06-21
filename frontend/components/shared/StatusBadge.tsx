@@ -11,6 +11,7 @@ const CONFIG: Record<string, { label: string; dot: string; text: string; bg: str
   AUTO_PASS:  { label: "Auto Pass",    dot: "bg-green-400", text: "text-green-200", bg: "bg-green-950/40", border: "border-green-500/25" },
   TO_VERIFY:  { label: "Needs Review", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
   AUTO_FAIL:  { label: "Failed",       dot: "bg-red-400",   text: "text-red-200",   bg: "bg-red-950/40", border: "border-red-500/25" },
+  BLOCKED:    { label: "Blocked",      dot: "bg-red-400",   text: "text-red-200",   bg: "bg-red-950/50", border: "border-red-500/35" },
   // Rule statuses
   pass:        { label: "Pass",   dot: "bg-green-400", text: "text-green-200", bg: "bg-green-950/40", border: "border-green-500/25" },
   fail:        { label: "Fail",   dot: "bg-red-400",   text: "text-red-200",   bg: "bg-red-950/40", border: "border-red-500/25" },

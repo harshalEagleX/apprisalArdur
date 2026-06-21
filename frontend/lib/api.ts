@@ -899,7 +899,7 @@ export interface BatchFile {
 export interface QCResult {
   id: number;
   batchFile: BatchFile;
-  qcDecision: "AUTO_PASS" | "TO_VERIFY" | "AUTO_FAIL";
+  qcDecision: "AUTO_PASS" | "TO_VERIFY" | "AUTO_FAIL" | "BLOCKED";
   finalDecision?: "PASS" | "FAIL";
   totalRules: number;
   passedCount: number;
@@ -1001,7 +1001,7 @@ export interface ReviewSession {
 
 export interface QCFileInfo {
   id: number;
-  qcDecision?: "AUTO_PASS" | "TO_VERIFY" | "AUTO_FAIL";
+  qcDecision?: "AUTO_PASS" | "TO_VERIFY" | "AUTO_FAIL" | "BLOCKED";
   missingDocuments?: string | null;
   batchFile?: BatchFile;
   documents?: BatchFile[];

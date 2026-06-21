@@ -389,6 +389,7 @@ class RerunGuardIntegrationTests {
                 "doc", "job", false, null,
                 "groq", "gpt-oss-120b", null,
                 false, List.of(),
+                false, List.of(),
                 List.of(), List.of(), List.of(), List.of(),
                 null);
     }

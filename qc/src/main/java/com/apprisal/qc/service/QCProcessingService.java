@@ -430,6 +430,7 @@ public class QCProcessingService {
                     case AUTO_PASS -> autoPassCount++;
                     case TO_VERIFY -> toVerifyCount++;
                     case AUTO_FAIL -> autoFailCount++;
+                    case BLOCKED   -> toVerifyCount++;   // blocked routes to human review
                 }
                 log.info(TimelineLog.event("admin_batches", "java_qc_file_complete",
                         "batch_id", batchId,
@@ -1139,6 +1140,9 @@ public class QCProcessingService {
      * - All PASS → AUTO_PASS
      */
     private QCDecision determineDecision(PythonQCResponse response) {
+        // A HOLD rule blocks the report regardless of the other counts — checked
+        // first so the blocking contract holds for every client, not just the UI.
+        if (Boolean.TRUE.equals(response.blocking()))                   return QCDecision.BLOCKED;
         if (response.verify()       != null && response.verify()       > 0) return QCDecision.TO_VERIFY;
         if (response.failed()       != null && response.failed()       > 0) return QCDecision.AUTO_FAIL;
         return QCDecision.AUTO_PASS;
