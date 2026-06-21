@@ -40,11 +40,16 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
         WHERE (:status IS NULL OR b.status = :status)
           AND (
             :search IS NULL
-            OR LOWER(b.parentBatchId) LIKE LOWER(CONCAT('%', :search, '%'))
-            OR LOWER(b.client.name) LIKE LOWER(CONCAT('%', :search, '%'))
-            OR LOWER(b.client.code) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(b.parentBatchId) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+            OR LOWER(b.client.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+            OR LOWER(b.client.code) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
           )
         """)
+    // NOTE: CAST(:search AS string) is required, not cosmetic. Postgres resolves the
+    // LOWER(CONCAT(...)) function signature at plan time even when ":search IS NULL"
+    // short-circuits the OR — an untyped null binds as bytea, so LOWER(bytea) fails
+    // with HTTP 500 on any status-only filter (no search term). The cast pins the
+    // param to varchar so the null is typed. Surfaced by load-testing the status filter.
     Page<Batch> searchAdminBatches(@Param("status") BatchStatus status,
                                    @Param("search") String search,
                                    Pageable pageable);
