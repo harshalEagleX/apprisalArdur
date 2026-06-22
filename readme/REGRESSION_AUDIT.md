@@ -67,8 +67,8 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 ## Permissions & roles
 | Check | Status | Evidence | Risk if skipped | Recommended test |
 |---|---|---|---|---|
-| Unaffected endpoints keep prior access rules | Partial | middleware activation (`37b181b`) changes enforcement globally; only `JwtUtilsTest` covers token logic | High | Matrix test: each route × {anon, reviewer, admin} → expected 200/302/403 |
-| Reviewer cannot reach admin routes | Missing | no role-matrix test found | High | (as above) |
+| Unaffected endpoints keep prior access rules | **Covered** | `app/.../security/ApiAuthorizationMatrixTest` (8) — full `@SpringBootTest` MockMvc over the real `/api/**` SecurityConfig chain | High | (covered) |
+| Reviewer cannot reach admin routes | **Covered** | same — REVIEWER→403 on `/api/admin/**`, `/api/qc/process/**`, `/api/graph/**`; both roles on `/api/{reviewer,qc,analytics}/**`; anon→401/403; `/api/auth/**` public | High | (covered) |
 | Expired/!invalid JWT handling | Partial | `JwtUtilsTest` (util level), not route level | Med | Expired token → redirect/401 at the middleware boundary |
 
 ## Old API responses
@@ -103,8 +103,9 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
    valid users or exposes a route. *Test:* full route × role matrix (anon/reviewer/admin →
    200/302/403), plus expired-JWT redirect. → **PARTIALLY COVERED:** `frontend/middleware.test.ts`
    (added 2026-06-22, 7 cases) pins public bypass / unauth→login / ADMIN allow / REVIEWER block
-   on `/admin`+`/analytics` / REVIEWER allow. Still missing: the **Java-side** API authorization
-   matrix (the authoritative gate) and expired-JWT behavior.
+   on `/admin`+`/analytics` / REVIEWER allow. → **NOW COVERED** on the authoritative side too:
+   `app/.../security/ApiAuthorizationMatrixTest` (8) drives the real `/api/**` SecurityConfig
+   chain via MockMvc. Remaining gap: expired-JWT behavior at the filter boundary.
 2. **Batch status-filter 500 fix has no regression test** (`7756736`) — the exact bug can
    silently return. *Test:* repository/controller test for status filter with null and
    non-null `:search` returning 200 + correct rows.
