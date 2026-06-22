@@ -1,0 +1,171 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SHAL Appraisal QC — UAT stack (single-host shared environment)
+#
+#   postgres ─┬─ ocr-service (FastAPI :5001) ─┐
+#   redis ────┤   celery-worker               ├─ java-backend (:8080) ─ frontend (:3000)
+#             └─ (broker + Groq cache)        ┘        │
+#                                              prometheus (:9090) ─ grafana (:3001)
+#
+# Usage:  cp .env.uat.example .env.uat && edit secrets, then  bash scripts/uat/up.sh
+# Secrets come from .env.uat (git-ignored). Service-to-service wiring is explicit below.
+# ─────────────────────────────────────────────────────────────────────────────
+name: shal-uat
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ardurApprisal}
+      POSTGRES_USER: ${DB_USERNAME:-apprisal}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.uat}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-apprisal} -d ${DB_NAME:-ardurApprisal}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  ocr-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ocr
+    environment:
+      DATABASE_URL: postgresql://${DB_USERNAME:-apprisal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-ardurApprisal}
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in .env.uat}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_VISION_API_KEY: ${GROQ_VISION_API_KEY:-}
+      GROQ_CACHE_ENABLED: "true"
+      ENVIRONMENT: uat
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${OCR_PORT:-5001}:5001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ocr
+    command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      RUN_DB_CREATE: "0"   # the web service owns schema setup
+      DATABASE_URL: postgresql://${DB_USERNAME:-apprisal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-ardurApprisal}
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_VISION_API_KEY: ${GROQ_VISION_API_KEY:-}
+      GROQ_CACHE_ENABLED: "true"
+      ENVIRONMENT: uat
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      ocr-service: { condition: service_started }
+    restart: unless-stopped
+
+  java-backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.java
+    environment:
+      SPRING_PROFILES_ACTIVE: uat
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-ardurApprisal}
+      DB_USERNAME: ${DB_USERNAME:-apprisal}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      OCR_SERVICE_URL: http://ocr-service:5001
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.uat}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-harshal@eaglexinfo.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.uat}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-update}
+      STORAGE_PATH: /app/uploads
+      TOMCAT_BASEDIR: /tmp/apprisal-tomcat
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "${JAVA_PORT:-8080}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      ocr-service: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        # Browser-facing URL of the Java backend. Override for a remote UAT host.
+        NEXT_PUBLIC_JAVA_URL: ${NEXT_PUBLIC_JAVA_URL:-http://localhost:8080}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      java-backend: { condition: service_started }
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.uat.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      java-backend: { condition: service_started }
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  promdata:
+  grafanadata:

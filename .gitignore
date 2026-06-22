@@ -54,7 +54,11 @@ build/
 .env
 .env.*
 !.env.example
+!.env.uat.example
 application-prod.yml
+
+# UAT local-runner artifacts (logs + pidfiles from scripts/uat/run-local.sh)
+.uat-run/
 application-prod.properties
 application-local.yml
 application-local.properties

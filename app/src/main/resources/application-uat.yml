@@ -1,0 +1,34 @@
+# UAT profile overrides (activated by SPRING_PROFILES_ACTIVE=uat).
+# Inherits everything from application.yml; only the UAT-specific hardening lives here.
+# Secrets still come from environment variables (see .env.uat) — none are hardcoded here.
+spring:
+  jpa:
+    # Stable schema in UAT. Keep 'update' until a schema baseline exists, then switch
+    # to 'validate' (via JPA_DDL_AUTO=validate) to catch drift instead of silently altering.
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+
+server:
+  session:
+    cookie:
+      # UAT is expected to run behind TLS — flip via COOKIE_SECURE=true.
+      secure: ${COOKIE_SECURE:false}
+
+# Expose actuator/prometheus on a SEPARATE management port (Strategy A from
+# prometheus/prometheus.yml.example). In the compose network this port is reachable by
+# the prometheus container but is NOT published to the host, so it stays internal.
+management:
+  server:
+    port: 9091
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+    com.apprisal: ${APP_LOG_LEVEL:INFO}

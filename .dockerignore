@@ -1,0 +1,19 @@
+# Build context hygiene for the UAT images — keep the context small & secret-free.
+**/target
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+.git
+.idea
+.vscode
+uploads
+*.log
+**/.env
+**/.env.*
+!**/.env.example
+brain/reports
+brain/test-data
+prometheus/grafana-data
