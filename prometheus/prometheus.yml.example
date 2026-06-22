@@ -1,0 +1,41 @@
+# Apprisal — example Prometheus scrape config (OBS-008)
+#
+# IMPORTANT — /actuator/prometheus is ADMIN-secured on the main app port (we locked
+# it down in SecurityConfig). Pick ONE of the scrape strategies below for an
+# internal single-host deployment. Strategy A is recommended.
+#
+# ── Strategy A (recommended): localhost-only management port ──────────────────
+# Expose actuator on a separate port bound to 127.0.0.1 so only a co-located
+# Prometheus can reach it, and the main app port stays clean. Add to the JVM env:
+#     MANAGEMENT_SERVER_PORT=9091
+#     MANAGEMENT_SERVER_ADDRESS=127.0.0.1
+# (Spring Boot maps these to management.server.port / .address. Verify your
+# security still applies as intended on the management context before relying on
+# it in a hostile network — on a trusted internal host, localhost binding is the
+# control.) Then scrape 127.0.0.1:9091 with NO auth block.
+#
+# ── Strategy B: scrape the main port with an admin credential ─────────────────
+# If you keep actuator on the main port, Prometheus must present an ADMIN session/
+# token. Their auth is JWT/session (not HTTP Basic), so issue a dedicated long-lived
+# ADMIN JWT for metrics and use `authorization: { credentials: <jwt> }`.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alert.rules.yml
+
+scrape_configs:
+  - job_name: apprisal-backend
+    metrics_path: /actuator/prometheus
+    # Strategy A target (localhost management port). For Strategy B, point at the
+    # main app host:port and add an `authorization:` block with an ADMIN token.
+    static_configs:
+      - targets: ["127.0.0.1:9091"]
+
+# Wire alerts to Alertmanager (optional):
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["127.0.0.1:9093"]

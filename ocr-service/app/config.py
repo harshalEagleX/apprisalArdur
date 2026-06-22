@@ -8,7 +8,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# ocr-service/.env is the service's own env. The PROJECT-ROOT .env holds keys SHARED
+# with the Java backend (notably INTERNAL_API_KEY) — load it as a fallback with
+# override=False so the service .env always wins and the DB target is never changed.
+# This keeps INTERNAL_API_KEY a single source of truth instead of duplicating the secret.
 load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).parent.parent.parent / ".env", override=False)
 
 
 DATABASE_URL: str = os.getenv(
@@ -18,6 +23,13 @@ DATABASE_URL: str = os.getenv(
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 MODEL_VERSION: str = os.getenv("MODEL_VERSION", "adaptive-1.0.0")
+
+# Shared secret the Java backend sends as the `X-API-Key` header on every call.
+# When set, the FastAPI service REQUIRES a matching header on all non-public
+# endpoints (see main.py). When blank (e.g. a local run that never configured it)
+# enforcement is SKIPPED so existing dev workflows are never broken — the value is
+# present in the project-root .env, so a normal deployment authenticates.
+INTERNAL_API_KEY: str = os.getenv("INTERNAL_API_KEY", "")
 
 # Google Cloud Vision (comparable-photo analysis: SCA-27 / SCA-16V).
 # VISION_ENABLED gates all cloud calls; the client also requires the
@@ -80,6 +92,21 @@ GROQ_CACHE_TTL_SECONDS: int = int(os.getenv("GROQ_CACHE_TTL_SECONDS", str(7 * 24
 # Force the SCA LLM extractor to run even when deterministic extraction looks ok
 # (A/B measurement). Default off → LLM runs only as a repair/fallback.
 SCA_LLM_ALWAYS: bool = os.getenv("SCA_LLM_ALWAYS", "false").lower() in ("1", "true", "yes")
+# Form gap-fill: collapse the per-page-group LLM calls into ONE combined call when
+# more than one group has gaps. Cuts the request count (the binding free-tier RPD
+# limit) and dedups the system prompt. Off by default — turn ON only behind a
+# measured before/after (PASS/FAIL/VERIFY + gap-fill fill-rate), per P-8/P-13.
+# Every value is STILL verbatim-validated against its own group's page (P-14a), so
+# the safety net is unchanged; the only thing under test is whether one combined
+# prompt lowers the fill-rate vs separate prompts.
+FORM_LLM_BATCH: bool = os.getenv("FORM_LLM_BATCH", "false").lower() in ("1", "true", "yes")
+# SCA double-verification (PROTOTYPE — UNVERIFIED): when on, the SCA currency overlay
+# COMPARES the deterministic (Camelot) value against the LLM value per cell instead of
+# letting the LLM silently overwrite. Agree → high confidence; disagree → keep the
+# deterministic value at LOW confidence + record both, so the SCA rule flags VERIFY
+# rather than trusting one reader blind. Default OFF — must be measured (P-8) before
+# enabling: does it raise CORRECT verifies without raising false ones?
+SCA_DOUBLE_VERIFY: bool = os.getenv("SCA_DOUBLE_VERIFY", "false").lower() in ("1", "true", "yes")
 
 # Groq vision — fallback for comparable-photo analysis when Gemini fails or is
 # rate-limited. Separate key/model (llama-4-scout multimodal). Image OCR/vision

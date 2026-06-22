@@ -221,6 +221,16 @@ The shared Groq **TPM budget** (`GROQ_TPM_LIMIT`, default 6000) is the real thro
 
 > The previous local-Ollama tier (mistral/llava) has been **removed entirely** — it was unused. All LLM extraction goes through `app/extraction/llm_groq.py`.
 
+#### P-14a The Groq text model is LOAD-BEARING for the compact grid — not a removable convenience
+
+The comparable-sales (SCA) grid and certain dense URAR form cells are **too compact for the deterministic/local readers** (Camelot, pdfplumber, Tesseract, PyMuPDF) to align columns and rows reliably. On those regions local OCR *measurably* fails — it mis-aligns adjustment cells, merges columns, and drops values. The Groq text model (`sca_llm_extractor`, `form_llm_extractor` gap-fill, `contract_extractor`) is therefore the **chosen extraction tier for those regions, proven by the baseline harness — not an optional enrichment.**
+
+This is safe — and is *not* the "Using the LLM for structured field extraction" mistake below — because **every LLM-returned value is verbatim-validated against the source page before it is accepted** (`form_llm_extractor._validate`: a number must match a digit-run that literally appears on the page; text must be a normalized substring of the page; `_field_sane` rejects cross-cell mis-maps). The LLM *proposes*; the page *disposes*. An LLM value that is not literally on the page is discarded, so accepted values cannot be hallucinations.
+
+Consequences for anyone tempted to "optimize":
+- **Do NOT move grid / gap-fill extraction back to local OCR to save Groq cost/TPM.** It directly regresses measured extraction accuracy. Groq for the grid is a **structural dependency** — budget for it (paid on-demand ≈ a few $/month for production volume), don't engineer it away.
+- The **only** sanctioned LLM optimization here (per P-13) is reducing the *number* of calls or input size — e.g. batching the per-group gap-fill calls — and **only behind a config flag with a measured before/after on the test set** (PASS/FAIL/VERIFY + field fill-rate). Removing the LLM tier itself is off the table.
+
 ---
 
 ### P-15 The Long Game — How to Keep the System Healthy Over Years
@@ -708,7 +718,9 @@ These are the mistakes that most commonly slow down or derail intelligent docume
 
 **Optimizing for document formats you do not have yet.** Every engineering decision should be driven by documents you have actually processed or are processing now. Do not build extraction logic for AMC templates you have not seen. Do not add validation rules for field combinations you have not observed. Build for what exists, measure it, then expand to cover what you discover next.
 
-**Using the LLM for structured field extraction.** This bears repeating because it is the most common mistake in systems like this. LLMs are powerful at understanding meaning in text but are unreliable for precise value extraction. They hallucinate, they paraphrase, they interpret ambiguous text differently on different runs. For fields where the exact value matters — addresses, dollar amounts, dates — always use regex with synonym expansion. Reserve the LLM for evaluative tasks where approximate understanding is sufficient.
+**Using the LLM for structured field extraction *without verbatim validation*.** LLMs are powerful at understanding meaning but unreliable for precise values — they hallucinate, paraphrase, and answer differently on different runs. Where a deterministic reader already works (clean labeled fields — addresses, dates, single-value dollar amounts on normal form lines), use regex/synonym extraction; do not reach for the LLM.
+
+**The measured exception (see P-14a):** the compact SCA comparable-sales grid and certain dense form cells are beyond local OCR's capability, so the LLM *is* the correct extraction tier there. What makes that safe — and keeps it out of this "mistake" — is that **every LLM value is verbatim-validated against the source page** (`_validate`/`_field_sane`): a value the LLM returns that does not literally appear on the page is discarded. So the real mistake is not "using the LLM for the grid"; it is **trusting LLM output without verbatim validation**, or using the LLM where a deterministic reader already succeeds. Never accept an LLM-extracted value that you have not validated back against the page text.
 
 **Ignoring the confidence calibration problem.** If you deploy a system that reports 0.9 confidence on extractions that are actually correct only 60% of the time, you will route too many incorrect extractions to the auto-accept path, and reviewers will begin to distrust the system. Calibration measurement is not optional — it should be a metric that is tracked from the beginning.
 

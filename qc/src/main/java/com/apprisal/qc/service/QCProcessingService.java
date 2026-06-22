@@ -46,6 +46,9 @@ import org.springframework.lang.NonNull;
 public class QCProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(QCProcessingService.class);
+    /** Wire-contract version this backend was built against. A mismatch from Python's
+     *  schema_version is logged (not fatal) so a silent payload drift is caught early. */
+    private static final String EXPECTED_PYTHON_SCHEMA_VERSION = "1.0";
     private static final String NOT_PROVIDED = "__NOT_PROVIDED__";
     private static final String NO_APPRAISAL_VALUE = "__NO_APPRAISAL_VALUE__";
     private static final String NO_ENGAGEMENT_VALUE = "__NO_ENGAGEMENT_VALUE__";
@@ -63,6 +66,10 @@ public class QCProcessingService {
     private final ObjectMapper objectMapper;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final BusinessEventService businessEventService;
+    // Cross-node cancellation signal. Backed by Redis in production (so "Stop QC"
+    // reaches a worker on another instance) with a graceful in-memory fallback, so
+    // single-host behaviour is unchanged. Best-effort — never throws into the pipeline.
+    private final com.apprisal.common.cluster.ClusterCoordinator clusterCoordinator;
     private final Map<Long, QCProgress> progressByBatch = new ConcurrentHashMap<>();
     private final Map<Long, Thread> runningThreads = new ConcurrentHashMap<>();
     private final Map<Long, Instant> batchQcStartedAt = new ConcurrentHashMap<>();
@@ -91,7 +98,8 @@ public class QCProcessingService {
             com.apprisal.common.repository.DocStatRepository docStatRepository,
             ObjectMapper objectMapper,
             RealtimeEventPublisher realtimeEventPublisher,
-            BusinessEventService businessEventService) {
+            BusinessEventService businessEventService,
+            com.apprisal.common.cluster.ClusterCoordinator clusterCoordinator) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
@@ -103,6 +111,7 @@ public class QCProcessingService {
         this.objectMapper = objectMapper;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.businessEventService = businessEventService;
+        this.clusterCoordinator = clusterCoordinator;
     }
 
     /**
@@ -186,6 +195,7 @@ public class QCProcessingService {
             activeBatches.remove(batchId);
             batchQcStartedAt.remove(batchId);
             cancellationRequests.remove(batchId);
+            clusterCoordinator.clearCancel(batchId); // drop the cross-node cancel flag
         }
     }
 
@@ -221,6 +231,8 @@ public class QCProcessingService {
     @Transactional
     public boolean cancelBatch(@NonNull Long batchId) {
         cancellationRequests.add(batchId);
+        // Broadcast cluster-wide so a worker on another instance also stops (best-effort).
+        clusterCoordinator.signalCancel(batchId);
         Thread worker = runningThreads.get(batchId);
         if (worker != null) {
             worker.interrupt();
@@ -519,7 +531,10 @@ public class QCProcessingService {
     }
 
     private boolean isCancellationRequested(Long batchId) {
-        return cancellationRequests.contains(batchId) || Thread.currentThread().isInterrupted();
+        return cancellationRequests.contains(batchId)
+                || Thread.currentThread().isInterrupted()
+                // Cross-node: an admin may have pressed Stop on a different instance.
+                || clusterCoordinator.isCancelSignalled(batchId);
     }
 
     private void updateProgress(Long batchId, String stage, String message, int current, int total, boolean running) {
@@ -791,6 +806,16 @@ public class QCProcessingService {
         BatchFile appraisal = batchFileRepository.findWithBatchAndReviewerById(appraisalId)
                 .orElseThrow(() -> new RuntimeException("BatchFile not found: " + appraisalId));
         Long batchId = appraisal.getBatch() != null ? appraisal.getBatch().getId() : null;
+        // Contract-drift guard (non-fatal): a Python build whose wire schema_version
+        // differs from what this backend expects may have reshaped a nested payload.
+        // We still persist (Jackson ignores unknown fields), but flag it loudly so a
+        // mismatched deploy is caught in logs rather than as silent data corruption.
+        String pySchema = pythonResponse.schemaVersion();
+        if (pySchema != null && !EXPECTED_PYTHON_SCHEMA_VERSION.equals(pySchema)) {
+            log.warn("Python QC response schema_version='{}' != expected '{}' (batch_file_id={}). "
+                    + "Verify Java/Python are deployed together; nested payloads may have drifted.",
+                    pySchema, EXPECTED_PYTHON_SCHEMA_VERSION, appraisal.getId());
+        }
         log.info(TimelineLog.event("admin_batches", "java_qc_result_save_start",
                 "batch_id", batchId,
                 "batch_file_id", appraisal.getId(),
@@ -1148,11 +1173,26 @@ public class QCProcessingService {
         return QCDecision.AUTO_PASS;
     }
 
+    // Known rule-status vocabulary the engine may emit. Used only to detect ENUM
+    // DRIFT — an unrecognised value still degrades safely to a needs-review state,
+    // but is logged so a new Python status isn't silently swallowed (DB-002).
+    private static final Set<String> KNOWN_RULE_STATUSES = Set.of(
+            "pass", "fail", "verify", "review", "hold",
+            "extraction_failed", "ocr_low_confidence", "system_error",
+            "source_missing", "cross_doc_mismatch", "skipped", "not_applicable");
+
     private String normalizePythonStatus(String status) {
         if (status == null || status.isBlank()) {
             return "verify";
         }
-        return status.trim().toLowerCase();
+        String normalized = status.trim().toLowerCase();
+        if (!KNOWN_RULE_STATUSES.contains(normalized)) {
+            // Drift signal: a status the backend doesn't recognise. It is treated as
+            // needs-review (safe default) but flagged so the vocabulary can be aligned.
+            log.warn("Unknown Python rule status '{}' — treating as review. Align KNOWN_RULE_STATUSES "
+                    + "if this is a deliberate new engine status.", normalized);
+        }
+        return normalized;
     }
 
     private boolean needsVerification(String normalizedStatus) {

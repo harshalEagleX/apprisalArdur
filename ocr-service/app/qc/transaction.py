@@ -194,6 +194,67 @@ def _overlay_comp_grid(rs, pdf, dtype):
     return _rebuild(rs, dtype, existing, ocr_method="comp_grid+layered")
 
 
+def _sca_num(v):
+    try:
+        return float(str(v).replace(",", "").replace("$", "").strip())
+    except Exception:
+        return None
+
+
+def _sca_values_agree(a, b) -> bool:
+    """True if two readers' values match within $1 or 0.5% (numbers), else exact text."""
+    na, nb = _sca_num(a), _sca_num(b)
+    if na is None or nb is None:
+        return str(a).strip() == str(b).strip()
+    return abs(na - nb) <= max(1.0, 0.005 * max(abs(na), abs(nb)))
+
+
+def _sca_double_verify(existing, llm, dtype) -> int:
+    """PROTOTYPE (config.SCA_DOUBLE_VERIFY, UNVERIFIED — default OFF).
+
+    Compare the deterministic (Camelot/comp_grid) value against the LLM value per
+    currency cell instead of letting the LLM silently overwrite:
+      • agree    → keep value, confidence 0.95 (both readers concur)
+      • disagree → keep the DETERMINISTIC value but confidence 0.40 and record BOTH
+                   values, so the SCA review rule flags VERIFY rather than trusting
+                   one reader blind (closes the "LLM silently wins" gap)
+      • LLM-only → use it at 0.90 (unchanged from the repair path)
+
+    NEXT REFINEMENT (after measurement): on disagreement, use the adjusted = sale +
+    net invariant to pick the self-consistent source before falling back to VERIFY.
+    Returns the number of cells touched (so the caller rebuilds the result set).
+    """
+    from app.core.result import ExtractionResult
+    from app.extraction.sca_llm_extractor import SCA_LLM_VERSION
+    touched = 0
+    for name, value in llm.items():
+        prev = existing.get(name)
+        if prev is None:
+            existing[name] = ExtractionResult(
+                canonical_name=name, document_type=dtype, value=str(value),
+                raw_source_text=str(value), extraction_method="sca_llm",
+                confidence=0.9, source_page=0, bbox=None,
+                normalization_applied=[f"sca_llm:{SCA_LLM_VERSION}"])
+            touched += 1
+        elif _sca_values_agree(prev.value, value):
+            existing[name] = ExtractionResult(
+                canonical_name=name, document_type=dtype, value=str(prev.value),
+                raw_source_text=f"camelot={prev.value}|llm={value}",
+                extraction_method="sca_camelot+llm_agree", confidence=0.95,
+                source_page=prev.source_page, bbox=prev.bbox,
+                normalization_applied=[f"sca_doubleverify:{SCA_LLM_VERSION}"])
+            touched += 1
+        else:
+            existing[name] = ExtractionResult(
+                canonical_name=name, document_type=dtype, value=str(prev.value),
+                raw_source_text=f"CONFLICT camelot={prev.value}|llm={value}",
+                extraction_method="sca_conflict", confidence=0.40,
+                source_page=prev.source_page, bbox=prev.bbox,
+                normalization_applied=[f"sca_doubleverify_conflict:{SCA_LLM_VERSION}"])
+            touched += 1
+    return touched
+
+
 def _overlay_sca_llm(rs, pdf, dtype):
     """Repair the SCA currency grid with the LLM "brain" (extraction layer
     v0.1.12) when the deterministic table readers look insufficient or
@@ -245,22 +306,26 @@ def _overlay_sca_llm(rs, pdf, dtype):
         return rs
 
     replaced = 0
-    for name, value in llm.items():
-        prev = existing.get(name)
-        if prev is not None and str(prev.value) == str(value):
-            continue
-        # The LLM refines the value but reads no geometry — inherit the grid
-        # page/box a deterministic pass (comp_grid / lattice) already recorded so
-        # the SCA review rule can still scroll to the cell (never drop to page 0).
-        existing[name] = ExtractionResult(
-            canonical_name=name, document_type=dtype, value=str(value),
-            raw_source_text=str(value), extraction_method="sca_llm",
-            confidence=0.9,
-            source_page=prev.source_page if prev else 0,
-            bbox=prev.bbox if prev else None,
-            normalization_applied=[f"sca_llm:{SCA_LLM_VERSION}"],
-        )
-        replaced += 1
+    if config.SCA_DOUBLE_VERIFY:
+        # PROTOTYPE path (default OFF): compare-and-flag instead of blind overwrite.
+        replaced = _sca_double_verify(existing, llm, dtype)
+    else:
+        for name, value in llm.items():
+            prev = existing.get(name)
+            if prev is not None and str(prev.value) == str(value):
+                continue
+            # The LLM refines the value but reads no geometry — inherit the grid
+            # page/box a deterministic pass (comp_grid / lattice) already recorded so
+            # the SCA review rule can still scroll to the cell (never drop to page 0).
+            existing[name] = ExtractionResult(
+                canonical_name=name, document_type=dtype, value=str(value),
+                raw_source_text=str(value), extraction_method="sca_llm",
+                confidence=0.9,
+                source_page=prev.source_page if prev else 0,
+                bbox=prev.bbox if prev else None,
+                normalization_applied=[f"sca_llm:{SCA_LLM_VERSION}"],
+            )
+            replaced += 1
     logger.info(
         "SCA-LLM overlay (v%s, groq:%s): set/replaced %d currency-grid fields for %s "
         "(deterministic adjusted=%d, suspect=%s)",

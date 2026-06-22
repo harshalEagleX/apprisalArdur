@@ -56,6 +56,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# PERF (latency/bandwidth): gzip responses >1 KB. The PythonQCResponse payload
+# (rule results + evidence + timings) is multi-KB JSON the Java backend pulls over
+# the wire on every document — compression cuts transfer time with negligible CPU.
+from fastapi.middleware.gzip import GZipMiddleware
+
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# ── Internal service authentication ─────────────────────────────────────────────
+# The Java backend already sends `X-API-Key: <INTERNAL_API_KEY>` on every call. This
+# middleware closes the gap where the service ACCEPTED but never VALIDATED it, leaving
+# OCR/QC/correction/config endpoints open to anyone who could reach the port.
+#
+# Backward-compatible by design:
+#   • Enforced ONLY when INTERNAL_API_KEY is configured (it is, via the root .env).
+#     If unset, enforcement is skipped so a bare local run is never broken.
+#   • Health/liveness + API docs stay public (load balancers, the brain test harness,
+#     and humans browsing /docs do not carry the key).
+#   • CORS pre-flight (OPTIONS) is always allowed so the browser handshake still works.
+# This is an additive guard — it changes NO architecture and NO data contract.
+import hmac as _hmac
+from app.config import INTERNAL_API_KEY as _INTERNAL_API_KEY
+
+_PUBLIC_PATHS = frozenset({"/health", "/live", "/docs", "/redoc", "/openapi.json"})
+
+
+@app.middleware("http")
+async def _enforce_internal_api_key(request, call_next):
+    if _INTERNAL_API_KEY and request.method != "OPTIONS":
+        path = request.url.path
+        if path not in _PUBLIC_PATHS:
+            provided = request.headers.get("X-API-Key", "")
+            # constant-time compare so a wrong key can't be guessed by timing
+            if not _hmac.compare_digest(provided, _INTERNAL_API_KEY):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid X-API-Key"},
+                )
+    return await call_next(request)
+
 
 @app.on_event("startup")
 async def startup():

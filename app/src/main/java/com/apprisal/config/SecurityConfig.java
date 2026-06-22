@@ -110,6 +110,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // /actuator/health stays public for load-balancer probes. Every other
+                        // actuator endpoint (metrics, prometheus, info) exposes internal
+                        // operational data and is restricted to ADMIN — previously it fell to
+                        // `anyRequest().authenticated()`, leaking metrics to any REVIEWER. A
+                        // Prometheus scraper authenticates as ADMIN or uses a separate mgmt port.
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // The HTTP matcher stays open to avoid login redirects during
                         // WebSocket upgrade. WebSocketAuthHandshakeInterceptor rejects
                         // anonymous upgrades using the session principal or JWT token,

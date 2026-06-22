@@ -32,6 +32,7 @@ import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from app import config
 from app.extraction import llm_groq
 
 logger = logging.getLogger(__name__)
@@ -388,9 +389,70 @@ def _field_sane(field: str, value: str) -> bool:
     return True
 
 
+def _gap_call_by_page(live_pages, wanted) -> Dict[str, Tuple[str, float]]:
+    """FORM_LLM_BATCH path: ONE LLM call per UNIQUE PAGE, not per group.
+
+    Several form groups can resolve to the SAME physical page — on a standard URAR
+    the Subject (+Contract) and Neighborhood sections are both on page 1; Cost and
+    USPAP often share a page. The per-group path sends that page's text once per
+    group (pure duplication). This groups by identical page text and makes ONE call
+    per page with the UNION of that page's wanted fields — so each page is sent once.
+
+    Safe-by-construction vs the old all-pages merge:
+      • Each prompt carries exactly ONE page's text → never exceeds the per-request
+        token ceiling (the 413 the all-pages merge hit).
+      • The prompt format is the SAME as the per-group path (`_prompt`), only the
+        field list is the union → minimal behavioural change.
+      • Every value is still verbatim-validated against THIS page (P-14a).
+      • If every group is on a different page, this is identical to per-group.
+    """
+    from collections import OrderedDict
+    by_page: "OrderedDict[str, list]" = OrderedDict()
+    for g, text in live_pages.items():
+        by_page.setdefault(text, []).append(g)
+
+    out: Dict[str, Tuple[str, float]] = {}
+    for text, groups in by_page.items():
+        field_to_group: Dict[str, str] = {}
+        ordered_fields: list = []
+        labels: list = []
+        for g in groups:
+            _, _table, page_label = PAGE_GROUPS[g]
+            labels.append(page_label)
+            for f in wanted[g]:
+                if f not in field_to_group:
+                    field_to_group[f] = g
+                    ordered_fields.append(f)
+        if not ordered_fields:
+            continue
+        page_label = " + ".join(dict.fromkeys(labels))  # combined, de-duped label
+        data = llm_groq.chat_json(
+            [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": _prompt(text[:11000], ordered_fields, page_label)},
+            ],
+            reasoning_effort="low",
+            max_tokens=3072,  # headroom for a page hosting two sections' fields
+        )
+        if not isinstance(data, dict):
+            continue
+        for field, raw in data.items():
+            g = field_to_group.get(field)
+            if g is None or raw is None:
+                continue
+            _, table, _ = PAGE_GROUPS[g]
+            ok = _validate(table[field], str(raw), text)
+            if ok is not None and _field_sane(field, ok[0]):
+                out[field] = ok
+    return out
+
+
 def extract_gap_fields_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, float]]:
-    """Return {field: (value, confidence)} for the requested missing fields,
-    one LLM call per page group that has gaps.
+    """Return {field: (value, confidence)} for the requested missing fields.
+
+    Default: one LLM call per page group that has gaps. When FORM_LLM_BATCH is on
+    AND more than one group has gaps, the calls are collapsed into a single combined
+    call (same verbatim validation, fewer requests — see _batched_gap_call).
 
     Only fields listed in PAGE_GROUPS are ever requested; every answer is
     validated before being returned. Empty dict on any failure (P-6).
@@ -410,26 +472,31 @@ def extract_gap_fields_llm(pdf_path, missing_fields) -> Dict[str, Tuple[str, flo
         return {}
 
     out: Dict[str, Tuple[str, float]] = {}
-    for g, text in pages.items():
-        if not text.strip():
-            continue
-        _, table, page_label = PAGE_GROUPS[g]
-        data = llm_groq.chat_json(
-            [
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user", "content": _prompt(text[:11000], wanted[g], page_label)},
-            ],
-            reasoning_effort="low",
-            max_tokens=2048,
-        )
-        if not isinstance(data, dict):
-            continue
-        for field, raw in data.items():
-            if field not in wanted[g] or raw is None:
+    live = {g: t for g, t in pages.items() if t.strip()}
+    # Per-page merge: one call per UNIQUE page (co-page groups share one call). When
+    # no two groups share a page this is identical to the per-group path, so it is
+    # safe to enable broadly. Off by default until measured (P-8) — flip FORM_LLM_BATCH.
+    if config.FORM_LLM_BATCH and len(live) >= 1:
+        out = _gap_call_by_page(live, wanted)
+    else:
+        for g, text in live.items():
+            _, table, page_label = PAGE_GROUPS[g]
+            data = llm_groq.chat_json(
+                [
+                    {"role": "system", "content": _SYSTEM},
+                    {"role": "user", "content": _prompt(text[:11000], wanted[g], page_label)},
+                ],
+                reasoning_effort="low",
+                max_tokens=2048,
+            )
+            if not isinstance(data, dict):
                 continue
-            ok = _validate(table[field], str(raw), text)
-            if ok is not None and _field_sane(field, ok[0]):
-                out[field] = ok
+            for field, raw in data.items():
+                if field not in wanted[g] or raw is None:
+                    continue
+                ok = _validate(table[field], str(raw), text)
+                if ok is not None and _field_sane(field, ok[0]):
+                    out[field] = ok
     if out:
         logger.info(
             "Gap-fill LLM v%s filled %d/%d requested fields (%s) for %s: %s",

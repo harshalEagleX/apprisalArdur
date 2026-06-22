@@ -51,6 +51,15 @@ spring:
         order_inserts: true
         order_updates: true
         format_sql: false
+        # PERF (latency): batch-fetch lazy associations N-at-a-time instead of one
+        # SELECT per parent row. Collapses the N+1 the batch-list and reviewer
+        # screens would hit walking batch→files→results. Additive — changes query
+        # SHAPE only, never results.
+        default_batch_fetch_size: 100
+        # PERF: pad IN(...) clauses to power-of-two sizes so Postgres reuses one
+        # prepared-statement plan across varying id-list lengths (less plan churn).
+        query:
+          in_clause_parameter_padding: true
     show-sql: false
     open-in-view: false
 
@@ -65,8 +74,27 @@ spring:
       max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:256MB}
 
 server:
+  # PERF (latency/bandwidth): gzip JSON/text responses. The reviewer screens and
+  # batch lists return large JSON (rule results, evidence) — compression cuts
+  # transfer time materially over the network. Only compresses >1 KB responses.
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/plain,text/css,text/html,application/javascript
+    min-response-size: 1024
+  http2:
+    enabled: ${HTTP2_ENABLED:true}
   tomcat:
     basedir: ${TOMCAT_BASEDIR:/private/tmp/apprisal-tomcat}
+    # PERF (load): size the request worker pool for the target concurrency. Defaults
+    # (200 threads) are fine, but make them env-tunable so a bigger host can serve
+    # more concurrent reviewers/admins without code changes (P-4). accept-count is
+    # the OS backlog when all threads are busy — prevents connection refusals under
+    # a burst rather than dropping them.
+    threads:
+      max: ${TOMCAT_THREADS_MAX:200}
+      min-spare: ${TOMCAT_THREADS_MIN:25}
+    accept-count: ${TOMCAT_ACCEPT_COUNT:100}
+    max-connections: ${TOMCAT_MAX_CONNECTIONS:10000}
 
   session:
     cookie:

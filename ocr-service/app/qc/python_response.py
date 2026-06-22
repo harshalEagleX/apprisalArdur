@@ -17,6 +17,10 @@ from app.qc.context import QCContext
 from app.qc.registry import all_rules
 from app.qc.result import QCReport, RuleResult, RuleStatus
 
+# Version of the PythonQCResponse wire CONTRACT (dict shape + nested payloads).
+# Bump on any structural change so consumers can detect drift. See usage below.
+CONTRACT_SCHEMA_VERSION = "1.0"
+
 # rule_id -> the engine's human-readable rule name (the @rule(name=...) label),
 # built lazily once the rule registry is populated. The reviewer UI shows this as
 # the rule's title, so it must be a real description, not "Section — ID".
@@ -339,6 +343,13 @@ def report_to_python_qc_response(
     blocking_rules = [r.rule_id for r in report.results if r.status == RuleStatus.HOLD]
 
     return {
+        # Version of the PythonQCResponse CONTRACT shape (not the ruleset). Bump
+        # whenever a field is added/removed/retyped in this dict or in the nested
+        # rule_results/evidence/timings payloads, so the Java side (and any future
+        # consumer) can detect a contract change instead of silently misreading a
+        # drifted payload. Independent of rule_engine_version (rule LOGIC) and
+        # EXTRACTION_LAYER_VERSION (extraction behaviour).
+        "schema_version": CONTRACT_SCHEMA_VERSION,
         "success": True,
         "processing_time_ms": processing_time_ms,
         "total_pages": 0,

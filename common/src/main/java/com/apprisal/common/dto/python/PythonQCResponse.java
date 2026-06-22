@@ -12,6 +12,10 @@ import java.util.Map;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PythonQCResponse(
+        // Version of the Python response CONTRACT shape (not the ruleset). Lets the
+        // backend detect a wire-format change instead of silently misreading drift.
+        // Null on legacy/older Python builds that predate the field.
+        @JsonProperty("schema_version") String schemaVersion,
         Boolean success,
         @JsonProperty("processing_time_ms") Integer processingTimeMs,
         @JsonProperty("total_pages")         Integer totalPages,

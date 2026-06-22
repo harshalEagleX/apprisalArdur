@@ -40,6 +40,12 @@ SCA_LLM_VERSION = "0.1.12"
 _CURRENCY = ("sale_price", "net_adjustment", "adjusted_sale_price")
 _FIELDS = _CURRENCY + ("gross_adj_pct", "gla")
 
+# Max comparables the LLM grid reader will number across pages. The URAR fits 3
+# comps/page, so 15 = 5 grid pages — covers high-comp urban/condo reports. The
+# deterministic readers (comp_grid_extractor / sca_grid_matrix) have NO cap; this
+# only bounds the LLM path. Raise if reports routinely exceed this.
+_MAX_COMPS = 15
+
 _SYSTEM = (
     "You read the Sales Comparison Approach grid of a URAR / Form 1004 residential "
     "appraisal report. Output ONLY one valid JSON object and nothing else."
@@ -183,7 +189,7 @@ def extract_sca_grid_llm(pdf_path) -> Dict[str, str]:
             continue
         for vals in _extract_page_comps(text):
             gi += 1
-            if gi > 12:
+            if gi > _MAX_COMPS:
                 break
             sale, net = vals.get("sale_price"), vals.get("net_adjustment")
             if sale is not None and net is not None:
@@ -193,7 +199,7 @@ def extract_sca_grid_llm(pdf_path) -> Dict[str, str]:
                 if n is None or not _plausible(f, n):
                     continue
                 out[f"comp_{gi}_{f}"] = str(n) if f == "gross_adj_pct" else str(int(round(n)))
-        if gi > 12:
+        if gi > _MAX_COMPS:
             break
 
     if out:

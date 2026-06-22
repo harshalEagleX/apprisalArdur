@@ -383,6 +383,7 @@ class RerunGuardIntegrationTests {
     /** Minimal Python QC response for driving a re-run persist (no timing/docStats block). */
     private static PythonQCResponse syntheticResponse() {
         return new PythonQCResponse(
+                "1.0",
                 true, 10, 1, "test",
                 Map.of(), Map.of(),
                 0, "qc-test", 0, 0, 0,
