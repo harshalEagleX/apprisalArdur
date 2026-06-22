@@ -40,7 +40,7 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 ## Previously fixed bugs
 | Prior bug in touched module | Status | Evidence | Risk if skipped | Recommended test |
 |---|---|---|---|---|
-| Batch status filter 500 (bytea inference on null `:search`) | Missing | fix in `7756736`; no regression test found for the status-filter query | High | Repository test: status filter with null + non-null search returns 200, correct rows |
+| Batch status filter 500 (bytea inference on null `:search`) | **Covered** | `app/.../BatchSearchRepositoryTests` (4) — added in the fix commit `7756736` (status-only/search-only/combined "does not throw") + now a row-correctness case (COMPLETED filter returns the completed batch, excludes the pending one), real Postgres | High | (covered) |
 | Malformed request body → 500 (now 400) | **Covered** | `a16bcfa` is a **Java** `GlobalApiExceptionHandler` fix (`HttpMessageNotReadableException`/`MethodArgumentNotValidException`→400), not Python. `app/.../GlobalApiExceptionHandlerTest` (5 cases) pins 400 on malformed/illegal body, 409 on optimistic-lock, 500 generic without leaking the raw message | Low | (covered) |
 | Date parse silent bug (MM/DD/YYYY vs ISO) | Covered | rule/extractor tests in `test_subject_contract_rules.py`, `test_recon_addendum_sig_rules.py` | Low | (covered) |
 | Rerun creating duplicates instead of superseding | Covered | `RerunGuardIntegrationTests.java` | Med | (covered) |
@@ -52,7 +52,7 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 | Java → Python `/qc/rules` (new) | Missing | `a16bcfa` added it; `getRules()` in `PythonClientService` has no test | Med | Test `getRules()` parses live `/qc/rules` payload |
 | Java → Python retry/timeout/409-dedup | Missing | full retry loop in `PythonClientService`; **no test** exercises retry/backoff/409 | High | Unit test with mocked RestTemplate: 5xx→retry, 409→poll job, timeout→clean error |
 | Redis (Groq cache) | Partial | `test_llm_cache.py` (in-process LRU + Redis path) | Low | (mostly covered) add Redis-down fallback assertion |
-| Postgres status-filter query | Missing | see status-filter bug above | High | (same as above) |
+| Postgres status-filter query | **Covered** | `BatchSearchRepositoryTests` exercises `searchAdminBatches` against real Postgres | High | (covered) |
 | WebSocket batch progress topic | Missing | no test | Med | Subscribe to `/topic/qc/batch/{id}/progress`, assert payload shape |
 
 ## Boundary conditions
@@ -60,7 +60,7 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 |---|---|---|---|---|
 | Empty/corrupt PDF | Partial | now 400 (`a16bcfa`); assert in test | High | Upload 0-byte + corrupt PDF → 400, no stack trace leaked |
 | Missing engagement / contract (N/A vs HOLD) | Covered | G-0 gate + `engagement_status`; `test_blocking_signal.py`, `test_qc_engine.py` | Med | (covered) |
-| Null `:search` in status filter | Missing | `7756736` | High | (see Previously fixed bugs) |
+| Null `:search` in status filter | **Covered** | `BatchSearchRepositoryTests.statusFilterWithNullSearchDoesNotThrow` | High | (covered) |
 | Value-parse exceptions narrowed (ValueError/TypeError) | Partial | `75a476b`; covered indirectly by rule tests | Med | Feed malformed numeric/date field → no crash, VERIFY not 500 |
 | Concurrent reviewer edit (optimistic lock) | Missing | `@Version` on QCRuleResult; no concurrency test found | Med | Two-writer test → second gets optimistic-lock failure |
 
@@ -106,9 +106,10 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
    on `/admin`+`/analytics` / REVIEWER allow. → **NOW COVERED** on the authoritative side too:
    `app/.../security/ApiAuthorizationMatrixTest` (8) drives the real `/api/**` SecurityConfig
    chain via MockMvc. Remaining gap: expired-JWT behavior at the filter boundary.
-2. **Batch status-filter 500 fix has no regression test** (`7756736`) — the exact bug can
-   silently return. *Test:* repository/controller test for status filter with null and
-   non-null `:search` returning 200 + correct rows.
+2. **Batch status-filter 500 fix** (`7756736`) → **COVERED:** `app/.../BatchSearchRepositoryTests`
+   (4) — the fix commit shipped 3 "does-not-throw" cases (status-only/search-only/combined) and
+   a row-correctness case was added (COMPLETED filter returns only COMPLETED rows), all against
+   real Postgres. (The audit's original "no test found" was incorrect.)
 3. **Java→Python retry/timeout/409-dedup** — the most failure-prone integration path.
    → **COVERED (2026-06-22):** `qc/.../PythonClientServiceTest` (8 cases) — happy path,
    empty body, 5xx→retry→success, 4xx no-retry, timeout-exhausted, 409→poll-job, `getRules()`
