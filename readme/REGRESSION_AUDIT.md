@@ -41,7 +41,7 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 | Prior bug in touched module | Status | Evidence | Risk if skipped | Recommended test |
 |---|---|---|---|---|
 | Batch status filter 500 (bytea inference on null `:search`) | Missing | fix in `7756736`; no regression test found for the status-filter query | High | Repository test: status filter with null + non-null search returns 200, correct rows |
-| Malformed QC request → 500 (now 400) | Partial | `a16bcfa`; verify a Python test asserts 400 on bad multipart | Med | `ocr-service/tests` case: POST `/qc/process` malformed body → 400 |
+| Malformed request body → 500 (now 400) | **Covered** | `a16bcfa` is a **Java** `GlobalApiExceptionHandler` fix (`HttpMessageNotReadableException`/`MethodArgumentNotValidException`→400), not Python. `app/.../GlobalApiExceptionHandlerTest` (5 cases) pins 400 on malformed/illegal body, 409 on optimistic-lock, 500 generic without leaking the raw message | Low | (covered) |
 | Date parse silent bug (MM/DD/YYYY vs ISO) | Covered | rule/extractor tests in `test_subject_contract_rules.py`, `test_recon_addendum_sig_rules.py` | Low | (covered) |
 | Rerun creating duplicates instead of superseding | Covered | `RerunGuardIntegrationTests.java` | Med | (covered) |
 
@@ -108,9 +108,10 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 2. **Batch status-filter 500 fix has no regression test** (`7756736`) — the exact bug can
    silently return. *Test:* repository/controller test for status filter with null and
    non-null `:search` returning 200 + correct rows.
-3. **Java→Python retry/timeout/409-dedup is untested** — the most failure-prone integration
-   path. *Test:* mocked-RestTemplate unit test covering 5xx→retry→success, 409→poll job,
-   ResourceAccess→clean timeout error.
+3. **Java→Python retry/timeout/409-dedup** — the most failure-prone integration path.
+   → **COVERED (2026-06-22):** `qc/.../PythonClientServiceTest` (8 cases) — happy path,
+   empty body, 5xx→retry→success, 4xx no-retry, timeout-exhausted, 409→poll-job, `getRules()`
+   ok + error. Mocked RestTemplates, no live Python needed.
 4. **BLOCKED decision spans Python→Java→frontend with no end-to-end assertion** — enum
    widening that compiles but may mis-render or mis-route. *Test:* live E2E producing a HOLD
    rule → batch shows BLOCKED → StatusBadge renders "Blocked".
