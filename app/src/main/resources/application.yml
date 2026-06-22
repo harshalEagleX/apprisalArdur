@@ -104,7 +104,7 @@ server:
 
 app:
   admin:
-    username: ${ADMIN_EMAIL:dhoteharshal16@gmail.com}
+    username: ${ADMIN_EMAIL:harshal@eaglexinfo.com}
     password: ${ADMIN_PASSWORD:Admin123!}
 
   jwt:

@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ADMIN = {
-  username: process.env.ADMIN_USERNAME ?? "dhoteharshal16@gmail.com",
+  username: process.env.ADMIN_USERNAME ?? "harshal@eaglexinfo.com",
   password: process.env.ADMIN_PASSWORD ?? "Admin123!",
 };
 const STAMP = Date.now();

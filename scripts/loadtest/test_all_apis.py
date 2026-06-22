@@ -9,6 +9,7 @@ Exhaustive API test — every Java + Python endpoint + the interconnection.
     reachable with key.
 """
 import json
+import os
 import re
 import urllib.request
 import urllib.error
@@ -16,7 +17,8 @@ import http.cookiejar
 
 JAVA = "http://127.0.0.1:8080"
 PY = "http://127.0.0.1:5001"
-ADMIN = {"username": "dhoteharshal16@gmail.com", "password": "Admin123!"}
+ADMIN = {"username": os.environ.get("LOGIN_USER", "harshal@eaglexinfo.com"),
+         "password": os.environ.get("LOGIN_PASS", "Admin123!")}
 
 cj = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
