@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -41,6 +43,24 @@ public class GlobalApiExceptionHandler {
             response.put("field", ex.getField());
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    /** Malformed / missing / unparseable JSON request body → 400 (was falling to the
+     *  generic 500 handler). Covers e.g. POST /api/auth/register with an empty body. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        log.warn("Malformed request body: {}", ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Malformed or missing request body");
+    }
+
+    /** Bean-validation (@Valid) failures → 400 with the first field error. */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleArgNotValid(MethodArgumentNotValidException ex) {
+        String msg = ex.getBindingResult().getFieldError() != null
+                ? ex.getBindingResult().getFieldError().getDefaultMessage()
+                : "Request validation failed";
+        log.warn("Request validation failed: {}", msg);
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, msg);
     }
 
     @ExceptionHandler(AccessDeniedException.class)

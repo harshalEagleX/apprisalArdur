@@ -156,6 +156,29 @@ async def reload_schema():
     return {"reloaded": True, "field_count": len(schema_loader.all_fields())}
 
 
+@app.get("/qc/rules")
+async def qc_rules():
+    """Registered QC rule catalog (id, checklist #, section, phase, name).
+
+    The Java backend proxies this at /api/qc/rules for the admin rule-list view.
+    Importing app.qc.rules registers every rule via the @rule decorator, so the
+    catalog reflects exactly what the engine runs."""
+    import app.qc.rules  # noqa: F401 — side-effect import registers all rules
+    from app.qc.registry import all_rules
+
+    rules = [
+        {
+            "rule_id": r.rule_id,
+            "checklist_num": r.checklist_num,
+            "section": r.section,
+            "phase": r.phase,
+            "name": r.name,
+        }
+        for r in sorted(all_rules(), key=lambda r: (r.section, r.rule_id))
+    ]
+    return {"total": len(rules), "rules": rules}
+
+
 @app.get("/schema/fields")
 async def list_fields(section: Optional[str] = Query(None)):
     fields = schema_loader.fields_for_section(section) if section else schema_loader.all_fields()
