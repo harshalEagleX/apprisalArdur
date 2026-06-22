@@ -7,6 +7,6 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["lib/**/*.test.ts", "hooks/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "hooks/**/*.test.ts", "middleware.test.ts"],
   },
 });
