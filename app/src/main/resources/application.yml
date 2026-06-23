@@ -84,7 +84,10 @@ server:
   http2:
     enabled: ${HTTP2_ENABLED:true}
   tomcat:
-    basedir: ${TOMCAT_BASEDIR:/private/tmp/shal-tomcat}
+    # Portable default: /tmp exists+writable on Linux AND macOS (where it
+    # symlinks to /private/tmp). The old /private/tmp default was macOS-only
+    # and failed to start Tomcat on Ubuntu. Override with TOMCAT_BASEDIR.
+    basedir: ${TOMCAT_BASEDIR:/tmp/shal-tomcat}
     # PERF (load): size the request worker pool for the target concurrency. Defaults
     # (200 threads) are fine, but make them env-tunable so a bigger host can serve
     # more concurrent reviewers/admins without code changes (P-4). accept-count is

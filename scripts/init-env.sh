@@ -87,6 +87,9 @@ STORAGE_PATH=./uploads
 # ── Redis (local native, no password) ───────────────────────
 REDIS_URL=redis://localhost:6379/0
 REDIS_PASSWORD=
+
+# ── Tomcat working dir (portable: /tmp exists on Linux + macOS) ──
+TOMCAT_BASEDIR=/tmp/shal-tomcat
 EOF
 
 # ── 2. ocr-service/.env (Python service-specific) ──────────────────────
