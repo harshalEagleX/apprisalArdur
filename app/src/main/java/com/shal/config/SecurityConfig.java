@@ -41,6 +41,14 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
     private String allowedOriginsConfig;
 
+    // CORS origin patterns. Default "*" allows ANY origin (LAN IPs, other hosts)
+    // for local/dev convenience. setAllowedOriginPatterns("*") is the ONE form
+    // that stays compatible with setAllowCredentials(true) — plain
+    // setAllowedOrigins("*") is rejected by browsers on credentialed requests.
+    // Lock this to a fixed allowlist in production via app.cors.allowed-origin-patterns.
+    @Value("${app.cors.allowed-origin-patterns:*}")
+    private String allowedOriginPatternsConfig;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter,
             UserDetailsService userDetailsService,
             AuditLogService auditLogService) {
@@ -52,9 +60,10 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        // Allow Next.js frontend and any configured production origins
-        List<String> origins = List.of(allowedOriginsConfig.split(","));
-        cfg.setAllowedOrigins(origins.stream().map(String::trim).toList());
+        // Allow the Next.js frontend from any host (localhost, LAN IP, etc.).
+        // Patterns (not setAllowedOrigins) so "*" can coexist with credentials.
+        List<String> patterns = List.of(allowedOriginPatternsConfig.split(","));
+        cfg.setAllowedOriginPatterns(patterns.stream().map(String::trim).filter(s -> !s.isBlank()).toList());
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setExposedHeaders(List.of("X-Correlation-ID", "Set-Cookie"));

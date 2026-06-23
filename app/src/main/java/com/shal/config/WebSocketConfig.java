@@ -14,8 +14,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final QcWebSocketHandler qcWebSocketHandler;
     private final WebSocketAuthHandshakeInterceptor authHandshakeInterceptor;
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
-    private String allowedOriginsConfig;
+    // Mirrors the HTTP CORS config: default "*" lets the realtime websocket
+    // handshake succeed from any host (localhost, LAN IP). Uses
+    // setAllowedOriginPatterns so "*" is permitted. Lock down in production.
+    @Value("${app.cors.allowed-origin-patterns:*}")
+    private String allowedOriginPatternsConfig;
 
     public WebSocketConfig(QcWebSocketHandler qcWebSocketHandler,
             WebSocketAuthHandshakeInterceptor authHandshakeInterceptor) {
@@ -25,13 +28,13 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        String[] allowedOrigins = java.util.Arrays.stream(allowedOriginsConfig.split(","))
+        String[] allowedOriginPatterns = java.util.Arrays.stream(allowedOriginPatternsConfig.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
                 .toArray(String[]::new);
 
         registry.addHandler(qcWebSocketHandler, "/ws/qc")
                 .addInterceptors(authHandshakeInterceptor)
-                .setAllowedOrigins(allowedOrigins);
+                .setAllowedOriginPatterns(allowedOriginPatterns);
     }
 }

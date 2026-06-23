@@ -26,6 +26,19 @@ gen_secret() {  # nbytes
   fi
 }
 
+# ── Detect this machine's primary LAN IP (Linux + macOS) ───────────────
+detect_lan_ip() {
+  local ip=""
+  if command -v hostname >/dev/null 2>&1 && hostname -I >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"      # Linux
+  fi
+  if [[ -z "$ip" ]] && command -v ipconfig >/dev/null 2>&1; then
+    ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"  # macOS
+  fi
+  echo "$ip"
+}
+LAN_IP="$(detect_lan_ip)"
+
 # ── Write a file only if missing (or FORCE=1) ──────────────────────────
 write_if_absent() {  # path  <<<content
   local path="$1"; shift
@@ -135,8 +148,34 @@ VISION_TIMEOUT=30
 EOF
 
 # ── 3. frontend/.env.local ─────────────────────────────────────────────
+# NEXT_PUBLIC_JAVA_URL is intentionally NOT pinned: lib/config.ts auto-derives
+# the backend URL from whatever host the browser loaded (localhost or LAN IP),
+# so the app works both locally and over the network. ALLOWED_DEV_ORIGINS lets
+# Next's HMR websocket load over the LAN IP.
 write_if_absent "$REPO_ROOT/frontend/.env.local" <<EOF
-NEXT_PUBLIC_JAVA_URL=http://localhost:8080
+# Backend URL is auto-derived from the browser host (see lib/config.ts).
+# Uncomment ONLY to force a fixed backend host:
+# NEXT_PUBLIC_JAVA_URL=http://localhost:8080
+
+# Hosts allowed to load Next.js dev (HMR) resources cross-origin.
+ALLOWED_DEV_ORIGINS=${LAN_IP}
 EOF
 
+# ── Migrate an existing .env.local from the old localhost-pinned default ──
+LOCAL_ENV="$REPO_ROOT/frontend/.env.local"
+if [[ -f "$LOCAL_ENV" ]]; then
+  # Comment out the stale hard pin to localhost (broke LAN/IP access).
+  if grep -q '^NEXT_PUBLIC_JAVA_URL=http://localhost:8080$' "$LOCAL_ENV"; then
+    sed -i.bak 's|^NEXT_PUBLIC_JAVA_URL=http://localhost:8080$|# NEXT_PUBLIC_JAVA_URL auto-derived from browser host (was pinned to localhost)|' "$LOCAL_ENV"
+    rm -f "$LOCAL_ENV.bak"
+    echo "[init-env] migrated frontend/.env.local: backend URL now auto-derived"
+  fi
+  # Ensure ALLOWED_DEV_ORIGINS is present (append the detected LAN IP if missing).
+  if [[ -n "$LAN_IP" ]] && ! grep -q '^ALLOWED_DEV_ORIGINS=' "$LOCAL_ENV"; then
+    printf '\n# Hosts allowed to load Next.js dev (HMR) resources cross-origin.\nALLOWED_DEV_ORIGINS=%s\n' "$LAN_IP" >> "$LOCAL_ENV"
+    echo "[init-env] added ALLOWED_DEV_ORIGINS=$LAN_IP to frontend/.env.local"
+  fi
+fi
+
+[[ -n "$LAN_IP" ]] && echo "[init-env] LAN IP detected: $LAN_IP (app reachable at http://$LAN_IP:3000)"
 echo "[init-env] Done. Edit ocr-service/.env to add GROQ_API_KEY for full LLM extraction."
