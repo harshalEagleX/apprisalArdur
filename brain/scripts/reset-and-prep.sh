@@ -122,10 +122,10 @@ LOG_DIR="$OCR_DIR/logs"
 mkdir -p "$LOG_DIR"
 (
   source /opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh
-  conda activate apprisal
+  conda activate shal
   cd "$OCR_DIR"
   nohup python main.py >> "$LOG_DIR/app.log" 2>> "$LOG_DIR/error.log" &
-  echo $! > /tmp/apprisal_ocr.pid
+  echo $! > /tmp/shal_ocr.pid
 )
 sleep 4
 
@@ -151,17 +151,17 @@ echo "════════════════════════�
 CELERY_LOG="$LOG_DIR/celery.log"
 (
   source /opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh
-  conda activate apprisal
+  conda activate shal
   cd "$OCR_DIR"
   nohup celery -A app.tasks.celery_app worker \
     --loglevel=info \
     --concurrency=1 \
     >> "$CELERY_LOG" 2>&1 &
-  echo $! > /tmp/apprisal_celery.pid
+  echo $! > /tmp/shal_celery.pid
 )
 sleep 3
 if pgrep -f "celery.*worker" > /dev/null 2>&1; then
-  echo "  ✓ Celery worker running (PID $(cat /tmp/apprisal_celery.pid 2>/dev/null || echo '?'))"
+  echo "  ✓ Celery worker running (PID $(cat /tmp/shal_celery.pid 2>/dev/null || echo '?'))"
 else
   echo "  WARNING: Celery worker did not start — QC will fall back to sync mode"
 fi

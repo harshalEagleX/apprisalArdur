@@ -68,10 +68,10 @@ analytics service, JWT + session dual auth, and PostgreSQL schema — is solid a
 ### 2a. Module & Folder Map (Actual, As-Found)
 
 ```
-apprisalArdur/                             ← Git root, Maven parent POM
+SHAL/                             ← Git root, Maven parent POM
 ├── pom.xml                                ← parent: 5 modules, Spring Boot 4.0.1, Java 21
 ├── common/                                ← Shared library (no Spring Boot main)
-│   └── src/main/java/com/apprisal/common/
+│   └── src/main/java/com/shal/common/
 │       ├── audit/         AppRevisionEntity, AppRevisionListener (Hibernate Envers)
 │       ├── dto/           AuthenticationRequest/Response, DecisionSaveRequest,
 │       │                  RegisterRequest, python/PythonQCResponse, PythonRuleResult
@@ -85,7 +85,7 @@ apprisalArdur/                             ← Git root, Maven parent POM
 │       └── service/       AuditLogService, FileMatchingService
 │
 ├── batch/                                 ← ZIP upload & file management
-│   └── src/main/java/com/apprisal/batch/
+│   └── src/main/java/com/shal/batch/
 │       ├── controller/
 │       │   ├── FileController.java        ← GET /files/{id} (serves PDFs to iframe)
 │       │   └── api/BatchApiController.java← GET|POST /api/client/batches  ← WRONG MOUNT
@@ -94,7 +94,7 @@ apprisalArdur/                             ← Git root, Maven parent POM
 │           └── OperatorSessionService.java← session tracking (analytics)
 │
 ├── qc/                                    ← QC processing & reviewer verification
-│   └── src/main/java/com/apprisal/qc/
+│   └── src/main/java/com/shal/qc/
 │       ├── config/OcrServiceConfig.java   ← Python endpoint, timeouts
 │       └── service/
 │       │   ├── QCProcessingService.java   ← orchestrates Python calls, stores results
@@ -105,7 +105,7 @@ apprisalArdur/                             ← Git root, Maven parent POM
 │           └── ReviewerApiController.java ← /api/reviewer/** (queue, decisions, progress)
 │
 ├── user/                                  ← Auth & user management
-│   └── src/main/java/com/apprisal/user/
+│   └── src/main/java/com/shal/user/
 │       ├── controller/
 │       │   ├── AuthController.java        ← /api/auth/login (JWT), /api/auth/register
 │       │   ├── ProfileController.java     ← /api/me
@@ -122,8 +122,8 @@ apprisalArdur/                             ← Git root, Maven parent POM
 │       └── util/JwtUtils.java
 │
 ├── app/                                   ← Spring Boot main, security, analytics
-│   └── src/main/java/com/apprisal/
-│       ├── ApprisalApplication.java
+│   └── src/main/java/com/shal/
+│       ├── ShalApplication.java
 │       ├── config/
 │       │   ├── SecurityConfig.java        ← references CLIENT role in 6 places
 │       │   ├── AdminSeeder.java           ← seeds default admin on startup
@@ -1006,7 +1006,7 @@ V5__add_batch_indexes.sql    ← missing performance indexes
 
 **V1 must be created by dumping the current schema:**
 ```bash
-pg_dump --schema-only --no-owner -d ardurApprisal > V1__initial_schema.sql
+pg_dump --schema-only --no-owner -d shal > V1__initial_schema.sql
 ```
 Then set `spring.flyway.baseline-on-migrate: true` on first deploy against an existing database.
 
@@ -1071,7 +1071,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity   ON audit_log(entity_type, entity_i
 
 **Existing tests found:** 1 file, 1 test.
 ```
-app/src/test/java/com/apprisal/ApprisalApplicationTests.java
+app/src/test/java/com/shal/ShalApplicationTests.java
   └── contextLoads()  ← Spring context startup test only
 ```
 
@@ -1094,7 +1094,7 @@ These are the tests that must exist before any Phase 5 code touches production:
 
 **1. Role guard integration tests** (verify the two-role enforcement)
 ```java
-// File: qc/src/test/java/com/apprisal/qc/controller/ReviewerApiControllerTest.java
+// File: qc/src/test/java/com/shal/qc/controller/ReviewerApiControllerTest.java
 @Test void reviewer_cannotSeeOtherReviewersBatches() { ... }
 @Test void reviewer_cannotSaveDecisionForUnassignedBatch() { ... }
 @Test void admin_canSeeAllPendingResults() { ... }
@@ -1103,7 +1103,7 @@ These are the tests that must exist before any Phase 5 code touches production:
 
 **2. BatchService unit tests** (the most complex service)
 ```java
-// File: batch/src/test/java/com/apprisal/batch/service/BatchServiceTest.java
+// File: batch/src/test/java/com/shal/batch/service/BatchServiceTest.java
 @Test void createFromZip_withValidStructure_createsFilesCorrectly() { ... }
 @Test void createFromZip_withPathTraversal_throwsValidationException() { ... }
 @Test void createFromZip_withDuplicateHash_throwsDuplicateException() { ... }
@@ -1112,7 +1112,7 @@ These are the tests that must exist before any Phase 5 code touches production:
 
 **3. VerificationService unit tests**
 ```java
-// File: qc/src/test/java/com/apprisal/qc/service/VerificationServiceTest.java
+// File: qc/src/test/java/com/shal/qc/service/VerificationServiceTest.java
 @Test void assertReviewerOwnsQcResult_whenNotAssigned_throwsSecurityException() { ... }
 @Test void saveDecision_accept_setsStatusManualPass() { ... }
 @Test void saveDecision_reject_setsStatusFail() { ... }
@@ -1293,7 +1293,7 @@ DB operation. Spring Boot 4 supports `@ConfigurationPropertiesScan` with `@Valid
 |----------|---------|---------|-----------------|-----------------|
 | `DB_HOST` | Java | `localhost` | YES | Won't connect to DB |
 | `DB_PORT` | Java | `5432` | NO | Uses default |
-| `DB_NAME` | Java | `ardurApprisal` | YES | Wrong DB |
+| `DB_NAME` | Java | `shal` | YES | Wrong DB |
 | `DB_USERNAME` | Java | `harshalsmac` | YES | Auth failure |
 | `DB_PASSWORD` | Java | `12345678` | YES | Auth failure (dev default is insecure) |
 | `ADMIN_EMAIL` | Java | `dhoteharshal16@gmail.com` | YES | Seeds wrong admin |
@@ -1312,7 +1312,7 @@ be rotated before any production deployment. The CLAUDE.md should reference env 
 ### Recommended: Add Startup Validation
 
 ```java
-// app/src/main/java/com/apprisal/config/StartupValidator.java
+// app/src/main/java/com/shal/config/StartupValidator.java
 @Component
 public class StartupValidator implements ApplicationListener<ApplicationReadyEvent> {
     @Value("${app.admin.password}") private String adminPassword;
@@ -1342,7 +1342,7 @@ services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_DB: ardurApprisal
+      POSTGRES_DB: shal
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
@@ -1372,7 +1372,7 @@ services:
     build: ./ocr-service
     depends_on: [postgres]
     environment:
-      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres:5432/ardurApprisal_ocr
+      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres:5432/shal_ocr
     ports:
       - "5001:5001"
 

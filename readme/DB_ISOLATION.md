@@ -5,8 +5,8 @@
 Both services point at the **same database**:
 
 ```
-Java   → localhost:5432 / ardurApprisal   (user: eaglexmac)
-Python → localhost:5432 / ardurApprisal   (user: postgres ← superuser)
+Java   → localhost:5432 / shal   (user: eaglexmac)
+Python → localhost:5432 / shal   (user: postgres ← superuser)
 ```
 
 ## Why one shared database is the right call here
@@ -26,16 +26,16 @@ The only genuine risk behind "same DB" is that **Python connects as `postgres` (
 
 **Fix:** least-privilege roles — same database, but Postgres itself enforces the boundary. See `scripts/db/least_privilege_roles.sql`:
 
-- `apprisal_python` owns the `adaptive_*` tables and is **revoked** from Java's tables.
-- `apprisal_java` owns the workflow/QC tables and is **revoked** from `adaptive_*`.
+- `shal_python` owns the `adaptive_*` tables and is **revoked** from Java's tables.
+- `shal_java` owns the workflow/QC tables and is **revoked** from `adaptive_*`.
 - Neither is a superuser. No second database, no Python code change (tables stay in `public`; isolation is by ownership + grants).
 
 ### Apply (run-when-ready, as a DB superuser)
 
 1. Edit the two passwords in `scripts/db/least_privilege_roles.sql`.
-2. `psql "postgres://postgres@localhost/ardurApprisal" -f scripts/db/least_privilege_roles.sql`
-3. Point Python at the scoped role: `ocr-service/.env` → `DATABASE_URL=postgresql://apprisal_python:<pw>@localhost/ardurApprisal`
-4. (Optional, recommended) point Java at its role: root `.env` → `DB_USERNAME=apprisal_java`, `DB_PASSWORD=<pw>`.
+2. `psql "postgres://postgres@localhost/shal" -f scripts/db/least_privilege_roles.sql`
+3. Point Python at the scoped role: `ocr-service/.env` → `DATABASE_URL=postgresql://shal_python:<pw>@localhost/shal`
+4. (Optional, recommended) point Java at its role: root `.env` → `DB_USERNAME=shal_java`, `DB_PASSWORD=<pw>`.
 5. Restart both services. Confirm with the verify query at the bottom of the script (each role should own only its own tables).
 
 After this, even if Python tried to `DROP TABLE batch`, Postgres refuses — the isolation your architecture assumes is now guaranteed by the database, not by convention.

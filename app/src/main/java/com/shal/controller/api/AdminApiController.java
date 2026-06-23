@@ -1,0 +1,395 @@
+package com.shal.controller.api;
+
+import com.shal.common.entity.AuditLog;
+import com.shal.common.entity.Client;
+import com.shal.common.entity.QCResult;
+import com.shal.common.entity.Role;
+import com.shal.common.entity.User;
+import com.shal.user.service.UserService;
+import com.shal.user.service.ClientService;
+import com.shal.batch.service.BatchService;
+import com.shal.common.service.AuditLogService;
+import com.shal.common.repository.AuditLogRepository;
+import com.shal.common.repository.QCResultRepository;
+import com.shal.common.security.UserPrincipal;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.lang.NonNull;
+import org.springframework.transaction.annotation.Transactional;
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
+import javax.sql.DataSource;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Admin REST API — user management, client management.
+ * Batch operations are in BatchApiController.
+ * All endpoints require ROLE_ADMIN (enforced in SecurityConfig).
+ */
+@RestController
+@RequestMapping("/api/admin")
+public class AdminApiController {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminApiController.class);
+
+    private final UserService userService;
+    private final ClientService clientService;
+    private final BatchService batchService;
+    private final AuditLogService auditLogService;
+    private final AuditLogRepository auditLogRepository;
+    private final QCResultRepository qcResultRepository;
+    private final com.shal.common.repository.BatchRepository batchRepository;
+    private final com.shal.common.repository.BatchFileRepository batchFileRepository;
+    private final DataSource dataSource;
+
+    public AdminApiController(UserService userService,
+            ClientService clientService,
+            BatchService batchService,
+            AuditLogService auditLogService,
+            AuditLogRepository auditLogRepository,
+            QCResultRepository qcResultRepository,
+            com.shal.common.repository.BatchRepository batchRepository,
+            com.shal.common.repository.BatchFileRepository batchFileRepository,
+            DataSource dataSource) {
+        this.userService = userService;
+        this.clientService = clientService;
+        this.batchService = batchService;
+        this.auditLogService = auditLogService;
+        this.auditLogRepository = auditLogRepository;
+        this.qcResultRepository = qcResultRepository;
+        this.batchRepository = batchRepository;
+        this.batchFileRepository = batchFileRepository;
+        this.dataSource = dataSource;
+    }
+
+    /**
+     * Database connection-pool health for the admin "degraded mode" banner.
+     * The pool already degrades gracefully (callers queue up to the 30s
+     * connection-timeout, then fail with a clear error rather than crashing) —
+     * this surfaces that pressure proactively so an admin knows operations may be
+     * slow before they hit a timeout. {@code degraded} is true when callers are
+     * waiting for a connection or the pool is fully checked out.
+     */
+    @GetMapping("/system/health")
+    public ResponseEntity<Map<String, Object>> systemHealth() {
+        Map<String, Object> body = new HashMap<>();
+        Map<String, Object> pool = new HashMap<>();
+        boolean degraded = false;
+        if (dataSource instanceof HikariDataSource hikari) {
+            HikariPoolMXBean mx = hikari.getHikariPoolMXBean();
+            if (mx != null) {
+                int active = mx.getActiveConnections();
+                int waiting = mx.getThreadsAwaitingConnection();
+                int max = hikari.getMaximumPoolSize();
+                pool.put("active", active);
+                pool.put("idle", mx.getIdleConnections());
+                pool.put("total", mx.getTotalConnections());
+                pool.put("waiting", waiting);
+                pool.put("max", max);
+                degraded = waiting > 0 || active >= max;
+            }
+        }
+        body.put("pool", pool);
+        body.put("degraded", degraded);
+        return ResponseEntity.ok(body);
+    }
+
+    // ── User Management ───────────────────────────────────────────────────────
+
+    /** Project a User entity to the fields declared in the TypeScript User interface. */
+    private Map<String, Object> userToMap(User u) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id",          u.getId());
+        m.put("username",    u.getUsername());
+        m.put("email",       u.getEmail());
+        m.put("fullName",    u.getFullName());
+        m.put("role",        u.getRole() != null ? u.getRole().name() : null);
+        m.put("active",      u.getActive());
+        m.put("createdAt",   u.getCreatedAt() != null ? u.getCreatedAt().toString() : null);
+        m.put("lastLoginAt", u.getLastLoginAt() != null ? u.getLastLoginAt().toString() : null);
+        // client is EAGER on User, so getClient() is always safe to call here
+        m.put("client", u.getClient() != null
+                ? Map.of("id", u.getClient().getId(),
+                         "name", u.getClient().getName() != null ? u.getClient().getName() : "",
+                         "code", u.getClient().getCode() != null ? u.getClient().getCode() : "")
+                : null);
+        return m;
+    }
+
+    @GetMapping("/users")
+    public ResponseEntity<?> getUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        var pg = userService.findAll(PageRequest.of(page, size, Sort.by("id").descending()));
+        return ResponseEntity.ok(Map.of(
+            "content",       pg.getContent().stream().map(this::userToMap).toList(),
+            "totalPages",    pg.getTotalPages(),
+            "number",        pg.getNumber(),
+            "totalElements", pg.getTotalElements()
+        ));
+    }
+
+    @GetMapping("/users/{id}")
+    public ResponseEntity<?> getUser(@PathVariable @NonNull Long id) {
+        return userService.findById(id)
+                .map(u -> ResponseEntity.ok((Object) userToMap(u)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/users")
+    public ResponseEntity<?> createUser(@RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            String username = (String) request.get("username");
+            String password = (String) request.get("password");
+            String roleStr  = (String) request.get("role");
+
+            // Enforce two-role system: only ADMIN or REVIEWER
+            if (roleStr == null || (!roleStr.equals("ADMIN") && !roleStr.equals("REVIEWER"))) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Role must be ADMIN or REVIEWER"));
+            }
+            Role role = Role.valueOf(roleStr);
+            String email    = (String) request.get("email");
+            String fullName = (String) request.get("fullName");
+            Long clientId   = request.get("clientId") != null ? Long.valueOf(request.get("clientId").toString()) : null;
+
+            Client client = clientId != null ? clientService.findById(clientId).orElse(null) : null;
+            User user = userService.create(username, password, role, email, fullName, client);
+            auditLogService.logEntity(principal.getUser(), "USER_CREATED", "User", user.getId());
+            return ResponseEntity.ok(userToMap(user));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/users/{id}")
+    public ResponseEntity<?> updateUser(@PathVariable @NonNull Long id,
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            String email    = (String) request.get("email");
+            String fullName = (String) request.get("fullName");
+            Role role = null;
+            if (request.get("role") != null) {
+                String roleStr = (String) request.get("role");
+                if (!roleStr.equals("ADMIN") && !roleStr.equals("REVIEWER")) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Role must be ADMIN or REVIEWER"));
+                }
+                role = Role.valueOf(roleStr);
+            }
+            Long clientId = request.get("clientId") != null ? Long.valueOf(request.get("clientId").toString()) : null;
+            Client client = clientId != null ? clientService.findById(clientId).orElse(null) : null;
+
+            User user = userService.update(id, email, fullName, role, client);
+            auditLogService.logEntity(principal.getUser(), "USER_UPDATED", "User", id);
+            return ResponseEntity.ok(userToMap(user));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Admin resets a user's password (audited). Safer than the delete-and-recreate workaround. */
+    @PostMapping("/users/{id}/reset-password")
+    public ResponseEntity<?> resetUserPassword(@PathVariable @NonNull Long id,
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            String newPassword = (String) request.get("password");
+            userService.updatePassword(id, newPassword);
+            auditLogService.logEntity(principal.getUser(), "USER_PASSWORD_RESET", "User", id);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Activate / deactivate a user (deactivated users can't sign in) — the safe alternative to delete. */
+    @PostMapping("/users/{id}/status")
+    public ResponseEntity<?> setUserStatus(@PathVariable @NonNull Long id,
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            boolean active = Boolean.TRUE.equals(request.get("active"));
+            if (id.equals(principal.getUser().getId()) && !active) {
+                return ResponseEntity.badRequest().body(Map.of("error", "You cannot deactivate your own account."));
+            }
+            User user = userService.setActive(id, active);
+            auditLogService.logEntity(principal.getUser(), active ? "USER_ACTIVATED" : "USER_DEACTIVATED", "User", id);
+            return ResponseEntity.ok(userToMap(user));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/users/{id}")
+    public ResponseEntity<?> deleteUser(@PathVariable @NonNull Long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            userService.delete(id);
+            auditLogService.logEntity(principal.getUser(), "USER_DELETED", "User", id);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Client Organisations ──────────────────────────────────────────────────
+
+    @GetMapping("/clients")
+    public ResponseEntity<?> getClients() {
+        return ResponseEntity.ok(clientService.findAll());
+    }
+
+    /**
+     * Per-client operational rollup for the clients table (batches, completed, files, success rate,
+     * last activity). Two grouped queries, joined in memory — no N+1 across the client list.
+     * Keyed by client id as a string so the frontend can look each row up.
+     */
+    @GetMapping("/clients/stats")
+    public ResponseEntity<Map<String, Object>> getClientStats() {
+        Map<Long, Long> fileCounts = new HashMap<>();
+        for (Object[] row : batchFileRepository.clientFileCounts()) {
+            fileCounts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        Map<String, Object> out = new HashMap<>();
+        for (Object[] row : batchRepository.clientBatchStats()) {
+            long clientId   = ((Number) row[0]).longValue();
+            long batches    = ((Number) row[1]).longValue();
+            long completed  = row[2] != null ? ((Number) row[2]).longValue() : 0L;
+            Object lastAct  = row[3];
+            Map<String, Object> stat = new HashMap<>();
+            stat.put("batches", batches);
+            stat.put("completed", completed);
+            stat.put("files", fileCounts.getOrDefault(clientId, 0L));
+            stat.put("successRate", batches > 0 ? Math.round((completed * 100.0) / batches) : null);
+            stat.put("lastActivity", lastAct != null ? lastAct.toString() : null);
+            out.put(String.valueOf(clientId), stat);
+        }
+        return ResponseEntity.ok(out);
+    }
+
+    /** Client drill-in: the client + its rollup stats, recent batches, and its users. */
+    @GetMapping("/clients/{id}")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ResponseEntity<?> getClientDetail(@PathVariable @NonNull Long id) {
+        var clientOpt = clientService.findById(id);
+        if (clientOpt.isEmpty()) return ResponseEntity.notFound().build();
+        Client c = clientOpt.get();
+        long batches = batchRepository.countByClientId(id);
+        long completed = batchRepository.countByClientIdAndStatus(id, com.shal.common.entity.BatchStatus.COMPLETED);
+
+        List<Map<String, Object>> recent = batchRepository.findTop5ByClientIdOrderByCreatedAtDesc(id).stream()
+            .map(b -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", b.getId());
+                m.put("parentBatchId", b.getParentBatchId());
+                m.put("status", b.getStatus() != null ? b.getStatus().name() : null);
+                m.put("fileCount", b.getFileCount());
+                m.put("createdAt", b.getCreatedAt() != null ? b.getCreatedAt().toString() : null);
+                return m;
+            }).toList();
+
+        List<Map<String, Object>> users = userService.findByClientId(id).stream()
+            .map(u -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", u.getId());
+                m.put("username", u.getUsername());
+                m.put("fullName", u.getFullName());
+                m.put("role", u.getRole() != null ? u.getRole().name() : null);
+                m.put("active", u.getActive());
+                return m;
+            }).toList();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("batches", batches);
+        stats.put("completed", completed);
+        stats.put("successRate", batches > 0 ? Math.round((completed * 100.0) / batches) : null);
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("client", c);
+        out.put("stats", stats);
+        out.put("recentBatches", recent);
+        out.put("users", users);
+        return ResponseEntity.ok(out);
+    }
+
+    @PostMapping("/clients")
+    public ResponseEntity<?> createClient(@RequestBody Map<String, String> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            Client client = clientService.create(request.get("name"), request.get("code"));
+            auditLogService.logEntity(principal.getUser(), "CLIENT_CREATED", "Client", client.getId());
+            return ResponseEntity.ok(client);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Batch audit log for graph ─────────────────────────────────────────────
+
+    @GetMapping("/batches/{id}/audit")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<Map<String, Object>>> getBatchAuditLog(@PathVariable @NonNull Long id) {
+        try {
+            // Collect all QCResult IDs for files in this batch
+            List<QCResult> qcResults = qcResultRepository.findByBatchId(id);
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (QCResult qcr : qcResults) {
+                List<AuditLog> logs = auditLogRepository.findByEntityTypeAndEntityId("QCResult", qcr.getId());
+                for (AuditLog entry : logs) {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", entry.getId());
+                    row.put("action", entry.getAction());
+                    row.put("entityType", entry.getEntityType());
+                    row.put("entityId", entry.getEntityId());
+                    row.put("details", entry.getDetails());
+                    row.put("createdAt", entry.getCreatedAt() != null ? entry.getCreatedAt().toString() : null);
+                    if (entry.getUser() != null) {
+                        row.put("user", Map.of("id", entry.getUser().getId(), "username", entry.getUser().getUsername()));
+                    }
+                    result.add(row);
+                }
+            }
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("getBatchAuditLog failed for batch {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
+    // ── Batch assignment (delegated to BatchApiController for upload,
+    //    kept here for the assign action used in the admin dashboard) ──────────
+
+    @PostMapping("/batches/{id}/assign")
+    public ResponseEntity<?> assignBatch(@PathVariable @NonNull Long id,
+            @RequestBody Map<String, Long> request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            Long reviewerId = request.get("reviewerId");
+            if (reviewerId == null) throw new IllegalArgumentException("reviewerId is required");
+
+            User reviewer = userService.findById(reviewerId)
+                    .orElseThrow(() -> new IllegalArgumentException("Reviewer not found: " + reviewerId));
+
+            if (reviewer.getRole() != Role.REVIEWER) {
+                throw new IllegalArgumentException("User " + reviewerId + " is not a REVIEWER");
+            }
+
+            batchService.assignReviewer(id, reviewer);
+            auditLogService.logEntity(principal.getUser(), "BATCH_ASSIGNED", "Batch", id);
+            return ResponseEntity.ok(Map.of("success", true, "reviewerId", reviewerId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+}

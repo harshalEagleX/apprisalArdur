@@ -1,4 +1,4 @@
-# Apprisal Platform — Architecture, Code, Data-Contract, Workflow, QC, Reliability & Performance Audit
+# SHAL Platform — Architecture, Code, Data-Contract, Workflow, QC, Reliability & Performance Audit
 
 **Audit date:** 2026-06-21
 **Branch audited:** `demo`
@@ -61,7 +61,7 @@ All changes below are **additive and verified** (`mvn test-compile` for `common,
 
 ## 0c. Third remediation pass (2026-06-21) — scale-out + observability (the last two)
 
-Both items previously parked as "future work" are now **implemented and verified against the live local Postgres + Redis** (full Spring context boots; `ApprisalApplicationTests` + `RerunGuardIntegrationTests` green; configs JSON/YAML-validated). All additive; single-host behaviour unchanged.
+Both items previously parked as "future work" are now **implemented and verified against the live local Postgres + Redis** (full Spring context boots; `ShalApplicationTests` + `RerunGuardIntegrationTests` green; configs JSON/YAML-validated). All additive; single-host behaviour unchanged.
 
 ### Cross-node cancellation (the real scale-out gap)
 - **Honest scoping:** batch *claiming* is already multi-instance-safe via the DB conditional UPDATE (`markQcProcessingIfTriggerable`). The only thing a single in-process map couldn't do across nodes was **cancellation** — so that's what was built.
@@ -104,7 +104,7 @@ The engineering quality is high: optimistic locking (`@Version`), soft-delete wi
 **Classification: Modular monolith (Java) + external stateless processing engine (Python), integrated by an HTTP/queue contract over a shared-instance / split-schema PostgreSQL.**
 
 Evidence:
-- Java is a **Maven multi-module monolith** deployed as one app (`pom.xml` modules: `common`, `batch`, `qc`, `user`, `app`; single `ApprisalApplication`). Module boundaries are real in code, not just docs — entities/repos live in `common`, workflow orchestration in `qc`/`batch`, auth in `user`.
+- Java is a **Maven multi-module monolith** deployed as one app (`pom.xml` modules: `common`, `batch`, `qc`, `user`, `app`; single `ShalApplication`). Module boundaries are real in code, not just docs — entities/repos live in `common`, workflow orchestration in `qc`/`batch`, auth in `user`.
 - Python is a **separate process** (FastAPI on :5001 + Celery workers) reached only via REST (`PythonClientService`). It holds no Java workflow state.
 - The DB is shared, but `manage_db.py` and `CLAUDE.md`'s "Database Schema Policy" enforce **disjoint ownership** (`adaptive_*` = Python; everything else = Java). This is the defining property that keeps it out of "distributed monolith" territory.
 

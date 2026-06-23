@@ -169,7 +169,7 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
 }
 
 // ── Session expiry tracking ────────────────────────────────────────────────────
-const SESSION_EXPIRES_KEY = "apprisal_session_expires_at";
+const SESSION_EXPIRES_KEY = "shal_session_expires_at";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1_000; // 24 h — matches JwtUtils expiry
 
 /** Record session start time after a successful login. */

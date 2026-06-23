@@ -15,15 +15,15 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: ${DB_NAME:-ardurApprisal}
-      POSTGRES_USER: ${DB_USERNAME:-apprisal}
+      POSTGRES_DB: ${DB_NAME:-shal}
+      POSTGRES_USER: ${DB_USERNAME:-shal}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.uat}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "${DB_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-apprisal} -d ${DB_NAME:-ardurApprisal}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-shal} -d ${DB_NAME:-shal}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.ocr
     environment:
-      DATABASE_URL: postgresql://${DB_USERNAME:-apprisal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-ardurApprisal}
+      DATABASE_URL: postgresql://${DB_USERNAME:-shal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-shal}
       REDIS_URL: redis://redis:6379/0
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in .env.uat}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
@@ -76,7 +76,7 @@ services:
     command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
       RUN_DB_CREATE: "0"   # the web service owns schema setup
-      DATABASE_URL: postgresql://${DB_USERNAME:-apprisal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-ardurApprisal}
+      DATABASE_URL: postgresql://${DB_USERNAME:-shal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-shal}
       REDIS_URL: redis://redis:6379/0
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
@@ -96,8 +96,8 @@ services:
       dockerfile: docker/Dockerfile.java
     environment:
       SPRING_PROFILES_ACTIVE: uat
-      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-ardurApprisal}
-      DB_USERNAME: ${DB_USERNAME:-apprisal}
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-shal}
+      DB_USERNAME: ${DB_USERNAME:-shal}
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
@@ -109,7 +109,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       JPA_DDL_AUTO: ${JPA_DDL_AUTO:-update}
       STORAGE_PATH: /app/uploads
-      TOMCAT_BASEDIR: /tmp/apprisal-tomcat
+      TOMCAT_BASEDIR: /tmp/shal-tomcat
     volumes:
       - uploads:/app/uploads
     ports:

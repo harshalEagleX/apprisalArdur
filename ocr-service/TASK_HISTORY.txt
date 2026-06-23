@@ -11,9 +11,9 @@ LEGEND:  [x] done   [~] partial/in-progress   [ ] not started
 --------------------------------------------------------------------------------
 
 ENVIRONMENT / GROUNDWORK
-[x] Confirmed runtime: conda env `apprisal` (py3.11) at
-    /opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/python (has all deps).
-    Local Postgres `ardurApprisal` :5432. Ollama mistral:7b + llava:13b. Tesseract 5.5.2.
+[x] Confirmed runtime: conda env `shal` (py3.11) at
+    /opt/homebrew/Caskroom/miniconda/base/envs/shal/bin/python (has all deps).
+    Local Postgres `shal` :5432. Ollama mistral:7b + llava:13b. Tesseract 5.5.2.
 [x] Read all planning docs + QCChceklistOpus.md + both QC Checklist xlsx.
 [x] Mapped uploads/ structure: 15 transaction folders (appraisal+engagement+contract),
     Orders/ = 27 loose PDFs. ~7 demo properties repeated across batches.
@@ -299,7 +299,7 @@ JAVA INTEGRATION BRIDGE — Python /qc/process contract (2026-06-03, same sessio
 
 END-TO-END JAVA FLOW VALIDATED (2026-06-03, same session)
 [x] Built Java app (mvn -pl app -am package, exit 0, app-0.0.1-SNAPSHOT.jar). Java 21,
-    DB jdbc:postgresql://localhost:5432/ardurApprisal (harshalsmac/12345678, SAME db as
+    DB jdbc:postgresql://localhost:5432/shal (harshalsmac/12345678, SAME db as
     Python; ddl-auto:create makes only the JPA tables, adaptive_* untouched). ocr.url=
     127.0.0.1:5001.
 [x] Started Java (port 8080, admin seeded dhoteharshal16@gmail.com/Admin123!). FULL FLOW:
@@ -748,7 +748,7 @@ VISION TRACK — Google Cloud Vision comparable-photo rules (SCA-27 + SCA-16V)
     FHA+MLS VERIFY, SCA-16V skip/distress), TestSCANewConstAndGLA. 44 passed.
 
 VISION TRACK pt.2 — Gemini (AI Studio) backend, LIVE
-[x] PIVOT: Cloud Vision key authenticated but project apprisal-498815 had
+[x] PIVOT: Cloud Vision key authenticated but project shal-498815 had
     BILLING_DISABLED (Vision requires a billing account even for free tier). User
     switched to Google AI Studio / Gemini (free tier, NO billing) — and Gemini is a
     better fit: it's multimodal, so one call returns building/MLS/distress/condition
@@ -1358,7 +1358,7 @@ gemini-key env test fails).
 DOCSTATS — LOAD-FIX VERIFICATION (live Postgres integration test)
 [x] Closed the gap flagged after the load audit: the A/B/D fixes were validated
     by compile+reason only. Added app/src/test/.../DocStatsIntegrationTests
-    (@SpringBootTest against the real ardurApprisal Postgres, matching the
+    (@SpringBootTest against the real shal Postgres, matching the
     existing EnversAudit test pattern) and RAN it green:
     - Test 1: every DocStatRepository JPQL (search CAST-as-string, batchTimingRows,
       ruleRanking CASE-WHEN, recentTrend, findPreviousByDocStatId cross-join,

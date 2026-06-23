@@ -5,11 +5,11 @@ folder of PDFs to a clickable reviewer dashboard.
 
 ## Prerequisites
 
-- conda env `apprisal` (Python 3.11) — has all deps (pymupdf, pdfplumber,
+- conda env `shal` (Python 3.11) — has all deps (pymupdf, pdfplumber,
   camelot, pytesseract, sentence-transformers, sqlalchemy, fastapi…).
-  Interpreter: `/opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/python`
-- Local Postgres (`brew services start postgresql@18`), database `ardurApprisal`.
-  Connection string in `ocr-service/.env` (`postgresql://postgres@localhost/ardurApprisal`).
+  Interpreter: `/opt/homebrew/Caskroom/miniconda/base/envs/shal/bin/python`
+- Local Postgres (`brew services start postgresql@18`), database `shal`.
+  Connection string in `ocr-service/.env` (`postgresql://postgres@localhost/shal`).
 - Tesseract (`brew install tesseract`) and Ghostscript (`brew install ghostscript`,
   enables Camelot bordered-table extraction).
 - Node 20+ for the Next.js frontend.
@@ -18,8 +18,8 @@ folder of PDFs to a clickable reviewer dashboard.
 
 ```bash
 cd ocr-service
-conda run -n apprisal python manage_db.py status     # verify adaptive_* tables exist
-conda run -n apprisal python manage_db.py create     # create if missing
+conda run -n shal python manage_db.py status     # verify adaptive_* tables exist
+conda run -n shal python manage_db.py create     # create if missing
 ```
 
 ## 2. Run QC on the document corpus
@@ -29,22 +29,22 @@ A "transaction" is a folder under `uploads/` containing `appraisal/`,
 
 ```bash
 # QC every transaction folder, persist reports to adaptive_validation_results:
-conda run -n apprisal python scripts/run_qc_corpus.py
+conda run -n shal python scripts/run_qc_corpus.py
 
 # Or one transaction:
-conda run -n apprisal python -c "from app.qc.transaction import run_transaction_qc; \
+conda run -n shal python -c "from app.qc.transaction import run_transaction_qc; \
   print(run_transaction_qc('../uploads/sort/#2321525505').counts())"
 
 # Print a readable report for one transaction:
-conda run -n apprisal python scripts/show_qc_report.py "sort/#2321525505"
-conda run -n apprisal python scripts/show_qc_report.py --list   # list QC'd transactions
+conda run -n shal python scripts/show_qc_report.py "sort/#2321525505"
+conda run -n shal python scripts/show_qc_report.py --list   # list QC'd transactions
 ```
 
 ## 3. API service
 
 ```bash
 cd ocr-service
-conda run -n apprisal python -m uvicorn main:app --host 127.0.0.1 --port 5001
+conda run -n shal python -m uvicorn main:app --host 127.0.0.1 --port 5001
 ```
 
 Key endpoints:

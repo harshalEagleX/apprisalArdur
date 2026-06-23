@@ -17,7 +17,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env", override=False)
 
 
 DATABASE_URL: str = os.getenv(
-    "DATABASE_URL", "postgresql://postgres@localhost/ardurApprisal"
+    "DATABASE_URL", "postgresql://postgres@localhost/shal"
 )
 
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")

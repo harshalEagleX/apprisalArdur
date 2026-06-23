@@ -2,14 +2,14 @@
 """
 Capture the REAL data sent to the LLM for one transaction — text vs image, and the
 exact content — with ZERO Groq calls. Patches chat_json / vision_chat_json to dump
-each call's payload to /tmp/apprisal-loadtest/prompts/ and return a stub.
+each call's payload to /tmp/shal-loadtest/prompts/ and return a stub.
 
 Run (project root): PYTHONPATH=ocr-service python3 scripts/loadtest/dump_llm_prompts.py <appraisal> [contract] [engagement]
 """
 import sys
 from pathlib import Path
 
-OUT = Path("/tmp/apprisal-loadtest/prompts")
+OUT = Path("/tmp/shal-loadtest/prompts")
 
 
 def main():

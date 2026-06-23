@@ -7,7 +7,7 @@ plus the comparable-photo vision fields.
 
 Usage:
     cd ocr-service
-    conda run -n apprisal python scripts/test_sca_corpus.py ../uploads/sort
+    conda run -n shal python scripts/test_sca_corpus.py ../uploads/sort
 """
 
 import sys

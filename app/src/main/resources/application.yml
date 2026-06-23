@@ -10,7 +10,7 @@ spring:
     time-zone: Asia/Kolkata
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/ardurApprisal}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/shal}
     username: ${DB_USERNAME:harshalsmac}
     password: ${DB_PASSWORD:12345678}
     driver-class-name: org.postgresql.Driver
@@ -84,7 +84,7 @@ server:
   http2:
     enabled: ${HTTP2_ENABLED:true}
   tomcat:
-    basedir: ${TOMCAT_BASEDIR:/private/tmp/apprisal-tomcat}
+    basedir: ${TOMCAT_BASEDIR:/private/tmp/shal-tomcat}
     # PERF (load): size the request worker pool for the target concurrency. Defaults
     # (200 threads) are fine, but make them env-tunable so a bigger host can serve
     # more concurrent reviewers/admins without code changes (P-4). accept-count is
@@ -156,7 +156,7 @@ management:
       show-details: when-authorized
   metrics:
     tags:
-      application: apprisal
+      application: shal
   # Hikari, JVM, and HTTP server timings are auto-bound by Micrometer when actuator
   # is present — no extra code needed; they appear under /actuator/metrics.
 
@@ -164,6 +164,6 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX,Asia/Kolkata} %-5level ${PID:- } --- [%thread] %logger{40} : %msg%n"
   level:
-    com.apprisal: INFO
+    com.shal: INFO
     org.hibernate.SQL: WARN
     org.springframework.security: WARN

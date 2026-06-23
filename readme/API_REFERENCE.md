@@ -1,6 +1,6 @@
 # API Reference
 
-Complete REST API documentation for the Apprisal QC Platform.
+Complete REST API documentation for the SHAL.
 
 > **Updated:** May 2026 — Derived from a full code audit of the actual controllers and
 > services. The previous version documented a Phase-1 MVP; this version reflects the

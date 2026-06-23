@@ -5,11 +5,11 @@
 # Schedule via cron/systemd timer, e.g. hourly or nightly. P-15: data is the asset —
 # retention removes only OLD backups, never the live DB.
 #
-#   DB_NAME=ardurApprisal BACKUP_DIR=/var/backups/apprisal/db ./scripts/backup_db.sh
+#   DB_NAME=shal BACKUP_DIR=/var/backups/shal/db ./scripts/backup_db.sh
 #   restore: pg_restore --clean --if-exists -d <db> <file.dump>
 set -euo pipefail
 
-DB_NAME="${DB_NAME:-${PGDATABASE:-ardurApprisal}}"
+DB_NAME="${DB_NAME:-${PGDATABASE:-shal}}"
 BACKUP_DIR="${BACKUP_DIR:-./backups/db}"
 RETENTION_DAYS="${DB_BACKUP_RETENTION_DAYS:-14}"
 

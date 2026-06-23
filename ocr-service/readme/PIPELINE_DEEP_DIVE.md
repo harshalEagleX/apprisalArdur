@@ -1080,4 +1080,4 @@ The LLM is the weakest dependency in the pipeline — if it's down, everything e
 ---
 
 *Document generated 2026-04-25. Live test: 96 Baell Trace Ct SE.pdf, 27 pages, 45.5s, 17 rules.*  
-*Server: FastAPI on port 5001, conda env `apprisal` (Python 3.11), Tesseract `/opt/homebrew/bin/tesseract`.*
+*Server: FastAPI on port 5001, conda env `shal` (Python 3.11), Tesseract `/opt/homebrew/bin/tesseract`.*

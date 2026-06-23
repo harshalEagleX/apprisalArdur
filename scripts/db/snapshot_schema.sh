@@ -12,12 +12,12 @@
 # two snapshots IS your migration note — review it before deploying.
 #
 # Usage:
-#   DB_URL='postgresql://user:pass@host:5432/ardurApprisal' scripts/db/snapshot_schema.sh
+#   DB_URL='postgresql://user:pass@host:5432/shal' scripts/db/snapshot_schema.sh
 # or rely on the same DATABASE_URL the services use.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-DB="${DB_URL:-${DATABASE_URL:-postgresql://localhost:5432/ardurApprisal}}"
+DB="${DB_URL:-${DATABASE_URL:-postgresql://localhost:5432/shal}}"
 OUT_DIR="$(cd "$(dirname "$0")/../.." && pwd)/db-snapshots"
 mkdir -p "$OUT_DIR"
 

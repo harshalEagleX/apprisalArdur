@@ -18,7 +18,7 @@ either ``OK`` with the extracted value, or a structured reason for the miss:
   * CRASHED <repr>         — the extractor raised; bug to fix.
 
 Run from ocr-service/:
-    conda run -n apprisal python scripts/explain_misses.py
+    conda run -n shal python scripts/explain_misses.py
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-UPLOADS = Path("/Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/uploads")
+UPLOADS = Path("/Users/eaglexmac/Documents/functionalProject/shal/shal/SHAL/uploads")
 
 # Same 23 PDFs as run_full_appraisal_test.py
 TEST_DOCS: List[str] = [

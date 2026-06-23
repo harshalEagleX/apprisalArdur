@@ -8,7 +8,7 @@
 -- This one-time backfill rewrites the stored labels for existing rows, keyed by the
 -- stable stage key. Values MUST match python_response._STAGE_LABELS.
 --
---   psql -d ardurApprisal -f scripts/backfill_stage_labels.sql
+--   psql -d shal -f scripts/backfill_stage_labels.sql
 -- Idempotent: re-running is a no-op once labels already match.
 -- =============================================================================
 

@@ -12,7 +12,7 @@ Document type is taken from the folder layout when present
 
 Usage:
     cd ocr-service
-    conda run -n apprisal python scripts/process_corpus.py [run_label] [--limit N]
+    conda run -n shal python scripts/process_corpus.py [run_label] [--limit N]
 """
 
 import sys

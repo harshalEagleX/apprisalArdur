@@ -5,7 +5,7 @@
 # browsable tree, but files unchanged since the previous snapshot are hardlinks, so
 # only changed/new documents consume new space. Schedule nightly.
 #
-#   STORAGE_PATH=./uploads UPLOADS_BACKUP_DIR=/var/backups/apprisal/uploads ./scripts/backup_uploads.sh
+#   STORAGE_PATH=./uploads UPLOADS_BACKUP_DIR=/var/backups/shal/uploads ./scripts/backup_uploads.sh
 #
 # For off-host durability point UPLOADS_BACKUP_DIR at a mounted second volume / NAS,
 # or wrap with restic/rclone to push the latest snapshot offsite.

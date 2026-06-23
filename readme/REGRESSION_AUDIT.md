@@ -34,7 +34,7 @@ with concrete file evidence; flag missing coverage explicitly; "none found" wher
 | Admin login → batch upload → Run QC → assign reviewer | Partial | `brain/src/runners/demo-e2e.spec.ts` (UI E2E exists) but not run against live stack post-change | High | Run demo-e2e on a live UAT stack; assert batch reaches REVIEW with rows persisted |
 | Reviewer queue → verify page → pass/fail → submit | Partial | verify-page logic now in `frontend/lib/reviewVerify.ts` + `reviewVerify.test.ts` (unit only) | High | Component/E2E render of verify page incl. BLOCKED status badge |
 | Auth gate on protected routes (middleware activated) | Partial | `frontend/middleware.ts` activated; no middleware test found | High | Test: unauthenticated → redirect to login; reviewer → 403 on admin route |
-| QC decision rollup incl. new BLOCKED | Covered | `app/src/test/java/com/apprisal/RerunGuardIntegrationTests.java`, `ocr-service/tests/test_blocking_signal.py` | Med | (covered) add frontend assertion BLOCKED renders "Blocked" |
+| QC decision rollup incl. new BLOCKED | Covered | `app/src/test/java/com/shal/RerunGuardIntegrationTests.java`, `ocr-service/tests/test_blocking_signal.py` | Med | (covered) add frontend assertion BLOCKED renders "Blocked" |
 | Batch progress over WebSocket | Missing | `5722507` swapped polling→WS; no WS test found | Med | Test: WS message triggers queue refresh; fallback if WS drops |
 
 ## Previously fixed bugs

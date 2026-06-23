@@ -8,7 +8,7 @@ to adaptive_validation_results, and prints a per-transaction + aggregate summary
 
 Usage:
     cd ocr-service
-    conda run -n apprisal python scripts/run_qc_corpus.py [--limit N]
+    conda run -n shal python scripts/run_qc_corpus.py [--limit N]
 """
 
 import sys

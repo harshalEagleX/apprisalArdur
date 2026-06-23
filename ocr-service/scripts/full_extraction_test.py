@@ -47,7 +47,7 @@ QC Rule → Required Fields mapping (per QCChceklistOpus.md):
   SIG-2:appraiser_name, appraiser_state_cert_number, appraiser_cert_state, appraiser_cert_expiration_date
 
 Usage:
-  conda run -n apprisal python scripts/full_extraction_test.py
+  conda run -n shal python scripts/full_extraction_test.py
 """
 
 import sys

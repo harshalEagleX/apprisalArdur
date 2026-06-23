@@ -8,7 +8,7 @@ Closes audit items **DB-010, TEN-001, TEN-002, TEN-003, TEN-004, TEN-005, TEN-00
 
 ## Decision
 
-The Apprisal platform runs as a **single-organization (single-tenant) deployment.**
+The SHAL platform runs as a **single-organization (single-tenant) deployment.**
 There is intentionally **no `organization_id`** and no cross-tenant row isolation.
 
 - `Role` = `{ADMIN, REVIEWER}` is the access model.

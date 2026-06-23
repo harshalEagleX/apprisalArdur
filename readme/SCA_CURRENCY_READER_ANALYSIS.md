@@ -94,5 +94,5 @@ Two honest consequences:
 ## 5. How this ties back to the optimization goal
 
 - **Item 7 (confidence-gating the SCA-LLM) is the highest-value, lowest-risk lever.** It cuts LLM calls on every clean-lattice document without touching extraction quality (the LLM still fires exactly where the deterministic reader is weak). It is measurable with the existing harness (PASS/FAIL/VERIFY off-vs-on, plus call count).
-- **Items 1–6 are the durable HomeVision-style fix:** make the deterministic currency reader strong enough (right-edge alignment + borderless fallback + per-form geometry) that the LLM is needed only on genuinely unreadable scans. That's what moves Ardur from ~11.6K tokens/doc toward HomeVision's ~1–3K — *and* it's the foundation the existing spatial-bounding-box work is already heading toward.
+- **Items 1–6 are the durable HomeVision-style fix:** make the deterministic currency reader strong enough (right-edge alignment + borderless fallback + per-form geometry) that the LLM is needed only on genuinely unreadable scans. That's what moves SHAL from ~11.6K tokens/doc toward HomeVision's ~1–3K — *and* it's the foundation the existing spatial-bounding-box work is already heading toward.
 - **Caching/batching were stopgaps; this is the real headroom.** None of items 1–7 are implemented here — this is analysis only, to inform whether/how to proceed.

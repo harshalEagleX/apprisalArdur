@@ -6,7 +6,7 @@ Wires monitoring on top of the metrics the app already exposes. Nothing here cha
 
 `/actuator/prometheus` (ADMIN-secured) serves:
 - **Auto-bound** (Micrometer): `hikaricp_*` (DB pool), `jvm_*`/`process_*` (heap, CPU), `http_server_requests_*` (latency, status).
-- **Custom** (`app/.../metrics/QcMetrics.java`): `apprisal_batches_qc_processing`, `apprisal_batches_review_pending`, `apprisal_batches_in_review`, `apprisal_batches_error`, `apprisal_batches_qc_stuck`. Sampled on scrape via cheap COUNT-by-status queries.
+- **Custom** (`app/.../metrics/QcMetrics.java`): `shal_batches_qc_processing`, `shal_batches_review_pending`, `shal_batches_in_review`, `shal_batches_error`, `shal_batches_qc_stuck`. Sampled on scrape via cheap COUNT-by-status queries.
 
 ## Files
 
@@ -33,7 +33,7 @@ Wires monitoring on top of the metrics the app already exposes. Nothing here cha
 - **QcBatchesStuck** → a batch is wedged in `QC_PROCESSING`; check the Python OCR service + Celery worker. The `StuckBatchReconciler` will retry/abandon, but the alert surfaces it sooner.
 - **QcErrorBatchesPresent** → batches in `ERROR` need an admin.
 - **ReviewBacklogHigh** → staffing/throughput signal (info, not an error).
-- **HttpServerErrorSpike / JvmHeapHigh / ApprisalBackendDown** → standard service-health alerts.
+- **HttpServerErrorSpike / JvmHeapHigh / SHALBackendDown** → standard service-health alerts.
 
 ## Note on scale-out
 

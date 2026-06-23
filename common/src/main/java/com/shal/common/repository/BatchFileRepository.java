@@ -1,0 +1,71 @@
+package com.shal.common.repository;
+
+import com.shal.common.entity.BatchFile;
+import com.shal.common.entity.FileStatus;
+import com.shal.common.entity.FileType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
+
+    List<BatchFile> findByBatchId(Long batchId);
+
+    List<BatchFile> findByBatchIdAndFileType(Long batchId, FileType fileType);
+
+    List<BatchFile> findByBatchIdAndStatus(Long batchId, FileStatus status);
+
+    /**
+     * Find files by batch, orderId, and type - for matching appraisal with
+     * engagement. Returns List to handle possible duplicates.
+     */
+    List<BatchFile> findByBatchIdAndOrderIdAndFileType(Long batchId, String orderId, FileType fileType);
+
+    /**
+     * Find all files with a specific orderId in a batch.
+     */
+    List<BatchFile> findByBatchIdAndOrderId(Long batchId, String orderId);
+
+    @Query("""
+        SELECT bf FROM BatchFile bf
+        JOIN FETCH bf.batch b
+        LEFT JOIN FETCH b.assignedReviewer
+        WHERE bf.id = :batchFileId
+        """)
+    java.util.Optional<BatchFile> findWithBatchAndReviewerById(@Param("batchFileId") Long batchFileId);
+
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.id = :batchId")
+    long countByBatchId(@Param("batchId") Long batchId);
+
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.assignedReviewer.id = :reviewerId")
+    long countByReviewerId(@Param("reviewerId") Long reviewerId);
+
+    long countByBatchIdAndFileType(Long batchId, FileType fileType);
+
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.id = :batchId AND bf.status = :status")
+    long countByBatchIdAndStatus(@Param("batchId") Long batchId, @Param("status") FileStatus status);
+
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.batch.client.id = :clientId AND bf.status = :status")
+    long countByClientIdAndStatus(@Param("clientId") Long clientId, @Param("status") FileStatus status);
+
+    /** Per-client file totals in one grouped query: [clientId, totalFiles]. */
+    @Query("""
+        SELECT bf.batch.client.id, COUNT(bf)
+        FROM BatchFile bf
+        WHERE bf.batch.client.id IS NOT NULL
+        GROUP BY bf.batch.client.id
+        """)
+    List<Object[]> clientFileCounts();
+
+    /**
+     * Bulk file load for multiple batches in one query.
+     * JOIN FETCH batch so callers can group by batch.id without LAZY loads.
+     * Replaces the N per-batch findByBatchId() calls in AuditGraphController.
+     */
+    @Query("SELECT f FROM BatchFile f JOIN FETCH f.batch WHERE f.batch.id IN :batchIds ORDER BY f.batch.id, f.id")
+    List<BatchFile> findByBatchIdIn(@Param("batchIds") List<Long> batchIds);
+}

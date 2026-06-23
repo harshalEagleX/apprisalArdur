@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 REAL_ROOT = "https://api.groq.com"
 CAP = int(os.getenv("PROBE_TOKEN_CAP", "40000"))
-LOG = os.getenv("PROBE_LOG", "/tmp/apprisal-loadtest/groq_usage.jsonl")
+LOG = os.getenv("PROBE_LOG", "/tmp/shal-loadtest/groq_usage.jsonl")
 
 app = FastAPI(title="Groq recording proxy")
 STATE = {"calls": 0, "total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0,

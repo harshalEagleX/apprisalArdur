@@ -1,5 +1,5 @@
 """
-Apprisal OCR Service — FastAPI Entry Point
+SHAL OCR Service — FastAPI Entry Point
 
 Days 1-6 endpoints:
   GET  /health              — service health + schema info
@@ -40,7 +40,7 @@ from app.services.correction_service import (
 )
 
 app = FastAPI(
-    title="Apprisal OCR Service",
+    title="SHAL OCR Service",
     description="Adaptive document extraction platform — Week 1",
     version="0.2.0",
 )

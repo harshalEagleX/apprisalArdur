@@ -3,7 +3,7 @@
 --
 -- Values below are STARTING POINTS sized for a ~48GB host. Adjust to the actual RAM
 -- of the deployment box. Apply as a superuser, then RESTART Postgres:
---   psql -d ardurApprisal -f scripts/postgres_tuning.sql
+--   psql -d shal -f scripts/postgres_tuning.sql
 --   brew services restart postgresql@16   # or: pg_ctl restart
 --
 -- shared_buffers and max_connections require a RESTART; the rest are reloadable.
