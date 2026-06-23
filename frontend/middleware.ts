@@ -42,5 +42,11 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclude ALL Next.js internals (not just static/image): the dev HMR
+  // websocket lives at /_next/webpack-hmr (+ Turbopack HMR). The old matcher
+  // only skipped _next/static|_next/image, so the HMR upgrade hit this auth
+  // middleware and got redirected to /login — which kills the ws connection
+  // ("WebSocket connection to ws://…/_next/webpack-hmr failed"). Skipping all
+  // of _next leaves auth gating on real routes intact while letting HMR through.
+  matcher: ["/((?!_next|favicon.ico).*)"],
 };
