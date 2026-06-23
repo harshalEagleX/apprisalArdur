@@ -203,18 +203,32 @@ function clearSessionRecord(): void {
  * well, needed for WebSocket handshake verification.
  */
 export async function login(username: string, password: string): Promise<void> {
-  const res = await fetch(`${JAVA}/api/auth/authenticate`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${JAVA}/api/auth/authenticate`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+  } catch (err) {
+    // fetch() only throws on a network/CORS failure — the backend was NOT
+    // reached at all. Surface this distinctly so a down/blocked backend is
+    // never confused with wrong credentials.
+    throw new Error(
+      `Cannot reach the backend at ${JAVA}. Make sure the Java service is running and that this host is allowed by CORS. (${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
 
   if (res.status === 429) {
     throw new Error("Too many login attempts. Please wait 5 minutes before trying again.");
   }
+  if (res.status === 401 || res.status === 403) {
+    // Backend IS reachable (system is up) — the credentials were rejected.
+    throw new Error("Invalid username or password — the backend is reachable, so the system is running; the credentials were rejected.");
+  }
   if (!res.ok) {
-    throw new Error("Invalid username or password");
+    throw new Error(await readErrorMessage(res, `Login failed (HTTP ${res.status}).`));
   }
   // jwt HttpOnly cookie is now set by the backend — record expiry for the
   // session-expiry warning hook, then nothing else needed from JS.

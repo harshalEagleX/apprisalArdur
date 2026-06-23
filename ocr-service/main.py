@@ -45,13 +45,22 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# Allow the Next.js dev frontend to call the QC endpoints directly (demo).
+# CORS. ALLOWED_ORIGINS (comma-separated) overrides; default "*" allows any
+# host (localhost + LAN IP) for local/dev. When allowing all origins we must
+# disable credentials (the browser rejects "*" + credentials) — the OCR service
+# is called server-to-server by Java with an API key, not via browser cookies,
+# so credentials are not needed here. Lock ALLOWED_ORIGINS down in production.
+import os
 from fastapi.middleware.cors import CORSMiddleware
+
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "*").strip()
+_allow_all = _origins_raw in ("", "*")
+_origins = ["*"] if _allow_all else [o.strip() for o in _origins_raw.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=not _allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )

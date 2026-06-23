@@ -91,6 +91,18 @@ ensure_local_bins() {
   export PATH
 }
 
+# ── Detect this machine's primary LAN IP (Linux + macOS) ─────────────
+detect_lan_ip() {
+  local ip=""
+  if command -v hostname >/dev/null 2>&1 && hostname -I >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"      # Linux
+  fi
+  if [[ -z "$ip" ]] && command -v ipconfig >/dev/null 2>&1; then
+    ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"  # macOS
+  fi
+  echo "$ip"
+}
+
 # ── TCP port check using bash /dev/tcp (no external deps) ────────────
 port_open() {  # host port
   (exec 3<>"/dev/tcp/$1/$2") 2>/dev/null && { exec 3>&- ; return 0; }

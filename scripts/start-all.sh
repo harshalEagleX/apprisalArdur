@@ -90,13 +90,29 @@ wait_port "ocr"      5001 60
 wait_port "java"     8080 90
 wait_port "frontend" 3000 60
 
+LAN_IP="$(detect_lan_ip)"
 cat <<EOF
 
-[start-all] All services launched.
+[start-all] All services launched (bound to all interfaces — reachable on the network).
 
-  Java backend  → http://localhost:8080
-  OCR service   → http://localhost:5001/health
-  Frontend      → http://localhost:3000
+  Frontend      → http://localhost:3000$( [[ -n "$LAN_IP" ]] && echo "   |   http://$LAN_IP:3000" )
+  Java backend  → http://localhost:8080$( [[ -n "$LAN_IP" ]] && echo "   |   http://$LAN_IP:8080" )
+  OCR service   → http://localhost:5001/health$( [[ -n "$LAN_IP" ]] && echo "   |   http://$LAN_IP:5001/health" )
+
+  Open the app from THIS machine via localhost, or from another device on the
+  network via the http://$LAN_IP:3000 URL — the frontend auto-targets the backend
+  on whatever host you load it from, so no per-device config is needed.
+EOF
+
+if [[ -n "$LAN_IP" ]]; then
+  cat <<EOF
+
+  If other devices cannot connect, open the ports in the firewall:
+    Linux:  sudo ufw allow 3000/tcp && sudo ufw allow 8080/tcp && sudo ufw allow 5001/tcp
+EOF
+fi
+
+cat <<EOF
 
   Logs:  tail -f $LOG_DIR/{java,ocr,celery,frontend}.log
   Stop:  $SCRIPTS/stop-all.sh

@@ -17,6 +17,9 @@ set -a
 set +a
 
 # ── Launch ───────────────────────────────────────────────────
+# -H 0.0.0.0 binds all interfaces so the app is reachable over the LAN/IP,
+# not just localhost. lib/config.ts then auto-targets the backend on the same
+# host the browser used, so no per-device URL config is needed.
 cd "$FRONTEND_DIR"
-echo "[start-frontend] Starting Next.js dev server on http://localhost:3000"
-exec npm run dev
+echo "[start-frontend] Starting Next.js dev server on http://0.0.0.0:3000 (network-accessible)"
+exec npm run dev -- -H 0.0.0.0 -p 3000

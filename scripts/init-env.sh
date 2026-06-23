@@ -120,7 +120,9 @@ DATABASE_URL=postgresql+psycopg2://shal:shal@localhost:5432/shal_qc
 # Celery broker + result backend + Groq TPM token bucket
 REDIS_URL=redis://127.0.0.1:6379/0
 
-ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
+# "*" = allow any origin (localhost + LAN IP) for dev/network access.
+# Lock this to a fixed list in production.
+ALLOWED_ORIGINS=*
 
 # Per-process SQLAlchemy pool (keep small so N Celery workers don't oversubscribe PG)
 DB_POOL_SIZE=2
