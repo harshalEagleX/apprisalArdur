@@ -40,6 +40,23 @@ write_if_absent() {  # path  <<<content
 JWT_SECRET="$(gen_secret 32)"
 INTERNAL_API_KEY="$(gen_secret 24)"
 
+# ── Real secrets (e.g. GROQ key) come from an UNTRACKED local file or env ──
+# scripts/.env.secrets is gitignored, so keys land in ocr-service/.env on every
+# machine WITHOUT ever being committed to the public repo. See .env.secrets.example.
+SECRETS_FILE="$REPO_ROOT/scripts/.env.secrets"
+if [[ -f "$SECRETS_FILE" ]]; then
+  set -a; # shellcheck disable=SC1090
+  source "$SECRETS_FILE"; set +a
+  echo "[init-env] loaded local secrets from scripts/.env.secrets"
+fi
+GROQ_API_KEY="${GROQ_API_KEY:-}"
+GROQ_VISION_API_KEY="${GROQ_VISION_API_KEY:-$GROQ_API_KEY}"
+if [[ -n "$GROQ_API_KEY" ]]; then
+  echo "[init-env] GROQ key found — will be written into ocr-service/.env"
+else
+  echo "[init-env] no GROQ key (set one in scripts/.env.secrets to enable LLM extraction)"
+fi
+
 # ── 1. Root .env (Java Spring Boot + shared keys) ──────────────────────
 write_if_absent "$REPO_ROOT/.env" <<EOF
 # ============================================================
@@ -98,11 +115,11 @@ LOG_LEVEL=INFO
 MODEL_VERSION=adaptive-1.0.0
 
 # ── Groq cloud LLM (structured-extraction brain) ────────────
-# PASTE YOUR KEY to enable LLM extraction. The service still runs without it
-# (synchronous fallback + keyword extraction), just with reduced grid accuracy.
-GROQ_API_KEY=
+# Key is injected from scripts/.env.secrets (untracked). Without it the service
+# still runs (synchronous fallback + keyword extraction), with reduced grid accuracy.
+GROQ_API_KEY=$GROQ_API_KEY
 GROQ_MODEL=openai/gpt-oss-120b
-GROQ_VISION_API_KEY=
+GROQ_VISION_API_KEY=$GROQ_VISION_API_KEY
 GROQ_VISION_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
 GROQ_TPM_LIMIT=6000
 
