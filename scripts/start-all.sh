@@ -19,6 +19,9 @@ mkdir -p "$LOG_DIR"
 # shellcheck source=scripts/_lib.sh
 source "$SCRIPTS/_lib.sh"
 
+# ── Auto-generate .env files if missing ──────────────────────
+bash "$SCRIPTS/init-env.sh"
+
 # ── Infrastructure checks ────────────────────────────────────
 echo "[start-all] Checking infrastructure..."
 

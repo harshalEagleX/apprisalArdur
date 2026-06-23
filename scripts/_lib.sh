@@ -51,16 +51,27 @@ activate_conda() {
   set +u
   # shellcheck disable=SC1090
   source "$conda_sh"
-  if ! conda activate "$env_name" 2>/dev/null; then
+  if conda activate "$env_name" 2>/dev/null; then
     set -u
-    echo "[conda] ERROR: could not activate env '$env_name'." >&2
-    echo "[conda]   Create it from ocr-service:  conda create -n $env_name python=3.11 -y" >&2
-    echo "[conda]   then: conda activate $env_name && pip install -r ocr-service/requirements.txt" >&2
-    echo "[conda]   Or override the name with CONDA_ENV=<name>." >&2
-    exit 1
+    echo "[conda] activated '$env_name' ($conda_sh)"
+    return 0
   fi
+
+  # Requested env missing → fall back to 'base' (deps may be installed there,
+  # e.g. an Ubuntu box where requirements went into base). Warn, don't die.
+  echo "[conda] WARN: env '$env_name' not found — falling back to 'base'." >&2
+  echo "[conda]   (To use a dedicated env: conda create -n $env_name python=3.11 -y" >&2
+  echo "[conda]    && conda activate $env_name && pip install -r ocr-service/requirements.txt," >&2
+  echo "[conda]    or set CONDA_ENV=<name>.)" >&2
+  if conda activate base 2>/dev/null; then
+    set -u
+    echo "[conda] activated 'base' ($conda_sh)"
+    return 0
+  fi
+
   set -u
-  echo "[conda] activated '$env_name' ($conda_sh)"
+  echo "[conda] ERROR: could not activate '$env_name' or 'base'." >&2
+  exit 1
 }
 
 # ── Prepend known local bin dirs to PATH, only if they exist ─────────

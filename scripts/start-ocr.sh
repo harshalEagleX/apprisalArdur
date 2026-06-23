@@ -25,7 +25,11 @@ for bin in tesseract pdftoppm pdfinfo; do
   command -v "$bin" >/dev/null 2>&1 || echo "[start-ocr] WARN: '$bin' not found in PATH (install tesseract / poppler-utils)"
 done
 
-# ── Launch ───────────────────────────────────────────────────
+# ── Ensure Python-owned tables exist (idempotent: create_all checkfirst) ──
 cd "$OCR_DIR"
+echo "[start-ocr] Ensuring Python DB tables exist (manage_db.py create)..."
+python manage_db.py create || echo "[start-ocr] WARN: manage_db create failed — check DATABASE_URL / Postgres"
+
+# ── Launch ───────────────────────────────────────────────────
 echo "[start-ocr] Starting uvicorn on http://0.0.0.0:5001"
 exec uvicorn main:app --host 0.0.0.0 --port 5001 --reload

@@ -1,32 +1,26 @@
 #!/usr/bin/env bash
 # Start the SHAL Java / Spring Boot backend on port 8080.
-# Loads .env and passes all vars as JVM -D flags.
+# Spring Boot imports .env itself (see application.yml: spring.config.import),
+# so we only ensure .env exists and launch the jar from the repo root.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 JAR="$REPO_ROOT/app/target/app-0.0.1-SNAPSHOT.jar"
 
-if [[ ! -f "$JAR" ]]; then
-  echo "[start-java] JAR not found — building first..."
-  cd "$REPO_ROOT"
-  ./mvnw -q -DskipTests clean package
+# ── Ensure .env exists (INTERNAL_API_KEY is required, no default) ─────
+if [[ ! -f "$REPO_ROOT/.env" ]]; then
+  echo "[start-java] .env missing — generating it..."
+  bash "$REPO_ROOT/scripts/init-env.sh"
 fi
 
-# ── Env vars ─────────────────────────────────────────────────
-set -a
-[[ -f "$REPO_ROOT/.env" ]] && source "$REPO_ROOT/.env"
-set +a
+# ── Build the jar if it isn't there yet ──────────────────────────────
+if [[ ! -f "$JAR" ]]; then
+  echo "[start-java] JAR not found — building (this can take a few minutes)..."
+  (cd "$REPO_ROOT" && ./mvnw -q -DskipTests clean package)
+fi
 
-# ── Launch ───────────────────────────────────────────────────
+# ── Launch ───────────────────────────────────────────────────────────
+# Run from repo root so Spring's 'optional:file:.env' import resolves.
+cd "$REPO_ROOT"
 echo "[start-java] Starting Spring Boot on http://localhost:8080"
-exec java \
-  -Dspring.datasource.url="${DB_URL}" \
-  -Dspring.datasource.username="${DB_USERNAME}" \
-  -Dspring.datasource.password="${DB_PASSWORD}" \
-  -Djwt.secret="${JWT_SECRET}" \
-  -Dadmin.email="${ADMIN_EMAIL}" \
-  -Dadmin.password="${ADMIN_PASSWORD}" \
-  -Docr.service.url="${OCR_SERVICE_URL}" \
-  -Docr.service.api-key="${INTERNAL_API_KEY}" \
-  -Dredis.url="${REDIS_URL:-redis://localhost:6379/0}" \
-  -jar "$JAR"
+exec java -jar "$JAR"
