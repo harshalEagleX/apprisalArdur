@@ -2,7 +2,7 @@
 Day 4 — Seed test set and run baseline measurement.
 
 Run:
-    conda run -n apprisal python scripts/seed_and_baseline.py
+    conda run -n shal python scripts/seed_and_baseline.py
 """
 
 import sys

@@ -10,7 +10,7 @@ Tests cover all six days of Week Two:
   Day 12 — Measurement: improvement over Day 4 baseline
 
 Run:
-    conda run -n apprisal python -m pytest tests/test_week2.py -v
+    conda run -n shal python -m pytest tests/test_week2.py -v
 """
 
 import sys

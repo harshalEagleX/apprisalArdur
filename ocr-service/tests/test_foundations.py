@@ -10,7 +10,7 @@ From the 30-day plan, Week One exit criteria are:
   ✓ The correction capture interface is functional (API endpoint responds).
 
 Run:
-    conda run -n apprisal python -m pytest tests/test_week1_exit_criteria.py -v
+    conda run -n shal python -m pytest tests/test_week1_exit_criteria.py -v
 """
 
 import sys

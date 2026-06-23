@@ -79,7 +79,7 @@ UAT assumes testers reach a stable environment independently. Delivered:
 - [x] **No-Docker local runner (active path)** — `scripts/uat/run-local.sh` + `stop-local.sh`
       start each service natively on its port (java :8080, ocr :5001, celery, next :3000) against
       local Postgres + Redis, using a real detailed `.env.uat` (git-ignored, merged from `./.env`
-      + `ocr-service/.env`). Activate the Python env first (`conda activate apprisal`).
+      + `ocr-service/.env`). Activate the Python env first (`conda activate shal`).
 - [x] **Live stack verified (2026-06-22):** Postgres ✓, Redis ✓; Python `/health` 200 (db
       connected, 134 rules via `/qc/rules` with API key, 401 without ✓); Java `/login` 302 +
       `/actuator/health` 200; frontend `/login` 200. The `uat` Spring profile boots clean on a

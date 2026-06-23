@@ -175,7 +175,7 @@ qc_rule_result
 ## 5. File Structure
 
 ```
-src/main/java/com/apprisal/
+src/main/java/com/shal/
 ├── config/
 │   ├── OcrServiceConfig.java       ✅ Python URL config
 │   └── RestTemplateConfig.java     ✅ HTTP client config
@@ -225,7 +225,7 @@ cd ocr-service
 python -m uvicorn main:app --host 0.0.0.0 --port 5001
 
 # Terminal 2: Java Application
-cd apprisal
+cd shal
 mvn spring-boot:run
 ```
 

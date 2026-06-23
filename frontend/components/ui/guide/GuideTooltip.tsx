@@ -28,7 +28,7 @@ type GuideState = {
 
 const GuideCtx = createContext<GuideState | null>(null);
 
-const STORAGE_KEY = "apprisal_guide_completed";
+const STORAGE_KEY = "shal_guide_completed";
 
 // ── Provider ─────────────────────────────────────────────────────────────────
 export function GuideProvider({ children }: { children: React.ReactNode }) {

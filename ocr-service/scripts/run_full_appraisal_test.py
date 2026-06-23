@@ -9,7 +9,7 @@ Speed: PDFs themselves are processed with all layers running in parallel.
 
 Usage:
     cd ocr-service
-    conda run -n apprisal python scripts/run_full_appraisal_test.py
+    conda run -n shal python scripts/run_full_appraisal_test.py
 """
 
 import sys

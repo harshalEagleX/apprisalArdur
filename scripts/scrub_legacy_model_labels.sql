@@ -7,7 +7,7 @@
 -- current Groq equivalents so no removed provider is ever shown.
 --   text model  -> gpt-oss-120b   |   vision model -> llama-4-scout   |   provider -> groq
 --
---   psql -d ardurApprisal -f scripts/scrub_legacy_model_labels.sql
+--   psql -d shal -f scripts/scrub_legacy_model_labels.sql
 -- Idempotent: re-running is a no-op once the strings are gone.
 -- =============================================================================
 

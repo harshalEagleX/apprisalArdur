@@ -180,7 +180,7 @@ Groq prompt caching is real and **cached input tokens are exempt from the rate l
 
 ## 6. How to reproduce / tear down
 
-Stack runs as background processes; logs in `/tmp/apprisal-loadtest/`. The mock LLM is wired only into the test instances via env vars — **no `.env` files were modified**.
+Stack runs as background processes; logs in `/tmp/shal-loadtest/`. The mock LLM is wired only into the test instances via env vars — **no `.env` files were modified**.
 
 ```bash
 # stop the test stack

@@ -1,4 +1,4 @@
-# Apprisal Platform — Implementation Plan & Enterprise Audit
+# SHAL Platform — Implementation Plan & Enterprise Audit
 
 **Document Version:** 3.0  
 **Last Audit:** 2026-05-11  
@@ -416,7 +416,7 @@ protected void configureMessageBroker(MessageBrokerRegistry config) {
 
 **Production credentials committed to repository:**
 
-The file `apprisalArdur/.env` contains real Neon PostgreSQL credentials, JWT signing
+The file `SHAL/.env` contains real Neon PostgreSQL credentials, JWT signing
 secret, and admin password. If this file has ever been committed to git, those credentials
 are in the git history permanently and must be considered compromised.
 
@@ -733,6 +733,6 @@ hardening. With 4-8 weeks of focused effort on the items below, it can reach 8+/
 
 ---
 
-*Document maintained by the Apprisal engineering team.*
+*Document maintained by the SHAL engineering team.*
 *For architecture diagrams, see [ARCHITECTURE.md](./ARCHITECTURE.md)*
 *For complete API reference, see [API_REFERENCE.md](./API_REFERENCE.md)*

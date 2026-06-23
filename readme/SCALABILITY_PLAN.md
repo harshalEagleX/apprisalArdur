@@ -1,4 +1,4 @@
-# Apprisal Platform — Scalability & Performance Engineering Plan
+# SHAL Platform — Scalability & Performance Engineering Plan
 
 > **Purpose:** Take the platform from its current single-box, synchronous design to a
 > deployment that reliably serves **50+ concurrent users**, stores **up to 5,000 source
@@ -427,7 +427,7 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 | OCR cache hit rate | _TBD_ | | | track |
 | Groq throttle-wait per doc | _TBD_ | | | track |
 
-**Phase 0 execution log (2026-06-15, local `ardurApprisal`):**
+**Phase 0 execution log (2026-06-15, local `shal`):**
 - **Indexes applied** — ran `scripts/add_missing_indexes.sql`: 6 created
   (`idx_qc_rule_qcresult_status`, `idx_qc_rule_result_needs_review`, `idx_audit_log_user_created`,
   `idx_audit_log_entity_created`, `idx_qc_result_final_decision`, `idx_batch_client_status`) +
@@ -454,7 +454,7 @@ Each phase is an independently deployable increment (P-7) with an explicit measu
 - **Java (QL-8):** `RestTemplateConfig` split into a pooled JDK-HttpClient short-timeout client
   (health/submit/poll, 30s) + a dedicated long client for the sync `/qc/process` only;
   `PythonClientService` wired to use the long client solely for that call. **`mvn compile` green.**
-- **Verified:** celery 5.6.3 / redis 7.4.0 present in the `apprisal` env, Redis server up; task
+- **Verified:** celery 5.6.3 / redis 7.4.0 present in the `shal` env, Redis server up; task
   registers; FastAPI app loads with the new routes; **end-to-end round-trip** through Redis
   observed `PENDING→STARTED→SUCCESS` with the result dict returned (so `task_track_started` and
   the result backend both work); pipeline degraded gracefully on a missing file (P-6).

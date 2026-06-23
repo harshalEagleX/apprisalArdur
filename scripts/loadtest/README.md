@@ -14,8 +14,8 @@ redis-server            # or: brew services start redis   (redis-cli ping -> PON
 
 # 3. Python OCR/QC API + at least one Celery worker (the durable queue)
 cd ocr-service
-conda run -n apprisal python -m uvicorn main:app --host 0.0.0.0 --port 5001 &
-conda run -n apprisal celery -A celery_app.celery_app worker \
+conda run -n shal python -m uvicorn main:app --host 0.0.0.0 --port 5001 &
+conda run -n shal celery -A celery_app.celery_app worker \
     --concurrency=6 --prefetch-multiplier=1 --loglevel=info &
 
 # 4. Java backend (reads qc.executor.* / Hikari from application.yml)

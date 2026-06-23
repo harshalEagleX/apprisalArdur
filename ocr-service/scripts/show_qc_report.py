@@ -3,8 +3,8 @@ Print the persisted QC report for a transaction as a readable document.
 
 Usage:
     cd ocr-service
-    conda run -n apprisal python scripts/show_qc_report.py "sort/#2321525505"
-    conda run -n apprisal python scripts/show_qc_report.py --list
+    conda run -n shal python scripts/show_qc_report.py "sort/#2321525505"
+    conda run -n shal python scripts/show_qc_report.py --list
 """
 
 import sys

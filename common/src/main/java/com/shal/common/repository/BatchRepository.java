@@ -1,0 +1,267 @@
+package com.shal.common.repository;
+
+import com.shal.common.dto.BatchStatusView;
+import com.shal.common.entity.Batch;
+import com.shal.common.entity.BatchStatus;
+import com.shal.common.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface BatchRepository extends JpaRepository<Batch, Long> {
+
+    /**
+     * Eagerly load client and assignedReviewer on the paginated list.
+     *
+     * Without this, both associations are LAZY. When the Hibernate session closes after
+     * findAll() returns (open-in-view=false), any access to b.getClient() or
+     * b.getAssignedReviewer() from outside a transaction throws LazyInitializationException.
+     *
+     * @EntityGraph uses LEFT JOIN (not JOIN FETCH), so it is safe with pagination —
+     * Hibernate does not load the full result set into memory before paginating.
+     */
+    @Override
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
+    Page<Batch> findAll(org.springframework.data.domain.Pageable pageable);
+
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
+    @Query("""
+        SELECT b FROM Batch b
+        WHERE (:status IS NULL OR b.status = :status)
+          AND (
+            :search IS NULL
+            OR LOWER(b.parentBatchId) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+            OR LOWER(b.client.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+            OR LOWER(b.client.code) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+          )
+        """)
+    // NOTE: CAST(:search AS string) is required, not cosmetic. Postgres resolves the
+    // LOWER(CONCAT(...)) function signature at plan time even when ":search IS NULL"
+    // short-circuits the OR — an untyped null binds as bytea, so LOWER(bytea) fails
+    // with HTTP 500 on any status-only filter (no search term). The cast pins the
+    // param to varchar so the null is typed. Surfaced by load-testing the status filter.
+    Page<Batch> searchAdminBatches(@Param("status") BatchStatus status,
+                                   @Param("search") String search,
+                                   Pageable pageable);
+
+    // assignedReviewer must be fetched too: toSummary() maps it after the session
+    // closes (open-in-view=false), so a missing fetch throws LazyInitializationException
+    // and 500s the single-batch GET for any batch that has a reviewer assigned.
+    @EntityGraph(attributePaths = {"files", "client", "assignedReviewer"})
+    Optional<Batch> findWithFilesById(Long id);
+
+    /**
+     * Lightweight load for access-control checks that only need batch.client.
+     * findById() opens and closes its own implicit transaction, so the returned
+     * entity is detached; calling batch.getClient() on a LAZY association then
+     * throws LazyInitializationException. This variant eagerly joins client so
+     * assertClientAccess() can read client.id safely on a detached object.
+     */
+    @EntityGraph(attributePaths = {"client"})
+    @Query("SELECT b FROM Batch b WHERE b.id = :id")
+    Optional<Batch> findByIdWithClient(@Param("id") Long id);
+
+    List<Batch> findByClientId(Long clientId);
+
+    Page<Batch> findByClientId(Long clientId, Pageable pageable);
+
+    List<Batch> findByStatus(BatchStatus status);
+
+    List<Batch> findByAssignedReviewerId(Long reviewerId);
+
+    Page<Batch> findByAssignedReviewerId(Long reviewerId, Pageable pageable);
+
+    List<Batch> findByCreatedById(Long userId);
+
+    @Query("SELECT COUNT(b) FROM Batch b WHERE b.client.id = :clientId")
+    long countByClientId(@Param("clientId") Long clientId);
+
+    @Query("SELECT COUNT(b) FROM Batch b WHERE b.client.id = :clientId AND b.status = :status")
+    long countByClientIdAndStatus(@Param("clientId") Long clientId, @Param("status") BatchStatus status);
+
+    /**
+     * Per-client batch rollup in ONE grouped query (avoids N+1 across the client list):
+     * [clientId, totalBatches, completedBatches, lastActivity].
+     */
+    @Query("""
+        SELECT b.client.id,
+               COUNT(b),
+               SUM(CASE WHEN b.status = com.shal.common.entity.BatchStatus.COMPLETED THEN 1 ELSE 0 END),
+               MAX(b.updatedAt)
+        FROM Batch b
+        WHERE b.client.id IS NOT NULL
+        GROUP BY b.client.id
+        """)
+    List<Object[]> clientBatchStats();
+
+    @Query("SELECT COUNT(b) FROM Batch b WHERE b.status = :status")
+    long countByStatus(@Param("status") BatchStatus status);
+
+    @Query("SELECT COUNT(b) FROM Batch b WHERE b.assignedReviewer.id = :reviewerId AND b.status = :status")
+    long countByAssignedReviewerIdAndStatus(@Param("reviewerId") Long reviewerId, @Param("status") BatchStatus status);
+
+    @Query("SELECT COUNT(b) > 0 FROM Batch b WHERE b.id = :batchId AND b.assignedReviewer.id = :reviewerId")
+    boolean isReviewerAssigned(@Param("batchId") Long batchId, @Param("reviewerId") Long reviewerId);
+
+    List<Batch> findByAssignedReviewerIdAndStatus(Long reviewerId, BatchStatus status);
+
+    // Duplicate upload detection
+    Optional<Batch> findByFileHash(String fileHash);
+
+    /**
+     * Atomically claim a batch before dispatching async QC work.
+     * This closes the double-click race where two HTTP requests both saw UPLOADED
+     * and launched parallel qc-worker threads for the same batch.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.status = com.shal.common.entity.BatchStatus.QC_PROCESSING,
+            b.errorMessage = null,
+            b.updatedAt = :now,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status IN (
+            com.shal.common.entity.BatchStatus.UPLOADED,
+            com.shal.common.entity.BatchStatus.VALIDATING,
+            com.shal.common.entity.BatchStatus.ERROR,
+            com.shal.common.entity.BatchStatus.COMPLETED,
+            com.shal.common.entity.BatchStatus.REVIEW_PENDING,
+            com.shal.common.entity.BatchStatus.IN_REVIEW
+          )
+        """)
+    int markQcProcessingIfTriggerable(@Param("batchId") Long batchId, @Param("now") LocalDateTime now);
+
+    /**
+     * Return a running batch to UPLOADED after an admin stop request.
+     * The existing uploaded files remain available, so the admin can run QC again.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.status = com.shal.common.entity.BatchStatus.UPLOADED,
+            b.errorMessage = :message,
+            b.updatedAt = :now,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status = com.shal.common.entity.BatchStatus.QC_PROCESSING
+        """)
+    int markUploadedIfQcProcessing(@Param("batchId") Long batchId,
+                                   @Param("message") String message,
+                                   @Param("now") LocalDateTime now);
+
+    /**
+     * Lightweight heartbeat for long-running QC work.  It keeps updatedAt as
+     * actual processing activity, so the stuck reconciler does not abandon a
+     * live batch just because Python/OCR takes a while.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.updatedAt = :now,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status = com.shal.common.entity.BatchStatus.QC_PROCESSING
+        """)
+    int touchQcProcessing(@Param("batchId") Long batchId, @Param("now") LocalDateTime now);
+
+    /**
+     * Assign a reviewer without loading and saving the full Batch row.
+     *
+     * This avoids optimistic-lock failures when QC completion updates the same
+     * batch status at nearly the same time an admin assigns a reviewer.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Batch b
+        SET b.assignedReviewer = :reviewer,
+            b.status = com.shal.common.entity.BatchStatus.REVIEW_PENDING,
+            b.updatedAt = :now,
+            b.version = b.version + 1
+        WHERE b.id = :batchId
+          AND b.status <> com.shal.common.entity.BatchStatus.QC_PROCESSING
+        """)
+    int assignReviewerIfNotProcessing(@Param("batchId") Long batchId,
+                                      @Param("reviewer") User reviewer,
+                                      @Param("now") LocalDateTime now);
+
+    /**
+     * Find batches stuck in QC_PROCESSING whose updatedAt is older than the given cutoff.
+     * Used by StuckBatchReconciler to detect and recover incomplete processing runs.
+     *
+     * A batch is "stuck" when:
+     *   - The async QC thread crashed or the JVM was killed mid-processing
+     *   - Python rejected the request and Java never updated the status
+     *   - The processing thread timed out without catching the exception
+     */
+    @Query("""
+        SELECT b FROM Batch b
+        WHERE b.status = com.shal.common.entity.BatchStatus.QC_PROCESSING
+          AND b.updatedAt < :cutoff
+        ORDER BY b.updatedAt ASC
+        """)
+    List<Batch> findStuckInQcProcessing(@Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * Find review batches whose per-QC locks have all expired but still have
+     * reviewer work pending. These should return to REVIEW_PENDING so the queue
+     * reflects that nobody is actively reviewing them.
+     */
+    @Query("""
+        SELECT b FROM Batch b
+        WHERE b.status = com.shal.common.entity.BatchStatus.IN_REVIEW
+          AND EXISTS (
+            SELECT 1 FROM QCResult pending
+            WHERE pending.batchFile.batch = b
+              AND pending.qcDecision <> com.shal.common.entity.QCDecision.AUTO_PASS
+              AND pending.finalDecision IS NULL
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM QCResult active
+            WHERE active.batchFile.batch = b
+              AND active.finalDecision IS NULL
+              AND active.reviewLockExpiresAt IS NOT NULL
+              AND active.reviewLockExpiresAt > :now
+          )
+        ORDER BY b.updatedAt ASC
+        """)
+    List<Batch> findExpiredInReviewBatches(@Param("now") LocalDateTime now);
+
+    /**
+     * Single-query alternative for the status polling endpoint.
+     * Replaces three separate queries (batch load + 2 counts) with one JPQL statement.
+     */
+    @Query("""
+        SELECT b.id                                                                       AS batchId,
+               b.status                                                                   AS status,
+               b.errorMessage                                                             AS errorMessage,
+               b.updatedAt                                                                AS updatedAt,
+               (SELECT COUNT(f) FROM BatchFile f WHERE f.batch.id = b.id)                AS totalFiles,
+               (SELECT COUNT(f2) FROM BatchFile f2
+                WHERE f2.batch.id = b.id
+                  AND f2.fileType = com.shal.common.entity.FileType.APPRAISAL)       AS processingTotalFiles,
+               (SELECT COUNT(qr) FROM QCResult qr WHERE qr.batchFile.batch.id = b.id)   AS completedFiles
+        FROM Batch b
+        WHERE b.id = :id
+        """)
+    BatchStatusView findStatusById(@Param("id") Long id);
+
+    // Efficient TopN queries for dashboards
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
+    List<Batch> findTop10ByOrderByCreatedAtDesc();
+
+    List<Batch> findTop5ByClientIdOrderByCreatedAtDesc(Long clientId);
+
+    @EntityGraph(attributePaths = {"client", "assignedReviewer"})
+    List<Batch> findTop10ByAssignedReviewerIdOrderByUpdatedAtDesc(Long reviewerId);
+}

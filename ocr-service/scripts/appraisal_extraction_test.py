@@ -8,7 +8,7 @@ Focus: appraisal_report type only. Engagement letters and contracts excluded.
 
 Usage:
     cd ocr-service
-    conda run -n apprisal python scripts/appraisal_extraction_test.py
+    conda run -n shal python scripts/appraisal_extraction_test.py
 """
 
 import sys

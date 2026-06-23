@@ -9,7 +9,7 @@ Day 25 — Template change detection fires on fingerprint mismatch
 Day 26 — Full pipeline validation results persisted and queryable
 
 Run:
-    conda run -n apprisal python -m pytest tests/test_week4.py -v
+    conda run -n shal python -m pytest tests/test_week4.py -v
 """
 
 import sys

@@ -31,4 +31,4 @@ management:
 logging:
   level:
     root: ${LOG_LEVEL:INFO}
-    com.apprisal: ${APP_LOG_LEVEL:INFO}
+    com.shal: ${APP_LOG_LEVEL:INFO}

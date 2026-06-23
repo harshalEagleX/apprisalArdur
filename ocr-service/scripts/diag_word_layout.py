@@ -117,8 +117,8 @@ def dump_pud_words(pdf: Path) -> None:
 
 if __name__ == "__main__":
     pdfs = [
-        Path("/Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/uploads/EQSS/8234X 2/appraisal/8234 E Pearson.pdf"),
-        Path("/Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/uploads/AERS/MSL/appraisal/96 Baell Trace Ct SE.pdf"),
+        Path("/Users/eaglexmac/Documents/functionalProject/shal/shal/SHAL/uploads/EQSS/8234X 2/appraisal/8234 E Pearson.pdf"),
+        Path("/Users/eaglexmac/Documents/functionalProject/shal/shal/SHAL/uploads/AERS/MSL/appraisal/96 Baell Trace Ct SE.pdf"),
     ]
     for p in pdfs:
         if not p.exists():

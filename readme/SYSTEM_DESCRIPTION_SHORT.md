@@ -1,6 +1,6 @@
-# Apprisal System Description - Short End-to-End View
+# SHAL System Description - Short End-to-End View
 
-Apprisal is an appraisal quality-control platform. The user uploads appraisal
+SHAL is an appraisal quality-control platform. The user uploads appraisal
 documents, the system extracts key fields from appraisal, engagement, and
 contract PDFs, runs QC rules, and gives reviewers a guided screen to verify
 exceptions with evidence and PDF page locations.

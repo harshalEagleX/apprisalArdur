@@ -1,4 +1,4 @@
-# Apprisal Platform — AI Coding Assistant Guidance
+# SHAL Platform — AI Coding Assistant Guidance
 
 > This file is read by the AI coding assistant on every session.
 > It establishes the rules that govern all coding decisions and the long-term architectural vision
@@ -11,7 +11,7 @@
 
 ## Engineering Strategy Principles
 
-> Derived from: *Apprisal Platform — Engineering Thinking and Development Strategy Guide*
+> Derived from: *SHAL Platform — Engineering Thinking and Development Strategy Guide*
 > Prepared for: EagleX Info Solution PVT LTD
 > These principles translate the strategy document into specific directives for AI coding assistant behavior.
 
@@ -246,11 +246,11 @@ Every design decision made today will be read, debugged, and extended by someone
 ---
 
 *Last updated: 2026-05-15*
-*Source: Apprisal Platform — Engineering Thinking and Development Strategy Guide (EagleX Info Solution PVT LTD)*
+*Source: SHAL Platform — Engineering Thinking and Development Strategy Guide (EagleX Info Solution PVT LTD)*
 
 ---
 
-## Apprisal Platform — Adaptive & Future-Proof Document Extraction Architecture Guide
+## SHAL Platform — Adaptive & Future-Proof Document Extraction Architecture Guide
 
 **Prepared for:** EagleX Info Solution PVT LTD
 **Document Purpose:** Long-term strategic and architectural guidance for moving from regex-based extraction to intelligent, format-independent, context-aware document understanding
@@ -765,5 +765,5 @@ The extraction accuracy ceiling is high. The platform has the right foundation, 
 ---
 
 *Last updated: 2026-05-15*
-*Source: Apprisal Platform — Adaptive & Future-Proof Document Extraction Architecture Guide*
+*Source: SHAL Platform — Adaptive & Future-Proof Document Extraction Architecture Guide*
 *Prepared for: EagleX Info Solution PVT LTD*

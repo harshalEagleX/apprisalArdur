@@ -58,14 +58,14 @@ Open your browser to **http://localhost:8080**
 ## Project Structure
 
 ```
-ardurApprisal/
+shal/
 ├── readme/                    # Documentation (you are here)
 │   ├── README.md
 │   ├── IMPLEMENTATION_PLAN.md
 │   ├── ARCHITECTURE.md
 │   └── API_REFERENCE.md
 ├── src/main/java/             # Java backend source
-│   └── com/ardur/appraisal/
+│   └── com/shal/appraisal/
 │       ├── auth/              # Authentication module
 │       ├── appraisal/         # Core appraisal logic
 │       ├── ocr/               # OCR integration client

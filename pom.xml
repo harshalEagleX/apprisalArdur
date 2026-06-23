@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.apprisal</groupId>
-    <artifactId>apprisal</artifactId>
+    <groupId>com.shal</groupId>
+    <artifactId>shal</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>apprisal</name>
+    <name>shal</name>
     <description>Appraisal QC Platform — multi-module monolith</description>
 
     <modules>
@@ -56,22 +56,22 @@
             </dependency>
             <!-- inter-module references -->
             <dependency>
-                <groupId>com.apprisal</groupId>
+                <groupId>com.shal</groupId>
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.apprisal</groupId>
+                <groupId>com.shal</groupId>
                 <artifactId>batch</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.apprisal</groupId>
+                <groupId>com.shal</groupId>
                 <artifactId>qc</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.apprisal</groupId>
+                <groupId>com.shal</groupId>
                 <artifactId>user</artifactId>
                 <version>${project.version}</version>
             </dependency>

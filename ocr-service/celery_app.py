@@ -1,5 +1,5 @@
 """
-Celery application for the Apprisal OCR/QC service (Scaling Phase 1).
+Celery application for the SHAL OCR/QC service (Scaling Phase 1).
 
 Wires the durable job queue the Java backend already expects (PythonClientService):
   POST /qc/submit        → enqueue qc_process_task, return {job_id}
@@ -27,7 +27,7 @@ from celery import Celery
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 
 celery_app = Celery(
-    "apprisal_qc",
+    "shal_qc",
     broker=REDIS_URL,
     backend=REDIS_URL,
     include=["app.tasks"],

@@ -13,7 +13,7 @@ COMPOSE=(docker compose -f docker-compose.uat.yml --env-file .env.uat)
 
 # shellcheck disable=SC1091
 set -a; source .env.uat; set +a
-DB_NAME="${DB_NAME:-ardurApprisal}"; DB_USERNAME="${DB_USERNAME:-apprisal}"
+DB_NAME="${DB_NAME:-shal}"; DB_USERNAME="${DB_USERNAME:-shal}"
 
 if [[ "${1:-}" != "--yes" ]]; then
   read -r -p "This DROPS ALL data in UAT '${DB_NAME}'. Type 'yes' to confirm: " ans

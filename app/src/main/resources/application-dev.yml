@@ -34,4 +34,4 @@ qc:
 
 logging:
   level:
-    com.apprisal: DEBUG
+    com.shal: DEBUG

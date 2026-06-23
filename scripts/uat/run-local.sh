@@ -9,10 +9,10 @@
 #   Frontend     : http://localhost:3000   (next build + start)
 #
 # Prereqs (this script does NOT install or manage them):
-#   • PostgreSQL running with the app DB (default ardurApprisal) reachable
+#   • PostgreSQL running with the app DB (default shal) reachable
 #   • Redis running on 127.0.0.1:6379
 #   • Java 21 + Maven wrapper; Node 20+; a Python env with ocr-service deps active
-#     (e.g. `conda activate apprisal`) BEFORE running this script
+#     (e.g. `conda activate shal`) BEFORE running this script
 #   • Secrets in ./.env (dev) and/or ./.env.uat — this script sources both if present
 #
 # Usage:
@@ -47,7 +47,7 @@ JAVA_PORT="${JAVA_PORT:-8080}"; OCR_PORT="${OCR_PORT:-5001}"; FRONTEND_PORT="${F
 JAR="app/target/app-0.0.1-SNAPSHOT.jar"
 
 # ── preflight ────────────────────────────────────────────────────────────────
-command -v uvicorn >/dev/null || { echo "ERROR: 'uvicorn' not on PATH — activate your Python env (e.g. conda activate apprisal)"; exit 1; }
+command -v uvicorn >/dev/null || { echo "ERROR: 'uvicorn' not on PATH — activate your Python env (e.g. conda activate shal)"; exit 1; }
 command -v npm     >/dev/null || { echo "ERROR: 'npm' not on PATH"; exit 1; }
 
 start_bg() { # name "command…"

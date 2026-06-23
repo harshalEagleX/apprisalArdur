@@ -26,7 +26,7 @@ WORKDIR /app
 RUN useradd -r -u 1001 spring
 COPY --from=build /src/app/target/app-0.0.1-SNAPSHOT.jar app.jar
 # uploads + tomcat tmp are written at runtime; make them owned by the app user.
-RUN mkdir -p /app/uploads /tmp/apprisal-tomcat && chown -R spring:spring /app /tmp/apprisal-tomcat
+RUN mkdir -p /app/uploads /tmp/shal-tomcat && chown -R spring:spring /app /tmp/shal-tomcat
 USER spring
 EXPOSE 8080 9091
 ENTRYPOINT ["java","-XX:MaxRAMPercentage=75.0","-jar","app.jar"]

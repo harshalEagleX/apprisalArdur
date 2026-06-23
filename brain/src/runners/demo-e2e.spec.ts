@@ -1,5 +1,5 @@
 /**
- * Apprisal QC — full lifecycle E2E (real Chrome, fully visible, no background work).
+ * SHAL — full lifecycle E2E (real Chrome, fully visible, no background work).
  *
  * Everything happens through the actual UI — there are no hidden API calls. An
  * on-page HUD narrates every single step and gives you Play / Pause control:
@@ -49,7 +49,7 @@ function flush() {
   const dir = path.resolve(__dirname, "../../reports");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "demo-e2e-log.json"), JSON.stringify(EVENTS, null, 2));
-  const md = ["# Apprisal QC — full lifecycle E2E log", "", `Run: ${new Date().toISOString()}`, ""]
+  const md = ["# SHAL — full lifecycle E2E log", "", `Run: ${new Date().toISOString()}`, ""]
     .concat(EVENTS.map(e => `- **${e.status}** \`${e.step}\`${e.detail !== undefined ? " — " + "`" + JSON.stringify(e.detail) + "`" : ""}`));
   fs.writeFileSync(path.join(dir, "demo-e2e-log.md"), md.join("\n"));
 }
@@ -57,7 +57,7 @@ function flush() {
 // ── on-page HUD: narration + Play/Pause, persists across navigations ─────────
 async function installHud(page: Page) {
   await page.addInitScript(() => {
-    const ROOT_ID = "apprisal-e2e-hud";
+    const ROOT_ID = "shal-e2e-hud";
     function ensure() {
       if (document.getElementById(ROOT_ID) || !document.body) return;
       const hud = document.createElement("div");
@@ -180,7 +180,7 @@ function humanDecision(status: "fail" | "verify", message: string) {
 test.describe.configure({ mode: "serial" });
 test.use({ channel: "chrome" });
 
-test("Apprisal QC — full admin + reviewer lifecycle", async ({ page }) => {
+test("SHAL — full admin + reviewer lifecycle", async ({ page }) => {
   test.setTimeout(30 * 60 * 1000);
   await installHud(page);
 

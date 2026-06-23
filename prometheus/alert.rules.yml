@@ -1,26 +1,26 @@
-# Apprisal — Prometheus alert rules (OBS-008)
+# SHAL — Prometheus alert rules (OBS-008)
 #
 # Watches the metrics Micrometer exposes at /actuator/prometheus:
 #   - hikaricp_*            (auto-bound) — DB pool saturation
 #   - jvm_*, process_*      (auto-bound) — heap / CPU
 #   - http_server_requests (auto-bound) — latency / error rate
-#   - apprisal_batches_*    (QcMetrics)  — QC backlog & stuck batches
+#   - shal_batches_*    (QcMetrics)  — QC backlog & stuck batches
 #
 # Load via prometheus.yml:  rule_files: [ "alert.rules.yml" ]
 # Tune thresholds to your host; the comments give the rationale.
 
 groups:
-  - name: apprisal-availability
+  - name: shal-availability
     rules:
-      - alert: ApprisalBackendDown
-        expr: up{job="apprisal-backend"} == 0
+      - alert: SHALBackendDown
+        expr: up{job="shal-backend"} == 0
         for: 1m
         labels: { severity: critical }
         annotations:
-          summary: "Apprisal backend is down"
+          summary: "SHAL backend is down"
           description: "Prometheus cannot scrape the backend for >1m."
 
-  - name: apprisal-db-pool
+  - name: shal-db-pool
     rules:
       # Pending threads waiting for a connection = pool exhausted. Sustained >0 means
       # requests are queueing on the DB pool (the review screens will lag).
@@ -40,7 +40,7 @@ groups:
           summary: "DB pool >90% utilised"
           description: "Active connections have been above 90% of max for 10m."
 
-  - name: apprisal-jvm
+  - name: shal-jvm
     rules:
       - alert: JvmHeapHigh
         expr: (sum by (instance) (jvm_memory_used_bytes{area="heap"}) / sum by (instance) (jvm_memory_max_bytes{area="heap"})) > 0.9
@@ -50,7 +50,7 @@ groups:
           summary: "JVM heap >90%"
           description: "Heap usage has been above 90% for 10m — risk of GC thrash / OOM."
 
-  - name: apprisal-http
+  - name: shal-http
     rules:
       # 5xx rate over total request rate. Fires on a sustained server-error spike.
       - alert: HttpServerErrorSpike
@@ -63,11 +63,11 @@ groups:
           summary: "HTTP 5xx rate >5%"
           description: "More than 5% of requests have returned 5xx for 5m."
 
-  - name: apprisal-qc
+  - name: shal-qc
     rules:
       # Stuck batches the reconciler hasn't cleared. Any sustained value is abnormal.
       - alert: QcBatchesStuck
-        expr: apprisal_batches_qc_stuck > 0
+        expr: shal_batches_qc_stuck > 0
         for: 20m
         labels: { severity: warning }
         annotations:
@@ -76,7 +76,7 @@ groups:
 
       # Review backlog growing — staffing / throughput signal, not an error.
       - alert: ReviewBacklogHigh
-        expr: apprisal_batches_review_pending > 50
+        expr: shal_batches_review_pending > 50
         for: 30m
         labels: { severity: info }
         annotations:
@@ -84,7 +84,7 @@ groups:
           description: "{{ $value }} batches have awaited a reviewer for 30m."
 
       - alert: QcErrorBatchesPresent
-        expr: apprisal_batches_error > 0
+        expr: shal_batches_error > 0
         for: 15m
         labels: { severity: warning }
         annotations:

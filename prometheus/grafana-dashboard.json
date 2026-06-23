@@ -1,6 +1,6 @@
 {
-  "title": "Apprisal — Platform Overview",
-  "uid": "apprisal-overview",
+  "title": "SHAL — Platform Overview",
+  "uid": "shal-overview",
   "schemaVersion": 39,
   "version": 1,
   "timezone": "browser",
@@ -23,7 +23,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "fieldConfig": { "defaults": { "thresholds": { "steps": [
         { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
-      "targets": [ { "expr": "apprisal_batches_qc_stuck", "refId": "A" } ]
+      "targets": [ { "expr": "shal_batches_qc_stuck", "refId": "A" } ]
     },
     {
       "id": 2, "type": "stat", "title": "Batches in ERROR",
@@ -31,7 +31,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "fieldConfig": { "defaults": { "thresholds": { "steps": [
         { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
-      "targets": [ { "expr": "apprisal_batches_error", "refId": "A" } ]
+      "targets": [ { "expr": "shal_batches_error", "refId": "A" } ]
     },
     {
       "id": 3, "type": "stat", "title": "DB pool pending",
@@ -45,16 +45,16 @@
       "id": 4, "type": "stat", "title": "Review backlog",
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "targets": [ { "expr": "apprisal_batches_review_pending", "refId": "A" } ]
+      "targets": [ { "expr": "shal_batches_review_pending", "refId": "A" } ]
     },
     {
       "id": 5, "type": "timeseries", "title": "QC workflow backlog",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
-        { "expr": "apprisal_batches_qc_processing", "legendFormat": "qc_processing", "refId": "A" },
-        { "expr": "apprisal_batches_review_pending", "legendFormat": "review_pending", "refId": "B" },
-        { "expr": "apprisal_batches_in_review", "legendFormat": "in_review", "refId": "C" }
+        { "expr": "shal_batches_qc_processing", "legendFormat": "qc_processing", "refId": "A" },
+        { "expr": "shal_batches_review_pending", "legendFormat": "review_pending", "refId": "B" },
+        { "expr": "shal_batches_in_review", "legendFormat": "in_review", "refId": "C" }
       ]
     },
     {

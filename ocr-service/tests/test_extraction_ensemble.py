@@ -10,7 +10,7 @@ extraction is the Groq overlays in app/qc/transaction.py):
   Day 19-20 — Full pipeline better than spatial-only baseline
 
 Run:
-    conda run -n apprisal python -m pytest tests/test_week3.py -v
+    conda run -n shal python -m pytest tests/test_week3.py -v
 """
 
 import sys

@@ -1,8 +1,8 @@
-# Ardur — LLM Usage & Extraction Architecture (SCA / Subject / Neighborhood / Contract)
+# SHAL — LLM Usage & Extraction Architecture (SCA / Subject / Neighborhood / Contract)
 
 **Purpose:** exactly how each section is extracted, **where the LLM is used, how, and why**, what data the LLM receives (**image vs text — with real captured examples**), and **what breaks if the LLM is removed.**
 
-**Method:** every claim below is grounded in code (`app/qc/transaction.py`, `app/extraction/*`) and in **real prompts captured from a live run** (LLM stubbed, zero Groq tokens) via `scripts/loadtest/dump_llm_prompts.py` on `28203 Fantail Dr` (appraisal + contract + engagement). The 12 captured calls are in `/tmp/apprisal-loadtest/prompts/`.
+**Method:** every claim below is grounded in code (`app/qc/transaction.py`, `app/extraction/*`) and in **real prompts captured from a live run** (LLM stubbed, zero Groq tokens) via `scripts/loadtest/dump_llm_prompts.py` on `28203 Fantail Dr` (appraisal + contract + engagement). The 12 captured calls are in `/tmp/shal-loadtest/prompts/`.
 
 ---
 
@@ -19,7 +19,7 @@
 
 **One-line architecture:** *Deterministic-first extraction (OCR → spatial text → regex/positional parsers), with the LLM layered on top only to (a) repair the compact SCA currency grid and (b) gap-fill named missing fields — on TEXT, not images. Images go only to the separate vision comp-photo check.*
 
-This is actually close to the HomeVision pattern you described — the gap is that Ardur's *deterministic SCA currency reader is weak*, so the LLM is leaned on there, and the SCA LLM currently runs whenever available (not only on deterministic failure), which inflates call count.
+This is actually close to the HomeVision pattern you described — the gap is that SHAL's *deterministic SCA currency reader is weak*, so the LLM is leaned on there, and the SCA LLM currently runs whenever available (not only on deterministic failure), which inflates call count.
 
 ---
 

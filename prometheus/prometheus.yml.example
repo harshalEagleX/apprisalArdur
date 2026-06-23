@@ -1,4 +1,4 @@
-# Apprisal — example Prometheus scrape config (OBS-008)
+# SHAL — example Prometheus scrape config (OBS-008)
 #
 # IMPORTANT — /actuator/prometheus is ADMIN-secured on the main app port (we locked
 # it down in SecurityConfig). Pick ONE of the scrape strategies below for an
@@ -27,7 +27,7 @@ rule_files:
   - alert.rules.yml
 
 scrape_configs:
-  - job_name: apprisal-backend
+  - job_name: shal-backend
     metrics_path: /actuator/prometheus
     # Strategy A target (localhost management port). For Strategy B, point at the
     # main app host:port and add an `authorization:` block with an ADMIN token.

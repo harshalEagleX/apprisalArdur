@@ -12,7 +12,7 @@ proxy that must sit in front of Groq.
 Run (from ocr-service/, with cache OFF so OFF and ON are measured cold):
   GROQ_BASE_URL=http://127.0.0.1:5099/openai/v1 \
   GROQ_CACHE_ENABLED=false GROQ_TPM_LIMIT=8000 \
-  /opt/homebrew/Caskroom/miniconda/base/envs/apprisal/bin/python3 \
+  /opt/homebrew/Caskroom/miniconda/base/envs/shal/bin/python3 \
       ../scripts/loadtest/measure_form_batch.py "<appraisal.pdf>" ["<more.pdf>" ...]
 """
 import json
