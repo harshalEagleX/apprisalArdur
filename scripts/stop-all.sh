@@ -7,7 +7,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="$REPO_ROOT/logs"
 
 stop_one() {
-  local name="$1" pidf="$LOG_DIR/$name.pid"
+  # Separate declarations: a single `local a=$1 b=$a` expands $a BEFORE the
+  # assignment of a, so under `set -u` it errors "name: unbound variable".
+  local name="${1:?stop_one requires a service name}"
+  local pidf="$LOG_DIR/$name.pid"
   [[ -f "$pidf" ]] || { echo "[stop-all] $name: no pid file — skipping"; return; }
 
   local pid; pid="$(cat "$pidf" 2>/dev/null || true)"
