@@ -40,6 +40,7 @@ public class RestTemplateConfig {
     @Primary
     RestTemplate restTemplate() {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)   // uvicorn doesn't support H2C upgrade
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
@@ -56,6 +57,7 @@ public class RestTemplateConfig {
     @Bean("pythonProcessRestTemplate")
     RestTemplate pythonProcessRestTemplate() {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)   // uvicorn doesn't support H2C upgrade
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
