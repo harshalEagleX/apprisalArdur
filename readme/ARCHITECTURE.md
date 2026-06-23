@@ -1,4 +1,4 @@
-# Apprisal Platform — System Architecture
+# SHAL Platform — System Architecture
 
 > **Current State** — This document reflects the architecture as it exists today, derived from a deep
 > code audit conducted May 2026. The previous version described a Phase-1 Thymeleaf MVP; the
@@ -25,7 +25,7 @@
 
 ## Platform Overview
 
-Apprisal is an enterprise appraisal quality-control platform. It ingests residential appraisal PDFs
+SHAL is an enterprise appraisal quality-control platform. It ingests residential appraisal PDFs
 alongside engagement letters and purchase contracts, runs an OCR + ML + rule-engine pipeline, and
 presents a structured reviewer workflow for human quality decisions.
 
@@ -77,7 +77,7 @@ The platform is a **polyglot multi-service system**:
 
 | Service | Language | Port | Auth | Entry Point |
 |---------|----------|------|------|-------------|
-| Java Backend | Spring Boot 3.4 | 8080 | JWT + Session | `ApprisalApplication.java` |
+| Java Backend | Spring Boot 3.4 | 8080 | JWT + Session | `ShalApplication.java` |
 | Python OCR | FastAPI 0.115 | 5001 | `X-API-Key` header | `ocr-service/main.py` |
 | Next.js Frontend | React 19 + Next.js 16 | 3000 | Bearer token (localStorage) | `frontend/app/` |
 | Redis | Redis 7 | 6379 | None (dev) | Docker Compose |
@@ -621,4 +621,4 @@ Java polls: GET /qc/job/{id} every 6s
 
 ---
 
-*Last updated: 2026-05-11 — Based on full code audit of apprisalArdur commit cdf7616*
+*Last updated: 2026-05-11 — Based on full code audit of SHAL commit cdf7616*

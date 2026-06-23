@@ -123,7 +123,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
             <span className="text-[11px] font-bold">A</span>
           </div>
           <div className="hidden sm:block">
-            <span className="block text-sm font-semibold leading-tight text-white">Ardur QC</span>
+            <span className="block text-sm font-semibold leading-tight text-white">SHAL</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Reviewer desk</span>
           </div>
         </div>

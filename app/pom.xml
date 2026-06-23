@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.apprisal</groupId>
-        <artifactId>apprisal</artifactId>
+        <groupId>com.shal</groupId>
+        <artifactId>shal</artifactId>
         <version>0.0.1-SNAPSHOT</version>
     </parent>
 
@@ -17,19 +17,19 @@
     <dependencies>
         <!-- Domain modules -->
         <dependency>
-            <groupId>com.apprisal</groupId>
+            <groupId>com.shal</groupId>
             <artifactId>common</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.apprisal</groupId>
+            <groupId>com.shal</groupId>
             <artifactId>batch</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.apprisal</groupId>
+            <groupId>com.shal</groupId>
             <artifactId>qc</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.apprisal</groupId>
+            <groupId>com.shal</groupId>
             <artifactId>user</artifactId>
         </dependency>
 

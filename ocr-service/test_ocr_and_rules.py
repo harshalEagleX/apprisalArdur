@@ -563,7 +563,7 @@ def run_test():
     output_dir = Path(__file__).parent / "test_output"
     output_dir.mkdir(exist_ok=True)
     
-    appraisal_pdf = test_dir / "apprisal_002.pdf"
+    appraisal_pdf = test_dir / "shal_002.pdf"
     engagement_pdf = test_dir / "engagement_002.pdf"
     
     # Setup logging
@@ -588,7 +588,7 @@ def run_test():
         save_extracted_text(
             appraisal_text,
             output_dir / "appraisal_extracted_text.txt",
-            "apprisal_002.pdf",
+            "shal_002.pdf",
             logger
         )
         

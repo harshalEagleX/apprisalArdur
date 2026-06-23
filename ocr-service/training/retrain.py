@@ -7,7 +7,7 @@ deploys only if accuracy improves, then marks feedback as used.
 
 Usage:
     # Manual run
-    conda activate apprisal && cd ocr-service
+    conda activate shal && cd ocr-service
     python training/retrain.py
 
     # From FastAPI (triggered by POST /admin/retrain)

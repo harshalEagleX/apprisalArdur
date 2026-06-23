@@ -1,10 +1,10 @@
 # Conda environment for OCR Service
 # Usage:
 #   Create:   conda env create -f environment.yml
-#   Activate: conda activate apprisal
+#   Activate: conda activate shal
 #   Update:   conda env update -f environment.yml --prune
 
-name: apprisal
+name: shal
 channels:
   - conda-forge
   - defaults

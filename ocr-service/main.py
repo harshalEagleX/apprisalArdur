@@ -1063,7 +1063,7 @@ async def process_qc(
 _ASYNC_JOBS_DIR = os.path.realpath(
     os.getenv(
         "ASYNC_JOBS_DIR",
-        os.getenv("JOB_DIR_ROOT", os.path.join(tempfile.gettempdir(), "apprisal_jobs")),
+        os.getenv("JOB_DIR_ROOT", os.path.join(tempfile.gettempdir(), "shal_jobs")),
     )
 )
 os.makedirs(_ASYNC_JOBS_DIR, exist_ok=True, mode=0o700)
@@ -1389,7 +1389,7 @@ async def trigger_retraining(
 
     try:
         import sys
-        sys.path.insert(0, "/Users/eaglexmac/Documents/functionalProject/ardur/apprisal/apprisalArdur/ocr-service")
+        sys.path.insert(0, "/Users/eaglexmac/Documents/functionalProject/shal/shal/SHAL/ocr-service")
         from training.retrain import run_retraining, generate_synthetic_feedback
 
         if synthetic:

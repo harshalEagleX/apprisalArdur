@@ -265,7 +265,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span className="text-xs font-bold text-white">A</span>
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-semibold leading-tight truncate text-white">Ardur QC</div>
+                <div className="text-sm font-semibold leading-tight truncate text-white">SHAL</div>
                 <div className="text-[10px] text-slate-600 uppercase tracking-[0.18em]">Admin control</div>
               </div>
             </div>

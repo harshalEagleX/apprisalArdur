@@ -1,4 +1,4 @@
-# Ardur Testing Brain
+# SHAL Testing Brain
 
 This folder is the multi-agent testing system around Playwright.
 

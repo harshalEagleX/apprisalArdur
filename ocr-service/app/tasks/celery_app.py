@@ -6,7 +6,7 @@ Broker + result backend: Redis (password-protected — see REDIS_URL in .env)
 Start the worker (separate terminal, --concurrency=1 is intentional on M1 8 GB
 because Ollama/llava:7b occupies the full unified memory during inference):
 
-    conda activate apprisal
+    conda activate shal
     cd ocr-service
     celery -A app.tasks.celery_app worker --loglevel=info --concurrency=1
 
@@ -44,7 +44,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 # job_dir that resolves outside this boundary is rejected to prevent path
 # traversal / directory-deletion attacks (the job_dir comes from /qc/submit).
 _JOB_DIR_ROOT = os.path.realpath(
-    os.getenv("JOB_DIR_ROOT", os.path.join(tempfile.gettempdir(), "apprisal_jobs"))
+    os.getenv("JOB_DIR_ROOT", os.path.join(tempfile.gettempdir(), "shal_jobs"))
 )
 os.makedirs(_JOB_DIR_ROOT, exist_ok=True, mode=0o700)
 

@@ -1,12 +1,12 @@
 /**
- * Ardur Appraisal - Main JavaScript
+ * SHAL Appraisal - Main JavaScript
  * Premium interactions and utilities
  */
 
 // ============================================
 // Global Configuration
 // ============================================
-const ArdurApp = {
+const SHALApp = {
     config: {
         apiBase: '/api',
         refreshInterval: 30000, // 30 seconds
@@ -99,7 +99,7 @@ const Toast = {
         document.body.appendChild(this.container);
     },
 
-    show(message, type = 'info', duration = ArdurApp.config.toastDuration) {
+    show(message, type = 'info', duration = SHALApp.config.toastDuration) {
         if (!this.container) this.init();
 
         const toast = document.createElement('div');
@@ -183,7 +183,7 @@ const Modal = {
 // ============================================
 const API = {
     async request(endpoint, options = {}) {
-        const url = `${ArdurApp.config.apiBase}${endpoint}`;
+        const url = `${SHALApp.config.apiBase}${endpoint}`;
         const defaultOptions = {
             headers: {
                 'Content-Type': 'application/json'
@@ -191,7 +191,7 @@ const API = {
         };
 
         try {
-            ArdurApp.state.isLoading = true;
+            SHALApp.state.isLoading = true;
             const response = await fetch(url, { ...defaultOptions, ...options });
             
             if (!response.ok) {
@@ -204,7 +204,7 @@ const API = {
             console.error('API Error:', error);
             throw error;
         } finally {
-            ArdurApp.state.isLoading = false;
+            SHALApp.state.isLoading = false;
         }
     },
 
@@ -400,7 +400,7 @@ const Table = {
 const StatusPoller = {
     intervals: {},
 
-    start(key, callback, interval = ArdurApp.config.refreshInterval) {
+    start(key, callback, interval = SHALApp.config.refreshInterval) {
         this.stop(key);
         this.intervals[key] = setInterval(callback, interval);
         callback(); // Run immediately
@@ -584,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    console.log('🚀 Ardur Appraisal initialized');
+    console.log('🚀 SHAL Appraisal initialized');
 });
 
 // Cleanup on page unload
@@ -593,7 +593,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 // Export for global access
-window.ArdurApp = ArdurApp;
+window.SHALApp = SHALApp;
 window.Utils = Utils;
 window.Toast = Toast;
 window.Modal = Modal;

@@ -37,8 +37,8 @@ def setup_observability(app) -> None:
 
     provider = TracerProvider(
         resource=Resource.create({
-            "service.name": os.getenv("OTEL_SERVICE_NAME", "apprisal-ocr-service"),
-            "service.namespace": "apprisal",
+            "service.name": os.getenv("OTEL_SERVICE_NAME", "shal-ocr-service"),
+            "service.namespace": "shal",
         })
     )
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))

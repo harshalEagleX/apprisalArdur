@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# reset_db.sh — Full database reset for Apprisal QC platform
+# reset_db.sh — Full database reset for SHAL platform
 #
 # Drops ALL tables (Java + Python) from the shared PostgreSQL database, then
 # recreates the Python-managed tables with manage_db.py recreate. Java tables
@@ -109,7 +109,7 @@ echo "      cd $SCRIPT_DIR"
 echo "      ./mvnw spring-boot:run"
 echo ""
 echo "    Option B — IntelliJ:"
-echo "      Run ApprisalApplication.java"
+echo "      Run ShalApplication.java"
 echo ""
 echo "  After Java starts, verify Hibernate connects cleanly and creates/updates Java-owned tables."
 echo "══════════════════════════════════════════════════════════"

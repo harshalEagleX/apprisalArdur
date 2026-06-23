@@ -734,7 +734,7 @@ ollama serve &
 
 # Backend (development)
 cd ocr-service
-conda activate apprisal
+conda activate shal
 uvicorn main:app --port 5001 --reload
 
 # Frontend (development)
