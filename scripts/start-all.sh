@@ -19,7 +19,13 @@ mkdir -p "$LOG_DIR"
 # shellcheck source=scripts/_lib.sh
 source "$SCRIPTS/_lib.sh"
 
-# ── Auto-generate .env files if missing ──────────────────────
+# ── Detect LAN IP before touching anything else ──────────────
+LAN_IP="$(detect_lan_ip)"
+[[ -n "$LAN_IP" ]] && echo "[start-all] LAN IP detected: $LAN_IP"
+
+# ── Generate / refresh .env files with current LAN IP ────────
+# init-env.sh creates missing files AND refreshes ALLOWED_DEV_ORIGINS +
+# APP_CORS_ALLOWED_ORIGINS in existing files so every restart auto-adapts.
 bash "$SCRIPTS/init-env.sh"
 
 # ── Infrastructure checks ────────────────────────────────────
@@ -90,7 +96,6 @@ wait_port "ocr"      5001 60
 wait_port "java"     8080 90
 wait_port "frontend" 3000 60
 
-LAN_IP="$(detect_lan_ip)"
 cat <<EOF
 
 [start-all] All services launched (bound to all interfaces — reachable on the network).

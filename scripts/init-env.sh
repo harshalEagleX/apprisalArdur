@@ -163,7 +163,7 @@ write_if_absent "$REPO_ROOT/frontend/.env.local" <<EOF
 ALLOWED_DEV_ORIGINS=${LAN_IP}
 EOF
 
-# ── Migrate an existing .env.local from the old localhost-pinned default ──
+# ── Migrate + refresh an existing frontend/.env.local ──────────────────
 LOCAL_ENV="$REPO_ROOT/frontend/.env.local"
 if [[ -f "$LOCAL_ENV" ]]; then
   # Comment out the stale hard pin to localhost (broke LAN/IP access).
@@ -172,10 +172,32 @@ if [[ -f "$LOCAL_ENV" ]]; then
     rm -f "$LOCAL_ENV.bak"
     echo "[init-env] migrated frontend/.env.local: backend URL now auto-derived"
   fi
-  # Ensure ALLOWED_DEV_ORIGINS is present (append the detected LAN IP if missing).
-  if [[ -n "$LAN_IP" ]] && ! grep -q '^ALLOWED_DEV_ORIGINS=' "$LOCAL_ENV"; then
-    printf '\n# Hosts allowed to load Next.js dev (HMR) resources cross-origin.\nALLOWED_DEV_ORIGINS=%s\n' "$LAN_IP" >> "$LOCAL_ENV"
-    echo "[init-env] added ALLOWED_DEV_ORIGINS=$LAN_IP to frontend/.env.local"
+  # Refresh ALLOWED_DEV_ORIGINS with the current LAN IP (update if stale, add if absent).
+  if [[ -n "$LAN_IP" ]]; then
+    if grep -q '^ALLOWED_DEV_ORIGINS=' "$LOCAL_ENV"; then
+      sed -i.bak "s|^ALLOWED_DEV_ORIGINS=.*|ALLOWED_DEV_ORIGINS=$LAN_IP|" "$LOCAL_ENV"
+      rm -f "$LOCAL_ENV.bak"
+      echo "[init-env] refreshed ALLOWED_DEV_ORIGINS=$LAN_IP in frontend/.env.local"
+    else
+      printf '\nALLOWED_DEV_ORIGINS=%s\n' "$LAN_IP" >> "$LOCAL_ENV"
+      echo "[init-env] added ALLOWED_DEV_ORIGINS=$LAN_IP to frontend/.env.local"
+    fi
+  fi
+fi
+
+# ── Refresh APP_CORS_ALLOWED_ORIGINS in root .env with the current LAN IP ──
+# This sets app.cors.allowed-origins used for the CSP frame-ancestors header.
+# The actual CORS filter uses app.cors.allowed-origin-patterns (default: *).
+ROOT_ENV="$REPO_ROOT/.env"
+if [[ -f "$ROOT_ENV" && -n "$LAN_IP" ]]; then
+  CORS_ORIGINS="http://localhost:3000,http://$LAN_IP:3000,http://localhost:8080,http://$LAN_IP:8080"
+  if grep -q '^APP_CORS_ALLOWED_ORIGINS=' "$ROOT_ENV"; then
+    sed -i.bak "s|^APP_CORS_ALLOWED_ORIGINS=.*|APP_CORS_ALLOWED_ORIGINS=$CORS_ORIGINS|" "$ROOT_ENV"
+    rm -f "$ROOT_ENV.bak"
+    echo "[init-env] refreshed APP_CORS_ALLOWED_ORIGINS in .env"
+  else
+    printf '\n# CORS allowed origins (frame-ancestors CSP) — auto-refreshed by init-env.sh\nAPP_CORS_ALLOWED_ORIGINS=%s\n' "$CORS_ORIGINS" >> "$ROOT_ENV"
+    echo "[init-env] added APP_CORS_ALLOWED_ORIGINS=$CORS_ORIGINS to .env"
   fi
 fi
 
