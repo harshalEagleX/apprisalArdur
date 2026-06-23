@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Start the SHAL Python OCR / FastAPI service on port 5001.
 # Activates the conda env (default 'shal') and loads .env before launching uvicorn.
+# Always reinstalls Python dependencies so a git pull is immediately reflected.
 # Cross-platform: macOS + Linux (Ubuntu).
 set -euo pipefail
 
@@ -24,6 +25,10 @@ ensure_local_bins
 for bin in tesseract pdftoppm pdfinfo; do
   command -v "$bin" >/dev/null 2>&1 || echo "[start-ocr] WARN: '$bin' not found in PATH (install tesseract / poppler-utils)"
 done
+
+# ── Always reinstall Python dependencies ─────────────────────
+echo "[start-ocr] Installing/refreshing Python dependencies..."
+pip install -q -r "$OCR_DIR/requirements.txt"
 
 # ── Ensure Python-owned tables exist (idempotent: create_all checkfirst) ──
 cd "$OCR_DIR"

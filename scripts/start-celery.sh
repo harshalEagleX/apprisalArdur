@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Start the SHAL Celery worker (uses Redis as broker + result backend).
 # Activates the conda env (default 'shal') and loads .env before launching.
+# Always reinstalls Python dependencies so a git pull is immediately reflected.
 # Cross-platform: macOS + Linux (Ubuntu).
 set -euo pipefail
 
@@ -21,6 +22,10 @@ set +a
 
 # ── Required binaries ────────────────────────────────────────
 ensure_local_bins
+
+# ── Always reinstall Python dependencies ─────────────────────
+echo "[start-celery] Installing/refreshing Python dependencies..."
+pip install -q -r "$OCR_DIR/requirements.txt"
 
 # ── Launch ───────────────────────────────────────────────────
 cd "$OCR_DIR"

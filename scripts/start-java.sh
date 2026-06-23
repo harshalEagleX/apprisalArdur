@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start the SHAL Java / Spring Boot backend on port 8080.
-# Spring Boot imports .env itself (see application.yml: spring.config.import),
-# so we only ensure .env exists and launch the jar from the repo root.
+# Always performs a clean Maven build so a git pull on the server is always
+# reflected — never runs a stale JAR from a previous checkout.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,14 +13,13 @@ if [[ ! -f "$REPO_ROOT/.env" ]]; then
   bash "$REPO_ROOT/scripts/init-env.sh"
 fi
 
-# ── Build the jar if it isn't there yet ──────────────────────────────
-if [[ ! -f "$JAR" ]]; then
-  echo "[start-java] JAR not found — building (this can take a few minutes)..."
-  (cd "$REPO_ROOT" && ./mvnw -q -DskipTests clean package)
-fi
+# ── Always do a clean build — picks up every git pull change ──────────
+echo "[start-java] Building JAR (clean, skipping tests)..."
+(cd "$REPO_ROOT" && ./mvnw -q -DskipTests clean package)
+echo "[start-java] Build complete: $JAR"
 
 # ── Launch ───────────────────────────────────────────────────────────
 # Run from repo root so Spring's 'optional:file:.env' import resolves.
 cd "$REPO_ROOT"
-echo "[start-java] Starting Spring Boot on http://localhost:8080"
+echo "[start-java] Starting Spring Boot on http://0.0.0.0:8080"
 exec java -jar "$JAR"
