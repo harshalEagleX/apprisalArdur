@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import CursorGridGlow from "@/components/shared/CursorGridGlow";
-import ProductWatermark from "@/components/shared/ProductWatermark";
 import { GuideProvider } from "@/components/ui/guide/GuideTooltip";
 import "./globals.css";
 
@@ -36,7 +35,7 @@ export default function RootLayout({
           <div className="app-content-root">
             {children}
           </div>
-          <ProductWatermark />
+
         </GuideProvider>
       </body>
     </html>
