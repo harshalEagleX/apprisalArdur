@@ -418,7 +418,7 @@ public class QCProcessingService {
                 // the precise queued/started/running state). "Running OCR" while the sub-stage
                 // says "queued — waiting for worker" was the confusing 2%+queued+running display.
                 updateProgress(batchId, "python", "Processing " + pair.getAppraisal().getFilename(), index, pairs.size(), true, safeModelConfig);
-                log.info(TimelineLog.event("admin_batches", "java_qc_file_start",
+                log.debug(TimelineLog.event("admin_batches", "java_qc_file_start",
                         "batch_id", batchId,
                         "batch_file_id", pair.getAppraisal().getId(),
                         "file_index", index + 1,
@@ -444,7 +444,7 @@ public class QCProcessingService {
                     case AUTO_FAIL -> autoFailCount++;
                     case BLOCKED   -> toVerifyCount++;   // blocked routes to human review
                 }
-                log.info(TimelineLog.event("admin_batches", "java_qc_file_complete",
+                log.debug(TimelineLog.event("admin_batches", "java_qc_file_complete",
                         "batch_id", batchId,
                         "batch_file_id", pair.getAppraisal().getId(),
                         "qc_result_id", result.getId(),
@@ -816,7 +816,7 @@ public class QCProcessingService {
                     + "Verify Java/Python are deployed together; nested payloads may have drifted.",
                     pySchema, EXPECTED_PYTHON_SCHEMA_VERSION, appraisal.getId());
         }
-        log.info(TimelineLog.event("admin_batches", "java_qc_result_save_start",
+        log.debug(TimelineLog.event("admin_batches", "java_qc_result_save_start",
                 "batch_id", batchId,
                 "batch_file_id", appraisal.getId(),
                 "appraisal", appraisal.getFilename(),
@@ -970,7 +970,7 @@ public class QCProcessingService {
                         previousActive.getId(), evEx.getMessage());
             }
         }
-        log.info(TimelineLog.event("admin_batches", "java_qc_result_saved",
+        log.debug(TimelineLog.event("admin_batches", "java_qc_result_saved",
                 "batch_id", batchId,
                 "batch_file_id", appraisal.getId(),
                 "qc_result_id", qcResult.getId(),

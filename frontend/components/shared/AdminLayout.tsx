@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Users, Building2,
-  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, ShieldCheck, Search,
+  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, ShieldCheck, Search, UserCircle,
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
@@ -388,11 +388,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* Sign out */}
+        {/* Profile + sign out */}
         <div className="p-2 border-t border-white/10">
           <div className={`mb-2 ${narrow ? "flex justify-center" : ""}`}>
             <GuideButton tourId={guide.id} steps={guide.steps} label={guide.label} compact={narrow} />
           </div>
+          {/* Profile link */}
+          <Link
+            href="/admin/profile"
+            title={narrow ? "My profile" : undefined}
+            className="flex items-center gap-3 w-full px-2.5 py-2 rounded-md text-sm text-slate-600 hover:text-slate-300 hover:bg-white/[0.04] transition-colors"
+          >
+            <UserCircle size={16} className="flex-shrink-0" />
+            {!narrow && <span>My profile</span>}
+          </Link>
           <button
             onClick={handleSignOut}
             disabled={signingOut}

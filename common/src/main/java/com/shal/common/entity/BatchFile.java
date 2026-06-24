@@ -72,6 +72,16 @@ public class BatchFile {
     @Column(name = "order_id")
     private String orderId;
 
+    /**
+     * Top-level property/case folder name extracted from the ZIP path.
+     * Example: "SHAL-sorted/8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson".
+     * Null for single-property ZIPs that have no intermediate set folder.
+     * Used to group files by property set in the batch detail view and to scope
+     * file matching so appraisal↔engagement matching stays within the same set.
+     */
+    @Column(name = "property_set_name", length = 500)
+    private String propertySetName;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -206,6 +216,14 @@ public class BatchFile {
         this.orderId = orderId;
     }
 
+    public String getPropertySetName() {
+        return propertySetName;
+    }
+
+    public void setPropertySetName(String propertySetName) {
+        this.propertySetName = propertySetName;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -240,6 +258,7 @@ public class BatchFile {
         private String documentQualityFlags;
         private FileStatus status = FileStatus.PENDING;
         private String orderId;
+        private String propertySetName;
 
         public BatchFileBuilder id(Long id) {
             this.id = id;
@@ -301,6 +320,11 @@ public class BatchFile {
             return this;
         }
 
+        public BatchFileBuilder propertySetName(String propertySetName) {
+            this.propertySetName = propertySetName;
+            return this;
+        }
+
         public BatchFile build() {
             BatchFile file = new BatchFile();
             file.id = this.id;
@@ -315,6 +339,7 @@ public class BatchFile {
             file.documentQualityFlags = this.documentQualityFlags;
             file.status = this.status;
             file.orderId = this.orderId;
+            file.propertySetName = this.propertySetName;
             return file;
         }
     }

@@ -25,6 +25,15 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
      */
     List<BatchFile> findByBatchIdAndOrderIdAndFileType(Long batchId, String orderId, FileType fileType);
 
+    /** Find files scoped to a specific property set within a batch. */
+    List<BatchFile> findByBatchIdAndPropertySetNameAndFileType(Long batchId, String propertySetName, FileType fileType);
+
+    /** True when a file with the given id belongs to the given batch. Used to validate partial re-QC requests. */
+    boolean existsByIdAndBatchId(Long id, Long batchId);
+
+    /** Find all files that belong to a specific property set in a batch. */
+    List<BatchFile> findByBatchIdAndPropertySetName(Long batchId, String propertySetName);
+
     /**
      * Find all files with a specific orderId in a batch.
      */

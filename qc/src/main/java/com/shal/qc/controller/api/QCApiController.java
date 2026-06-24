@@ -49,6 +49,7 @@ public class QCApiController {
     private final DocumentMatchRepository documentMatchRepository;
     private final StuckBatchReconciler reconciler;
     private final EnversAuditService enversAuditService;
+    private final com.shal.common.repository.BusinessEventRepository businessEventRepository;
 
     public QCApiController(
             QCProcessingService qcProcessingService,
@@ -59,7 +60,8 @@ public class QCApiController {
             BatchFileRepository batchFileRepository,
             DocumentMatchRepository documentMatchRepository,
             StuckBatchReconciler reconciler,
-            EnversAuditService enversAuditService) {
+            EnversAuditService enversAuditService,
+            com.shal.common.repository.BusinessEventRepository businessEventRepository) {
         this.qcProcessingService = qcProcessingService;
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
@@ -69,6 +71,7 @@ public class QCApiController {
         this.documentMatchRepository = documentMatchRepository;
         this.reconciler = reconciler;
         this.enversAuditService = enversAuditService;
+        this.businessEventRepository = businessEventRepository;
     }
 
     /**
@@ -219,6 +222,19 @@ public class QCApiController {
                 "message", "Batch is already being processed", "batchId", batchId, "status", "QC_PROCESSING",
                 "pollUrl", "/api/admin/batches/" + batchId + "/status"));
         }
+
+        // Validate every requested file ID belongs to this batch before claiming it.
+        // A non-existent or cross-batch ID would silently no-op; return 400 instead.
+        List<Long> invalidIds = fileIds.stream()
+                .filter(fid -> !batchFileRepository.existsByIdAndBatchId(fid, batchId))
+                .collect(java.util.stream.Collectors.toList());
+        if (!invalidIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error",          "File ID(s) not found in batch " + batchId + ": " + invalidIds,
+                "invalidFileIds", invalidIds,
+                "batchId",        batchId));
+        }
+
         // Same pre-flight as a full run: reject if Python is down BEFORE claiming the batch.
         if (!pythonClientService.isHealthy()) {
             return ResponseEntity.status(503).body(Map.of(
@@ -311,9 +327,12 @@ public class QCApiController {
                     m.put("errorCount",       r.getErrorCount());
                     m.put("score",            null); // no score field on entity
                     m.put("ruleEngineVersion", r.getRuleEngineVersion());
-                    m.put("missingDocuments", r.getMissingDocuments());
-                    m.put("processedAt",      r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
-                    m.put("reviewedAt",       r.getReviewedAt() != null ? r.getReviewedAt().toString() : null);
+                    m.put("missingDocuments",   r.getMissingDocuments());
+                    m.put("rejectionCategory",  r.getRejectionCategory());
+                    m.put("rejectionNote",       r.getRejectionNote());
+                    m.put("reviewerNotes",       r.getReviewerNotes());
+                    m.put("processedAt",        r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
+                    m.put("reviewedAt",         r.getReviewedAt() != null ? r.getReviewedAt().toString() : null);
                     m.put("batchFile", r.getBatchFile() != null
                             ? Map.of("id", r.getBatchFile().getId(),
                                      "filename", r.getBatchFile().getFilename() != null ? r.getBatchFile().getFilename() : "")
@@ -459,6 +478,64 @@ public class QCApiController {
         body.put("rejectedCandidatesJson", match.getRejectedCandidatesJson());
         body.put("matchedAt", match.getMatchedAt() != null ? match.getMatchedAt().toString() : null);
         return body;
+    }
+
+    /**
+     * Per-file event history / audit timeline.
+     * Returns all BusinessEvents for a specific BatchFile, plus the active QCResult
+     * summary for convenience. Powers the "File History" drawer in the batch detail view.
+     */
+    @GetMapping("/file-history/{batchFileId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Map<String, Object>> getFileHistory(
+            @PathVariable @NonNull Long batchFileId) {
+        var fileOpt = batchFileRepository.findWithBatchAndReviewerById(batchFileId);
+        if (fileOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        var file = fileOpt.get();
+
+        var events = businessEventRepository.findByBatchFileId(batchFileId);
+
+        List<Map<String, Object>> eventDtos = events.stream().map(e -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id",          e.getId());
+            m.put("eventType",   e.getEventType());
+            m.put("outcome",     e.getOutcome());
+            m.put("sourceLayer", e.getSourceLayer());
+            m.put("occurredAt",  e.getOccurredAt() != null ? e.getOccurredAt().toString() : null);
+            return m;
+        }).collect(java.util.stream.Collectors.toList());
+
+        var activeResult = qcResultRepository.findActiveByBatchFileId(batchFileId);
+        Map<String, Object> qcSummary = null;
+        if (activeResult.isPresent()) {
+            var r = activeResult.get();
+            qcSummary = new LinkedHashMap<>();
+            qcSummary.put("id",              r.getId());
+            qcSummary.put("qcDecision",      r.getQcDecision() != null ? r.getQcDecision().name() : null);
+            qcSummary.put("finalDecision",   r.getFinalDecision() != null ? r.getFinalDecision().name() : null);
+            qcSummary.put("rejectionCategory", r.getRejectionCategory());
+            qcSummary.put("rejectionNote",   r.getRejectionNote());
+            qcSummary.put("reviewerNotes",   r.getReviewerNotes());
+            qcSummary.put("totalRules",      r.getTotalRules());
+            qcSummary.put("passedCount",     r.getPassedCount());
+            qcSummary.put("failedCount",     r.getFailedCount());
+            qcSummary.put("processedAt",     r.getProcessedAt() != null ? r.getProcessedAt().toString() : null);
+            qcSummary.put("reviewedAt",      r.getReviewedAt() != null ? r.getReviewedAt().toString() : null);
+            qcSummary.put("rerunOfId",       r.getRerunOf() != null ? r.getRerunOf().getId() : null);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("batchFileId",    file.getId());
+        body.put("filename",       file.getFilename());
+        body.put("fileType",       file.getFileType() != null ? file.getFileType().name() : null);
+        body.put("status",         file.getStatus() != null ? file.getStatus().name() : null);
+        body.put("propertySetName", file.getPropertySetName());
+        body.put("events",         eventDtos);
+        body.put("activeQcResult", qcSummary);
+        return ResponseEntity.ok(body);
     }
 
     /** Python service health check. */

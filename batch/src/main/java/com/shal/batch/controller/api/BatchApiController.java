@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.lang.NonNull;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,7 +139,7 @@ public class BatchApiController {
         // fileCount from denormalized column — always accurate, no lazy-load required
         m.put("fileCount", b.getFileCount());
         if (includeFiles) {
-            m.put("files", b.getFiles().stream().map(f -> {
+            List<Map<String, Object>> fileDtos = b.getFiles().stream().map(f -> {
                 Map<String, Object> fm = new HashMap<>();
                 fm.put("id",                   f.getId());
                 fm.put("filename",              f.getFilename());
@@ -146,9 +147,33 @@ public class BatchApiController {
                 fm.put("fileSize",              f.getFileSize() != null ? f.getFileSize() : 0L);
                 fm.put("status",                f.getStatus() != null ? f.getStatus().name() : "");
                 fm.put("orderId",               f.getOrderId() != null ? f.getOrderId() : "");
+                fm.put("propertySetName",       f.getPropertySetName());
                 fm.put("documentQualityFlags",  f.getDocumentQualityFlags());
                 return fm;
-            }).toList());
+            }).toList();
+            m.put("files", fileDtos);
+
+            // Group files by propertySetName → propertySets list for the detail view.
+            // Sets are ordered by their first occurrence in the file list.
+            java.util.LinkedHashMap<String, List<Map<String, Object>>> setMap = new java.util.LinkedHashMap<>();
+            for (Map<String, Object> f : fileDtos) {
+                String setKey = (String) f.get("propertySetName");
+                setKey = setKey != null && !setKey.isBlank() ? setKey : null;
+                String bucket = setKey != null ? setKey : "__root__";
+                setMap.computeIfAbsent(bucket, k -> new ArrayList<>()).add(f);
+            }
+            List<Map<String, Object>> propertySets = setMap.entrySet().stream().map(entry -> {
+                Map<String, Object> ps = new HashMap<>();
+                ps.put("setName",      "__root__".equals(entry.getKey()) ? null : entry.getKey());
+                ps.put("files",        entry.getValue());
+                ps.put("fileCount",    entry.getValue().size());
+                ps.put("completedCount", entry.getValue().stream().filter(f -> "COMPLETED".equals(f.get("status"))).count());
+                ps.put("errorCount",   entry.getValue().stream().filter(f -> "ERROR".equals(f.get("status"))).count());
+                ps.put("pendingCount", entry.getValue().stream().filter(f -> "PENDING".equals(f.get("status"))).count());
+                return ps;
+            }).toList();
+            m.put("propertySets", propertySets);
+            m.put("setCount", (long) setMap.entrySet().stream().filter(e -> !"__root__".equals(e.getKey())).count());
         } else {
             // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
             // returns (open-in-view=false). fileCount column has the accurate count.

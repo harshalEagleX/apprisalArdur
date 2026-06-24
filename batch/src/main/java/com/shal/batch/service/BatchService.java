@@ -34,9 +34,11 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -423,12 +425,12 @@ public class BatchService {
                 }
 
                 if (entry.isDirectory()) {
-                    if (lowerEntryName.contains("appraisal")) {
-                        hasAppraisalFolder = true;
-                    }
-                    if (lowerEntryName.contains("engagement") || lowerEntryName.contains("eagagement")) {
-                        hasEngagementFolder = true;
-                    }
+                    // Classify only by the folder's own name, not the full path, so a set folder
+                    // like "8234 E Pearson_no_appraisal" doesn't falsely set hasAppraisalFolder.
+                    String dirSegment = lastPathSegment(entryName).toLowerCase();
+                    if (dirSegment.startsWith("appraisal")) hasAppraisalFolder = true;
+                    if (dirSegment.startsWith("engagement") || dirSegment.startsWith("eagagement")
+                            || dirSegment.equals("order") || dirSegment.equals("orders")) hasEngagementFolder = true;
                     continue;
                 }
 
@@ -438,22 +440,40 @@ public class BatchService {
                     continue;
                 }
 
+                // Classify by the DIRECT PARENT FOLDER name only (the segment immediately
+                // containing this PDF), not the full entry path. Using the full path causes
+                // misclassification when a set folder name contains type keywords
+                // (e.g. "8234 E Pearson_no_appraisal/engagement/order.pdf" would incorrectly
+                // become APPRAISAL because "appraisal" appears in the set folder name).
+                String parentFolder = directParentFolder(entryName);
                 FileType fileType;
-                String lower = lowerEntryName;
-                if (lower.contains("appraisal")) {
+                if (parentFolder.startsWith("appraisal")) {
                     fileType = FileType.APPRAISAL;
                     hasAppraisalFolder = true;
-                } else if (lower.contains("engagement") || lower.contains("eagagement") || lower.contains("order")) {
+                } else if (parentFolder.startsWith("engagement") || parentFolder.startsWith("eagagement")
+                        || parentFolder.equals("order") || parentFolder.equals("orders")) {
                     fileType = FileType.ENGAGEMENT;
                     hasEngagementFolder = true;
-                } else if (lower.contains("contract") || lower.contains("purchase") || lower.contains("agreement")) {
+                } else if (parentFolder.startsWith("contract") || parentFolder.startsWith("purchase")
+                        || parentFolder.startsWith("agreement")) {
                     fileType = FileType.CONTRACT;
                 } else {
                     continue;
                 }
 
+                // Extract the property set name from the ZIP path.
+                // e.g. "SHAL-sorted/8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson"
+                // e.g. "8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson"
+                // e.g. "appraisal/file.pdf" → null
+                String propertySetName = extractPropertySetName(entryName);
+
                 String filename = filenameOnly;
-                Path typeDir = batchDir.resolve(fileType.name().toLowerCase());
+                // Store files in a sub-directory keyed by propertySetName (sanitized) so
+                // files from different property sets never collide on disk.
+                String storageFolderName = propertySetName != null
+                        ? sanitizeFolderName(propertySetName) + "/" + fileType.name().toLowerCase()
+                        : fileType.name().toLowerCase();
+                Path typeDir = batchDir.resolve(storageFolderName);
                 Files.createDirectories(typeDir);
                 // Two entries can share a filename but hold different content (e.g.
                 // two "appraisal.pdf" under different subfolders). Never overwrite —
@@ -461,7 +481,7 @@ public class BatchService {
                 Path filePath = uniqueFilePath(typeDir, filename);
                 if (!filePath.getFileName().toString().equals(filename)) {
                     log.warn("Filename collision in ZIP: '{}' already present in {} folder — stored as '{}'",
-                            filename, fileType.name().toLowerCase(), filePath.getFileName());
+                            filename, storageFolderName, filePath.getFileName());
                     filename = filePath.getFileName().toString();
                 }
                 Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -475,7 +495,7 @@ public class BatchService {
                     continue;
                 }
                 String contentHash = computeSha256(filePath);
-                String qualityFlags = documentQualityFlags(fileType, filename, contentHash, batch.getFiles());
+                String qualityFlags = documentQualityFlags(fileType, filename, contentHash, batch.getFiles(), propertySetName);
 
                 BatchFile batchFile = BatchFile.builder()
                         .batch(batch)
@@ -489,6 +509,7 @@ public class BatchService {
                         .documentQualityFlags(qualityFlags)
                         .status(FileStatus.PENDING)
                         .orderId(FileMatchingService.extractOrderId(filename))
+                        .propertySetName(propertySetName)
                         .build();
 
                 batch.addFile(batchFile);
@@ -503,6 +524,24 @@ public class BatchService {
 
         if (batch.getFiles().isEmpty()) {
             throw new ValidationException("No valid PDF files found in the batch");
+        }
+
+        // If only ONE distinct non-null propertySetName exists, all files are under the
+        // same folder — that folder is the batch root, not a meaningful property set.
+        // Clear propertySetName so the batch is treated as a flat (single-property) upload.
+        Set<String> distinctSets = batch.getFiles().stream()
+                .map(BatchFile::getPropertySetName)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (distinctSets.size() <= 1) {
+            for (BatchFile f : batch.getFiles()) {
+                f.setPropertySetName(null);
+            }
+        } else {
+            log.info("Batch {} has {} distinct property sets: {}",
+                    batch.getParentBatchId(), distinctSets.size(), distinctSets);
+            // Check each set for completeness and warn about incomplete ones
+            warnIncompleteSets(batch, distinctSets);
         }
 
         flagDocumentRoleAmbiguity(batch);
@@ -526,41 +565,183 @@ public class BatchService {
     }
 
     /**
-     * Flag ambiguous document roles — more than one appraisal (possibly different
-     * properties), engagement letter, or contract in a single ZIP. We never
-     * silently merge: the batch records a warning so the admin can confirm the
-     * intended mapping before running QC. Processing is not blocked.
+     * Flag ambiguous document roles within each property set.
+     * Multiple appraisals across different sets is expected (multi-property ZIP).
+     * Only warn when a single set has more than one document of the same role.
      */
     private void flagDocumentRoleAmbiguity(Batch batch) {
-        long appraisals = batch.getFiles().stream().filter(f -> f.getFileType() == FileType.APPRAISAL).count();
-        long engagements = batch.getFiles().stream().filter(f -> f.getFileType() == FileType.ENGAGEMENT).count();
-        long contracts = batch.getFiles().stream().filter(f -> f.getFileType() == FileType.CONTRACT).count();
+        // Group files by propertySetName (null → "__root__" for flat ZIPs)
+        Map<String, List<BatchFile>> bySet = new HashMap<>();
+        for (BatchFile f : batch.getFiles()) {
+            String key = f.getPropertySetName() != null ? f.getPropertySetName() : "__root__";
+            bySet.computeIfAbsent(key, k -> new ArrayList<>()).add(f);
+        }
 
         List<String> warnings = new ArrayList<>();
-        if (appraisals > 1) {
-            warnings.add(appraisals + " appraisal PDFs found — confirm they belong to the same appraisal set. "
-                    + "Different properties must be split into separate batches.");
+
+        if (bySet.size() > 1) {
+            // Multi-set ZIP: inform admin how many property sets were found
+            List<String> setNames = bySet.keySet().stream()
+                    .filter(k -> !"__root__".equals(k))
+                    .sorted()
+                    .toList();
+            log.info("Batch {} contains {} property sets: {}", batch.getParentBatchId(), setNames.size(), setNames);
         }
-        if (engagements > 1) {
-            warnings.add(engagements + " engagement letters found — confirm which one applies before running QC.");
-        }
-        if (contracts > 1) {
-            warnings.add(contracts + " contracts found — confirm which one applies before running QC.");
+
+        for (Map.Entry<String, List<BatchFile>> entry : bySet.entrySet()) {
+            String setLabel = "__root__".equals(entry.getKey()) ? "root" : ("\"" + entry.getKey() + "\"");
+            List<BatchFile> files = entry.getValue();
+
+            long appraisals = files.stream().filter(f -> f.getFileType() == FileType.APPRAISAL).count();
+            long engagements = files.stream().filter(f -> f.getFileType() == FileType.ENGAGEMENT).count();
+            long contracts   = files.stream().filter(f -> f.getFileType() == FileType.CONTRACT).count();
+
+            if (appraisals > 1) {
+                warnings.add("Set " + setLabel + ": " + appraisals
+                        + " appraisal PDFs found — confirm they belong to the same appraisal.");
+            }
+            if (engagements > 1) {
+                warnings.add("Set " + setLabel + ": " + engagements
+                        + " engagement letters found — confirm which one applies before running QC.");
+            }
+            if (contracts > 1) {
+                warnings.add("Set " + setLabel + ": " + contracts
+                        + " contracts found — confirm which one applies before running QC.");
+            }
         }
 
         if (!warnings.isEmpty()) {
-            batch.setIntakeWarnings(String.join("\n", warnings));
-            log.warn("Batch {} has ambiguous document roles: appraisals={}, engagements={}, contracts={}",
-                    batch.getParentBatchId(), appraisals, engagements, contracts);
+            String note = String.join("\n", warnings);
+            String existing = batch.getIntakeWarnings();
+            batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+            log.warn("Batch {} has ambiguous document roles per set: {}", batch.getParentBatchId(), warnings);
         }
     }
 
-    private String documentQualityFlags(FileType fileType, String filename, String contentHash, List<BatchFile> existingFiles) {
+    /**
+     * Warn about property sets that are missing required documents.
+     *
+     * A set without an appraisal cannot be QC'd at all — it should be uploaded as a
+     * separate batch once the appraisal PDF is available.
+     * A set without an engagement letter can still be QC'd but with reduced accuracy —
+     * the admin should be aware and ideally upload it as its own batch with the full set.
+     */
+    private void warnIncompleteSets(Batch batch, Set<String> distinctSets) {
+        List<String> warnings = new ArrayList<>();
+        for (String setName : distinctSets) {
+            List<BatchFile> setFiles = batch.getFiles().stream()
+                    .filter(f -> setName.equals(f.getPropertySetName()))
+                    .toList();
+            boolean hasAppraisal  = setFiles.stream().anyMatch(f -> f.getFileType() == FileType.APPRAISAL);
+            boolean hasEngagement = setFiles.stream().anyMatch(f -> f.getFileType() == FileType.ENGAGEMENT);
+
+            if (!hasAppraisal) {
+                warnings.add("Set \"" + setName + "\" has no appraisal PDF — this set will be skipped during QC. "
+                        + "Remove it from the ZIP and upload it as a separate batch once the appraisal is available.");
+                log.warn("Batch {} set '{}' has no appraisal — it will be skipped during QC",
+                        batch.getParentBatchId(), setName);
+            } else if (!hasEngagement) {
+                warnings.add("Set \"" + setName + "\" has no engagement letter — QC will proceed without it, "
+                        + "which reduces accuracy. Consider removing it and uploading as a separate batch "
+                        + "once the engagement letter is available.");
+                log.warn("Batch {} set '{}' has no engagement letter — QC accuracy may be reduced",
+                        batch.getParentBatchId(), setName);
+            }
+        }
+        if (!warnings.isEmpty()) {
+            String note = String.join("\n", warnings);
+            String existing = batch.getIntakeWarnings();
+            batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+        }
+    }
+
+    /**
+     * Extract the property set (top-level property folder) name from a ZIP entry path.
+     * Looks for the directory segment that is a document-type keyword and returns
+     * the segment immediately before it.
+     *
+     * Examples:
+     *   "8234 E Pearson/appraisal/file.pdf"             → "8234 E Pearson"
+     *   "SHAL-sorted/8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson"
+     *   "appraisal/file.pdf"                            → null (no set)
+     */
+    static String extractPropertySetName(String entryPath) {
+        if (entryPath == null || entryPath.isBlank()) return null;
+        String[] parts = entryPath.split("/");
+        // Iterate over directory segments (all except the last, which is the filename)
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (isDocTypeFolder(parts[i])) {
+                return i > 0 ? parts[i - 1].trim() : null;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isDocTypeFolder(String segment) {
+        if (segment == null) return false;
+        String lower = segment.trim().toLowerCase();
+        return lower.equals("appraisal")   || lower.equals("appraisals")
+            || lower.equals("engagement")  || lower.equals("engagements")
+            || lower.equals("eagagement")  || lower.equals("eagagements")
+            || lower.equals("contract")    || lower.equals("contracts")
+            || lower.equals("order")       || lower.equals("orders")
+            || lower.equals("purchase")    || lower.equals("agreement");
+    }
+
+    /** Strip characters that are unsafe in filesystem path segments. */
+    private static String sanitizeFolderName(String name) {
+        return name.replaceAll("[/\\\\:*?\"<>|]", "_").trim();
+    }
+
+    /**
+     * Returns the last non-empty path segment of a ZIP entry name (directory or file),
+     * lower-cased and with trailing slashes stripped.
+     * e.g. "SHAL-sorted/8234 E Pearson/appraisal/" → "appraisal"
+     */
+    private static String lastPathSegment(String entryName) {
+        if (entryName == null || entryName.isBlank()) return "";
+        String trimmed = entryName.replace("\\", "/").stripTrailing();
+        if (trimmed.endsWith("/")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+        int slash = trimmed.lastIndexOf('/');
+        return (slash >= 0 ? trimmed.substring(slash + 1) : trimmed).trim().toLowerCase();
+    }
+
+    /**
+     * Returns the direct parent folder name of a ZIP file entry, lower-cased.
+     * e.g. "SHAL-sorted/8234 E Pearson/appraisal/report.pdf" → "appraisal"
+     * e.g. "appraisal/report.pdf" → "appraisal"
+     * Falls back to the empty string if the structure is unexpected.
+     */
+    private static String directParentFolder(String entryPath) {
+        if (entryPath == null) return "";
+        String[] parts = entryPath.replace("\\", "/").split("/");
+        // parts[-1] is the filename; parts[-2] is the direct parent folder
+        return parts.length >= 2 ? parts[parts.length - 2].trim().toLowerCase() : "";
+    }
+
+    private String documentQualityFlags(FileType fileType, String filename, String contentHash,
+                                         List<BatchFile> existingFiles, String propertySetName) {
         List<String> flags = new ArrayList<>();
-        boolean duplicateHash = existingFiles.stream()
-                .anyMatch(file -> contentHash != null && contentHash.equals(file.getContentHash()));
-        if (duplicateHash) {
-            flags.add("This uploaded PDF has the same fingerprint as another document in this batch.");
+
+        if (contentHash != null && !existingFiles.isEmpty()) {
+            // Check for duplicate content within the same property set first — this is a strong
+            // signal that the same file was accidentally included twice in the same property folder.
+            boolean sameSetDuplicate = existingFiles.stream().anyMatch(f ->
+                    contentHash.equals(f.getContentHash())
+                    && java.util.Objects.equals(propertySetName, f.getPropertySetName()));
+            if (sameSetDuplicate) {
+                String setHint = propertySetName != null ? " in set \"" + propertySetName + "\"" : "";
+                flags.add("Duplicate: this PDF has the same fingerprint as another file" + setHint
+                        + " — likely an accidental duplicate upload. Review and remove the copy.");
+            } else {
+                // Cross-set or batch-wide duplicate (less critical — different sets may share
+                // supporting documents in some workflows)
+                boolean batchWideDuplicate = existingFiles.stream()
+                        .anyMatch(f -> contentHash.equals(f.getContentHash()));
+                if (batchWideDuplicate) {
+                    flags.add("This PDF has the same fingerprint as another document in this batch.");
+                }
+            }
         }
 
         String lowerName = filename == null ? "" : filename.toLowerCase();

@@ -53,26 +53,30 @@ public class FileMatchingService {
 
     /**
      * Find the engagement letter that matches an appraisal file.
-     * Matching is done by orderId extracted from filename.
+     * Prefers same-set matching for multi-property batches.
      *
      * @param appraisalFile The appraisal file to find engagement for
-     * @return Optional containing the matching engagement file, or empty if not
-     *         found
+     * @return Optional containing the matching engagement file, or empty if not found
      */
     @Transactional
     public Optional<BatchFile> findEngagementForAppraisal(BatchFile appraisalFile) {
         if (appraisalFile.getFileType() != FileType.APPRAISAL) {
             throw new IllegalArgumentException("Expected APPRAISAL file type, got: " + appraisalFile.getFileType());
         }
-
-        return matchSupportingFile(appraisalFile, FileType.ENGAGEMENT).supportingFile();
+        return findSupportingFile(appraisalFile, FileType.ENGAGEMENT);
     }
 
     /**
      * Get all matched file pairs for a batch.
      *
+     * For multi-property-set batches (where BatchFile.propertySetName is set),
+     * engagement and contract matching is first attempted within the same set.
+     * If no match is found within the set, a batch-wide fallback is tried.
+     * This prevents cross-set matching (e.g., the engagement letter for "8234 E Pearson"
+     * being incorrectly matched to the appraisal for "2307 Merrily Cir N").
+     *
      * @param batchId The batch ID
-     * @return List of file pairs (appraisal + optional engagement)
+     * @return List of file pairs (appraisal + optional engagement + optional contract)
      */
     @Transactional
     public List<FilePair> getMatchedPairs(Long batchId) {
@@ -84,8 +88,8 @@ public class FileMatchingService {
                 continue;
             }
 
-            Optional<BatchFile> engagement = findEngagementForAppraisal(appraisal);
-            Optional<BatchFile> contract   = findContractForAppraisal(appraisal);
+            Optional<BatchFile> engagement = findSupportingFile(appraisal, FileType.ENGAGEMENT);
+            Optional<BatchFile> contract   = findSupportingFile(appraisal, FileType.CONTRACT);
             pairs.add(new FilePair(appraisal, engagement.orElse(null), contract.orElse(null)));
         }
 
@@ -93,9 +97,56 @@ public class FileMatchingService {
         return pairs;
     }
 
+    /**
+     * Find a supporting file (engagement or contract) for an appraisal.
+     * When the appraisal has a propertySetName, candidates are first restricted to
+     * the same set so that a multi-property ZIP never cross-matches documents.
+     */
+    private Optional<BatchFile> findSupportingFile(BatchFile appraisal, FileType targetType) {
+        String setName = appraisal.getPropertySetName();
+        if (setName != null && !setName.isBlank()) {
+            // Try same-set match first
+            List<BatchFile> setCandidates = batchFileRepository
+                    .findByBatchIdAndPropertySetNameAndFileType(appraisal.getBatch().getId(), setName, targetType);
+            if (!setCandidates.isEmpty()) {
+                // Use orderId within the set
+                String orderId = appraisal.getOrderId();
+                if (orderId != null && !orderId.isBlank()) {
+                    Optional<BatchFile> exact = setCandidates.stream()
+                            .filter(f -> orderId.equals(f.getOrderId()))
+                            .min(Comparator.comparing(BatchFile::getId, Comparator.nullsLast(Long::compareTo)));
+                    if (exact.isPresent()) {
+                        persistMatch(appraisal, targetType,
+                                new MatchOutcome(exact, "exact_order_id_in_set", 1.0,
+                                        "Exact orderId match within set " + setName + ".",
+                                        List.of(), List.of()));
+                        return exact;
+                    }
+                }
+                // Fallback: take first candidate in the same set
+                BatchFile selected = setCandidates.stream()
+                        .min(Comparator.comparing(BatchFile::getId, Comparator.nullsLast(Long::compareTo)))
+                        .orElse(null);
+                if (selected != null) {
+                    double confidence = setCandidates.size() == 1 ? 0.95 : 0.80;
+                    persistMatch(appraisal, targetType,
+                            new MatchOutcome(Optional.of(selected), "set_first_candidate", confidence,
+                                    "First " + targetType + " candidate within set " + setName + ".",
+                                    setCandidates.size() > 1 ? setCandidates : List.of(), List.of()));
+                    return Optional.of(selected);
+                }
+            }
+            // Set had no candidates — fall through to global matching below
+            log.info("No {} found in set '{}' for appraisal {} — trying batch-wide fallback",
+                    targetType, setName, appraisal.getFilename());
+        }
+        // No set or no set-level match: use the original orderId / fuzzy logic
+        return matchSupportingFile(appraisal, targetType).supportingFile();
+    }
+
     @Transactional
     public Optional<BatchFile> findContractForAppraisal(BatchFile appraisalFile) {
-        return matchSupportingFile(appraisalFile, FileType.CONTRACT).supportingFile();
+        return findSupportingFile(appraisalFile, FileType.CONTRACT);
     }
 
     private MatchOutcome matchSupportingFile(BatchFile appraisalFile, FileType targetType) {

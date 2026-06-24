@@ -254,6 +254,32 @@ export async function getMe(): Promise<{ role: "ADMIN" | "REVIEWER"; username: s
   return apiFetch("/api/me");
 }
 
+export interface UserProfile {
+  id: number;
+  username: string;
+  fullName: string | null;
+  email: string | null;
+  role: "ADMIN" | "REVIEWER";
+  active: boolean;
+  lastLoginAt: string | null;
+  createdAt: string | null;
+  client: { id: number; name: string; code: string } | null;
+}
+
+export const getProfile = () => apiFetch<UserProfile>("/api/me/profile");
+
+export const updateProfile = (data: { fullName?: string; email?: string }) =>
+  apiFetch<{ success: boolean; message?: string }>("/api/me/profile", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const changePassword = (currentPassword: string, newPassword: string, confirmPassword: string) =>
+  apiFetch<{ success: boolean; message?: string }>("/api/me/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+  });
+
 export const getPasswordPolicy = () =>
   apiFetch<{ minLength: number }>("/api/config/password-policy");
 
@@ -724,6 +750,41 @@ export const decideOverride = (
 export const getQCHistory = (batchFileId: number) =>
   apiFetch<QCHistoryRun[]>(`/api/qc/history/file/${batchFileId}`);
 
+export interface FileHistoryEvent {
+  id: number;
+  eventType: string;
+  outcome: string | null;
+  sourceLayer: string | null;
+  occurredAt: string | null;
+}
+
+export interface FileHistoryResponse {
+  batchFileId: number;
+  filename: string;
+  fileType: string | null;
+  status: string | null;
+  propertySetName: string | null;
+  events: FileHistoryEvent[];
+  activeQcResult: {
+    id: number;
+    qcDecision: string | null;
+    finalDecision: string | null;
+    rejectionCategory: string | null;
+    rejectionNote: string | null;
+    reviewerNotes: string | null;
+    totalRules: number;
+    passedCount: number;
+    failedCount: number;
+    processedAt: string | null;
+    reviewedAt: string | null;
+    rerunOfId: number | null;
+  } | null;
+}
+
+/** Full per-file history including events and active QC result summary. */
+export const getFileHistory = (batchFileId: number) =>
+  apiFetch<FileHistoryResponse>(`/api/qc/file-history/${batchFileId}`);
+
 export type QCDiffFinding = {
   ruleId: string | null;
   ruleName: string | null;
@@ -887,6 +948,10 @@ export interface Batch {
   files: BatchFile[];
   /** Eagerly-computed file count from DB @Formula — always accurate even when files is not loaded */
   fileCount?: number;
+  /** Property sets derived from ZIP folder structure — populated on GET /api/admin/batches/{id} */
+  propertySets?: PropertySet[];
+  /** Number of distinct property set folders found in the ZIP (0 for flat/single-set batches) */
+  setCount?: number;
   assignedReviewer?: Pick<User, "id" | "username" | "fullName">;
   createdBy?: Pick<User, "id" | "username">;
   errorMessage?: string;
@@ -903,7 +968,18 @@ export interface BatchFile {
   fileSize: number;
   status: string;
   orderId?: string;
+  propertySetName?: string | null;
   documentQualityFlags?: string | null;
+}
+
+/** A property set groups files from one property/case folder within a batch. */
+export interface PropertySet {
+  setName: string | null;
+  files: BatchFile[];
+  fileCount: number;
+  completedCount: number;
+  errorCount: number;
+  pendingCount: number;
 }
 
 export interface QCResult {
@@ -919,7 +995,11 @@ export interface QCResult {
   processingTimeMs?: number;
   cacheHit?: boolean;
   missingDocuments?: string | null;
+  rejectionCategory?: string | null;
+  rejectionNote?: string | null;
+  reviewerNotes?: string | null;
   processedAt: string;
+  reviewedAt?: string | null;
 }
 
 export interface QCRuleResult {

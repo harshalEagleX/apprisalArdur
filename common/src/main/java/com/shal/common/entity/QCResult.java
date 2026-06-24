@@ -168,6 +168,21 @@ public class QCResult {
     @Column(name = "reviewer_notes", columnDefinition = "TEXT")
     private String reviewerNotes;
 
+    /**
+     * Structured rejection category set by the reviewer when finalDecision=FAIL.
+     * Values: EXTRACTION_MISMATCH, DOCUMENT_ISSUE, QC_MISMATCH, SIGNATURE_ISSUE, OTHER.
+     * Null when the file is approved or rejection category was not specified.
+     */
+    @Column(name = "rejection_category", length = 100)
+    private String rejectionCategory;
+
+    /**
+     * Free-text rejection note visible to admin explaining why the file was rejected.
+     * Set alongside rejectionCategory when finalDecision=FAIL.
+     */
+    @Column(name = "rejection_note", columnDefinition = "TEXT")
+    private String rejectionNote;
+
     // QCRuleResult is @NotAudited (removed to avoid 137 Envers rows per QC run).
     // Envers requires @NotAudited on the owning side's collection when the target
     // entity is not audited. Rule outcome history is tracked via BusinessEvent instead.
@@ -419,6 +434,12 @@ public class QCResult {
     public void setReviewerNotes(String reviewerNotes) {
         this.reviewerNotes = reviewerNotes;
     }
+
+    public String getRejectionCategory() { return rejectionCategory; }
+    public void setRejectionCategory(String rejectionCategory) { this.rejectionCategory = rejectionCategory; }
+
+    public String getRejectionNote() { return rejectionNote; }
+    public void setRejectionNote(String rejectionNote) { this.rejectionNote = rejectionNote; }
 
     public List<QCRuleResult> getRuleResults() {
         return ruleResults;

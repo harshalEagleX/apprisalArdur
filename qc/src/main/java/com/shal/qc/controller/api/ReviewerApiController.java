@@ -361,13 +361,26 @@ public class ReviewerApiController {
                 verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
             }
 
-            String notes = request != null ? request.get("notes") : null;
-            String sessionToken = request != null ? request.get("sessionToken") : null;
+            String notes             = request != null ? request.get("notes") : null;
+            String sessionToken      = request != null ? request.get("sessionToken") : null;
+            String rejectionCategory = request != null ? request.get("rejectionCategory") : null;
+            String rejectionNote     = request != null ? request.get("rejectionNote") : null;
             if (sessionToken == null || sessionToken.isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of("success", false, "error", "sessionToken is required"));
             }
             verificationService.heartbeatReviewSession(qcResultId, sessionToken);
             QCResult result = verificationService.completeSavedVerification(qcResultId, principal.getUser(), notes);
+            // Persist structured rejection info when the reviewer rejects the file
+            if (result.getFinalDecision() != null && result.getFinalDecision().name().equals("FAIL")) {
+                if (rejectionCategory != null && !rejectionCategory.isBlank()) {
+                    result.setRejectionCategory(rejectionCategory.trim().toUpperCase());
+                }
+                if (rejectionNote != null && !rejectionNote.isBlank()) {
+                    result.setRejectionNote(rejectionNote.trim());
+                }
+                // Save is handled by the outer transaction via completeSavedVerification;
+                // these fields are set on the managed entity before the session closes.
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
