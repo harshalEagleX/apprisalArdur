@@ -16,7 +16,7 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAdminDashboard().then(setDash).catch(console.error).finally(() => setLoading(false));
+    getAdminDashboard().then(setDash).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const n = (k: string) => Number(dash[k] ?? 0);

@@ -93,7 +93,7 @@ public class FileMatchingService {
             pairs.add(new FilePair(appraisal, engagement.orElse(null), contract.orElse(null)));
         }
 
-        log.info("Found {} file pairs for batch {}", pairs.size(), batchId);
+        log.debug("Found {} file pairs for batch {}", pairs.size(), batchId);
         return pairs;
     }
 
@@ -261,7 +261,7 @@ public class FileMatchingService {
             confidence = Math.min(confidence, 0.72);
         }
 
-        log.info("Matched {} {} for appraisal {} using normalized filename fallback (score={}, confidence={})",
+        log.debug("Matched {} {} for appraisal {} via fallback (score={}, confidence={})",
                 targetType, best.getFilename(), appraisalFile.getFilename(), bestScore, confidence);
         return new MatchOutcome(Optional.of(best), "fuzzy_name", confidence,
                 "Filename heuristic selected best candidate with score " + bestScore + ".",

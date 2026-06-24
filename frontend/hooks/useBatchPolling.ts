@@ -32,10 +32,8 @@ export interface UseBatchPollingReturn {
   stopPolling: (batchId: number) => void;
 }
 
-function batchPollingLog(event: string, payload?: unknown) {
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[useBatchPolling] ${event}`, payload ?? "");
-  }
+function batchPollingLog(_event: string, _payload?: unknown) {
+  // no-op
 }
 
 export function useBatchPolling(

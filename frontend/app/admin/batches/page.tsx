@@ -33,8 +33,8 @@ type ReconcileResult = {
   stuckFound: number; retried: number; abandoned: number; pythonHealthy: boolean; message: string;
 };
 
-function batchLog(event: string, payload?: unknown) {
-  if (process.env.NODE_ENV !== "production") console.log(`[BatchesPage] ${event}`, payload ?? "");
+function batchLog(_event: string, _payload?: unknown) {
+  // no-op
 }
 
 function statusCounts(batches: Batch[]) {

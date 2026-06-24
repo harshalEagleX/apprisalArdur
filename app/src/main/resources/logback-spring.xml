@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="shal"/>
+
+  <!-- ── Console: WARN and above only ──────────────────────────────────────── -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>WARN</level>
+    </filter>
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} — %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- ── File: INFO and above, rolling daily, 30-day retention ─────────────── -->
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/shal.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>logs/shal.%d{yyyy-MM-dd}.log</fileNamePattern>
+      <maxHistory>30</maxHistory>
+      <totalSizeCap>500MB</totalSizeCap>
+    </rollingPolicy>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{50} — %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- ── Quiet noisy framework loggers at file level too ───────────────────── -->
+  <logger name="org.hibernate.SQL"                          level="WARN"/>
+  <logger name="org.hibernate.orm.deprecation"              level="ERROR"/>
+  <logger name="org.hibernate.type.descriptor.sql"          level="WARN"/>
+  <logger name="org.springframework.web"                     level="WARN"/>
+  <logger name="org.springframework.security"               level="WARN"/>
+  <logger name="org.springframework.orm.jpa"                level="WARN"/>
+  <logger name="org.apache.catalina"                        level="WARN"/>
+  <logger name="org.apache.tomcat"                          level="WARN"/>
+  <logger name="com.zaxxer.hikari"                          level="WARN"/>
+  <logger name="io.lettuce"                                 level="WARN"/>
+  <logger name="org.springframework.data.repository.config" level="WARN"/>
+
+  <!-- ── SHAL application loggers: INFO to file, WARN to console ───────────── -->
+  <logger name="com.shal" level="INFO" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="FILE"/>
+  </logger>
+
+  <!-- ── Root: everything else — WARN to console, INFO to file ────────────── -->
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="FILE"/>
+  </root>
+</configuration>

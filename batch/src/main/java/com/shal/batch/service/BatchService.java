@@ -306,15 +306,8 @@ public class BatchService {
                 ? originalFilename.replace(".zip", "")
                 : "BATCH_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-        log.info(TimelineLog.event("admin_batches", "java_upload_start",
-                "batch_ref", parentBatchId,
-                "client_code", client.getCode(),
-                "user", creator.getUsername(),
-                "zip_name", originalFilename,
-                "zip_bytes", file.getSize(),
-                "file_hash", fileHash));
-        log.info("Creating batch '{}' for client '{}' by user '{}'",
-                parentBatchId, client.getCode(), creator.getUsername());
+        log.info("Batch upload started: ref={} client={} user={} size={} bytes",
+                parentBatchId, client.getCode(), creator.getUsername(), file.getSize());
 
         // Build batch in memory — do NOT save yet.
         // Saving before addFile() would make this a managed entity; Hibernate would
@@ -333,18 +326,7 @@ public class BatchService {
             Path batchDir = Paths.get(storagePath, client.getCode(), parentBatchId);
             Files.createDirectories(batchDir);
             extractAndValidateZip(file, batch, batchDir);
-            log.info(TimelineLog.event("admin_batches", "java_upload_extracted",
-                    "batch_ref", parentBatchId,
-                    "client_code", client.getCode(),
-                    "file_count", batch.getFiles().size(),
-                    "storage_dir", batchDir,
-                    "elapsed_ms", TimelineLog.elapsedMs(extractStarted)));
-            // UPLOADED = ZIP is valid, files are on disk, waiting for admin to trigger QC.
-            // QC_PROCESSING is only set by QCProcessingService when Python is actually called.
-            // Setting QC_PROCESSING here was the bug that hid the "Run QC" button forever.
             batch.setStatus(BatchStatus.UPLOADED);
-            log.info("Batch '{}' uploaded successfully with {} files — ready for QC",
-                    parentBatchId, batch.getFiles().size());
         } catch (ValidationException e) {
             log.warn("Batch validation failed for '{}': {}", parentBatchId, e.getMessage());
             batch.setStatus(BatchStatus.VALIDATION_FAILED);
@@ -368,13 +350,8 @@ public class BatchService {
         // ONE save in the success path — cascade creates all files atomically
         long saveStarted = System.nanoTime();
         batch = Objects.requireNonNull(batchRepository.save(batch));
-        log.info(TimelineLog.event("admin_batches", "java_upload_saved",
-                "batch_id", batch.getId(),
-                "batch_ref", batch.getParentBatchId(),
-                "status", batch.getStatus(),
-                "file_count", batch.getFileCount(),
-                "save_ms", TimelineLog.elapsedMs(saveStarted),
-                "total_elapsed_ms", TimelineLog.elapsedMs(flowStarted)));
+        log.info("Batch '{}' created (id={}) — {} files, {} ms",
+                batch.getParentBatchId(), batch.getId(), batch.getFileCount(), TimelineLog.elapsedMs(flowStarted));
         auditLogService.logEntity(creator, "BATCH_UPLOAD", "Batch", batch.getId());
         Map<String, Object> eventPayload = new HashMap<>();
         eventPayload.put("parent_batch_id", batch.getParentBatchId());
@@ -538,8 +515,7 @@ public class BatchService {
                 f.setPropertySetName(null);
             }
         } else {
-            log.info("Batch {} has {} distinct property sets: {}",
-                    batch.getParentBatchId(), distinctSets.size(), distinctSets);
+            log.debug("Batch {} — {} distinct property sets", batch.getParentBatchId(), distinctSets.size());
             // Check each set for completeness and warn about incomplete ones
             warnIncompleteSets(batch, distinctSets);
         }
@@ -551,7 +527,7 @@ public class BatchService {
                     + String.join(", ", excludedNonPdf);
             String existing = batch.getIntakeWarnings();
             batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
-            log.info("Batch {} catalogued {} non-PDF file(s) excluded from extraction",
+            log.debug("Batch {} — {} non-PDF file(s) catalogued and excluded",
                     batch.getParentBatchId(), excludedNonPdf.size());
         }
 
@@ -585,7 +561,7 @@ public class BatchService {
                     .filter(k -> !"__root__".equals(k))
                     .sorted()
                     .toList();
-            log.info("Batch {} contains {} property sets: {}", batch.getParentBatchId(), setNames.size(), setNames);
+            log.debug("Batch {} contains {} property sets", batch.getParentBatchId(), setNames.size());
         }
 
         for (Map.Entry<String, List<BatchFile>> entry : bySet.entrySet()) {

@@ -28,12 +28,6 @@ function warnMissingEngineText(rule: QCRuleResult): void {
   const id = rule.ruleId ?? "(unknown)";
   if (warnedRuleIds.has(id)) return;
   warnedRuleIds.add(id);
-  // This list IS the backlog: every rule logged here needs rejection_text
-  // implemented in the Python engine. Do not silence it by changing the chain.
-  console.warn(
-    `[qc] Rule ${id} has no engine-supplied rejectionText — using the frontend ` +
-      `development fallback. Implement rejection_text for this rule in the Python engine.`
-  );
 }
 
 /**

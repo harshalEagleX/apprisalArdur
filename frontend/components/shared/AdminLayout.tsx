@@ -12,6 +12,7 @@ import ActivityMonitor from "./ActivityMonitor";
 import DeviceGate from "./DeviceGate";
 import { CommandPalette } from "./CommandPalette";
 import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideTooltip";
+import { NotificationBell } from "./NotificationBell";
 
 const NAV = [
   { href: "/admin",          label: "Overview",   Icon: LayoutDashboard },
@@ -388,11 +389,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* Profile + sign out */}
+        {/* Bottom actions */}
         <div className="p-2 border-t border-white/10">
           <div className={`mb-2 ${narrow ? "flex justify-center" : ""}`}>
             <GuideButton tourId={guide.id} steps={guide.steps} label={guide.label} compact={narrow} />
           </div>
+
+          {/* Notification bell — shown inline in narrow mode, with label in wide mode */}
+          {narrow ? (
+            <div className="flex justify-center py-1">
+              <NotificationBell />
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-2.5 py-2">
+              <span className="text-sm text-slate-600">Notifications</span>
+              <NotificationBell />
+            </div>
+          )}
+
           {/* Profile link */}
           <Link
             href="/admin/profile"
@@ -402,6 +416,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <UserCircle size={16} className="flex-shrink-0" />
             {!narrow && <span>My profile</span>}
           </Link>
+
           <button
             onClick={handleSignOut}
             disabled={signingOut}
