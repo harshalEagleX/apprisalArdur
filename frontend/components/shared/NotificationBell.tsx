@@ -1,11 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Bell, X, CheckCircle2, AlertTriangle, Info,
   CheckCheck, Layers,
 } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import Link from "next/link";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Notification {
   id: string;
@@ -19,26 +22,36 @@ export interface Notification {
   read: boolean;
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function iconFor(type: string, status?: string) {
+function notifIcon(type: string, status?: string) {
   if (type === "QC_COMPLETED") {
-    if (status === "COMPLETED") return <CheckCircle2 size={15} className="text-green-400" />;
-    if (status === "ERROR")     return <AlertTriangle size={15} className="text-red-400" />;
-    return <Layers size={15} className="text-indigo-400" />;
+    if (status === "COMPLETED") return <CheckCircle2 size={16} className="text-green-400" />;
+    if (status === "ERROR")     return <AlertTriangle size={16} className="text-red-400" />;
+    return <Layers size={16} className="text-indigo-400" />;
   }
-  if (type === "RE_REVIEW_REQUESTED") return <AlertTriangle size={15} className="text-amber-400" />;
-  return <Info size={15} className="text-slate-400" />;
+  if (type === "RE_REVIEW_REQUESTED") return <AlertTriangle size={16} className="text-amber-400" />;
+  return <Info size={16} className="text-slate-400" />;
 }
 
-function iconBg(type: string, status?: string) {
+function notifIconBg(type: string, status?: string) {
   if (type === "QC_COMPLETED") {
-    if (status === "COMPLETED") return "bg-green-500/15 border-green-500/20";
-    if (status === "ERROR")     return "bg-red-500/15 border-red-500/20";
-    return "bg-indigo-500/15 border-indigo-500/20";
+    if (status === "COMPLETED") return "bg-green-500/10 ring-green-500/25";
+    if (status === "ERROR")     return "bg-red-500/10 ring-red-500/25";
+    return "bg-indigo-500/10 ring-indigo-500/25";
   }
-  if (type === "RE_REVIEW_REQUESTED") return "bg-amber-500/15 border-amber-500/20";
-  return "bg-white/[0.06] border-white/10";
+  if (type === "RE_REVIEW_REQUESTED") return "bg-amber-500/10 ring-amber-500/25";
+  return "bg-white/[0.05] ring-white/10";
+}
+
+function notifLabel(type: string, status?: string) {
+  if (type === "QC_COMPLETED") {
+    if (status === "COMPLETED") return "QC Passed";
+    if (status === "ERROR")     return "QC Error";
+    return "QC Complete";
+  }
+  if (type === "RE_REVIEW_REQUESTED") return "Re-review Request";
+  return "Notification";
 }
 
 function timeAgo(iso: string) {
@@ -54,13 +67,11 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-const MAX_NOTIFS = 50;
+const MAX_NOTIFS = 60;
 
-// ── NotificationCard ──────────────────────────────────────────────────────────
+// ── Single card ───────────────────────────────────────────────────────────────
 
-function NotificationCard({
-  n, onDismiss, onRead,
-}: {
+function NotifCard({ n, onDismiss, onRead }: {
   n: Notification;
   onDismiss: (id: string) => void;
   onRead: (id: string) => void;
@@ -68,139 +79,276 @@ function NotificationCard({
   return (
     <div
       onClick={() => onRead(n.id)}
-      className={`group relative flex items-start gap-3 rounded-xl px-3.5 py-3 transition-all duration-150 cursor-default ${
+      className={`group relative flex cursor-default select-none items-start gap-3.5 rounded-2xl p-4 transition-all duration-100 ${
         n.read
-          ? "opacity-60 hover:opacity-80"
-          : "bg-white/[0.03] hover:bg-white/[0.05]"
+          ? "opacity-45 hover:opacity-65"
+          : "bg-white/[0.04] ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.06]"
       }`}
     >
-      {/* unread dot */}
+      {/* unread dot — top-right corner */}
       {!n.read && (
-        <span className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-indigo-400" />
+        <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-indigo-400 ring-2 ring-[#0f1114] ring-offset-0" />
       )}
 
-      {/* icon */}
-      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${iconBg(n.type, n.status)}`}>
-        {iconFor(n.type, n.status)}
+      {/* icon badge */}
+      <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${notifIconBg(n.type, n.status)}`}>
+        {notifIcon(n.type, n.status)}
       </div>
 
-      {/* content */}
-      <div className="min-w-0 flex-1">
-        <p className={`text-[13px] leading-snug ${n.read ? "text-slate-400" : "text-slate-100 font-medium"}`}>
+      {/* body */}
+      <div className="min-w-0 flex-1 pr-5">
+        <span className={`text-[10px] font-bold uppercase tracking-widest ${n.read ? "text-slate-700" : "text-slate-500"}`}>
+          {notifLabel(n.type, n.status)}
+        </span>
+        <p className={`mt-0.5 text-[13px] leading-snug ${n.read ? "text-slate-500" : "text-slate-100"}`}>
           {n.message}
         </p>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-3">
           <span className="text-[11px] text-slate-600">{timeAgo(n.occurredAt)}</span>
           {n.needsReview && n.batchId && (
             <Link
               href={`/admin/batches/${n.batchId}`}
               onClick={e => { e.stopPropagation(); onRead(n.id); }}
-              className="text-[11px] text-indigo-400/80 hover:text-indigo-300 transition-colors"
+              className="text-[11px] font-medium text-indigo-400/80 transition-colors hover:text-indigo-300"
             >
-              Open →
+              View batch →
             </Link>
           )}
         </div>
       </div>
 
-      {/* dismiss */}
+      {/* dismiss on hover */}
       <button
         onClick={e => { e.stopPropagation(); onDismiss(n.id); }}
-        className="shrink-0 rounded-lg p-1 text-slate-700 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/[0.06] hover:text-slate-400"
+        className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.05] text-slate-600 opacity-0 transition-all hover:bg-white/10 hover:text-slate-300 group-hover:opacity-100"
         aria-label="Dismiss"
       >
-        <X size={12} />
+        <X size={10} />
       </button>
     </div>
   );
 }
 
-// ── NotificationBell ──────────────────────────────────────────────────────────
+// ── Notification Drawer (portal) ──────────────────────────────────────────────
+// Rendered via createPortal at document.body so it is NOT trapped inside the
+// sidebar's backdrop-filter stacking context. Without the portal, position:fixed
+// children of a backdrop-filter parent are positioned relative to that parent
+// rather than the viewport, so the "right-0" lands at the sidebar's right edge
+// instead of the screen's right edge.
+
+function NotificationDrawer({
+  notifs,
+  open,
+  onClose,
+  onMarkAllRead,
+  onClearAll,
+  onDismiss,
+  onRead,
+}: {
+  notifs: Notification[];
+  open: boolean;
+  onClose: () => void;
+  onMarkAllRead: () => void;
+  onClearAll: () => void;
+  onDismiss: (id: string) => void;
+  onRead: (id: string) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  const unread = notifs.filter(n => !n.read).length;
+
+  // mount → paint → animate in
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+    } else {
+      setVisible(false);
+      const t = setTimeout(() => setMounted(false), 320);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
+  // ESC
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    if (mounted) document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mounted, onClose]);
+
+  // click outside
+  useEffect(() => {
+    const onMouse = (e: MouseEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) onClose();
+    };
+    if (visible) {
+      const t = setTimeout(() => document.addEventListener("mousedown", onMouse), 60);
+      return () => { clearTimeout(t); document.removeEventListener("mousedown", onMouse); };
+    }
+  }, [visible, onClose]);
+
+  if (!mounted) return null;
+
+  const today   = notifs.filter(n => Date.now() - new Date(n.occurredAt).getTime() < 86400000);
+  const earlier = notifs.filter(n => Date.now() - new Date(n.occurredAt).getTime() >= 86400000);
+
+  const drawer = (
+    <>
+      {/* dim backdrop */}
+      <div
+        onClick={onClose}
+        style={{ transition: "opacity 280ms ease", opacity: visible ? 1 : 0 }}
+        className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-[2px]"
+      />
+
+      {/* drawer panel — anchored to viewport right edge */}
+      <div
+        ref={drawerRef}
+        style={{
+          transition: "transform 320ms cubic-bezier(0.32,0.72,0,1)",
+          transform: visible ? "translateX(0)" : "translateX(100%)",
+        }}
+        className="fixed right-0 top-0 bottom-0 z-[9999] flex w-[400px] flex-col
+                   border-l border-white/[0.08]
+                   bg-[#0e1013]/75
+                   shadow-[-24px_0_72px_rgba(0,0,0,0.65)]
+                   backdrop-blur-[28px]"
+      >
+        {/* ── Header ─────────────────────────────── */}
+        <div className="flex items-start justify-between px-5 pt-8 pb-5">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <Bell size={15} className="text-slate-400" />
+              <h2 className="text-[15px] font-semibold tracking-tight text-white">Notifications</h2>
+              {unread > 0 && (
+                <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
+                  {unread} new
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-600">
+              QC completions, alerts and review requests
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.06] text-slate-500 transition hover:bg-white/[0.1] hover:text-white"
+          >
+            <X size={13} />
+          </button>
+        </div>
+
+        {/* ── Action bar ─────────────────────────── */}
+        {notifs.length > 0 && (
+          <>
+            <div className="mx-5 h-px bg-white/[0.06]" />
+            <div className="flex items-center justify-between px-5 py-2.5">
+              {unread > 0 ? (
+                <button
+                  onClick={onMarkAllRead}
+                  className="flex items-center gap-1.5 text-[11px] text-slate-500 transition hover:text-slate-300"
+                >
+                  <CheckCheck size={11} /> Mark all as read
+                </button>
+              ) : (
+                <span className="text-[11px] text-slate-700">All caught up</span>
+              )}
+              <button
+                onClick={onClearAll}
+                className="text-[11px] text-slate-600 transition hover:text-slate-400"
+              >
+                Clear all
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── List ───────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-3 pb-6">
+          {notifs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-white/[0.06] bg-white/[0.03]">
+                <Bell size={24} className="text-slate-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-400">No recent notifications</p>
+                <p className="mt-1 text-xs text-slate-600">You&apos;re all caught up.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1 pt-1">
+              {today.length > 0 && (
+                <>
+                  <p className="px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-700">Today</p>
+                  {today.map(n => <NotifCard key={n.id} n={n} onDismiss={onDismiss} onRead={onRead} />)}
+                </>
+              )}
+              {earlier.length > 0 && (
+                <>
+                  <p className="px-2 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-widest text-slate-700">Earlier</p>
+                  {earlier.map(n => <NotifCard key={n.id} n={n} onDismiss={onDismiss} onRead={onRead} />)}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ─────────────────────────────── */}
+        {notifs.length > 0 && (
+          <div className="border-t border-white/[0.06] px-5 py-3 text-center">
+            <span className="text-[11px] text-slate-700">
+              {notifs.length} notification{notifs.length !== 1 ? "s" : ""}
+              {unread > 0 ? ` · ${unread} unread` : " · all read"}
+            </span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  // Portal to document.body — escapes sidebar's backdrop-filter stacking context
+  return typeof document !== "undefined"
+    ? createPortal(drawer, document.body)
+    : null;
+}
+
+// ── Bell trigger (lives in sidebar) ──────────────────────────────────────────
 
 export function NotificationBell() {
   const [notifs, setNotifs] = useState<Notification[]>([]);
-  const [open, setOpen] = useState(false);
-  const [entering, setEntering] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const btnRef  = useRef<HTMLButtonElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const unread = notifs.filter(n => !n.read).length;
 
   const addNotif = useCallback((raw: unknown) => {
-    const data = raw as Record<string, unknown>;
-    const notif: Notification = {
+    const d = raw as Record<string, unknown>;
+    setNotifs(prev => [{
       id:            Date.now().toString(36) + Math.random().toString(36).slice(2),
-      type:          String(data.type ?? "NOTIFICATION"),
-      message:       String(data.message ?? "New notification"),
-      batchId:       data.batchId as number | undefined,
-      parentBatchId: data.parentBatchId as string | undefined,
-      status:        data.status as string | undefined,
-      needsReview:   Boolean(data.needsReview),
-      occurredAt:    String(data.occurredAt ?? new Date().toISOString()),
+      type:          String(d.type ?? "NOTIFICATION"),
+      message:       String(d.message ?? "New notification"),
+      batchId:       d.batchId as number | undefined,
+      parentBatchId: d.parentBatchId as string | undefined,
+      status:        d.status as string | undefined,
+      needsReview:   Boolean(d.needsReview),
+      occurredAt:    String(d.occurredAt ?? new Date().toISOString()),
       read:          false,
-    };
-    setNotifs(prev => [notif, ...prev].slice(0, MAX_NOTIFS));
+    }, ...prev].slice(0, MAX_NOTIFS));
   }, []);
 
   useWebSocket(
     ["/topic/admin/notifications"],
-    useCallback((_topic: string, payload: unknown) => { addNotif(payload); }, [addNotif]),
+    useCallback((_t: string, p: unknown) => addNotif(p), [addNotif]),
   );
 
-  // open with entrance animation
-  function toggleOpen() {
-    if (open) {
-      setOpen(false);
-    } else {
-      setOpen(true);
-      setEntering(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setEntering(false));
-      });
-    }
-  }
-
-  // ESC key
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  // click outside
-  useEffect(() => {
-    function onMouse(e: MouseEvent) {
-      if (
-        panelRef.current && !panelRef.current.contains(e.target as Node) &&
-        btnRef.current   && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false);
-    }
-    if (open) document.addEventListener("mousedown", onMouse);
-    return () => document.removeEventListener("mousedown", onMouse);
-  }, [open]);
-
-  function markAllRead() {
-    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
-  }
-  function dismissOne(id: string) {
-    setNotifs(prev => prev.filter(n => n.id !== id));
-  }
-  function readOne(id: string) {
-    setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  }
-  function clearAll() {
-    setNotifs([]);
-    setOpen(false);
-  }
-
   return (
-    <div className="relative">
-      {/* Bell button */}
+    <>
+      {/* Bell button in sidebar */}
       <button
-        ref={btnRef}
-        onClick={toggleOpen}
+        onClick={() => setDrawerOpen(o => !o)}
         className="relative flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-white/[0.06] hover:text-slate-300"
-        aria-label="Notifications"
+        aria-label="Open notifications"
       >
         <Bell size={16} />
         {unread > 0 && (
@@ -210,93 +358,16 @@ export function NotificationBell() {
         )}
       </button>
 
-      {/* macOS-style panel */}
-      {open && (
-        <div
-          ref={panelRef}
-          style={{
-            transition: "opacity 180ms ease, transform 180ms ease",
-            opacity: entering ? 0 : 1,
-            transform: entering ? "scale(0.95) translateY(-6px)" : "scale(1) translateY(0)",
-            transformOrigin: "top right",
-          }}
-          className="absolute right-0 top-10 z-50 w-[380px] overflow-hidden rounded-2xl
-                     border border-white/[0.08]
-                     bg-[#141618]/90
-                     shadow-[0_32px_64px_rgba(0,0,0,0.7),0_0_0_0.5px_rgba(255,255,255,0.05)]
-                     backdrop-blur-2xl"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold text-white tracking-tight">Notifications</span>
-              {unread > 0 && (
-                <span className="rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
-                  {unread} new
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              {unread > 0 && (
-                <button
-                  onClick={markAllRead}
-                  title="Mark all as read"
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-slate-500 transition hover:bg-white/[0.06] hover:text-slate-300"
-                >
-                  <CheckCheck size={11} /> All read
-                </button>
-              )}
-              {notifs.length > 0 && (
-                <button
-                  onClick={clearAll}
-                  className="rounded-md px-2 py-1 text-[11px] text-slate-600 transition hover:bg-white/[0.06] hover:text-slate-400"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Thin separator */}
-          <div className="mx-4 h-px bg-white/[0.06]" />
-
-          {/* Notification list */}
-          <div className="max-h-[440px] overflow-y-auto px-1.5 py-2">
-            {notifs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-                  <Bell size={22} className="text-slate-600" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-slate-400">No recent notifications</div>
-                  <div className="mt-1 text-xs text-slate-600">You&apos;re all caught up.</div>
-                </div>
-              </div>
-            ) : (
-              <ul className="space-y-0.5">
-                {notifs.map(n => (
-                  <li key={n.id}>
-                    <NotificationCard n={n} onDismiss={dismissOne} onRead={readOne} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Footer */}
-          {notifs.length > 0 && (
-            <>
-              <div className="mx-4 h-px bg-white/[0.06]" />
-              <div className="px-4 py-2.5 text-center">
-                <span className="text-[11px] text-slate-700">
-                  {notifs.length} notification{notifs.length !== 1 ? "s" : ""}
-                  {unread > 0 ? ` · ${unread} unread` : " · all read"}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+      {/* Drawer rendered at document.body via portal */}
+      <NotificationDrawer
+        notifs={notifs}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onMarkAllRead={() => setNotifs(p => p.map(n => ({ ...n, read: true })))}
+        onClearAll={() => { setNotifs([]); setDrawerOpen(false); }}
+        onDismiss={id => setNotifs(p => p.filter(n => n.id !== id))}
+        onRead={id => setNotifs(p => p.map(n => n.id === id ? { ...n, read: true } : n))}
+      />
+    </>
   );
 }
