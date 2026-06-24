@@ -890,7 +890,7 @@ public class ReviewerApiController {
                     "QCRuleResult", ruleResultId,
                     "comment=" + adminComment, clientIp(httpRequest), httpRequest.getHeader("User-Agent"));
 
-            // Notify the reviewer via real-time event
+            // Notify the reviewer via real-time event (session channel)
             if (rr.getQcResult() != null) {
                 Map<String, Object> event = new HashMap<>();
                 event.put("type",         approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED");
@@ -899,6 +899,21 @@ public class ReviewerApiController {
                 event.put("approvedBy",   displayName(principal.getUser()));
                 event.put("comment",      adminComment);
                 realtimeEventPublisher.publish("/topic/reviewer/qc/" + rr.getQcResult().getId() + "/override", event);
+
+                // Also push to the reviewer notifications feed so it appears in their bell
+                try {
+                    Map<String, Object> notif = new java.util.LinkedHashMap<>();
+                    notif.put("type",        approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED");
+                    notif.put("ruleId",      rr.getRuleId());
+                    notif.put("approvedBy",  displayName(principal.getUser()));
+                    notif.put("message",     approve
+                            ? "Override approved by " + displayName(principal.getUser()) + " for rule " + rr.getRuleId() + "."
+                            : "Override rejected by " + displayName(principal.getUser()) + " for rule " + rr.getRuleId() + ". Please reconsider.");
+                    notif.put("occurredAt",  java.time.LocalDateTime.now().toString());
+                    realtimeEventPublisher.publish("/topic/reviewer/notifications", notif);
+                } catch (Exception pubEx) {
+                    log.debug("Failed to push override notification: {}", pubEx.getMessage());
+                }
             }
 
             return ResponseEntity.ok(Map.of(

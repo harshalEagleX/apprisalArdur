@@ -316,7 +316,9 @@ function NotificationDrawer({
 
 // ── Bell trigger (lives in sidebar) ──────────────────────────────────────────
 
-export function NotificationBell() {
+export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
+  topics?: string[];
+}) {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -338,7 +340,7 @@ export function NotificationBell() {
   }, []);
 
   useWebSocket(
-    ["/topic/admin/notifications"],
+    topics,
     useCallback((_t: string, p: unknown) => addNotif(p), [addNotif]),
   );
 

@@ -2,12 +2,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BrainCircuit, FileCheck2, HelpCircle, Inbox, LogOut } from "lucide-react";
+import { BrainCircuit, FileCheck2, HelpCircle, Inbox, LogOut, UserCircle } from "lucide-react";
 import type { ComponentType } from "react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
 import DeviceGate from "./DeviceGate";
 import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideTooltip";
+import { NotificationBell } from "./NotificationBell";
 
 const REVIEWER_QUEUE_GUIDE_STEPS: TooltipStep[] = [
   {
@@ -146,11 +147,22 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
           <span className="truncate">Verify evidence. Save decisions. Sign off with traceability.</span>
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
           <GuideButton tourId={guideId} steps={guideSteps} />
-          <span className="text-[10px] bg-[#161B22] border border-white/10 text-slate-500 px-2 py-0.5 rounded font-mono uppercase tracking-wide">
+          <span className="hidden text-[10px] bg-[#161B22] border border-white/10 text-slate-500 px-2 py-0.5 rounded font-mono uppercase tracking-wide sm:inline">
             Reviewer
           </span>
+          {/* Notification bell — reviewer topic */}
+          <NotificationBell topics={["/topic/reviewer/notifications"]} />
+          {/* Profile */}
+          <Link
+            href="/reviewer/profile"
+            title="My profile"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-white/[0.06] hover:text-slate-300"
+          >
+            <UserCircle size={16} />
+          </Link>
+          <div className="h-4 w-px bg-white/10" />
           <button
             onClick={handleSignOut}
             disabled={signingOut}

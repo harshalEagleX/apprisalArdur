@@ -10,6 +10,7 @@ import com.shal.common.repository.DocumentMatchRepository;
 import com.shal.common.repository.ProcessingMetricsRepository;
 import com.shal.common.repository.QCResultRepository;
 import com.shal.common.repository.QCRuleResultRepository;
+import com.shal.common.realtime.RealtimeEventPublisher;
 import com.shal.common.service.AuditLogService;
 import com.shal.common.service.BusinessEventService;
 import com.shal.common.service.FileMatchingService;
@@ -62,6 +63,7 @@ public class BatchService {
     private final com.shal.common.repository.DocStatRepository docStatRepository;
     private final AuditLogService auditLogService;
     private final BusinessEventService businessEventService;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     @Value("${app.storage.path:./uploads}")
     private String storagePath;
@@ -78,7 +80,8 @@ public class BatchService {
             ProcessingMetricsRepository metricsRepository,
             com.shal.common.repository.DocStatRepository docStatRepository,
             AuditLogService auditLogService,
-            BusinessEventService businessEventService) {
+            BusinessEventService businessEventService,
+            RealtimeEventPublisher realtimeEventPublisher) {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository = qcResultRepository;
@@ -88,6 +91,7 @@ public class BatchService {
         this.docStatRepository = docStatRepository;
         this.auditLogService = auditLogService;
         this.businessEventService = businessEventService;
+        this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -821,6 +825,19 @@ public class BatchService {
                         "reviewer_id", reviewer.getId(),
                         "reviewer_username", reviewer.getUsername()
                 ));
+        // Notify the reviewer via the reviewer notifications topic
+        try {
+            Map<String, Object> notif = new java.util.LinkedHashMap<>();
+            notif.put("type",          "BATCH_ASSIGNED");
+            notif.put("batchId",       batch.getId());
+            notif.put("parentBatchId", batch.getParentBatchId());
+            notif.put("message",       "Batch \"" + batch.getParentBatchId() + "\" has been assigned to you for review.");
+            notif.put("needsReview",   true);
+            notif.put("occurredAt",    java.time.LocalDateTime.now().toString());
+            realtimeEventPublisher.publish("/topic/reviewer/notifications", notif);
+        } catch (Exception e) {
+            log.debug("Failed to push assignment notification: {}", e.getMessage());
+        }
         return batch;
     }
 

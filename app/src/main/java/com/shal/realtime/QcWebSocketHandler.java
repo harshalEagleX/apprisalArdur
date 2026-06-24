@@ -32,7 +32,8 @@ public class QcWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(QcWebSocketHandler.class);
     private static final String SUBSCRIBE_PREFIX = "subscribe:";
-    private static final String ADMIN_NOTIFICATIONS_TOPIC = "/topic/admin/notifications";
+    private static final String ADMIN_NOTIFICATIONS_TOPIC    = "/topic/admin/notifications";
+    private static final String REVIEWER_NOTIFICATIONS_TOPIC = "/topic/reviewer/notifications";
 
     private final ObjectMapper objectMapper;
     private final BatchRepository batchRepository;
@@ -119,6 +120,9 @@ public class QcWebSocketHandler extends TextWebSocketHandler {
         User actor = user.get();
         if (ADMIN_NOTIFICATIONS_TOPIC.equals(topic)) {
             return actor.getRole() == Role.ADMIN;
+        }
+        if (REVIEWER_NOTIFICATIONS_TOPIC.equals(topic)) {
+            return actor.getRole() == Role.REVIEWER || actor.getRole() == Role.ADMIN;
         }
         if (topic.startsWith("/topic/qc/batch/")) {
             Long batchId = parseIdAfter(topic, "/topic/qc/batch/");
