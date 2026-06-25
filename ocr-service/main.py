@@ -138,15 +138,34 @@ def _celery_worker_running() -> bool:
         return False
 
 
+def _db_tables_ready() -> bool:
+    """True when the critical Python-managed tables exist. Missing tables mean
+    QC results cannot be persisted — surface this in /health before wasting tokens."""
+    try:
+        from app.database import get_db
+        import sqlalchemy as _sa
+        with get_db() as s:
+            s.execute(_sa.text("SELECT 1 FROM adaptive_validation_results LIMIT 1"))
+        return True
+    except Exception:
+        return False
+
+
 @app.get("/health")
 async def health():
+    db_ok = verify_connection()
+    tables_ok = _db_tables_ready() if db_ok else False
+    celery_ok = _celery_worker_running()
+    ready = db_ok and tables_ok  # celery down → sync fallback, still usable
     return {
-        "status": "ok",
+        "status": "ok" if ready else "degraded",
         "schema_version": schema_loader.schema_version,
         "field_count": len(schema_loader.all_fields()),
         "model_version": MODEL_VERSION,
-        "database": "connected" if verify_connection() else "disconnected",
-        "celery_worker_running": _celery_worker_running(),
+        "database": "connected" if db_ok else "disconnected",
+        "db_tables_ready": tables_ok,
+        "celery_worker_running": celery_ok,
+        "ready_for_qc": ready and celery_ok,
     }
 
 
@@ -225,6 +244,7 @@ async def qc_process(
     file: UploadFile = File(...),                       # appraisal report (required)
     engagement_letter: Optional[UploadFile] = File(None),
     contract_file: Optional[UploadFile] = File(None),
+    xml_file: Optional[UploadFile] = File(None),        # MISMO 2.6 XML (optional)
     model_provider: str = Form("groq"),
     text_model: str = Form(""),
     vision_model: str = Form(""),
@@ -248,6 +268,7 @@ async def qc_process(
     appraisal = _save_upload(file)
     engagement = _save_upload(engagement_letter)
     contract = _save_upload(contract_file)
+    xml = _save_upload(xml_file)
     token = progress_token or str(_uuid.uuid4())
     started = _time.time()
     _QC_PROGRESS[token] = {"stage": "received", "message": "Document received",
@@ -270,6 +291,7 @@ async def qc_process(
         report, ctx = await run_in_threadpool(
             run_transaction_qc_paths,
             appraisal, engagement, contract,
+            xml_path=xml,
             transaction_id=(file.filename or "transaction"),
             persist=True, progress=_progress,
             engagement_status=engagement_status,
@@ -286,7 +308,7 @@ async def qc_process(
         logging.getLogger(__name__).exception("QC process failed")
         raise HTTPException(status_code=500, detail=f"QC processing failed: {exc}")
     finally:
-        for p in (appraisal, engagement, contract):
+        for p in (appraisal, engagement, contract, xml):
             if p:
                 try:
                     _os.remove(p)
@@ -365,6 +387,7 @@ async def qc_submit(
     file: UploadFile = File(...),                       # appraisal report (required)
     engagement_letter: Optional[UploadFile] = File(None),
     contract_file: Optional[UploadFile] = File(None),
+    xml_file: Optional[UploadFile] = File(None),        # MISMO 2.6 XML (optional)
     model_provider: str = Form("groq"),
     text_model: str = Form(""),
     vision_model: str = Form(""),
@@ -391,10 +414,11 @@ async def qc_submit(
     appraisal = _save_upload(file)
     engagement = _save_upload(engagement_letter)
     contract = _save_upload(contract_file)
+    xml = _save_upload(xml_file)
     file_hash = source_hash or _sha256_file(appraisal)
 
     def _cleanup():
-        for p in (appraisal, engagement, contract):
+        for p in (appraisal, engagement, contract, xml):
             if p:
                 try:
                     _os.remove(p)
@@ -417,6 +441,7 @@ async def qc_submit(
             "appraisal_path": str(appraisal),
             "engagement_path": str(engagement) if engagement else None,
             "contract_path": str(contract) if contract else None,
+            "xml_path": str(xml) if xml else None,
             "model_provider": model_provider,
             "text_model": text_model,
             "vision_model": vision_model,

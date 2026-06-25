@@ -392,3 +392,296 @@ def ca2_econ_life(ctx: QCContext):
                       status=RuleStatus.VERIFY, message=qc_config.template("CA-2-life"),
                       fields_involved=["remaining_economic_life"], template_id="CA-2-life",
                       evidence=ev, confidence=0.7)
+
+
+# ---- R-ASSIGN-COND: Assignment condition vs report language consistency ------
+#
+# The reconciliation section's "as is / subject to" box must align with the
+# broader report language. When the box says "AsIs" but the addendum or limiting
+# conditions describe a repair/completion condition (or vice versa), the
+# appraiser's certification is internally inconsistent — a compliance issue.
+#
+# Implementation:
+#   1. Read assignment_condition (AsIs / SubjectToRepairs / SubjectToCompletion /
+#      SubjectToInspection — extracted from the reconciliation radio buttons).
+#   2. Read addendum_text (the "Additional Comments" / "Limiting Conditions"
+#      narrative block that most often contains subject-to language).
+#   3. Use layer_b.assess() with concern="subject_to" to determine whether the
+#      narrative addresses or contradicts the box.
+#
+# SKIPPED when assignment_condition could not be extracted (data missing → the
+# reviewer must check manually; we don't emit a phantom finding on empty data).
+
+_SUBJECT_TO_RE = re.compile(
+    r"\bsubject\s+to\b|\bcompletion\s+required\b|\brepair\s+required\b"
+    r"|\bpending\s+(repair|completion|inspection)\b",
+    re.I,
+)
+_AS_IS_RE = re.compile(r"\bas[\-\s]is\b", re.I)
+
+
+@rule(id="R-ASSIGN-COND", num="R-assign-cond", section="reconciliation", phase=3,
+      name="Assignment condition vs report language consistency")
+def r_assign_cond(ctx: QCContext):
+    """Verify the assignment condition radio button is consistent with the limiting
+    conditions / addendum narrative.
+
+    Common defect: appraiser selects 'As Is' on the reconciliation page but the
+    limiting conditions addendum reads 'subject to repairs' — or the reverse.
+    """
+    from app.qc import layer_b
+
+    condition = (ctx.appraisal.value("assignment_condition") or "").strip()
+    addendum = (ctx.appraisal.value("addendum_text") or "").strip()
+    limiting = (ctx.appraisal.value("limiting_conditions_text") or "").strip()
+    combined_narrative = f"{addendum} {limiting}".strip()
+
+    ev = [
+        ctx.appraisal.evidence("assignment_condition"),
+        ctx.appraisal.evidence("addendum_text"),
+        ctx.appraisal.evidence("limiting_conditions_text"),
+    ]
+    fields = ["assignment_condition", "addendum_text", "limiting_conditions_text"]
+
+    if not condition:
+        # Cannot evaluate without the condition checkbox value — skip silently so
+        # we don't create a false finding on extraction gaps (P-6).
+        return _res("R-ASSIGN-COND", "R-assign-cond", "reconciliation",
+                    RuleStatus.SKIPPED,
+                    message="Assignment condition could not be extracted; skipping consistency check.",
+                    fields=fields, evidence=ev)
+
+    condition_lower = condition.lower()
+    is_subject_to = any(k in condition_lower for k in (
+        "subjecttorepairs", "subjecttocompletion", "subjecttoinspection",
+        "subject to", "subject_to",
+    ))
+    is_as_is = "asis" in condition_lower or "as is" in condition_lower or condition_lower == "asis"
+
+    if not combined_narrative:
+        # No narrative to compare — advisory VERIFY so reviewer checks manually.
+        return _res("R-ASSIGN-COND", "R-assign-cond", "reconciliation",
+                    RuleStatus.VERIFY,
+                    message=qc_config.template("R-ASSIGN-COND", condition=condition),
+                    fields=fields, template_id="R-ASSIGN-COND",
+                    evidence=ev, confidence=0.4)
+
+    has_subject_to_language = bool(_SUBJECT_TO_RE.search(combined_narrative))
+    has_as_is_language = bool(_AS_IS_RE.search(combined_narrative))
+
+    # Conflict: condition box says "As Is" but narrative says "subject to"
+    if is_as_is and has_subject_to_language:
+        v = layer_b.assess(
+            ctx, concern="subject_to",
+            base_message=qc_config.template("R-ASSIGN-COND", condition=condition),
+            facts=(
+                "The assignment condition is 'As Is' but the addendum/limiting conditions "
+                "narrative contains 'subject to' language, which contradicts the condition checkbox."
+            ),
+            explained_status=RuleStatus.VERIFY,
+            unexplained_status=RuleStatus.VERIFY,
+            explained_conf=0.5,
+            unexplained_conf=0.7,
+        )
+        return _res("R-ASSIGN-COND", "R-assign-cond", "reconciliation",
+                    v.status, message=v.message, reasoning=v.reasoning,
+                    fields=fields, template_id="R-ASSIGN-COND",
+                    evidence=ev, confidence=v.confidence)
+
+    # Conflict: condition box says "Subject To" but narrative says "as is"
+    if is_subject_to and has_as_is_language and not has_subject_to_language:
+        v = layer_b.assess(
+            ctx, concern="subject_to",
+            base_message=qc_config.template("R-ASSIGN-COND", condition=condition),
+            facts=(
+                f"The assignment condition is '{condition}' (subject-to) but the addendum "
+                "narrative describes an 'as is' condition without supporting subject-to language."
+            ),
+            explained_status=RuleStatus.VERIFY,
+            unexplained_status=RuleStatus.VERIFY,
+            explained_conf=0.5,
+            unexplained_conf=0.7,
+        )
+        return _res("R-ASSIGN-COND", "R-assign-cond", "reconciliation",
+                    v.status, message=v.message, reasoning=v.reasoning,
+                    fields=fields, template_id="R-ASSIGN-COND",
+                    evidence=ev, confidence=v.confidence)
+
+    # Consistent: subject-to condition + subject-to language, or as-is + as-is language
+    return _res("R-ASSIGN-COND", "R-assign-cond", "reconciliation",
+                RuleStatus.PASS, fields=fields, evidence=ev)
+
+
+# ---- R-INCOME-REQ income approach required for rental/multi-family ----------
+
+@rule(id="R-INCOME-REQ", num="R-income-req", section="income_approach", phase=3,
+      name="Income approach developed when required")
+def r_income_req(ctx: QCContext):
+    form = ctx.form_type
+    occ = (ctx.appraisal.value("occupancy_type") or "").lower()
+    income_val = ctx.appraisal.value("income_approach_value")
+    ev = [ctx.appraisal.evidence("income_approach_value"),
+          ctx.appraisal.evidence("occupancy_type")]
+    fields = ["income_approach_value", "occupancy_type"]
+
+    def _has_income() -> bool:
+        if income_val is None:
+            return False
+        v = str(income_val).strip()
+        return bool(v) and v not in ("0", "0.0", "N/A", "n/a")
+
+    # 2-4 unit properties: income approach is required
+    if form == "1025":
+        if not _has_income():
+            return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.FAIL,
+                        message=qc_config.template("MF-1-income"),
+                        fields=fields, template_id="MF-1-income", evidence=ev)
+        return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    if "tenant" in occ or "investment" in occ:
+        if not _has_income():
+            return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.VERIFY,
+                        message=qc_config.template("R-INCOME-RENTAL"),
+                        fields=fields, template_id="R-INCOME-RENTAL", evidence=ev, confidence=0.6)
+        return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.NOT_APPLICABLE,
+                message="Income approach not required for this occupancy type.",
+                fields=fields, evidence=ev)
+
+
+# ---- R-VALUE-RANGE final value within range of all developed approaches -----
+
+@rule(id="R-VALUE-RANGE", num="R-val-range", section="reconciliation", phase=3,
+      name="Final value within range of developed approach values")
+def r_value_range(ctx: QCContext):
+    final = normalize_currency(ctx.appraisal.value("appraised_value"))
+    sca = normalize_currency(ctx.appraisal.value("final_value_sca"))
+    cost = normalize_currency(ctx.appraisal.value("cost_approach_value"))
+    income = normalize_currency(ctx.appraisal.value("income_approach_value"))
+    ev = [ctx.appraisal.evidence("appraised_value"),
+          ctx.appraisal.evidence("final_value_sca"),
+          ctx.appraisal.evidence("cost_approach_value")]
+    fields = ["appraised_value", "final_value_sca", "cost_approach_value"]
+
+    if final is None:
+        return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.VERIFY,
+                    message="Final opinion of value could not be read — manual review required.",
+                    fields=fields, evidence=ev, confidence=0.5)
+
+    developed = [v for v in (sca, cost, income) if v and v > 10_000]
+    if len(developed) < 2:
+        return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.NOT_APPLICABLE,
+                    message="Only one approach value developed; single-approach reconciliation handled by R-1.",
+                    fields=fields, evidence=ev)
+
+    lo, hi = min(developed), max(developed)
+    tol_pct = float(qc_config.semantic("approach_value_deviation_pct", 10.0)) / 100.0
+
+    if lo <= final <= hi:
+        return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    deviation_lo = (lo - final) / lo if final < lo else 0.0
+    deviation_hi = (final - hi) / hi if final > hi else 0.0
+    max_dev = max(deviation_lo, deviation_hi)
+
+    if max_dev <= tol_pct:
+        return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.VERIFY,
+                message=qc_config.template("R-1-range",
+                                           value=int(final), a=int(lo), b=int(hi)),
+                fields=fields, template_id="R-1-range", evidence=ev, confidence=0.7)
+
+
+# ---- R-EXPOSURE exposure time stated as a specific period -------------------
+
+_EXPOSURE_RE = re.compile(
+    r"exposure\s+time\s+(?:of\s+)?(\d+[\s\-–]+(?:to[\s\-–]+)?\d*\s*(?:months?|days?|weeks?|years?)"
+    r"|(?:one|two|three|four|five|six)\s+(?:to\s+(?:one|two|three|four|five|six)\s+)?months?)",
+    re.I,
+)
+
+
+@rule(id="R-EXPOSURE", num="R-exposure", section="reconciliation", phase=1,
+      name="Exposure time stated as a specific period")
+def r_exposure_time(ctx: QCContext):
+    addendum = (ctx.appraisal.value("addendum_text") or "").strip()
+    sca_comment = (ctx.appraisal.value("sca_comment") or "").strip()
+    reconciliation = (ctx.appraisal.value("final_reconciliation_comment") or "").strip()
+    full_text = " ".join([addendum, sca_comment, reconciliation])
+    ev = [ctx.appraisal.evidence("addendum_text"),
+          ctx.appraisal.evidence("final_reconciliation_comment")]
+    fields = ["addendum_text", "final_reconciliation_comment"]
+
+    if not full_text.strip():
+        return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.VERIFY,
+                    message="Narrative text could not be extracted; exposure time cannot be verified — manual review required.",
+                    fields=fields, evidence=ev, confidence=0.5)
+
+    if _EXPOSURE_RE.search(full_text):
+        return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.VERIFY,
+                message=qc_config.template("R-EXPOSURE"),
+                fields=fields, template_id="R-EXPOSURE", evidence=ev, confidence=0.6)
+
+
+# ---- R-MKTTIME marketing time consistent with XML neighborhood data ---------
+
+_MKT_TIME_MAP = {
+    "underthreemonths": 3,
+    "under3months": 3,
+    "threetosixmonths": 6,
+    "3to6months": 6,
+    "oversixmonths": 7,   # "more than 6 months"
+    "over6months": 7,
+}
+
+_MKT_MONTHS_RE = re.compile(
+    r"marketing\s+time\s+(?:of\s+)?(\d+)\s*(?:to\s*(\d+))?\s*months?",
+    re.I,
+)
+
+
+@rule(id="R-MKTTIME", num="R-mkttime", section="reconciliation", phase=4,
+      name="Marketing time consistent with neighborhood data")
+def r_marketing_time(ctx: QCContext):
+    xml_mkt = (ctx.appraisal.value("marketing_time_typical") or "").strip()
+    addendum = (ctx.appraisal.value("addendum_text") or "").strip()
+    sca_comment = (ctx.appraisal.value("sca_comment") or "").strip()
+    full_text = f"{addendum} {sca_comment}"
+    ev = [ctx.appraisal.evidence("marketing_time_typical"),
+          ctx.appraisal.evidence("addendum_text")]
+    fields = ["marketing_time_typical", "addendum_text"]
+
+    if not xml_mkt:
+        return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.NOT_APPLICABLE,
+                    message="Marketing time from XML neighborhood section not available; rule not applicable.",
+                    fields=fields, evidence=ev)
+
+    xml_limit_months = _MKT_TIME_MAP.get(xml_mkt.lower().replace(" ", "").replace("-", ""))
+    if xml_limit_months is None:
+        return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.NOT_APPLICABLE,
+                    message="Marketing time category not recognized; manual check recommended.",
+                    fields=fields, evidence=ev)
+
+    m = _MKT_MONTHS_RE.search(full_text)
+    if not m:
+        return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.VERIFY,
+                    message=qc_config.template("R-MKTTIME"),
+                    fields=fields, template_id="R-MKTTIME", evidence=ev, confidence=0.5)
+
+    lo_months = int(m.group(1))
+    hi_months = int(m.group(2)) if m.group(2) else lo_months
+
+    if xml_limit_months <= 3 and lo_months > 6:
+        return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.VERIFY,
+                    message=qc_config.template("R-MKTTIME"),
+                    fields=fields, template_id="R-MKTTIME", evidence=ev, confidence=0.7)
+    if xml_limit_months >= 7 and hi_months <= 3:
+        return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.VERIFY,
+                    message=qc_config.template("R-MKTTIME"),
+                    fields=fields, template_id="R-MKTTIME", evidence=ev, confidence=0.7)
+
+    return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
