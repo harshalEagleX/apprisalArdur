@@ -81,20 +81,30 @@ public class PythonClientService {
                                       QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
                                       Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
                                       String engagementStatus) {
+        return processQC(appraisalPath, null, engagementPath, contractPath,
+                modelConfig, stageCallback, batchId, batchFileId, qcResultId, sourceHash, engagementStatus);
+    }
+
+    public PythonQCResponse processQC(Path appraisalPath, Path xmlPath,
+                                      Path engagementPath, Path contractPath,
+                                      QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
+                                      Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                      String engagementStatus) {
         String url = config.getUrl() + "/qc/process";
         long callStarted = System.nanoTime();
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         String progressToken = UUID.randomUUID().toString();
         lastRetryCount.set(0);
 
-        log.info("Calling Python QC service: {} with appraisal: {}, engagement: {}, contract: {}, model: {}",
+        log.info("Calling Python QC service: {} with appraisal: {}, xml: {}, engagement: {}, contract: {}, model: {}",
                 url, appraisalPath.getFileName(),
+                xmlPath != null ? xmlPath.getFileName() : "none",
                 engagementPath != null ? engagementPath.getFileName() : "none",
                 contractPath != null ? contractPath.getFileName() : "none",
                 safeModelConfig.label());
 
         MultiValueMap<String, Object> body =
-                buildBaseBody(appraisalPath, engagementPath, contractPath, engagementStatus, safeModelConfig);
+                buildBaseBody(appraisalPath, xmlPath, engagementPath, contractPath, engagementStatus, safeModelConfig);
         body.add("progress_token", progressToken);   // sync path streams progress
         String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig);
         log.info(TimelineLog.event("admin_batches", "java_python_call_start",
@@ -356,18 +366,28 @@ public class PythonClientService {
                                          Path contractPath, QCModelConfig modelConfig,
                                          Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
                                          String engagementStatus) {
+        return submitQCJob(appraisalPath, null, engagementPath, contractPath,
+                modelConfig, batchId, batchFileId, qcResultId, sourceHash, engagementStatus);
+    }
+
+    public JobSubmitResponse submitQCJob(Path appraisalPath, Path xmlPath,
+                                         Path engagementPath, Path contractPath,
+                                         QCModelConfig modelConfig,
+                                         Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                         String engagementStatus) {
         String url = config.getUrl() + "/qc/submit";
         QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         lastRetryCount.set(0);
 
-        log.info("Submitting async QC job: appraisal={} engagement={} contract={} model={}",
+        log.info("Submitting async QC job: appraisal={} xml={} engagement={} contract={} model={}",
                 appraisalPath.getFileName(),
+                xmlPath        != null ? xmlPath.getFileName()        : "none",
                 engagementPath != null ? engagementPath.getFileName() : "none",
                 contractPath   != null ? contractPath.getFileName()   : "none",
                 cfg.label());
 
         MultiValueMap<String, Object> body =
-                buildBaseBody(appraisalPath, engagementPath, contractPath, engagementStatus, cfg);
+                buildBaseBody(appraisalPath, xmlPath, engagementPath, contractPath, engagementStatus, cfg);
         String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, cfg);
 
         HttpHeaders headers = new HttpHeaders();
@@ -515,13 +535,48 @@ public class PythonClientService {
     private MultiValueMap<String, Object> buildBaseBody(
             Path appraisalPath, Path engagementPath, Path contractPath,
             String engagementStatus, QCModelConfig cfg) {
+        return buildBaseBody(appraisalPath, null, engagementPath, contractPath, engagementStatus, cfg);
+    }
+
+    private MultiValueMap<String, Object> buildBaseBody(
+            Path appraisalPath, Path xmlPath, Path engagementPath, Path contractPath,
+            String engagementStatus, QCModelConfig cfg) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new FileSystemResource(Objects.requireNonNull(appraisalPath.toFile())));
+
+        // Guard: appraisal PDF must exist on disk — a missing file causes a silent
+        // 422 (FastAPI sees "file" field as null) which is hard to diagnose.
+        java.io.File appraisalFile = Objects.requireNonNull(appraisalPath).toFile();
+        if (!appraisalFile.exists() || !appraisalFile.isFile()) {
+            throw new RuntimeException(
+                "Appraisal PDF not found on disk (path: " + appraisalPath + "). " +
+                "The file may have been deleted or the storage path is wrong. " +
+                "Re-upload the batch to recover.");
+        }
+        body.add("file", new FileSystemResource(appraisalFile));
+
+        if (xmlPath != null) {
+            java.io.File xmlFile = xmlPath.toFile();
+            if (xmlFile.exists() && xmlFile.isFile()) {
+                body.add("xml_file", new FileSystemResource(xmlFile));
+            } else {
+                log.warn("APPRAISAL_XML path set ({}) but file not found on disk — skipping XML overlay", xmlPath);
+            }
+        }
         if (engagementPath != null) {
-            body.add("engagement_letter", new FileSystemResource(Objects.requireNonNull(engagementPath.toFile())));
+            java.io.File engFile = engagementPath.toFile();
+            if (engFile.exists() && engFile.isFile()) {
+                body.add("engagement_letter", new FileSystemResource(engFile));
+            } else {
+                log.warn("Engagement letter path set ({}) but file not found on disk — skipping", engagementPath);
+            }
         }
         if (contractPath != null) {
-            body.add("contract_file", new FileSystemResource(Objects.requireNonNull(contractPath.toFile())));
+            java.io.File conFile = contractPath.toFile();
+            if (conFile.exists() && conFile.isFile()) {
+                body.add("contract_file", new FileSystemResource(conFile));
+            } else {
+                log.warn("Contract path set ({}) but file not found on disk — skipping", contractPath);
+            }
         }
         // Per-document ingestion status so Python's G-0 gate can distinguish a
         // genuinely-absent engagement (NOT_PROVIDED → N/A) from one that exists but

@@ -67,11 +67,30 @@ EXTRACTION_LAYER_VERSION: str = os.getenv("EXTRACTION_LAYER_VERSION", "0.1.16")
 # OpenAI-compatible API. gpt-oss-120b is a reasoning model → force JSON output
 # with a low reasoning effort. Keys live in .env (gitignored), never in code.
 LLM_EXTRACTION_ENABLED: bool = os.getenv("LLM_EXTRACTION_ENABLED", "true").lower() in ("1", "true", "yes")
-# Layer-B reviewer reasoning: when enabled, Groq polishes the plain-language "why"
+# Layer-B reviewer reasoning: when enabled, the LLM polishes the plain-language "why"
 # shown to the reviewer for judgment rules. Evaluative use ONLY — it never changes a
 # rule's pass/fail (that stays deterministic, CLAUDE.md §17). Opt-in (off by default)
 # so the rule engine and the baseline harness stay deterministic unless turned on.
 LAYER_B_LLM_ENABLED: bool = os.getenv("LAYER_B_LLM_ENABLED", "false").lower() in ("1", "true", "yes")
+
+# Together AI (primary LLM) — two API keys used in round-robin for async batching so
+# two requests can run simultaneously. Keys are independent accounts; each has its own
+# Redis TPM token bucket. Add both keys for maximum throughput, or just KEY_1 for a
+# single-key setup.
+TOGETHER_API_KEY_1: str = os.getenv("TOGETHER_API_KEY_1", "")
+TOGETHER_API_KEY_2: str = os.getenv("TOGETHER_API_KEY_2", "")
+TOGETHER_BASE_URL: str = os.getenv("TOGETHER_BASE_URL", "https://api.together.ai/v1")
+TOGETHER_MODEL: str = os.getenv("TOGETHER_MODEL", "openai/gpt-oss-120b")
+TOGETHER_TIMEOUT: int = int(os.getenv("TOGETHER_TIMEOUT", "60"))
+# Together AI runs at FULL POWER — no client-side TPM throttle by default.
+# The token bucket exists only for telemetry. Together's own API returns 429 when
+# its server-side rate limit is hit; the client retries with backoff then falls back
+# to Groq automatically. Set TOGETHER_TPM_LIMIT to a real limit only if you want
+# client-side pre-throttling (e.g. to avoid hitting Together's hard limit on a
+# shared key). Default: effectively unlimited (10M tokens/min).
+TOGETHER_TPM_LIMIT: int = int(os.getenv("TOGETHER_TPM_LIMIT", "10000000"))
+
+# Groq (fallback LLM) — used when Together is unconfigured or exhausts all retries.
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")

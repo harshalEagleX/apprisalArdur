@@ -88,9 +88,11 @@ public class FileMatchingService {
                 continue;
             }
 
+            Optional<BatchFile> xml        = findSupportingFile(appraisal, FileType.APPRAISAL_XML);
             Optional<BatchFile> engagement = findSupportingFile(appraisal, FileType.ENGAGEMENT);
             Optional<BatchFile> contract   = findSupportingFile(appraisal, FileType.CONTRACT);
-            pairs.add(new FilePair(appraisal, engagement.orElse(null), contract.orElse(null)));
+            pairs.add(new FilePair(appraisal, xml.orElse(null),
+                                   engagement.orElse(null), contract.orElse(null)));
         }
 
         log.debug("Found {} file pairs for batch {}", pairs.size(), batchId);
@@ -249,6 +251,20 @@ public class FileMatchingService {
                 .toList();
 
         if (bestScore < 2 || best == null) {
+            // Last resort: when there is exactly ONE file of this type in the batch and
+            // the batch is small (≤5 appraisals), use it unambiguously. This handles the
+            // common case where a ZIP contains a flat or poorly-named file set — there is
+            // no other candidate to confuse it with, so orderId matching is irrelevant.
+            long appraisalCount = batchFileRepository.countByBatchIdAndFileType(
+                    appraisalFile.getBatch().getId(), FileType.APPRAISAL);
+            if (candidates.size() == 1 && appraisalCount <= 5) {
+                BatchFile sole = candidates.get(0);
+                log.info("Single-file fallback: using sole {} '{}' for appraisal '{}' (orderId/name match failed, 1 candidate, {} appraisals in batch)",
+                        targetType, sole.getFilename(), appraisalFile.getFilename(), appraisalCount);
+                return new MatchOutcome(Optional.of(sole), "single_file_fallback", 0.70,
+                        "Only one " + targetType + " exists in this batch; selected by single-file fallback.",
+                        List.of(), List.of());
+            }
             log.warn("No {} found for appraisal {} using orderId or filename fallback",
                     targetType, appraisalFile.getFilename());
             return new MatchOutcome(Optional.empty(), "missing", 0.0,
@@ -393,32 +409,45 @@ public class FileMatchingService {
                                 List<BatchFile> rejectedCandidates) {}
 
     /**
-     * DTO representing a matched pair of appraisal and engagement files.
+     * DTO representing a matched set of appraisal, XML, engagement, and contract files.
      */
     public static class FilePair {
         private final BatchFile appraisal;
+        private final BatchFile appraisalXml;   // MISMO 2.6 GSE XML, may be null
         private final BatchFile engagement;
         private final BatchFile contract;
 
         public FilePair(BatchFile appraisal, BatchFile engagement) {
-            this(appraisal, engagement, null);
+            this(appraisal, null, engagement, null);
         }
 
         public FilePair(BatchFile appraisal, BatchFile engagement, BatchFile contract) {
-            this.appraisal  = appraisal;
-            this.engagement = engagement;
-            this.contract   = contract;
+            this(appraisal, null, engagement, contract);
         }
 
-        public BatchFile getAppraisal()  { return appraisal; }
-        public BatchFile getEngagement() { return engagement; }
-        public BatchFile getContract()   { return contract; }
+        public FilePair(BatchFile appraisal, BatchFile appraisalXml,
+                        BatchFile engagement, BatchFile contract) {
+            this.appraisal    = appraisal;
+            this.appraisalXml = appraisalXml;
+            this.engagement   = engagement;
+            this.contract     = contract;
+        }
 
-        public boolean hasEngagement() { return engagement != null; }
-        public boolean hasContract()   { return contract != null; }
+        public BatchFile getAppraisal()    { return appraisal; }
+        public BatchFile getAppraisalXml() { return appraisalXml; }
+        public BatchFile getEngagement()   { return engagement; }
+        public BatchFile getContract()     { return contract; }
+
+        public boolean hasEngagement()   { return engagement != null; }
+        public boolean hasContract()     { return contract != null; }
+        public boolean hasAppraisalXml() { return appraisalXml != null; }
 
         public Path getAppraisalPath() {
             return Paths.get(appraisal.getStoragePath());
+        }
+
+        public Path getAppraisalXmlPath() {
+            return appraisalXml != null ? Paths.get(appraisalXml.getStoragePath()) : null;
         }
 
         public Path getEngagementPath() {
