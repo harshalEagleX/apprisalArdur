@@ -39,8 +39,12 @@ public class RestTemplateConfig {
     @Bean
     @Primary
     RestTemplate restTemplate() {
+        // Force HTTP/1.1: Java's HttpClient negotiates HTTP/2 by default; uvicorn
+        // (the Python OCR service) only speaks HTTP/1.1 and rejects h2c upgrade
+        // requests with "Invalid HTTP request received." (400 Bad Request).
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(30));
@@ -55,8 +59,10 @@ public class RestTemplateConfig {
      */
     @Bean("pythonProcessRestTemplate")
     RestTemplate pythonProcessRestTemplate() {
+        // Force HTTP/1.1 — same reason as above.
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(Math.max(60, ocrServiceConfig.getTimeoutSeconds())));
