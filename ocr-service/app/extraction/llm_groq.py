@@ -321,12 +321,17 @@ def _try_together(
     if not api_key:
         return None
 
+    # NOTE: do NOT send response_format={"type":"json_object"} to Together for the
+    # gpt-oss-120b reasoning model — it breaks the model (it emits "{\"final{\"" then
+    # thousands of newlines until it hits max_tokens, finish_reason=length, ~9s wasted).
+    # The model returns clean JSON from the prompt instruction alone, and _extract_json
+    # parses it (it regex-extracts the {...} block even if wrapped in prose). Groq does
+    # NOT have this bug, so _try_groq keeps response_format. Verified 2026-06-26.
     body: Dict = {
         "model": model,
         "messages": messages,
         "temperature": 0,
         "max_tokens": max_tokens,
-        "response_format": {"type": "json_object"},
     }
     if reasoning_effort:
         body["reasoning_effort"] = reasoning_effort
@@ -370,8 +375,19 @@ def _try_together(
                 _emit_telemetry(model, throttle_ms, inference_ms, attempts, rate_limited, ok=False)
                 return None
 
-            content = resp.json()["choices"][0]["message"]["content"]
+            choice = resp.json()["choices"][0]
+            content = choice.get("message", {}).get("content") or ""
+            finish = choice.get("finish_reason")
+            # Guard: a reasoning model that ran out of tokens mid-generation
+            # (finish_reason=length) with no parseable JSON is the known gpt-oss
+            # garbage-output failure — fail fast to Groq instead of returning junk.
             result = _extract_json(content)
+            if result is None and finish == "length":
+                logger.warning(
+                    "Together %s hit token limit with unparseable output "
+                    "(finish=length) — failing over to Groq", model)
+                _emit_telemetry(model, throttle_ms, inference_ms, attempts, rate_limited, ok=False)
+                return None
             _emit_telemetry(model, throttle_ms, inference_ms, attempts, rate_limited, ok=result is not None)
             return result
 

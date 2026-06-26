@@ -228,12 +228,18 @@ import uuid as _uuid
 _QC_PROGRESS: dict = {}
 
 
+_UPLOAD_DIR = Path(__file__).parent / "qc_uploads"
+_UPLOAD_DIR.mkdir(exist_ok=True)
+
+
 def _save_upload(upload: Optional[UploadFile]) -> Optional[Path]:
+    """Save an uploaded file to a persistent directory (not /tmp which macOS cleans).
+    Files survive Celery worker restarts and macOS temp cleanup."""
     if upload is None:
         return None
     suffix = Path(upload.filename or "doc.pdf").suffix or ".pdf"
-    fd, tmp = _tempfile.mkstemp(suffix=suffix)
     import os as _os
+    fd, tmp = _tempfile.mkstemp(suffix=suffix, dir=str(_UPLOAD_DIR))
     with _os.fdopen(fd, "wb") as f:
         f.write(upload.file.read())
     return Path(tmp)
