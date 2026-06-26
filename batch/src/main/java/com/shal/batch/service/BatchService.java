@@ -415,9 +415,14 @@ public class BatchService {
                     continue;
                 }
 
-                if (!entryName.toLowerCase().endsWith(".pdf")) {
+                // Accept PDFs (all document types) AND .xml (MISMO appraisal XML).
+                // Everything else (images, spreadsheets, etc.) is catalogued but excluded.
+                String lowerEntry = entryName.toLowerCase();
+                boolean isPdf = lowerEntry.endsWith(".pdf");
+                boolean isXmlEntry = lowerEntry.endsWith(".xml");
+                if (!isPdf && !isXmlEntry) {
                     excludedNonPdf.add(filenameOnly);
-                    log.info("Cataloguing non-PDF entry (excluded from extraction): {}", entryName);
+                    log.info("Cataloguing non-PDF/non-XML entry (excluded from extraction): {}", entryName);
                     continue;
                 }
 
@@ -427,10 +432,18 @@ public class BatchService {
                 // (e.g. "8234 E Pearson_no_appraisal/engagement/order.pdf" would incorrectly
                 // become APPRAISAL because "appraisal" appears in the set folder name).
                 String parentFolder = directParentFolder(entryName);
+                // XML files are the MISMO 2.6 GSE appraisal XML — only valid in the
+                // appraisal folder. An .xml anywhere else is excluded (a .xml is never
+                // an engagement letter or contract).
                 FileType fileType;
                 if (parentFolder.startsWith("appraisal")) {
-                    fileType = FileType.APPRAISAL;
+                    fileType = isXmlEntry ? FileType.APPRAISAL_XML : FileType.APPRAISAL;
                     hasAppraisalFolder = true;
+                } else if (isXmlEntry) {
+                    // XML outside the appraisal folder — not a document we process.
+                    excludedNonPdf.add(filenameOnly);
+                    log.info("Excluding XML outside appraisal folder: {}", entryName);
+                    continue;
                 } else if (parentFolder.startsWith("engagement") || parentFolder.startsWith("eagagement")
                         || parentFolder.equals("order") || parentFolder.equals("orders")) {
                     fileType = FileType.ENGAGEMENT;
