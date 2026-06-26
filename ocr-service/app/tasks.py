@@ -32,6 +32,7 @@ def qc_process_task(
     appraisal_path: str,
     engagement_path: Optional[str] = None,
     contract_path: Optional[str] = None,
+    xml_path: Optional[str] = None,
     model_provider: str = "groq",
     text_model: str = "",
     vision_model: str = "",
@@ -45,14 +46,32 @@ def qc_process_task(
     from app.qc.transaction import run_transaction_qc_paths
 
     started = time.time()
-    logger.info("qc_process_task start: job=%s appraisal=%s", self.request.id, appraisal_path)
+    logger.info("qc_process_task start: job=%s appraisal=%s xml=%s",
+                self.request.id, appraisal_path, xml_path)
+
+    # Stream live progress into the Celery task state so the Java backend (which
+    # polls GET /qc/job/{id}) can show a moving progress bar on the async path —
+    # not just "queued 2%" until done. Each stage emits state=PROGRESS with meta.
+    def _progress(stage: str, message: str, pct: float) -> None:
+        try:
+            self.update_state(state="PROGRESS", meta={
+                "stage": stage,
+                "message": message,
+                "sub_percent": max(0.0, min(1.0, float(pct) / 100.0)),
+                "elapsed_ms": int((time.time() - started) * 1000),
+            })
+        except Exception:
+            pass  # progress reporting must never break the job (P-6)
+
     try:
         report, ctx = run_transaction_qc_paths(
             Path(appraisal_path),
             Path(engagement_path) if engagement_path else None,
             Path(contract_path) if contract_path else None,
+            xml_path=Path(xml_path) if xml_path else None,
             transaction_id=document_id or "transaction",
             persist=True,
+            progress=_progress,
             engagement_status=engagement_status,
         )
         resp = report_to_python_qc_response(
@@ -74,7 +93,7 @@ def qc_process_task(
     finally:
         # The /qc/submit uploads are throwaway copies (the source of record stays in the
         # batch store — P-5); this task owns their cleanup whether it succeeds or fails.
-        for p in (appraisal_path, engagement_path, contract_path):
+        for p in (appraisal_path, engagement_path, contract_path, xml_path):
             if p:
                 try:
                     os.remove(p)

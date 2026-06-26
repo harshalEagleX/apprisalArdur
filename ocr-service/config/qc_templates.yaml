@@ -143,6 +143,7 @@ R-1-range:    "The final opinion of value (${value}) falls outside the range of 
 R-1-weight:   "The reconciliation commentary must identify which approach was given the most weight and explain why; please revise."
 R-2-bias:     "The opinion of value equals the contract price exactly; please verify the value conclusion is independently supported and not influenced by the contract amount."
 R-2-asisbox:  "At least one box ('As Is' or 'Subject To') must be checked in the reconciliation section."
+R-ASSIGN-COND: "The assignment condition ({condition}) appears inconsistent with the language in the report. Please confirm the limiting conditions and certification are consistent with the value conclusion condition."
 CA-1-sitevalue: "Please provide an Opinion of site value in the report."
 CA-3-arith:   "The indicated value by Cost Approach (${value}) does not equal site value + depreciated cost of improvements (${a} + ${b}); please verify the cost approach arithmetic."
 CA-3-depr:    "The stated depreciation appears inconsistent with the effective age and remaining economic life; please verify the depreciation estimate."
@@ -241,3 +242,25 @@ FHA-6-repairs:     "FHA assignment: repairs/conditions are indicated; the apprai
 FHA-7-spaceheater: "FHA assignment: a space heater appears to be the primary heat source. FHA does not accept space heaters as the sole heating system; please address."
 FHA-12-wellseptic: "FHA assignment: subject uses a private well and/or septic system; please confirm distances/compliance with HUD requirements."
 FHA-13-appliances: "FHA assignment: please confirm the kitchen appliances are present and operational."
+
+# ---- Arithmetic / Timeline / Consistency (arithmetic.py) ----
+I-1-yrbuilt:         "The stated Actual Age ({stated}) does not match the year built ({yb}) and effective date ({eff}) which imply an age of {calc} years; please reconcile."
+TL-ENG-order:        "The engagement letter date ({a}) is after the report signature date ({b}); the appraiser must be engaged before completing the assignment. Please verify the timeline."
+TL-CONTRACT-late:    "The contract date ({a}) is after the appraisal effective date ({b}); the appraiser must have the fully executed contract before the effective date of the appraisal. Please verify."
+C-ANALYZE-nocontract: "The appraisal indicates the contract was analyzed (Reviewed: Y), but no purchase contract was provided in the case file. Please provide the contract or revise the contract section."
+LISTING-CMNT-var:    "The subject's most recent listing price ({listing}) differs from the opinion of value (${value}) by {pct}%. Please address the listing price relationship in the report commentary."
+
+# ---- Reconciliation (new additions) ----
+R-INCOME-RENTAL: "The subject is income-producing (tenant-occupied); the income approach should be developed or the omission explained in the report. Please confirm."
+R-EXPOSURE: "Reasonable exposure time was not found or is not stated as a specific time period. USPAP requires a stated exposure time; please provide a specific period in the reconciliation or addendum."
+R-MKTTIME: "Marketing time consistency between the neighborhood market conditions and the reconciliation section could not be confirmed. Please ensure the stated marketing time is consistent with the DOM data in the comparable grid and market conditions analysis."
+
+# ---- Order-level cross-document rules (ORD-*) ----
+ORD-FORM-MATCH: "The engagement letter requires form {ordered} but the report is on form {actual}. Please verify the correct form was used for this assignment."
+ORD-INSP-SCOPE: "The engagement letter ordered a {ordered} inspection but the scope of work in the report appears inconsistent with that inspection type. Please confirm the scope matches what was ordered."
+ORD-COBORROWER: "The engagement letter lists co-borrower '{co_borrower}' who does not appear in the appraisal borrower section. Please include the co-borrower name per the order form."
+ORD-ASSIGN-MATCH: "The engagement letter indicates assignment type '{ordered}' but the appraisal report states '{actual}'. The engagement letter is authoritative — please resolve this discrepancy."
+
+# ---- ST-INTENDED / ST-SCOPE (were emitting raw rule-id as message) ----
+ST-INTENDED: "The report must state the Intended Use (mortgage finance/lending) and name the Intended User (the lender/client). Please confirm both statements are present."
+ST-SCOPE: "The Scope of Work statement could not be confirmed. Please verify the report includes a scope-of-work description appropriate to the inspection type performed."

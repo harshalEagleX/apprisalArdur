@@ -424,6 +424,17 @@ public class PythonClientService {
      */
     public PythonQCResponse waitForJobResult(String jobId, Duration timeout,
                                               java.util.function.BooleanSupplier batchCancelled) {
+        return waitForJobResult(jobId, timeout, batchCancelled, null);
+    }
+
+    /**
+     * Poll a queued job until done. When {@code progressCallback} is non-null, each
+     * poll that returns Celery state=PROGRESS forwards the live stage meta so the
+     * async path drives a moving progress bar (not just "queued 2%" until done).
+     */
+    public PythonQCResponse waitForJobResult(String jobId, Duration timeout,
+                                              java.util.function.BooleanSupplier batchCancelled,
+                                              Consumer<PythonProgress> progressCallback) {
         String url = config.getUrl() + "/qc/job/" + jobId;
         HttpHeaders headers = new HttpHeaders();
         if (config.getApiKey() != null && !config.getApiKey().isBlank())
@@ -473,6 +484,20 @@ public class PythonClientService {
                 } else if ("FAILURE".equals(state)) {
                     String err = stringFromMap(body, "error");
                     throw new RuntimeException("QC job " + jobId + " failed: " + err);
+                } else if ("PROGRESS".equals(state) && progressCallback != null) {
+                    // Live stage meta from the Celery task — drive the progress bar.
+                    Object progObj = body.get("progress");
+                    if (progObj instanceof Map<?, ?> prog) {
+                        Object stageV = prog.get("stage");
+                        Object msgV   = prog.get("message");
+                        String stage   = stageV != null ? stageV.toString() : "python";
+                        String message = msgV != null ? msgV.toString() : "Processing";
+                        double pct     = prog.get("sub_percent") instanceof Number n ? n.doubleValue() : 0.0;
+                        long elapsed   = prog.get("elapsed_ms")  instanceof Number n ? n.longValue()   : 0L;
+                        try {
+                            progressCallback.accept(new PythonProgress(stage, message, pct, elapsed));
+                        } catch (Exception ignore) { /* progress must never break polling */ }
+                    }
                 }
 
                 // Still PENDING after grace window → worker is not running, give up fast

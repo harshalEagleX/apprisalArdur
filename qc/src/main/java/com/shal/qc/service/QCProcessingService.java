@@ -676,6 +676,7 @@ public class QCProcessingService {
             try {
                 job = pythonClient.submitQCJob(
                         pair.getAppraisalPath(),
+                        pair.getAppraisalXmlPath(),
                         pair.getEngagementPath(),
                         pair.getContractPath(),
                         modelConfig,
@@ -697,6 +698,7 @@ public class QCProcessingService {
                         "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
                 pythonResponse = pythonClient.processQC(
                         pair.getAppraisalPath(),
+                        pair.getAppraisalXmlPath(),
                         pair.getEngagementPath(),
                         pair.getContractPath(),
                         modelConfig,
@@ -725,7 +727,14 @@ public class QCProcessingService {
                 pythonResponse = pythonClient.waitForJobResult(
                         job.jobId(),
                         timeout,
-                        () -> isCancellationRequested(progressBatchId));
+                        () -> isCancellationRequested(progressBatchId),
+                        snapshot -> {
+                            String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
+                            String subMessage = snapshot.message() != null ? snapshot.message()
+                                    : "Processing " + appraisal.getFilename();
+                            updateSubProgress(progressBatchId, subStage, subMessage,
+                                    snapshot.subPercent(), snapshot.elapsedMs());
+                        });
             } catch (PythonClientService.CeleryWorkerUnavailableException workerEx) {
                 log.warn("Queued Python job {} was not picked up by Celery; taking it over synchronously",
                         workerEx.jobId());
@@ -768,6 +777,7 @@ public class QCProcessingService {
             BatchFile appraisal) {
         return pythonClient.processQC(
                 pair.getAppraisalPath(),
+                pair.getAppraisalXmlPath(),
                 pair.getEngagementPath(),
                 pair.getContractPath(),
                 modelConfig,

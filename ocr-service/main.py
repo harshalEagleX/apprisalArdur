@@ -501,6 +501,11 @@ async def qc_job(job_id: str):
         body["result"] = res.result          # the PythonQCResponse dict from qc_process_task
     elif state == "FAILURE":
         body["error"] = str(res.result)      # exception → string for the Java error message
+    elif state == "PROGRESS":
+        # Live stage meta set by qc_process_task._progress — drives the async-path
+        # progress bar (stage, message, sub_percent 0-1, elapsed_ms).
+        info = res.info if isinstance(res.info, dict) else {}
+        body["progress"] = info
     return body
 
 
