@@ -424,3 +424,384 @@ def st1b_site_plausibility(ctx: QCContext):
     )
     return _res("ST-1B", "26b", RuleStatus.VERIFY, message=msg,
                 fields=fields, evidence=ev, confidence=0.55)
+
+
+# ============================================================================
+# NEW RULES — appended below existing rules (do not modify above)
+# ============================================================================
+
+# ---- ST-HBU Highest and best use stated and consistent ---------------------
+#
+# The XML extractor surfaces H&BU as highest_and_best_use (existing ST-6 field)
+# and highest_best_use_indicator / highest_best_use_description.  ST-6 already
+# fires a HOLD when the checkbox is explicitly "No"; this rule fires a VERIFY
+# when ALL H&BU-related fields are blank (cannot be confirmed).
+
+@rule(id="ST-HBU", num="ST-hbu", section="site", phase=1,
+      name="Highest and best use stated and consistent")
+def st_hbu_stated(ctx: QCContext):
+    # Try every field the XML extractor may populate for H&BU data.
+    hbu = (ctx.appraisal.value("highest_and_best_use") or "").strip()
+    hbu_ind = (ctx.appraisal.value("highest_best_use_indicator") or "").strip()
+    hbu_desc = (ctx.appraisal.value("highest_best_use_description") or "").strip()
+    ev = [
+        ctx.appraisal.evidence("highest_and_best_use"),
+        ctx.appraisal.evidence("highest_best_use_indicator"),
+        ctx.appraisal.evidence("highest_best_use_description"),
+    ]
+    fields = ["highest_and_best_use", "highest_best_use_indicator", "highest_best_use_description"]
+
+    # Any positive HBU signal → the existing ST-6 covers the hard cases (HOLD on No).
+    # Here we only surface the case where all three fields are blank — the appraiser
+    # left the section empty, which requires a reviewer to confirm.
+    any_populated = any([hbu, hbu_ind, hbu_desc])
+    if any_populated:
+        return _res("ST-HBU", "ST-hbu", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    return _res(
+        "ST-HBU", "ST-hbu", RuleStatus.VERIFY,
+        message="Highest and best use statement could not be confirmed; please verify "
+                "the H&BU section is completed.",
+        fields=fields, evidence=ev, confidence=0.5,
+    )
+
+
+# ---- ST-ZONE-NC Zoning non-conformance → commentary check ------------------
+#
+# Complements ST-5 (which fires when zoning_compliance is extracted as
+# "Legal Non-Conforming").  This rule also inspects addendum_text for
+# non-conformance language when the checkbox field was not extracted, and
+# routes to Layer-B to gauge whether the required commentary is present.
+
+@rule(id="ST-ZONE-NC", num="ST-zone-nc", section="site", phase=3,
+      name="Zoning non-conformance commentary")
+def st_zone_nc(ctx: QCContext):
+    comp = (ctx.appraisal.value("zoning_compliance") or "").lower()
+    addendum = (ctx.appraisal.value("addendum_text") or "").lower()
+    ev = [
+        ctx.appraisal.evidence("zoning_compliance"),
+        ctx.appraisal.evidence("addendum_text"),
+    ]
+    fields = ["zoning_compliance", "addendum_text"]
+
+    # Only fire when there is a non-conformance signal; ST-5 owns the primary
+    # zoning_compliance check.  This rule adds coverage via addendum scanning.
+    _NC = re.compile(r"(non[- ]?conform|grandfather|legal\s+non)", re.I)
+    nc_in_comp = ("non" in comp and "conform" in comp)
+    nc_in_addendum = bool(_NC.search(addendum))
+
+    if not nc_in_comp and not nc_in_addendum:
+        return _res("ST-ZONE-NC", "ST-zone-nc", RuleStatus.NOT_APPLICABLE,
+                    fields=fields, evidence=ev)
+
+    # There IS a non-conformance signal → check whether the narrative addresses it.
+    facts = (
+        "legal non-conforming zoning indicated in "
+        + ("compliance field" if nc_in_comp else "")
+        + (" and " if nc_in_comp and nc_in_addendum else "")
+        + ("addendum text" if nc_in_addendum else "")
+    )
+    v = layer_b.assess(ctx, concern="zoning",
+                       base_message=qc_config.template("ST-5-nonconforming"),
+                       facts=facts)
+    return _res("ST-ZONE-NC", "ST-zone-nc", v.status, message=v.message,
+                reasoning=v.reasoning, fields=fields,
+                template_id="ST-5-nonconforming", evidence=ev, confidence=v.confidence)
+
+
+# ---- ST-FLOOD-CMT Flood zone present → marketability commentary -------------
+#
+# fires when: flood_zone_indicator == Y/Yes/true/1 OR flood_zone_id starts with
+# A or V (SFHA prefix).  Checks whether the addendum or any narrative contains
+# flood-related commentary.  Does NOT duplicate ST-8 (completeness of FEMA data
+# fields); this rule focuses solely on whether the marketability impact is
+# discussed in a narrative.
+
+def _in_flood_zone(ctx: QCContext) -> bool:
+    ind = (ctx.appraisal.value("flood_zone_indicator") or "").strip().lower()
+    if ind in ("y", "yes", "true", "1"):
+        return True
+    zone_id = (ctx.appraisal.value("flood_zone_id") or "").upper().strip()
+    # SFHA zone codes start with A or V (AE, AO, AH, VE, V, A, A99…)
+    if zone_id and zone_id[0] in ("A", "V"):
+        return True
+    return False
+
+
+@rule(id="ST-FLOOD-CMT", num="ST-flood-cmt", section="site", phase=5,
+      applies_when=_in_flood_zone,
+      name="Flood zone present — marketability commentary required")
+def st_flood_cmt(ctx: QCContext):
+    zone_id = (ctx.appraisal.value("flood_zone_id") or "Unknown").strip()
+    addendum = (ctx.appraisal.value("addendum_text") or "").lower()
+    ev = [
+        ctx.appraisal.evidence("flood_zone_indicator"),
+        ctx.appraisal.evidence("flood_zone_id"),
+        ctx.appraisal.evidence("addendum_text"),
+    ]
+    fields = ["flood_zone_indicator", "flood_zone_id", "addendum_text"]
+
+    _FLOOD_RX = re.compile(
+        r"flood|fema|sfha|special\s+flood|insurance\s+(requir|premium|impact)|"
+        r"national\s+flood|nfip", re.I,
+    )
+
+    # Also check the narrative fields that layer_b aggregates.
+    narrative = layer_b.narrative_text(ctx)
+    addressed = bool(_FLOOD_RX.search(addendum) or _FLOOD_RX.search(narrative))
+
+    if addressed:
+        return _res("ST-FLOOD-CMT", "ST-flood-cmt", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    return _res(
+        "ST-FLOOD-CMT", "ST-flood-cmt", RuleStatus.VERIFY,
+        message=qc_config.template("ST-FLOOD-CMT", zone=zone_id),
+        template_id="ST-FLOOD-CMT", fields=fields, evidence=ev, confidence=0.7,
+    )
+
+
+# ---- ST-RIGHTS Leasehold property rights disclosure ------------------------
+#
+# Phase 2: fires when property_rights field is blank (VERIFY) or Leasehold (FAIL
+# unless remaining-lease commentary found in addendum/narrative).
+
+@rule(id="ST-RIGHTS", num="ST-rights", section="site", phase=2,
+      name="Leasehold property rights disclosure")
+def st_rights_lease(ctx: QCContext):
+    rights = (ctx.appraisal.value("property_rights") or "").strip()
+    addendum = (ctx.appraisal.value("addendum_text") or "").lower()
+    ev = [
+        ctx.appraisal.evidence("property_rights"),
+        ctx.appraisal.evidence("addendum_text"),
+    ]
+    fields = ["property_rights", "addendum_text"]
+
+    if not rights:
+        return _res("ST-RIGHTS", "ST-rights", RuleStatus.VERIFY,
+                    message=qc_config.template("S-11-rights"),
+                    template_id="S-11-rights", fields=fields, evidence=ev, confidence=0.5)
+
+    if rights.lower() not in ("leasehold",):
+        return _res("ST-RIGHTS", "ST-rights", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    # Leasehold: the report must discuss the remaining lease term.
+    _LEASE_RX = re.compile(
+        r"(remaining\s+)?lease\s+term|leasehold\s+(interest|value|impac|discount)|"
+        r"years?\s+(remaining|left)\s+(on\s+the\s+)?lease|ground\s+rent|"
+        r"land\s+lease|leasehold\s+estate", re.I,
+    )
+    narrative = layer_b.narrative_text(ctx)
+    addressed = bool(_LEASE_RX.search(addendum) or _LEASE_RX.search(narrative.lower()))
+
+    if addressed:
+        return _res("ST-RIGHTS", "ST-rights", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    return _res(
+        "ST-RIGHTS", "ST-rights", RuleStatus.FAIL,
+        message=qc_config.template("ST-RIGHTS-LEASE"),
+        template_id="ST-RIGHTS-LEASE", fields=fields, evidence=ev, confidence=0.8,
+    )
+
+
+# ---- ST-PRIOR-SVC Prior services disclosure --------------------------------
+#
+# Fires in signature section (phase 2).  Checks whether prior services are
+# indicated (indicator field = "Y" OR addendum mentions it), and if so, whether
+# a description is present.
+
+@rule(id="ST-PRIOR-SVC", num="ST-prior-svc", section="signature", phase=2,
+      name="Prior services disclosure")
+def st_prior_svc(ctx: QCContext):
+    ind = (ctx.appraisal.value("prior_services_indicator") or "").strip().lower()
+    desc = (ctx.appraisal.value("prior_services_description") or "").strip()
+    addendum = (ctx.appraisal.value("addendum_text") or "").lower()
+    ev = [
+        ctx.appraisal.evidence("prior_services_indicator"),
+        ctx.appraisal.evidence("prior_services_description"),
+        ctx.appraisal.evidence("addendum_text"),
+    ]
+    fields = ["prior_services_indicator", "prior_services_description", "addendum_text"]
+
+    _PRIOR_RX = re.compile(
+        r"prior\s+(service|appraisal|assignment)|previously\s+appraised|"
+        r"prior\s+(inspection|review)", re.I,
+    )
+
+    # Determine if prior services are indicated.
+    indicator_yes = ind in ("y", "yes", "true", "1")
+    addendum_mentions = bool(_PRIOR_RX.search(addendum))
+
+    if not indicator_yes and not addendum_mentions:
+        # No signal → N/A (silence is correct, not a finding).
+        return _res("ST-PRIOR-SVC", "ST-prior-svc", RuleStatus.NOT_APPLICABLE,
+                    fields=fields, evidence=ev)
+
+    # Prior services are indicated — check for a description.
+    has_description = bool(desc) or bool(
+        re.search(
+            r"(prior\s+(service|appraisal|assignment)).{0,200}(date|type|role|inspect|review)",
+            addendum, re.I | re.DOTALL,
+        )
+    )
+    if has_description:
+        return _res("ST-PRIOR-SVC", "ST-prior-svc", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    # Indicated but no description → FAIL using the existing ADD-9-services template.
+    return _res(
+        "ST-PRIOR-SVC", "ST-prior-svc", RuleStatus.FAIL,
+        message=qc_config.template("ADD-9-services"),
+        template_id="ADD-9-services", fields=fields, evidence=ev, confidence=0.75,
+    )
+
+
+# ---- ST-INTENDED Intended use and user stated ------------------------------
+#
+# USPAP requires the intended use AND intended user to be identified.
+# Phase 1, section "subject" (appears early in the report / addendum).
+
+@rule(id="ST-INTENDED", num="ST-intended", section="subject", phase=1,
+      name="Intended use and intended user stated")
+def st_intended(ctx: QCContext):
+    addendum = (ctx.appraisal.value("addendum_text") or "")
+    narrative = layer_b.narrative_text(ctx)
+    combined = addendum + " " + narrative
+    ev = [ctx.appraisal.evidence("addendum_text")]
+    fields = ["addendum_text"]
+
+    has_use = bool(re.search(r"intended\s+use", combined, re.I))
+    has_user = bool(re.search(
+        r"intended\s+user|lender.{0,60}(client|user)|client.{0,40}lender", combined, re.I,
+    ))
+
+    if has_use and has_user:
+        return _res("ST-INTENDED", "ST-intended", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    return _res(
+        "ST-INTENDED", "ST-intended", RuleStatus.VERIFY,
+        message=qc_config.template("ST-INTENDED"),
+        template_id="ST-INTENDED", fields=fields, evidence=ev, confidence=0.6,
+    )
+
+
+# ---- ST-SCOPE Scope of work stated -----------------------------------------
+#
+# USPAP requires a stated scope of work.  Phase 1, section "subject".
+
+@rule(id="ST-SCOPE", num="ST-scope", section="subject", phase=1,
+      name="Scope of work stated")
+def st_scope(ctx: QCContext):
+    addendum = (ctx.appraisal.value("addendum_text") or "")
+    narrative = layer_b.narrative_text(ctx)
+    combined = addendum + " " + narrative
+    ev = [ctx.appraisal.evidence("addendum_text")]
+    fields = ["addendum_text"]
+
+    if re.search(r"scope\s+of\s+work", combined, re.I):
+        return _res("ST-SCOPE", "ST-scope", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    return _res(
+        "ST-SCOPE", "ST-scope", RuleStatus.VERIFY,
+        message=qc_config.template("ST-SCOPE"),
+        template_id="ST-SCOPE", fields=fields, evidence=ev, confidence=0.6,
+    )
+
+
+# ---- ST-FORM-MATCH Form type matches property type -------------------------
+#
+# Guards against submitting a single-family form for a condo or 2-4 unit.
+# Phase 1, section "subject".
+
+@rule(id="ST-FORM-MATCH", num="ST-form-match", section="subject", phase=1,
+      name="Form type matches property type")
+def st_form_match(ctx: QCContext):
+    form = (ctx.form_type or "").strip()
+    design = (ctx.appraisal.value("design_style") or "").lower()
+    ev = [ctx.appraisal.evidence("design_style")]
+    fields = ["design_style"]
+
+    if not form:
+        return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.NOT_APPLICABLE,
+                    fields=fields, evidence=ev)
+
+    is_condo_design = bool(re.search(r"\bcondo(minium)?\b", design, re.I))
+
+    if form == "1004":
+        # 1004 is for detached single-family — flag if design looks like a condo.
+        if is_condo_design:
+            return _res(
+                "ST-FORM-MATCH", "ST-form-match", RuleStatus.FAIL,
+                message=qc_config.template("ST-FORM-MATCH", form="1004", prop_type=design or "condo"),
+                template_id="ST-FORM-MATCH", fields=fields, evidence=ev, confidence=0.8,
+            )
+        return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    if form == "1073":
+        # 1073 is for condominiums — flag if design does not contain condo.
+        if not is_condo_design:
+            return _res(
+                "ST-FORM-MATCH", "ST-form-match", RuleStatus.VERIFY,
+                message=qc_config.template("ST-FORM-MATCH", form="1073",
+                                           prop_type=design or "non-condo"),
+                template_id="ST-FORM-MATCH", fields=fields, evidence=ev, confidence=0.6,
+            )
+        return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    if form == "1025":
+        # 1025 is for 2-4 unit — flag if design signals single-family detached without
+        # any unit count evidence (we cannot check units_count here without duplication,
+        # so we limit to an obvious single-family design signal).
+        if is_condo_design:
+            return _res(
+                "ST-FORM-MATCH", "ST-form-match", RuleStatus.VERIFY,
+                message=qc_config.template("ST-FORM-MATCH", form="1025",
+                                           prop_type=design or "condo"),
+                template_id="ST-FORM-MATCH", fields=fields, evidence=ev, confidence=0.6,
+            )
+        return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.PASS, fields=fields, evidence=ev)
+
+    # Unrecognised form type — cannot evaluate.
+    return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.NOT_APPLICABLE,
+                fields=fields, evidence=ev)
+
+
+# ---- ST-GEO-COMP Appraiser geographic competency ---------------------------
+#
+# When the appraiser's license state differs from the property state, USPAP
+# requires the appraiser to demonstrate geographic competency.  The rule fires
+# a VERIFY (not FAIL) because geographic competency may be addressed in the
+# limiting conditions or addendum, not as a hard violation.
+# Phase 2, section "signature".
+
+@rule(id="ST-GEO-COMP", num="ST-geo-comp", section="signature", phase=2,
+      name="Appraiser geographic competency")
+def st_geo_comp(ctx: QCContext):
+    lic_state = (ctx.appraisal.value("appraiser_license_state") or "").strip().upper()
+    prop_state = (ctx.appraisal.value("state") or "").strip().upper()
+    ev = [
+        ctx.appraisal.evidence("appraiser_license_state"),
+        ctx.appraisal.evidence("state"),
+    ]
+    fields = ["appraiser_license_state", "state"]
+
+    if not lic_state or not prop_state:
+        # Cannot evaluate without both data points → SKIPPED (data missing).
+        return _res("ST-GEO-COMP", "ST-geo-comp", RuleStatus.NOT_APPLICABLE,
+                    message="Appraiser license state or property state could not be read; "
+                            "geographic competency check skipped.",
+                    fields=fields, evidence=ev)
+
+    if lic_state == prop_state:
+        return _res("ST-GEO-COMP", "ST-geo-comp", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
+    # States differ — surface for reviewer confirmation (VERIFY, not FAIL).
+    return _res(
+        "ST-GEO-COMP", "ST-geo-comp", RuleStatus.VERIFY,
+        message=qc_config.template("ST-GEO-COMP", lic_state=lic_state, prop_state=prop_state),
+        template_id="ST-GEO-COMP", fields=fields, evidence=ev, confidence=0.7,
+    )

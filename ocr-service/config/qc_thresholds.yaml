@@ -34,6 +34,7 @@ semantic:
   sca2_min_listings_declining: 1  # same threshold under declining-market/over-supply trigger
   sca_br2_min_above: 2            # Champions Funding: min adjusted comps at/above final value
   sca_psh_large_gain_pct: 30.0   # prior-sale value increase % that triggers SCA-PSH escalation
+  approach_value_deviation_pct: 10.0  # final value vs developed approach range tolerance (%)
 
   # ---- Layer-B / Layer-C severity calibration (MIRA three-layer model) -------
   # Judgment rules (adjustments, comp selection, market trend, dated comps) route
@@ -43,6 +44,16 @@ semantic:
   # engine softens an asserted finding toward a confirm. Tune here without code.
   layer_b_conf_explained: 0.4    # narrative addresses the concern → low-severity confirm
   layer_b_conf_unexplained: 0.7  # no explanation found → full-severity VERIFY
+  approach_value_deviation_pct: 10.0  # final value vs developed approach range tolerance (%)
+
+  # ---- CG-* comparable-grid supplemental rules ----------------------------
+  comp_distance_urban_miles: 1.0          # CG-DIST: max distance for Urban area type
+  comp_distance_suburban_miles: 5.0       # CG-DIST: max distance for Suburban area type
+  comp_distance_rural_miles: 10.0         # CG-DIST: max distance for Rural area type
+  comp_prior_sale_window_months: 36       # CG-PRIOR-SALE: look-back window for comp prior sale
+  comp_prior_sale_change_pct: 25.0        # CG-PRIOR-SALE: price change % threshold for flag
+  comp_time_adj_variance_pct: 50.0        # CG-TIME-CONSIST: max rate variance % before flag
+  comp_cond_adj_tolerance: 5000           # CG-COND-CONSIST: dollar tolerance for condition adj consistency
 
 # Subject-section content validation (S-4 / S-5). Editable per experience (P-4).
 subject:

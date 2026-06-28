@@ -393,13 +393,108 @@ def _llm_gap_fill(text: str, missing) -> Dict[str, str]:
         return {}
 
 
+# ---------------------------------------------------------------------------
+# Concessions description extraction
+# ---------------------------------------------------------------------------
+
+# Common concession type labels found in financing sections of purchase contracts.
+_CONCESSION_TYPE_LABELS = re.compile(
+    r"(closing\s*costs?|buyer['']?s?\s*(?:closing\s*)?costs?|"
+    r"pre-?paid[s]?|points|origination|discount\s*points?|"
+    r"interest\s*rate\s*buy[\s-]?down|buy[\s-]?down|"
+    r"seller[\s-]?paid\s*(?:closing\s*)?costs?|"
+    r"seller\s*contributions?|seller\s*concessions?|"
+    r"buyer['']?s?\s*expenses?|repairs?|fix-?ups?)",
+    re.I,
+)
+
+
+def _concessions_description(text: str) -> Optional[str]:
+    """Extract a brief concession-type description from the financing section.
+
+    Scans the 10 lines surrounding any concession context line and collects
+    all descriptive type labels (closing costs, points, buy-down, etc.).
+    Returns a comma-separated string of unique labels, or None when none found.
+    """
+    lines = text.splitlines()
+    hits: List[str] = []
+    for i, ln in enumerate(lines):
+        if not _CONCESSION_CTX.search(ln):
+            continue
+        window = "\n".join(lines[max(0, i - 2):i + 8])
+        for m in _CONCESSION_TYPE_LABELS.finditer(window):
+            label = re.sub(r"\s+", " ", m.group(1)).strip().lower()
+            if label not in hits:
+                hits.append(label)
+    return ", ".join(hits) if hits else None
+
+
+# ---------------------------------------------------------------------------
+# Public classification and execution-status helpers
+# (used by ContractPackage.from_single_path and downstream rule checks)
+# ---------------------------------------------------------------------------
+
+_AMENDMENT_PHRASES_PUB = re.compile(
+    r"(amendment|addendum\s+to\s+(purchase|contract)|change\s+in\s+terms|"
+    r"revised\s+(purchase|contract)|modification\s+of\s+(purchase|agreement)|"
+    r"counter\s*offer|counter-?offer|backup\s+offer)",
+    re.I,
+)
+
+
+def classify_contract_document(text: str) -> str:
+    """Return "amendment" if the text is an amendment/addendum, else "base".
+
+    Used by ContractPackage to distinguish the controlling base contract from
+    subsequent amendments so the package can resolve the final transaction state.
+    """
+    return "amendment" if _AMENDMENT_PHRASES_PUB.search(text) else "base"
+
+
+_CHECK_UNSIGNED = re.compile(
+    r"(not\s+(signed|executed)|unsigned|awaiting\s+signature|"
+    r"will\s+be\s+executed|executed\s+at\s+closing)",
+    re.I,
+)
+_CHECK_SIG_BLOCK = re.compile(
+    r"(x___|_{4,}|signed[\s:]*([A-Z][a-z]+\s+[A-Z][a-z]+)|"
+    r"buyer\s+signature|seller\s+signature|by:\s*/s/)",
+    re.I,
+)
+
+
+def check_execution_status(text: str) -> bool:
+    """Return True when the contract document appears to be fully executed.
+
+    Heuristic: if any explicit unexecuted language is present the document is
+    not executed. Otherwise, two or more distinct signature-block markers
+    (buyer + seller) indicate it is executed.  The caller should treat the
+    result as advisory — the appraiser's own contract analysis commentary
+    (checked by C-EXEC) is the authoritative signal for rule purposes.
+    """
+    tail = text[-3000:]  # signature blocks live at the end
+    if _CHECK_UNSIGNED.search(tail):
+        return False
+    return len(_CHECK_SIG_BLOCK.findall(tail)) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Main extraction entry point
+# ---------------------------------------------------------------------------
+
 def extract_contract_fields(pdf_path, ocr_max_pages: int = 13) -> Dict[str, str]:
     """Return {canonical_field: value} from the sales contract (best effort).
 
     Embedded text is read from EVERY page (cheap — a 42-page condo developer
     agreement keeps its price schedule and signatures deep in the document);
     Tesseract OCR for image-only pages is capped at ocr_max_pages, which covers
-    the whole scanned TREC One-to-Four including the EXECUTED block (~page 9)."""
+    the whole scanned TREC One-to-Four including the EXECUTED block (~page 9).
+
+    The returned dict always includes the private keys:
+      ``_raw_text`` — full concatenated document text (used by ContractPackage)
+      ``_path``     — resolved file path string (used by ContractPackage)
+    These private keys are stripped by the overlay layer before persisting.
+    """
     pdf_path = Path(pdf_path)
     try:
         doc = fitz.open(str(pdf_path))
@@ -432,6 +527,9 @@ def extract_contract_fields(pdf_path, ocr_max_pages: int = 13) -> Dict[str, str]
         conc = _trec_concessions(text, price)
     if conc is not None:
         out["concessions_amount"] = conc
+    conc_desc = _concessions_description(text)
+    if conc_desc:
+        out["concessions_description"] = conc_desc
     items = _personal_property(text)
     if items:
         out["personal_property_items"] = items
@@ -445,4 +543,10 @@ def extract_contract_fields(pdf_path, ocr_max_pages: int = 13) -> Dict[str, str]
                if f not in out]
     if missing:
         out.update(_llm_gap_fill(text, missing))
+    # Private metadata used by ContractPackage — stripped by _overlay_contract
+    # before the result set is persisted (these keys start with "_" which the
+    # overlay loop skips: `if not value: continue` rejects blank, and the
+    # ExtractionResult canonical_name validation ignores underscore-prefixed keys).
+    out["_raw_text"] = text
+    out["_path"] = str(pdf_path)
     return out

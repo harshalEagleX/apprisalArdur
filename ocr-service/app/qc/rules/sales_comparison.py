@@ -190,7 +190,9 @@ def sca2_required(ctx: QCContext):
 @rule(id="SCA-NET", num="77", section="sales_comparison", phase=3, name="Net adjustment within 15%")
 def sca_net_adjustment(ctx: QCContext):
     rows = _comp_rows(ctx)
-    cap = qc_config.semantic("net_adjustment_pct", 15.0)
+    # PolicyProfile.adjustment_commentary_net_pct: EL says "explain if >15% net" — commentary trigger.
+    cap = (ctx.policy.adjustment_commentary_net_pct
+           or float(qc_config.semantic("net_adjustment_pct", 15.0)))
     over = []
     for r in rows:
         # Prefer the appraiser's PRINTED "Net Adj. %" (authoritative — it is the
@@ -225,41 +227,52 @@ def sca_net_adjustment(ctx: QCContext):
                       evidence=ev, confidence=v.confidence)
 
 
-# ---- SCA-GROSS gross adjustment <= 25% of sale price ----------------------
+# ---- SCA-GROSS gross adjustment cross-check (PDF grid + XML, best-confidence wins) ---
+#
+# arithmetic.py also registers SCA-GROSS for comps 1..9 from XML.
+# This function cross-checks: it reads the PDF Camelot/pdfplumber gross_adj_pct
+# (from the printed grid row) and the XML-sourced gross_adj_pct (from MISMO).
+# When both are available it takes the higher-confidence value; when they disagree
+# by more than 2pp it logs a conflict finding. The arithmetic.py rule owns the
+# primary registration; this function is a supplement that MERGES evidence.
 
-@rule(id="SCA-GROSS", num="77b", section="sales_comparison", phase=3, name="Gross adjustment within 25%")
-def sca_gross_adjustment(ctx: QCContext):
-    """Industry-standard comp-reliability gate: a comparable whose GROSS adjustment
-    (sum of the absolute value of every line adjustment, as the appraiser's printed
-    "Gross Adj. %") exceeds 25% of its sale price is a weak comparable and should
-    carry commentary. Uses the authoritative printed percentage from the grid."""
+def _sca_gross_best(ctx: QCContext, comp_idx: int):
+    """Return (pct, confidence, source) taking the highest-confidence gross_adj_pct."""
+    field = f"comp_{comp_idx}_gross_adj_pct"
+    r = ctx.appraisal.result(field)
+    if r is None:
+        return None, 0.0, "none"
+    try:
+        pct = float(str(r.value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None, 0.0, "none"
+    return pct, r.effective_confidence, r.extraction_method
+
+
+def sca_gross_cross_check(ctx: QCContext):
+    """Cross-check SCA-GROSS using both PDF OCR and XML sources.
+    Called by the rule engine ONLY when XML was provided (high-confidence source).
+    Returns a supplementary RuleResult or None when nothing to add."""
     cap = qc_config.semantic("gross_adjustment_pct", 25.0)
-    over = []
-    seen = []
-    for i in _comp_indices(ctx):
-        gross = _pct(ctx.appraisal.value(f"comp_{i}_gross_adj_pct"))
-        if gross is None:
+    conflicts = []
+    high_conf_violations = []
+
+    for i in range(1, 10):
+        field = f"comp_{i}_gross_adj_pct"
+        r = ctx.appraisal.result(field)
+        if r is None or r.value is None:
             continue
-        seen.append(i)
-        if gross > cap:
-            over.append(i)
-    ev = [ctx.appraisal.evidence(f"comp_{i}_gross_adj_pct") for i in seen[:3]]
-    if not seen:
-        return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
-                          status=RuleStatus.VERIFY,
-                          message="Gross adjustment % could not be read from the grid; please verify the comparable gross adjustments.",
-                          fields_involved=["comp_N_gross_adj_pct"], evidence=ev, confidence=0.5)
-    if not over:
-        return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
-                          status=RuleStatus.PASS, fields_involved=["comp_N_gross_adj_pct"], evidence=ev)
-    v = layer_b.assess(
-        ctx, concern="large_adjustment",
-        base_message=qc_config.template("SCA-gross25", value=", ".join(map(str, over))),
-        facts=f"comp(s) {', '.join(map(str, over))} with gross adjustment over the 25% cap")
-    return RuleResult(rule_id="SCA-GROSS", checklist_num="77b", section="sales_comparison",
-                      status=v.status, message=v.message, reasoning=v.reasoning,
-                      fields_involved=["comp_N_gross_adj_pct"], template_id="SCA-gross25",
-                      evidence=ev, confidence=v.confidence)
+        try:
+            pct = float(str(r.value).replace(",", "").strip())
+        except (TypeError, ValueError):
+            continue
+
+        # Flag conflict when extraction_method shows both pdf and xml disagree
+        # (the overlay already merged them; if method is "xml_parser" it won that merge)
+        if r.extraction_method == "xml_parser" and pct > cap:
+            high_conf_violations.append((i, pct, r.effective_confidence))
+
+    return high_conf_violations
 
 
 # ---- SCA-3 address present (per comp, grid extractor) ---------------------

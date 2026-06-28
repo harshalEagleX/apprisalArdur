@@ -610,7 +610,65 @@ def _overlay_locate(rs, pdf):
     return rs
 
 
+def _overlay_xml(rs, xml_path, dtype):
+    """Overlay MISMO 2.6 GSE XML fields on top of the PDF extraction result.
+
+    XML is the primary structured source — every field it produces carries
+    confidence 0.97 (vs the PDF extractors' 0.82–0.92), so in DocView the XML
+    value wins whenever both sources disagree.  Fields the XML does not cover
+    (e.g. narrative text from addendum body) are left untouched.
+    No-op when xml_path is None or XML parsing fails (P-6)."""
+    if xml_path is None:
+        return rs
+    try:
+        from app.extraction.xml_extractor import extract_xml
+        xml_rs = extract_xml(xml_path)
+    except Exception as exc:
+        logger.warning("XML overlay failed for %s: %s", Path(xml_path).name, exc)
+        return rs
+    if not xml_rs.found_results():
+        return rs
+    existing = {name: r for name, r in rs}
+    # Merge: XML result wins on confidence, PDF result kept when XML has no value
+    from dataclasses import replace as _replace
+    for name, xml_r in xml_rs:
+        prev = existing.get(name)
+        if prev is None or xml_r.effective_confidence > prev.effective_confidence:
+            existing[name] = _replace(xml_r, document_type=dtype)
+    return _rebuild(rs, dtype, existing, ocr_method="xml_parser+layered")
+
+
+def _infer_txn_type(sets: dict) -> str:
+    """Infer transaction type from ExtractionResultSet objects in `sets`."""
+    for role in ("appraisal", "engagement"):
+        rs = sets.get(role)
+        if rs is None:
+            continue
+        # ExtractionResultSet supports .get(canonical)
+        try:
+            r = rs.get("assignment_type")
+            t = (r.value if r and r.found else "").lower()
+        except Exception:
+            continue
+        if "purchase" in t:
+            return "purchase"
+        if "refinance" in t or "refi" in t:
+            return "refinance"
+    return "unknown"
+
+
+def _infer_txn_type_from_fields(eng_fields: dict) -> str:
+    """Infer transaction type from the raw engagement field dict (pre-ResultSet)."""
+    t = (eng_fields.get("assignment_type") or "").lower()
+    if "purchase" in t:
+        return "purchase"
+    if "refinance" in t or "refi" in t:
+        return "refinance"
+    return "unknown"
+
+
 def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path=None,
+                             xml_path=None,
                              transaction_id: Optional[str] = None, persist: bool = True,
                              progress=None, engagement_status: Optional[str] = None):
     """Run QC from explicit document paths (what the Java backend supplies via
@@ -650,11 +708,117 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
 
     transaction_id = transaction_id or str(Path(appraisal_path).stem)
     sets = {}
-    # Progress messages use the same plain-language vocabulary as the stage labels
-    # in python_response._STAGE_LABELS — no implementation jargon shown to users.
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 1 — Document classification (implicit: each file's type is known
+    #           from the caller — appraisal/engagement/contract paths are
+    #           typed at the API boundary). Document classifier runs inside
+    #           pipeline_runner.py for standalone use; here paths are typed.
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 2 — Engagement letter: Job 1 (order field extraction) +
+    #           Job 2 (policy overlay extraction).
+    #
+    # The engagement letter IS the order in this system — extracted FIRST so
+    # OrderMetadata and PolicyProfile are ready before any other extractor.
+    # ═══════════════════════════════════════════════════════════════════════
+    eng_status = engagement_status
+    eng_raw_text = ""
+    eng_raw_fields: dict = {}
+    eng_overlay = None
+
+    if engagement_path:
+        _emit("extract_engagement", "Reading the engagement letter", 8.0)
+        try:
+            from app.extraction.engagement_extractor import (
+                extract_engagement_fields, extract_engagement,
+            )
+            eng_raw_fields = extract_engagement_fields(Path(engagement_path))
+            eng = extract_engagement(Path(engagement_path), "engagement_letter")
+            eng = _overlay_locate(eng, Path(engagement_path))
+            sets["engagement"] = eng
+            # Full text for overlay + hash
+            try:
+                import fitz as _fitz
+                _doc = _fitz.open(str(engagement_path))
+                eng_raw_text = "\n".join(
+                    _doc[i].get_text("text") for i in range(len(_doc))
+                )
+                _doc.close()
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error("Engagement extraction failed: %s", exc)
+
+        # Job 2 — policy overlay (deterministic regex over full letter text)
+        try:
+            from app.qc.engagement_overlay import EngagementOverlay
+            eng_overlay = EngagementOverlay.from_text(eng_raw_text) if eng_raw_text \
+                else EngagementOverlay.from_pdf(engagement_path)
+        except Exception as exc:
+            logger.warning("EngagementOverlay extraction failed: %s", exc)
+            from app.qc.engagement_overlay import EngagementOverlay
+            eng_overlay = EngagementOverlay.empty()
+
+        if eng_status is None and sets.get("engagement") is None:
+            eng_status = "EXTRACTION_FAILED"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 3 — Artifact inventory (what arrived vs what was expected).
+    # Runs before any extraction so missing-document warnings are logged
+    # before rules run. Rules can also read ctx.artifact_inventory.
+    # ═══════════════════════════════════════════════════════════════════════
+    from app.qc.artifact_inventory import ArtifactInventory
+    inventory = ArtifactInventory.build(
+        has_appraisal_pdf=bool(appraisal_path),
+        has_appraisal_xml=bool(xml_path),
+        has_engagement=bool(engagement_path) and sets.get("engagement") is not None,
+        has_contract=bool(contract_path),
+        transaction_type=_infer_txn_type_from_fields(eng_raw_fields),
+        engagement_status=eng_status,
+    )
+    for warn in inventory.warnings:
+        logger.warning("Artifact inventory: %s", warn)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 4 — OrderMetadata (built from engagement letter + XML pre-read).
+    # At this point XML may not yet be extracted — build with what we have.
+    # XML fallback fields are merged in Step 5 below.
+    # ═══════════════════════════════════════════════════════════════════════
+    from app.qc.order_metadata import OrderMetadata
+    order = OrderMetadata.from_extraction(
+        engagement_fields=eng_raw_fields,
+        xml_result_set=None,            # XML not yet extracted; updated in Step 5
+        engagement_raw_text=eng_raw_text,
+    )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 5 — Appraisal PDF + XML extraction.
+    # After XML is extracted, update OrderMetadata with fallback fields.
+    # ═══════════════════════════════════════════════════════════════════════
     _emit("extract_appraisal", "Reading the appraisal report", 10.0)
     rs = run_full_extraction(Path(appraisal_path), "appraisal_report", use_paddle=False)
     rs = _overlay_form_type(rs, Path(appraisal_path), "appraisal_report")
+
+    xml_rs = None
+    if xml_path:
+        _emit("xml_overlay", "Fusing appraisal XML structured data", 22.0)
+        try:
+            from app.extraction.xml_extractor import extract_xml
+            xml_rs = extract_xml(xml_path)
+        except Exception as exc:
+            logger.warning("XML extraction failed for OrderMetadata: %s", exc)
+        rs = _overlay_xml(rs, Path(xml_path), "appraisal_report")
+
+    # Now update OrderMetadata with XML fallbacks
+    if xml_rs is not None:
+        order = OrderMetadata.from_extraction(
+            engagement_fields=eng_raw_fields,
+            xml_result_set=xml_rs,
+            engagement_raw_text=eng_raw_text,
+        )
+
     _emit("sca_grid", "Reading the comparable sales grid", 28.0)
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")
     _emit("sca_llm", "Analyzing comparable sales", 36.0)
@@ -670,29 +834,58 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     _emit("locate", "Preparing review highlights", 44.0)
     rs = _overlay_locate(rs, Path(appraisal_path))
     sets["appraisal"] = rs
-    if engagement_path:
-        _emit("extract_engagement", "Reading the engagement letter", 45.0)
-        eng = run_full_extraction(Path(engagement_path), "engagement_letter", use_paddle=False)
-        eng = _overlay_engagement(eng, Path(engagement_path), "engagement_letter")
-        sets["engagement"] = _overlay_locate(eng, Path(engagement_path))
-    if contract_path:
-        _emit("extract_contract", "Reading the sales contract", 65.0)
-        con = run_full_extraction(Path(contract_path), "sales_contract", use_paddle=False)
-        con = _overlay_contract(con, Path(contract_path), "sales_contract")
-        sets["contract"] = _overlay_locate(con, Path(contract_path))
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 6 — PolicyProfile: AMC defaults → engagement overlay merged.
+    # No real AMC DB profiles yet — from_amc_id returns defaults for all.
+    # ═══════════════════════════════════════════════════════════════════════
+    from app.qc.policy_profile import PolicyProfile
+    policy = PolicyProfile.build(
+        amc_id=order.amc_id,
+        loan_type=order.loan_type,          # loads FHA/USDA/VA sub-profile from amc_policies.yaml
+        overlay=eng_overlay,
+        engagement_hash=order.engagement_hash,
+    )
+    logger.info(
+        "PolicyProfile built: amc=%s loan=%s stop_unsigned=%s "
+        "age_trigger=%s adj_gross_trigger=%s stop_c5c6=%s",
+        order.amc_id, order.loan_type,
+        policy.stop_on_unsigned_contract,
+        policy.comp_age_commentary_trigger_months,
+        policy.adjustment_commentary_gross_pct,
+        policy.stop_on_c5_c6,
+    )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 7 — Contract: NOT extracted (policy).
+    # Contract documents are NEVER OCR'd / read / extracted. We only record that
+    # one was provided so the reviewer can open it; every contract cross-document
+    # rule is flagged for manual verification against the contract. This avoids
+    # the slow, error-prone scanned-contract OCR entirely.
+    # ═══════════════════════════════════════════════════════════════════════
+    contract_pkg = None
+    contract_provided = bool(contract_path)
+    if contract_provided:
+        _emit("contract_skip", "Contract provided — flagged for manual review", 70.0)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # STEP 8 — Rule engine.
+    # ═══════════════════════════════════════════════════════════════════════
     _emit("rules", "Running quality checks", 85.0)
-    # When the engagement file was supplied but produced no extraction set, treat
-    # it as EXTRACTION_FAILED unless the caller said otherwise.
-    eng_status = engagement_status
-    if eng_status is None and engagement_path is not None and sets.get("engagement") is None:
-        eng_status = "EXTRACTION_FAILED"
+
     ctx = QCContext(
         transaction_id=transaction_id,
-        appraisal=sets.get("appraisal"), engagement=sets.get("engagement"),
-        contract=sets.get("contract"),
-        structured_conf=qc_config.structured_conf, checkbox_conf=qc_config.checkbox_conf,
+        appraisal=sets.get("appraisal"),
+        engagement=sets.get("engagement"),
+        contract=None,                       # contract is never extracted (policy)
+        contract_provided=contract_provided,
+        structured_conf=qc_config.structured_conf,
+        checkbox_conf=qc_config.checkbox_conf,
         engagement_status=eng_status,
+        policy=policy,
+        artifact_inventory=inventory,
+        contract_package=contract_pkg,
+        order_metadata=order,
     )
     report = run_qc(ctx)
     _finish_stage()
@@ -718,6 +911,31 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
     llm_telemetry.set_span("extraction")
     sets = extract_documents(folder)
     stage_ms = {"extraction": (perf_counter() - _t) * 1000.0}
+
+    # ---- Artifact inventory (folder-based path) -----------------------------
+    from app.qc.artifact_inventory import ArtifactInventory
+    _appraisal_pdf = _first_pdf(folder, "appraisal")
+    inventory = ArtifactInventory.build(
+        has_appraisal_pdf=_appraisal_pdf is not None,
+        has_appraisal_xml=False,    # folder-based path doesn't carry XML
+        has_engagement=sets.get("engagement") is not None,
+        has_contract=sets.get("contract") is not None,
+        transaction_type=_infer_txn_type(sets),
+    )
+    for warn in inventory.warnings:
+        logger.warning("Artifact inventory: %s", warn)
+
+    # ---- Policy profile (folder-based path) ---------------------------------
+    from app.qc.policy_profile import PolicyProfile
+    amc_id = None
+    try:
+        eng_set = sets.get("engagement")
+        if eng_set is not None:
+            amc_id = eng_set.get("amc_id") if hasattr(eng_set, "get") else None
+    except Exception:
+        pass
+    policy = PolicyProfile.from_amc_id(amc_id)
+
     ctx = QCContext(
         transaction_id=transaction_id,
         appraisal=sets.get("appraisal"),
@@ -725,6 +943,8 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
         contract=sets.get("contract"),
         structured_conf=qc_config.structured_conf,
         checkbox_conf=qc_config.checkbox_conf,
+        policy=policy,
+        artifact_inventory=inventory,
     )
     _t = perf_counter()
     llm_telemetry.set_span("rules")

@@ -104,3 +104,102 @@ def g1_loan_type(ctx: QCContext):
                           fields_involved=["loan_type", "fha_case_number"], evidence=ev)
     return RuleResult(rule_id="G-1", checklist_num="B", section="global",
                       status=RuleStatus.PASS, fields_involved=["loan_type"], evidence=ev)
+
+
+# ---- G-C56 C5/C6 condition → HOLD when AMC policy says stop ----------------
+# Source: Equity Solutions USA EL body: "C5 or C6 condition, please stop all work"
+# Activation: only when policy.stop_on_c5_c6 is True (loaded from amc_policies.yaml)
+
+@rule(id="G-C56", num="G-c56", section="global", phase=1,
+      applies_when=lambda ctx: ctx.policy.is_active("stop_on_c5_c6", default=False),
+      name="C5/C6 condition triggers AMC stop")
+def g_c56_stop(ctx: QCContext):
+    cond = (ctx.appraisal.value("subject_grid_condition_rating")
+            or ctx.appraisal.value("condition_rating") or "").upper().strip()
+    ev = [ctx.appraisal.evidence("subject_grid_condition_rating")]
+    if not cond:
+        return RuleResult(rule_id="G-C56", checklist_num="G-c56", section="global",
+                          status=RuleStatus.SKIPPED,
+                          message="Subject condition rating could not be read; C5/C6 stop check skipped.",
+                          fields_involved=["subject_grid_condition_rating"], evidence=ev)
+    if cond in ("C5", "C6"):
+        return RuleResult(rule_id="G-C56", checklist_num="G-c56", section="global",
+                          status=RuleStatus.HOLD,
+                          message=f"Subject property is rated {cond}. The engagement letter requires stopping all work and contacting the AMC before proceeding when the subject is in C5 or C6 condition.",
+                          fields_involved=["subject_grid_condition_rating"], evidence=ev)
+    return RuleResult(rule_id="G-C56", checklist_num="G-c56", section="global",
+                      status=RuleStatus.PASS, fields_involved=["subject_grid_condition_rating"], evidence=ev)
+
+
+# ---- G-LAVA Hawaiian lava zones 1 and 2 → HOLD when policy says stop --------
+# Source: Equity Solutions USA EL body: "lava zones 1 and 2, please stop all work"
+
+@rule(id="G-LAVA", num="G-lava", section="global", phase=1,
+      applies_when=lambda ctx: (
+          ctx.policy.is_active("stop_on_lava_zone", default=False)
+          and (ctx.order.state or "").upper() == "HI"
+      ),
+      name="Hawaiian lava zone triggers AMC stop")
+def g_lava_stop(ctx: QCContext):
+    addendum = (ctx.appraisal.value("addendum_text") or "").lower()
+    zip_code = (ctx.appraisal.value("zip_code") or ctx.order.zip_code or "")
+    ev = [ctx.appraisal.evidence("addendum_text")]
+
+    # Lava zones 1 and 2 are on the Big Island (Hawaii County, zip 967xx)
+    # Maui and Oahu properties are not in lava zones 1/2
+    if not zip_code.startswith("967"):
+        return RuleResult(rule_id="G-LAVA", checklist_num="G-lava", section="global",
+                          status=RuleStatus.PASS,
+                          message="Subject ZIP code does not indicate Big Island (lava zones 1-2 area); lava zone check passed.",
+                          fields_involved=["zip_code"], evidence=ev)
+
+    import re
+    if re.search(r"lava\s+zone\s*[12]\b", addendum, re.I):
+        return RuleResult(rule_id="G-LAVA", checklist_num="G-lava", section="global",
+                          status=RuleStatus.HOLD,
+                          message="The property appears to be in a Hawaiian lava zone 1 or 2. The engagement letter requires stopping all work and contacting the AMC immediately.",
+                          fields_involved=["addendum_text"], evidence=ev)
+
+    # Big Island property but no explicit lava zone mention — flag for reviewer
+    return RuleResult(rule_id="G-LAVA", checklist_num="G-lava", section="global",
+                      status=RuleStatus.VERIFY,
+                      message="Subject is in Hawaii (Big Island ZIP). Please confirm the property is not in lava zone 1 or 2; the engagement letter requires stopping work if it is.",
+                      fields_involved=["zip_code"], evidence=ev, confidence=0.6)
+
+
+# ---- G-MFG Pre-1976 manufactured home → HOLD when policy says stop ----------
+# Source: Equity Solutions USA EL body: "Manufactured Home built prior to June 15, 1976"
+
+@rule(id="G-MFG", num="G-mfg", section="global", phase=1,
+      applies_when=lambda ctx: ctx.policy.is_active("stop_on_pre1976_manufactured", default=False),
+      name="Pre-1976 manufactured home triggers AMC stop")
+def g_mfg_stop(ctx: QCContext):
+    design = (ctx.appraisal.value("design_style") or "").lower()
+    year_built_raw = ctx.appraisal.value("year_built") or ctx.order.zip_code
+    year_built_raw = ctx.appraisal.value("year_built") or ""
+    ev = [ctx.appraisal.evidence("design_style"), ctx.appraisal.evidence("year_built")]
+
+    import re
+    is_manufactured = re.search(r"manufactured|mobile\s+home|modular", design, re.I) is not None
+    if not is_manufactured:
+        return RuleResult(rule_id="G-MFG", checklist_num="G-mfg", section="global",
+                          status=RuleStatus.NOT_APPLICABLE,
+                          message="Property does not appear to be a manufactured home.",
+                          fields_involved=["design_style"], evidence=ev)
+
+    year_m = re.search(r"\b(19\d{2}|20\d{2})\b", str(year_built_raw))
+    if not year_m:
+        return RuleResult(rule_id="G-MFG", checklist_num="G-mfg", section="global",
+                          status=RuleStatus.VERIFY,
+                          message="Subject appears to be a manufactured home but the year built could not be confirmed. Please verify the subject was not built before June 15, 1976; the engagement letter requires stopping work if it was.",
+                          fields_involved=["year_built"], evidence=ev, confidence=0.5)
+
+    year = int(year_m.group(1))
+    if year < 1976:
+        return RuleResult(rule_id="G-MFG", checklist_num="G-mfg", section="global",
+                          status=RuleStatus.HOLD,
+                          message=f"Subject is a manufactured home built in {year}, which is before the June 15, 1976 HUD standard cutoff. The engagement letter requires stopping all work and contacting the AMC immediately.",
+                          fields_involved=["design_style", "year_built"], evidence=ev)
+
+    return RuleResult(rule_id="G-MFG", checklist_num="G-mfg", section="global",
+                      status=RuleStatus.PASS, fields_involved=["design_style", "year_built"], evidence=ev)

@@ -173,3 +173,73 @@ def sig4_email(ctx: QCContext):
                       status=RuleStatus.VERIFY, message=qc_config.template("SIG-4-email"),
                       fields_involved=["appraiser_email"], template_id="SIG-4-email",
                       evidence=ev, confidence=0.6)
+
+
+# ============================================================================
+# NEW RULES — appended below existing rules (do not modify above)
+# ============================================================================
+
+# ---- SIG-TRAINEE Trainee appraiser requires supervisory cosign --------------
+#
+# When the appraiser's license type identifies them as a trainee or apprentice,
+# USPAP and state regulations require a supervisory appraiser to co-sign.
+# Both the supervisory appraiser's name AND license/certificate number must be
+# present; missing either is a hard FAIL.
+
+import re as _re   # re is already imported at module level, but guard for append safety
+
+_TRAINEE_RX = _re.compile(
+    r"trainee|apprentice|(?<!\w)at\b|registered\s+appraiser\s+trainee", _re.I,
+)
+
+
+@rule(id="SIG-TRAINEE", num="SIG-trainee", section="signature", phase=2,
+      name="Trainee appraiser requires supervisory cosign")
+def sig_trainee(ctx: QCContext):
+    lic_type = (ctx.appraisal.value("appraiser_license_type") or "").strip()
+    sup_name = (ctx.appraisal.value("supervisory_appraiser_name") or "").strip()
+    sup_lic = (
+        ctx.appraisal.value("supervisory_appraiser_cert_number")
+        or ctx.appraisal.value("supervisory_appraiser_license_number")
+        or ""
+    ).strip()
+    ev = [
+        ctx.appraisal.evidence("appraiser_license_type"),
+        ctx.appraisal.evidence("supervisory_appraiser_name"),
+        ctx.appraisal.evidence("supervisory_appraiser_cert_number"),
+    ]
+    fields = [
+        "appraiser_license_type",
+        "supervisory_appraiser_name",
+        "supervisory_appraiser_cert_number",
+    ]
+
+    if not lic_type:
+        # Cannot evaluate — data missing.
+        return RuleResult(
+            rule_id="SIG-TRAINEE", checklist_num="SIG-trainee", section="signature",
+            status=RuleStatus.NOT_APPLICABLE,
+            message="Appraiser license type could not be read; trainee check skipped.",
+            fields_involved=fields, evidence=ev,
+        )
+
+    if not _TRAINEE_RX.search(lic_type):
+        # Not a trainee designation — rule does not apply.
+        return RuleResult(
+            rule_id="SIG-TRAINEE", checklist_num="SIG-trainee", section="signature",
+            status=RuleStatus.NOT_APPLICABLE, fields_involved=fields, evidence=ev,
+        )
+
+    # Trainee identified — supervisory name AND license are both required.
+    if sup_name and sup_lic:
+        return RuleResult(
+            rule_id="SIG-TRAINEE", checklist_num="SIG-trainee", section="signature",
+            status=RuleStatus.PASS, fields_involved=fields, evidence=ev,
+        )
+
+    return RuleResult(
+        rule_id="SIG-TRAINEE", checklist_num="SIG-trainee", section="signature",
+        status=RuleStatus.FAIL,
+        message=qc_config.template("SIG-TRAINEE", type=lic_type),
+        fields_involved=fields, template_id="SIG-TRAINEE", evidence=ev,
+    )

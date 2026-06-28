@@ -307,3 +307,110 @@ def c5_personal_property(ctx: QCContext):
                 message=qc_config.template("C-5-personal", value=items),
                 fields=["personal_property_items"], template_id="C-5-personal",
                 confidence=0.5, evidence=ev)
+
+
+# ---- C-PKG-UNEXEC — document-level execution status from ContractPackage ----
+# C-EXEC (above) checks the appraiser's OWN written commentary about execution
+# status.  C-PKG-UNEXEC is a complementary, independent check that reads the
+# execution signals from the contract PDF itself via ContractPackage, so both
+# the appraiser's claim AND the document evidence are evaluated.
+
+@rule(id="C-PKG-UNEXEC", num="C-pkg-unexec", section="contract", phase=1,
+      applies_when=_is_purchase, name="Contract package execution status (document-level)")
+def c_pkg_unexec(ctx: QCContext):
+    # Require a contract document to be present and parsed.
+    if not ctx.has_contract:
+        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.NOT_APPLICABLE,
+                    message="No purchase contract document provided; document-level "
+                            "execution check cannot run.")
+
+    # Read the ContractPackage attached by the transaction runner (Task 5).
+    pkg = getattr(ctx, "contract_package", None)
+    if pkg is None:
+        # Package was not built (extraction failure, old code path, or test) —
+        # gracefully skip rather than crash; C-EXEC still covers commentary.
+        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.SKIPPED,
+                    message="ContractPackage not available for this transaction; "
+                            "document-level execution check skipped.",
+                    fields=["contract_package"])
+
+    ev = [ctx.contract.evidence("buyer_names"),
+          ctx.contract.evidence("concessions_amount")]
+
+    if not pkg.documents:
+        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.SKIPPED,
+                    message="ContractPackage has no documents; document-level "
+                            "execution check skipped.",
+                    evidence=ev)
+
+    if pkg.resolved_execution_status:
+        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.PASS,
+                    message="The contract document(s) appear to be fully executed.",
+                    evidence=ev)
+
+    return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.HOLD,
+                message=qc_config.template("C-EXEC-unsigned"),
+                fields=["contract_package"],
+                template_id="C-EXEC-unsigned", evidence=ev)
+
+
+# ---- C-BUYER-MATCH — buyer names on contract vs borrower on engagement ------
+# When both documents are available, verify that every borrower named on the
+# engagement letter (order form) appears somewhere in the contract buyer list.
+# A mismatch does not automatically fail — the order may be in the buyer's
+# entity name, the buyer may be an LLC, or there may be a legitimate co-buyer
+# not yet on the order.  VERIFY surfaces it for human judgment.
+
+@rule(id="C-BUYER-MATCH", num="C-buyer-match", section="contract", phase=2,
+      applies_when=lambda ctx: _is_purchase(ctx) and ctx.has_contract and ctx.has_engagement,
+      name="Buyer names on contract match borrower(s) on engagement")
+def c_buyer_match(ctx: QCContext):
+    # Collect buyer name string from the contract extractor.
+    contract_buyers_raw = (ctx.contract.value("buyer_names") or "").strip()
+    ev = [ctx.contract.evidence("buyer_names"),
+          ctx.engagement.evidence("borrower_name"),
+          ctx.engagement.evidence("co_borrower_name")]
+
+    if not contract_buyers_raw:
+        # Extraction did not find buyer names — cannot compare; skip silently.
+        return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.SKIPPED,
+                    message="Buyer name(s) could not be extracted from the contract; "
+                            "borrower-name comparison skipped.",
+                    fields=["buyer_names"], evidence=ev)
+
+    # Collect borrower names from the engagement letter.
+    borrower = (ctx.engagement.value("borrower_name") or "").strip()
+    co_borrower = (ctx.engagement.value("co_borrower_name") or "").strip()
+    order_names = [n for n in (borrower, co_borrower) if n]
+
+    if not order_names:
+        return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.SKIPPED,
+                    message="Borrower name(s) could not be extracted from the engagement "
+                            "letter; borrower-name comparison skipped.",
+                    fields=["borrower_name"], evidence=ev)
+
+    # Fuzzy token match: every engagement borrower name token should appear in
+    # the contract buyer string.  We compare lowercase token sets so "John A.
+    # Smith" matches "JOHN SMITH" — middle initials are ignored when absent.
+    contract_buyers_lower = contract_buyers_raw.lower()
+
+    def _name_present(name: str) -> bool:
+        """True if all significant tokens of `name` appear in the buyer string."""
+        tokens = [t for t in re.split(r"[\s,&.]+", name.lower()) if len(t) > 1]
+        return all(tok in contract_buyers_lower for tok in tokens)
+
+    mismatched = [n for n in order_names if not _name_present(n)]
+
+    if not mismatched:
+        return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.PASS,
+                    fields=["buyer_names", "borrower_name"], evidence=ev)
+
+    order_label = " / ".join(order_names)
+    return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.VERIFY,
+                message=qc_config.template(
+                    "C-BUYER-MATCH",
+                    contract_buyers=contract_buyers_raw,
+                    order_borrowers=order_label,
+                ),
+                fields=["buyer_names", "borrower_name"],
+                template_id="C-BUYER-MATCH", evidence=ev, confidence=0.7)

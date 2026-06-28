@@ -14,10 +14,15 @@ declarative and the extraction contract stable (P-12).
 from __future__ import annotations
 
 import re
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from app.core.result import ExtractionResult, ExtractionResultSet
 from app.qc.result import Evidence
+
+if TYPE_CHECKING:
+    from app.qc.policy_profile import PolicyProfile
+    from app.qc.artifact_inventory import ArtifactInventory
+    from app.qc.order_metadata import OrderMetadata
 
 # Confidence below which a structured-field value is "uncertain" → rule downgraded
 # to VERIFY rather than asserted PASS/FAIL. Overridden from qc_thresholds.yaml.
@@ -82,6 +87,10 @@ class QCContext:
         structured_conf: float = DEFAULT_STRUCTURED_CONF,
         checkbox_conf: float = DEFAULT_CHECKBOX_CONF,
         engagement_status: Optional[str] = None,
+        policy: Optional["PolicyProfile"] = None,
+        artifact_inventory: Optional["ArtifactInventory"] = None,
+        contract_package: Optional[object] = None,
+        order_metadata: Optional["OrderMetadata"] = None,
     ):
         self.transaction_id = transaction_id
         self.appraisal = DocView("appraisal", appraisal)
@@ -95,6 +104,29 @@ class QCContext:
         # G-0 gate can NOT_APPLICABLE the former and HOLD the latter. None = the
         # caller did not forward a status → treat absence as blocking (safe default).
         self.engagement_status = (engagement_status or "").strip().upper() or None
+        # Per-case policy: AMC threshold overrides and rule activation flags.
+        # Falls back to global defaults when None (safe for callers that haven't
+        # been updated to pass a policy yet — P-6).
+        if policy is None:
+            from app.qc.policy_profile import PolicyProfile as _PP
+            policy = _PP.default()
+        self.policy: "PolicyProfile" = policy
+        # Pre-QC artifact inventory: which documents are present vs expected.
+        # Populated before the rule engine runs so rules can inspect it without
+        # touching the file system (P-3).
+        self.artifact_inventory: Optional["ArtifactInventory"] = artifact_inventory
+        # Raw contract package object forwarded from the extraction pipeline
+        # (may carry execution-status metadata such as resolved_execution_status).
+        # None when no contract was provided.
+        self.contract_package: Optional[object] = contract_package
+        # OrderMetadata: extracted from the engagement letter (primary) + XML cross-ref.
+        # The engagement letter IS the order in this system — no external LOS/AMS.
+        # None when engagement letter was absent; rules that need order facts must
+        # gate on ctx.order is not None (or ctx.has_engagement).
+        if order_metadata is None:
+            from app.qc.order_metadata import OrderMetadata as _OM
+            order_metadata = _OM.empty()
+        self.order: "OrderMetadata" = order_metadata
 
     # -- document access --------------------------------------------------
     def doc(self, label: str) -> DocView:
@@ -155,3 +187,23 @@ class QCContext:
         only an explicit no-grid form (update/completion) turns it off — so a
         normal 1004 with a comp-extraction failure still runs SCA and flags it."""
         return not self.is_update_report
+
+    @property
+    def has_unexecuted_contract(self) -> bool:
+        """True when a contract package is present but its execution status indicates
+        the contract has NOT been fully signed by all parties.
+
+        Rules that implement the stop-on-unsigned-contract policy (e.g. C-EXEC) read
+        this property so the check is expressed once and stays consistent (P-3).
+
+        Returns False (safe/pass-through) when:
+          - No contract package is attached (contract_package is None)
+          - The package has no resolved_execution_status attribute
+          - The status is truthy (contract IS executed)
+        """
+        if self.contract_package is None:
+            return False
+        status = getattr(self.contract_package, "resolved_execution_status", None)
+        # A falsy status (None, False, empty string, 0) means not executed.
+        # A truthy status ("executed", True, "YES", etc.) means it is executed.
+        return not bool(status)

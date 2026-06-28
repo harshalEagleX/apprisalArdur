@@ -1,14 +1,21 @@
 """
 QC engine — run every applicable rule against a transaction context.
 
-Responsibilities:
-  * applicability gating — rules whose applies_when is False become
-    NOT_APPLICABLE (still recorded, so FHA rules show as N/A on a conventional
-    file rather than vanishing).
-  * normalize each rule's output to a list of RuleResult and tag section/num.
-  * roll up to a QCReport; persist every result to adaptive_validation_results.
+Outcome model (3 states only, SKIPPED reserved for crashes):
+  PASS           — rule evaluated, condition satisfied
+  FAIL/VERIFY/HOLD — rule evaluated, issue found
+  NOT_APPLICABLE — business condition does not apply to this assignment
+  SKIPPED        — rule crashed (exception); never produced for missing policy/data
 
-Each rule runs in isolation — one rule raising never blocks the others (P-6).
+Rules must never return SKIPPED for missing policy or missing extraction data.
+Policy always resolves from AMC base → engagement overlay → UAD/GSE default.
+Missing extraction data → VERIFY (reviewer confirms) or NOT_APPLICABLE.
+
+Responsibilities:
+  * applicability gating — rules whose applies_when is False become NOT_APPLICABLE
+  * normalize each rule's output to a list of RuleResult and tag section/num
+  * coerce any rule-returned SKIPPED(reason=policy/data) to VERIFY in post-processing
+  * roll up to a QCReport; persist to adaptive_validation_results
 """
 
 from __future__ import annotations
@@ -54,6 +61,36 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
            min_phase: Optional[int] = None) -> QCReport:
     """Run all registered rules (optionally filtered by phase) on the context."""
     report = QCReport(transaction_id=ctx.transaction_id)
+
+    # ---- Zero-comps blocking gate ------------------------------------------
+    # When the SCA grid is expected (normal full appraisal) but no comparable
+    # sale prices were extracted, every SCA rule would evaluate against empty
+    # data and produce phantom PASSes or misleading VERIFYs. Detect this up
+    # front, emit a single HOLD (SCA-ZERO-COMPS) so the reviewer sees one clear
+    # root cause, and skip all other SCA rules for this run (they will be
+    # re-evaluated once extraction is confirmed and the job is re-run).
+    _zero_comps = (
+        ctx.has_sca_grid
+        and not any(ctx.appraisal.value(f"comp_{i}_sale_price") for i in range(1, 10))
+    )
+    if _zero_comps:
+        report.results.append(RuleResult(
+            rule_id="SCA-ZERO-COMPS",
+            checklist_num="SCA-zero",
+            section="sales_comparison",
+            status=RuleStatus.HOLD,
+            message=(
+                "No comparable sales were extracted from the report. "
+                "All sales comparison approach rules are suspended until the comparable "
+                "grid can be confirmed. Please verify the extraction succeeded and re-run."
+            ),
+            confidence=0.9,
+        ))
+        logger.warning(
+            "QC %s: zero comps extracted — SCA rules suspended (SCA-ZERO-COMPS HOLD)",
+            ctx.transaction_id,
+        )
+
     for spec in all_rules():
         if only_phase is not None and spec.phase != only_phase:
             continue
@@ -68,6 +105,17 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
                 rule_id=spec.rule_id, checklist_num=spec.checklist_num,
                 section=spec.section, status=RuleStatus.NOT_APPLICABLE,
                 message="No sales-comparison grid on this report form (e.g. appraisal update / completion report).",
+            ))
+            _record_timing(report, spec, RuleStatus.NOT_APPLICABLE, started)
+            continue
+        # Zero-comps gate: SCA rules are NOT_APPLICABLE when no grid was extracted.
+        # Using NOT_APPLICABLE (not SKIPPED) because the rule genuinely cannot evaluate
+        # on an empty grid — this is a form/data condition, not a system failure.
+        if _zero_comps and spec.section == "sales_comparison":
+            report.results.append(RuleResult(
+                rule_id=spec.rule_id, checklist_num=spec.checklist_num,
+                section=spec.section, status=RuleStatus.NOT_APPLICABLE,
+                message="No comparable sales extracted from this report; rule cannot evaluate (see SCA-ZERO-COMPS HOLD).",
             ))
             _record_timing(report, spec, RuleStatus.NOT_APPLICABLE, started)
             continue
@@ -103,7 +151,33 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
             ))
             _record_timing(report, spec, RuleStatus.SKIPPED, started)
     _escalate_sections(report)
+    _coerce_data_skipped_to_verify(report)
+    _dedup_findings(report)
     return report
+
+
+def _coerce_data_skipped_to_verify(report: QCReport) -> None:
+    """
+    Enforce the 3-outcome model: SKIPPED is only for rule crashes.
+    Any SKIPPED returned for a data/policy reason becomes VERIFY so the reviewer
+    sees it rather than it silently disappearing.
+
+    Crash SKIPPED (message starts with 'Rule execution error') is preserved —
+    it represents a genuine system failure, not a data gap.
+    """
+    coerced = 0
+    for r in report.results:
+        if r.status != RuleStatus.SKIPPED:
+            continue
+        if r.message and r.message.startswith("Rule execution error"):
+            continue  # genuine crash — keep SKIPPED
+        r.status = RuleStatus.VERIFY
+        if r.message and not r.message.endswith("(manual review required)"):
+            r.message = r.message.rstrip(". ") + " — manual review required."
+        r.confidence = min(r.confidence or 0.5, 0.5)
+        coerced += 1
+    if coerced:
+        logger.debug("Coerced %d data-SKIPPED findings to VERIFY", coerced)
 
 
 # Worst-first precedence so a rule that emits several sub-results is labelled by
@@ -148,6 +222,78 @@ def _escalate_sections(report: QCReport) -> None:
                          "systematic problems (not isolated errors); the section is placed on "
                          "HOLD for a full manual review."),
             ))
+
+
+def _dedup_findings(report: QCReport) -> None:
+    """Merge findings that point to the same root business issue.
+
+    Grouping key = (section, entity_id, issue_category).
+
+    The highest-severity finding in each group is kept; lower-severity duplicates
+    are removed and their evidence is merged into the keeper so no source citation
+    is lost. PASS / NOT_APPLICABLE / SKIPPED findings are never deduplicated —
+    only actionable (HOLD / FAIL / VERIFY) results are candidates.
+
+    This prevents the reviewer from seeing the same root problem described twice
+    in different words because two rules fired on the same underlying data gap.
+    """
+    from collections import defaultdict
+
+    def _group_key(r: RuleResult) -> str:
+        # Entity: which comparable, the subject, or a document-level entity.
+        entity = "subject"
+        for f in r.fields_involved:
+            if f.startswith("comp_") and "_" in f[5:]:
+                n = f[5:].split("_")[0]
+                if n.isdigit():
+                    entity = f"comp_{n}"
+                    break
+        # Issue category: first six chars of rule_id (e.g. "SCA-17" → "SCA-17")
+        # combined with the section name to ensure cross-section collisions can't happen.
+        category = r.section or "general"
+        # Use template_id when available for a more precise dedup key; fall back
+        # to the first 6 characters of rule_id.
+        issue = r.template_id or r.rule_id[:6]
+        return f"{category}|{entity}|{issue}"
+
+    groups: dict = defaultdict(list)
+    for r in report.results:
+        if r.status in (RuleStatus.PASS, RuleStatus.NOT_APPLICABLE, RuleStatus.SKIPPED):
+            continue  # only dedup actionable findings
+        groups[_group_key(r)].append(r)
+
+    to_remove: set = set()
+    _severity_order = {
+        RuleStatus.HOLD: 4,
+        RuleStatus.FAIL: 3,
+        RuleStatus.VERIFY: 2,
+        RuleStatus.SKIPPED: 1,
+        RuleStatus.PASS: 0,
+        RuleStatus.NOT_APPLICABLE: 0,
+    }
+    for key, group in groups.items():
+        if len(group) < 2:
+            continue
+        # Sort worst-first so the most severe finding is the keeper.
+        group.sort(key=lambda r: -_severity_order.get(r.status, 0))
+        keeper = group[0]
+        for dup in group[1:]:
+            # Merge evidence from the duplicate into the keeper, avoiding duplicates
+            # on the same canonical field (one citation per field is enough).
+            existing_fields = {e.field for e in keeper.evidence}
+            for ev in dup.evidence:
+                if ev.field not in existing_fields:
+                    keeper.evidence.append(ev)
+                    existing_fields.add(ev.field)
+            to_remove.add(id(dup))
+
+    if to_remove:
+        before = len(report.results)
+        report.results = [r for r in report.results if id(r) not in to_remove]
+        logger.debug(
+            "QC dedup: removed %d duplicate findings (from %d → %d results)",
+            before - len(report.results), before, len(report.results),
+        )
 
 
 def persist_report(report: QCReport, document_id: str) -> int:

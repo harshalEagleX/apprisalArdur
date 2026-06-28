@@ -1,0 +1,298 @@
+# =============================================================================
+# SHAL AMC BASE POLICY — Equity Solutions USA
+# =============================================================================
+# Built by reading all three engagement letters (EL-2 CA, EL-3 FL, EL-4 HI)
+# verbatim. Every field below cites the exact engagement letter language that
+# justifies it. This is the permanent playbook for all Equity Solutions USA orders.
+#
+# POLICY RESOLUTION ORDER (3 levels, always resolves — never falls through to SKIP):
+#   1. This file  — recurring AMC-wide rules (same text in every EL body)
+#   2. Per-order engagement letter overrides (Order Information block differences)
+#   3. config/qc_thresholds.yaml — UAD/GSE/USPAP baseline (fallback only)
+#
+# OUTCOME MODEL:
+#   PASS              — rule evaluated, condition satisfied
+#   FAIL/VERIFY/HOLD  — rule evaluated, issue found (HOLD = blocking stop)
+#   NOT_APPLICABLE    — business condition genuinely doesn't apply to this
+#                       assignment / loan type / form type / document set
+#   SKIPPED           — rule engine crash only (never "policy not configured")
+#
+# =============================================================================
+
+equity_solutions_usa:
+
+  # ── Identity ────────────────────────────────────────────────────────────────
+  amc_name: "Equity Solutions USA"
+  amc_id: "equity_solutions_usa"
+  # Order number prefixes seen across all three letters
+  order_prefixes: ["ESCA-", "ESFL-", "ESHI-", "ESTX-", "ESAZ-", "ESWV-"]
+  # Signature page client name requirement:
+  # EL body: "Type 'Equity Solutions USA' on the Name line in client section"
+  amc_signature_name: "Equity Solutions USA"
+
+
+  # ── BLOCKING STOPS — HOLD, terminate review ──────────────────────────────────
+  # EL: "STOP AND NOTIFY EQUITY SOLUTIONS, USA IF…"
+
+  # "a fully signed contract was not attached to this order for Purchase appraisals"
+  stop_on_unsigned_contract: true
+  # "or you are provided other contracts by other parties for Purchase appraisals"
+  stop_on_competing_contract: true
+  # "plans, specs, materials lists have not been provided (for Proposed or Under-Construction appraisals)"
+  stop_on_missing_plans_new_construction: true
+  # "the wrong form was requested for the type of property that exists"
+  stop_on_wrong_form: true
+  # "the FHA Case # or VA number has not been provided (for FHA or VA orders)"
+  stop_on_missing_fha_case: true
+  stop_on_missing_va_number: true
+  # "the subject cannot be rebuilt if destroyed, or the subject's improvement is illegal under zoning"
+  stop_on_illegal_zoning: true
+  # "subject is in C5 or C6 condition, please stop all work and call us before moving forward"
+  stop_on_c5_c6: true
+  # "If the subject property is located within lava zones 1 and 2, please stop all work"
+  stop_on_lava_zone: true
+  # "If the subject is a Manufactured Home that was built prior to June 15, 1976 — please stop"
+  stop_on_pre1976_manufactured: true
+
+
+  # ── COMMENTARY TRIGGERS — explanation required when threshold exceeded ────────
+  # EL: These all use "please provide an explanation" or "please comment" —
+  # NOT "prohibited" or "rejected". Rules use these as VERIFY triggers, not FAIL.
+
+  # "Sales Over 6 Months Old: Please provide an explanation on the use of sales over 6 months."
+  comp_age_commentary_trigger_months: 6
+
+  # "If the subject is in a Suburban Area — please comment on the use of sales exceeding 1 mile"
+  distance_commentary_trigger_suburban_miles: 1.0
+  # "If the subject is in an Urban Area — please comment on the use of sales exceeding 1/2 mile"
+  distance_commentary_trigger_urban_miles: 0.5
+  # No rural trigger stated — use UAD/GSE default from qc_thresholds.yaml
+  distance_commentary_trigger_rural_miles: null  # → falls back to qc_thresholds default (10.0)
+
+  # "If any comparable sale adjustments exceed a 10% line adjustment…
+  #  the client requires the appraiser to explain the rationale and reasoning behind the adjustments.
+  #  Commentary needs to be comparable sale specific."
+  adjustment_commentary_line_pct: 10.0
+  # "…15% net adjustment…"
+  adjustment_commentary_net_pct: 15.0
+  # "…25% gross adjustment…"
+  adjustment_commentary_gross_pct: 25.0
+
+
+  # ── REQUIRED CONTENT — must be present in every report ───────────────────────
+  # EL: "REQUIREMENTS and REMINDERS" and "INSPECTIONS, SKETCH" sections
+
+  # "Include a full legal description or attach a copy…"
+  require_legal_description: true
+  # "Include the estimated remaining economic life on all reports."
+  require_economic_life: true
+  # "Include highest and best use summary sentences (legal, physical, economic…)"
+  require_hbu_summary: true
+  # "Include the specific zoning classification and description
+  #  (e.g., not simply 'Residential' unless that is the zoning name)."
+  require_zoning_detail: true
+  # "When disclosing an extraordinary assumption or hypothetical condition,
+  #  include a statement that its use might affect assignment results."
+  require_extraordinary_assumption_disclosure: true
+  # "Include written analysis of the subject's current and within-12-month listings,
+  #  options, and agreements of sale…
+  #  Simply typing dates and amounts does not meet USPAP requirements."
+  require_listing_analysis_12months: true
+  # "…and the subject's within-3-year sales and transfers.
+  #  Explain how the listings, contracts, and sales relate to each other."
+  require_prior_sale_analysis_3years: true
+  # "Disclose the reasonable exposure time for the subject's value opinion"
+  require_exposure_time: true
+  # "Disclose prior services performed related to the subject property
+  #  in the three years prior the acceptance of this assignment,
+  #  in accordance with Standards Rule 2-3."
+  require_prior_services_disclosure: true
+  # "Attach a copy of your State License/Certification to every appraisal report
+  #  – on its own separate page."
+  require_license_attachment: true
+  # "Please comment if any personal property was considered
+  #  in the development of the opinion of value."
+  require_personal_property_comment: true
+  # "Aerial Maps — please include an aerial map of the subject and surrounding area with all reports."
+  require_aerial_map: true
+  # "If the property is located in a Flood Zone — please be sure to attach a copy
+  #  of the Flood Map with your final report."
+  require_flood_map_if_flood_zone: true
+  # "Smoke and CO Detectors: Please comment if there are any applicable State or Local codes
+  #  that require CO and/or Smoke Detectors."
+  require_smco_comment: true
+  # "If the property is in a FEMA DECLARED DISASTER AREA — Please add commentary
+  #  as to whether the subject property HAS been impacted by the disaster event"
+  require_disaster_commentary_if_declared: true
+
+
+  # ── SKETCH REQUIREMENTS ───────────────────────────────────────────────────────
+  # EL: "Sketch Requirements: A floorplan sketch is required and must be
+  #      software generated (not hand drawn) and indicate dimensions and
+  #      calculations that support how the gross living area was developed."
+
+  require_sketch: true
+  require_sketch_software_generated: true
+  # "A sketch is required for all levels including unfinished and finished basement areas."
+  require_sketch_all_levels: true
+  # "The floor plan needs to include: floor level, room labeling, interior walls,
+  #  doorways, staircases, exterior/interior egress, and dimensions of all exterior walls."
+  require_sketch_interior_walls: true
+  # "All exterior features (porch, patio, deck) are to be included on the sketch
+  #  along with other exterior amenities that include barns, permanent sheds, inground pools."
+  require_sketch_exterior_features: true
+
+
+  # ── PHOTO REQUIREMENTS ────────────────────────────────────────────────────────
+  # EL: "PHOTOGRAPHS, MAPS" section
+
+  # "At minimum — assignments requiring interior inspections require color photographs of:
+  #  front, rear, street view, kitchen (with photos showing all cooking facilities),
+  #  all bathrooms, all bedrooms, all living areas including foyer and laundry room,
+  #  full basement including mechanicals/finished areas, and all garage interiors."
+  require_photo_front: true
+  require_photo_rear: true
+  require_photo_street: true
+  require_photo_kitchen: true
+  require_photo_all_bathrooms: true
+  require_photo_all_bedrooms: true
+  require_photo_living_areas: true
+  require_photo_basement_if_present: true
+  require_photo_garage_interior_if_present: true
+  # "Subject photos to include all external beneficial/adverse influences,
+  #  any recent renovations, any deterioration, and any health and safety issues."
+  require_photo_adverse_influences: true
+  # "For assignments where guides require appraiser to drive to the comparables,
+  #  include color photos of the front of each comp sale, listing, pending."
+  require_comp_photos: true
+  # "Photos must be in focus."
+  require_photos_in_focus: true
+
+
+  # ── PROPERTY-TYPE-SPECIFIC RULES ─────────────────────────────────────────────
+  # EL body sections on special property types
+
+  # ADU (Accessory Dwelling Unit):
+  # "Provide a description of the ADU physical characteristics and comment on access."
+  # "Report the gross living area of the accessory unit (ADU) separately from primary dwelling."
+  # "Comment on market acceptance and current occupancy of the accessory."
+  require_adu_commentary_if_present: true
+
+  # Well and Septic:
+  # "Properties served by Well and Septic: Provide commentary on the distance.
+  #  Well must be at least 50 ft from septic tank, 100 ft from septic drain field,
+  #  10 ft from property lines."
+  require_well_septic_commentary_if_present: true
+  well_min_distance_from_septic_tank_ft: 50
+  well_min_distance_from_drain_field_ft: 100
+  well_min_distance_from_property_line_ft: 10
+
+  # Solar Panels:
+  # "If solar panels: provide photos and comment whether panels are
+  #  Leased / Financed / Owned. If Owned, comment on contributory value."
+  require_solar_panel_commentary_if_present: true
+
+  # New Construction:
+  # "Please supply comparable sales of recently completed similar new construction homes."
+  # "At least one closed sale from subject neighborhood (resale preferred, non-subject-builder),
+  #  one closed comparable from outside the subject neighborhood."
+  require_new_construction_comp_outside_development: true
+  # "If there are no closed sales in the subject-subdivision/PUD, and subject is one of the
+  #  first sales, it's permissible to utilize two pending sales."
+  allow_pending_comps_new_construction_no_closed: true
+
+  # Trainees:
+  # "If trainee used: trainee's name and assistance type must be disclosed.
+  #  Trainee may sign as Appraiser only if supervisor signs as Supervisor Appraiser."
+  require_supervisor_if_trainee: true
+
+  # Intended use:
+  # "In the report, type the intended user and intended use language required by
+  #  FHA, VA, USDA/RD, etc. applicable for the assignment type."
+  require_intended_use_statement: true
+  require_intended_user_statement: true
+
+
+  # ── REPORT QUALITY — unacceptable practices stated explicitly ────────────────
+  # EL: "DETAIL IN REPORTS — Unacceptable practices:"
+
+  # "merely stating 'best sales used as comps'" → no boilerplate comp selection
+  prohibit_boilerplate_comp_selection: true
+  # "Using inapplicable or meaningless boilerplate"
+  prohibit_generic_boilerplate: true
+  # "Merely stating 'a $ adjustment was made' without explaining the support or method"
+  require_adjustment_support_narrative: true
+  # "Merely citing 'experience' on its own without explaining information or methods"
+  prohibit_experience_only_adjustment_support: true
+
+
+  # ── FHA-SPECIFIC SUB-PROFILE (merged when loan_type == "fha") ────────────────
+  # Reference: "Assignment Conditions depend on assignment type: FHA: HUD Handbook 4000.1"
+
+  fha:
+    # FHA case number required on all pages
+    require_fha_case_all_pages: true
+    # HUD 4000.1: comps must be within 12 months (6 months preferred for primary approach)
+    comp_age_hard_limit_months: 12
+    comp_age_preferred_months: 6
+    # HUD MPR/MPS: physical condition must meet minimum property requirements
+    require_fha_mpr_statement: true
+    # HUD requires well/septic commentary with specific distance measurements
+    require_well_septic_commentary_if_present: true
+    # "FHA 4000.1 distance requirements" for well/septic distances (same as base policy above)
+    # Solar panel ownership/lease disclosure required for FHA collateral
+    require_solar_panel_commentary_if_present: true
+    # 203K/Homestyle: if renovation assignment, subject must be appraised subject-to bid
+    require_203k_appraised_subject_to_bid: true
+
+  # ── VA-SPECIFIC SUB-PROFILE ──────────────────────────────────────────────────
+  va:
+    require_va_case_all_pages: true
+    # VA minimum property requirements
+    require_va_mpr_statement: true
+
+  # ── USDA-SPECIFIC SUB-PROFILE ────────────────────────────────────────────────
+  usda:
+    # "USDA/RD (additional): USDA Lender Handbook 3555"
+    require_cost_approach: true
+    require_usda_mpr_statement: true
+
+
+# =============================================================================
+# UAD/GSE DEFAULTS — fallback when AMC policy is silent
+# =============================================================================
+# Used only when amc_policies.yaml has no value AND engagement letter says nothing.
+# Every rule resolves here last — there is no fourth level.
+
+__default__:
+  # Comp age: GSE guideline prefers within 12 months
+  comp_age_commentary_trigger_months: 12
+  # Distance: no GSE hard rule — reviewer judgment; 5mi suburban is industry norm
+  distance_commentary_trigger_suburban_miles: 5.0
+  distance_commentary_trigger_urban_miles: 1.0
+  distance_commentary_trigger_rural_miles: 10.0
+  # Adjustment triggers: FNMA/FHLMC underwriting norms
+  adjustment_commentary_net_pct: 15.0
+  adjustment_commentary_gross_pct: 25.0
+  adjustment_commentary_line_pct: 10.0
+  # Blocking stops: off by default (must be explicitly enabled by AMC policy)
+  stop_on_unsigned_contract: false
+  stop_on_c5_c6: false
+  stop_on_lava_zone: false
+  stop_on_pre1976_manufactured: false
+  stop_on_illegal_zoning: false
+  stop_on_wrong_form: false
+  stop_on_missing_fha_case: false
+  # Required content: USPAP minimums always apply
+  require_economic_life: true
+  require_exposure_time: true
+  require_hbu_summary: true
+  require_zoning_detail: true
+  require_prior_services_disclosure: true
+  require_extraordinary_assumption_disclosure: true
+  # Not required by USPAP alone unless triggered by condition
+  require_smco_comment: false
+  require_flood_map_if_flood_zone: false
+  require_aerial_map: false
+  require_well_septic_commentary_if_present: false
+  require_solar_panel_commentary_if_present: false

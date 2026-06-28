@@ -423,3 +423,79 @@ def i_smco(ctx: QCContext):
                 message=qc_config.template("I-SMCO-missing"),
                 fields=list(_NARRATIVE_SOURCES),
                 template_id="I-SMCO-missing", evidence=ev, confidence=0.5)
+
+
+# ---- I-HOA-PUD: HOA dues vs PUD checkbox consistency -----------------------
+# UAD requirement: when HOA dues > 0 are entered in the subject section, the
+# PUD checkbox must be marked. Conversely, when PUD is marked, there must be
+# an HOA dues amount (or an explicit $0 with explanation). Either direction of
+# inconsistency surfaces a FAIL (dues present, PUD not marked) or VERIFY (PUD
+# marked but no dues — sometimes $0 dues are valid for newly-formed PUDs).
+#
+# Skip (SKIPPED) when either value couldn't be extracted, so empty forms don't
+# generate false positives (P-6).
+
+
+def _parse_hoa_num(val) -> float:
+    """Extract the first numeric value from an HOA dues string (e.g. '$120' → 120.0)."""
+    if val is None:
+        return 0.0
+    m = re.search(r"[\d.]+", str(val).replace(",", "").replace("$", ""))
+    try:
+        return float(m.group(0)) if m else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+@rule(id="I-HOA-PUD", num="S-9-pud", section="subject", phase=1,
+      name="HOA/PUD consistency")
+def i_hoa_pud(ctx: QCContext):
+    """HOA dues and PUD checkbox must be internally consistent in the subject section.
+
+    UAD rule:
+    - HOA dues > 0 → PUD must be checked (FAIL when PUD not marked)
+    - PUD marked → HOA dues should be present (VERIFY when dues absent/zero;
+      $0 is legal for some PUDs but warrants reviewer confirmation)
+    - No HOA dues + PUD not marked → PASS (typical SFR)
+    """
+    hoa_raw = ctx.appraisal.value("hoa_dues")
+    pud_raw = ctx.appraisal.value("is_pud")
+    ev = [ctx.appraisal.evidence("hoa_dues"), ctx.appraisal.evidence("is_pud")]
+    fields = ["hoa_dues", "is_pud"]
+
+    # Skip when the appraisal document was not extracted — can't assert either
+    # direction without data (P-6 graceful degradation).
+    if not ctx.appraisal.present:
+        return _res("I-HOA-PUD", "S-9-pud", RuleStatus.SKIPPED,
+                    message="Appraisal not available; HOA/PUD check skipped.",
+                    fields=fields, evidence=ev)
+
+    hoa_amount = _parse_hoa_num(hoa_raw)
+    pud_marked = str(pud_raw or "").strip().lower() in {"true", "yes", "y", "1", "x", "checked"}
+    pud_no = str(pud_raw or "").strip().lower() in {"false", "no", "n", "0", "unchecked"}
+
+    # HOA dues present (>0) but PUD not explicitly marked → FAIL
+    if hoa_amount > 0 and pud_no:
+        return _res("I-HOA-PUD", "S-9-pud", RuleStatus.FAIL,
+                    message=qc_config.template("S-9-pud", value=hoa_raw),
+                    fields=fields, template_id="S-9-pud", evidence=ev)
+
+    # HOA dues present but PUD extraction uncertain (not clearly yes or no) →
+    # VERIFY so the reviewer confirms the checkbox rather than silently passing.
+    if hoa_amount > 0 and not pud_marked and not pud_no:
+        return _res("I-HOA-PUD", "S-9-pud", RuleStatus.VERIFY,
+                    message=qc_config.template("S-9-pud", value=hoa_raw),
+                    fields=fields, template_id="S-9-pud", evidence=ev, confidence=0.6)
+
+    # PUD marked but no HOA dues amount shown → advisory VERIFY (legal for $0 PUDs)
+    if pud_marked and hoa_amount == 0:
+        return _res("I-HOA-PUD", "S-9-pud", RuleStatus.VERIFY,
+                    message=(
+                        "PUD is marked but no HOA dues amount is shown; "
+                        "please confirm the HOA amount (enter $0 if applicable)."
+                    ),
+                    fields=fields, evidence=ev, confidence=0.5)
+
+    # All other cases: consistent (dues+PUD both set, or neither set)
+    return _res("I-HOA-PUD", "S-9-pud", RuleStatus.PASS,
+                fields=fields, evidence=ev)
