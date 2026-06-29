@@ -401,8 +401,8 @@ def im2_room_triplet(ctx: QCContext):
 
     msg = (
         f"Bedroom count ({beds}) is not less than total room count ({rooms}) — "
-        f"values may be transposed in the improvements grid.{swap_msg} "
-        f"Confirm on the improvements section of the appraisal."
+        f"these may be swapped in the improvements section.{swap_msg} "
+        f"Please verify the correct values on the improvements page."
     )
     return _res("IM-2", "40b", RuleStatus.VERIFY, message=msg,
                 fields=fields, evidence=ev, confidence=0.55)

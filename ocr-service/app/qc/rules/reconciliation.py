@@ -27,7 +27,7 @@ def r1_value_match(ctx: QCContext):
     if not sca or not final:
         return RuleResult(rule_id="R-1", checklist_num="89", section="reconciliation",
                           status=RuleStatus.VERIFY,
-                          message="The indicated value (sales comparison) or final opinion of value could not be read; please verify they reconcile.",
+                          message="The sales comparison value or final opinion of value could not be read. Please verify both numbers are present and agree.",
                           fields_involved=["indicated_value_sca", "appraised_value"], evidence=ev, confidence=0.5)
     out = []
     # multiple approaches developed → final must sit within their range; only
@@ -158,13 +158,11 @@ def val1_appraised_value_integrity(ctx: QCContext):
     if cp and abs(av - cp) < 1 and not inside_bracket:
         return _res("VAL-1", "87b", "reconciliation", RuleStatus.VERIFY,
                     message=(
-                        f"Extracted appraised value (${av:,.0f}) equals the contract price "
-                        f"(${cp:,.0f}) and falls outside the adjusted comparable range "
+                        f"The extracted appraised value (${av:,.0f}) is identical to the contract price "
+                        f"and falls outside the adjusted comparable range "
                         f"(${min(comp_adj):,.0f}–${max(comp_adj):,.0f}). "
-                        "This pattern is consistent with the contract-price field being "
-                        "extracted as the final opinion of value. "
-                        "Manually confirm the appraiser's final opinion on the "
-                        "certification/signature page."
+                        "This may mean the contract price was accidentally read as the final value. "
+                        "Please confirm the appraiser's final opinion of value on the signature page."
                     ),
                     fields=fields, evidence=ev, confidence=0.3)
 
@@ -383,7 +381,7 @@ def ca2_econ_life(ctx: QCContext):
     if val is None:
         return RuleResult(rule_id="CA-2", checklist_num="93", section="cost_approach",
                           status=RuleStatus.VERIFY,
-                          message="The remaining economic life could not be read; please verify it meets the FHA/USDA/VA minimum.",
+                          message="The remaining economic life could not be read. Please verify it is at least 30 years (required for FHA/USDA/VA loans).",
                           fields_involved=["remaining_economic_life"], evidence=ev, confidence=0.5)
     if val >= minimum:
         return RuleResult(rule_id="CA-2", checklist_num="93", section="cost_approach",

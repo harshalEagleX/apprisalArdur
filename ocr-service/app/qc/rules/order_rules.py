@@ -206,9 +206,9 @@ def ord_conflict(ctx: QCContext):
                      confidence=0.97, field=conflict.field_name),
         ]
         msg = (
-            f"The engagement letter states {conflict.field_name} = '{conflict.engagement_value}' "
-            f"but the appraisal XML states '{conflict.xml_value}'. "
-            "Resolve the discrepancy — the engagement letter is authoritative."
+            f"The order form says {conflict.field_name} is '{conflict.engagement_value}' "
+            f"but the appraisal report shows '{conflict.xml_value}'. "
+            "The order form is authoritative — please update the report to match."
         )
         results.append(H.make_result(
             "ORD-CONFLICT", "ORD-conflict", "global", RuleStatus.FAIL,

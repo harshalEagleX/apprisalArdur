@@ -149,10 +149,11 @@ def sca2_required(ctx: QCContext):
         return RuleResult(rule_id="SCA-2", checklist_num="54", section="sales_comparison",
                           status=RuleStatus.VERIFY,
                           message=(
-                              f"{comp_ids} classified as closed sale(s) by cell text, "
-                              f"but structural signals disagree — {'; '.join(reasons)}. "
-                              "Confirm comp status from MLS source sheet before relying "
-                              "on the closed-sale count."
+                              f"{comp_ids} appear to be closed sales in the grid, but the "
+                              f"settlement date or MLS status is missing or shows active/pending — "
+                              f"{'; '.join(reasons)}. "
+                              "Please confirm the comp status from the MLS source sheet before "
+                              "counting them as closed sales."
                           ),
                           fields_involved=["comp_N_sale_price", "comp_N_settlement_date"],
                           evidence=ev, confidence=0.55)
