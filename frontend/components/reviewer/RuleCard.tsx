@@ -155,12 +155,17 @@ export const RuleCard = memo(function RuleCard({
         className="w-full text-left"
       >
         <div className="flex items-start gap-2">
-          <span className="font-mono text-[10px] bg-[#0B0F14]/70 border border-white/10 px-1.5 py-0.5 rounded text-slate-400 flex-shrink-0 mt-0.5">
-            {rule.ruleId}
-          </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-medium text-slate-200">{rule.ruleName}</span>
+              {/* Lead with the human-readable rule name; the internal code is a
+                  tiny muted tag for support/traceability, never the headline. */}
+              <span className="text-xs font-semibold text-slate-100">{rule.ruleName}</span>
+              <span
+                className="font-mono text-[9px] text-slate-500/70 flex-shrink-0"
+                title="Internal rule code (for support)"
+              >
+                {rule.ruleId}
+              </span>
               <span
                 className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${severityStyle(sev)}`}
               >
@@ -241,18 +246,20 @@ export const RuleCard = memo(function RuleCard({
           )}
 
           {rule.confidence != null && (() => {
-            // Frame confidence qualitatively so a bare "100%" doesn't invite blind trust.
-            // Low confidence is flagged amber (verify carefully); the raw % is secondary.
+            // Show confidence as a plain-language tier with a traffic-light dot so a
+            // reviewer knows at a glance how much to trust it — never a bare "100%".
+            // 75-100 green (high) · 41-74 amber (double-check) · 0-40 red (verify).
             const c = Number(rule.confidence);
-            const band = c >= 0.85
-              ? { label: "High confidence", cls: "text-slate-300" }
-              : c >= 0.6
-                ? { label: "Moderate confidence", cls: "text-slate-300" }
-                : { label: "Low confidence — verify carefully", cls: "text-amber-300" };
+            const pct = Math.round(c * 100);
+            const band = pct >= 75
+              ? { label: "High confidence", dot: "bg-green-400", cls: "text-green-300" }
+              : pct >= 41
+                ? { label: "Double-check this", dot: "bg-amber-400", cls: "text-amber-300" }
+                : { label: "Please verify manually", dot: "bg-red-400", cls: "text-red-300" };
             return (
               <div className={`flex items-center gap-1.5 text-[11px] ${band.cls}`}>
+                <span className={`inline-block h-2 w-2 rounded-full ${band.dot}`} aria-hidden />
                 <span className="font-medium">{band.label}</span>
-                <span className="font-mono text-slate-500">· {Math.round(c * 100)}%</span>
               </div>
             );
           })()}
@@ -300,9 +307,9 @@ export const RuleCard = memo(function RuleCard({
               )}
               {isFail && (
                 <div className="text-[11px] text-red-200 bg-red-950/18 border border-red-500/25 rounded-lg px-2.5 py-2">
-                  <strong>Confirm issue</strong> to acknowledge this finding — it stays as an issue in the final report.
-                  To override to no-issue, enter a specific reason (at least 20 characters)
-                  {requireSecondApproval ? "; a second reviewer must approve the override before sign-off." : "."}
+                  Press <strong>Confirm issue</strong> to keep this in the report.
+                  Think it&apos;s actually fine? Write a short reason why (at least 20 characters)
+                  {requireSecondApproval ? " — we&apos;ll ask a second reviewer to confirm." : "."}
                 </div>
               )}
               {rule.overridePending && (
@@ -381,7 +388,7 @@ export const RuleCard = memo(function RuleCard({
                 onChange={e => onComment(e.target.value)}
                 placeholder={
                   isFail
-                    ? "Reason for no-issue override — be specific (minimum 20 characters). Leave blank to confirm issue."
+                    ? "Why is this fine? Be specific (min 20 characters). Leave blank to keep the issue."
                     : "Add a comment (optional)..."
                 }
                 rows={2}
