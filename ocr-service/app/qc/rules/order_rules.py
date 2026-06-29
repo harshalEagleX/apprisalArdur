@@ -178,25 +178,17 @@ def ord_coborrower(ctx: QCContext):
       name="Unsigned contract blocked by engagement letter policy")
 def ord_exec_stop(ctx: QCContext):
     ev = []
-    if ctx.contract_package is not None:
-        executed = getattr(ctx.contract_package, "resolved_execution_status", None)
-        if executed is None:
-            return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.VERIFY,
-                                 message="Contract execution status could not be determined; engagement letter requires a fully signed contract. Please verify.",
-                                 fields=["contract_analyzed"], evidence=ev, confidence=0.5)
-        if executed:
-            return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.PASS,
-                                 fields=["contract_analyzed"], evidence=ev)
-        # Contract present but not executed
+    # The contract document is NOT read, so execution status cannot be determined
+    # from the document. When the engagement letter requires a fully signed
+    # contract: if no contract was provided at all → HOLD; if one was provided →
+    # VERIFY (the reviewer confirms it is fully executed against the contract file).
+    if not ctx.has_contract:
         return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.HOLD,
-                             message=qc_config.template("C-EXEC-unsigned"),
-                             fields=["contract_analyzed"], template_id="C-EXEC-unsigned",
-                             evidence=ev)
-
-    # No contract at all — purchase with policy stop
-    return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.HOLD,
-                         message="No purchase contract was provided. The engagement letter requires a fully executed contract before processing. Please stop and return to the client.",
-                         fields=["contract_analyzed"], evidence=ev)
+                             message="No purchase contract was provided. The engagement letter requires a fully executed contract before processing. Please stop and return to the client.",
+                             fields=["contract_analyzed"], evidence=ev)
+    return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.VERIFY,
+                         message="The engagement letter requires a fully executed contract. The contract document is not auto-read; please open the contract file and confirm it is fully signed by all parties.",
+                         fields=["contract_analyzed"], evidence=ev, confidence=0.5)
 
 
 # ── ORD-CONFLICT — engagement letter vs XML conflict on a key fact ────────────

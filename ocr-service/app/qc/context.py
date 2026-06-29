@@ -91,6 +91,7 @@ class QCContext:
         artifact_inventory: Optional["ArtifactInventory"] = None,
         contract_package: Optional[object] = None,
         order_metadata: Optional["OrderMetadata"] = None,
+        contract_provided: bool = False,
     ):
         self.transaction_id = transaction_id
         self.appraisal = DocView("appraisal", appraisal)
@@ -115,6 +116,10 @@ class QCContext:
         # Populated before the rule engine runs so rules can inspect it without
         # touching the file system (P-3).
         self.artifact_inventory: Optional["ArtifactInventory"] = artifact_inventory
+        # Whether a purchase contract document was supplied for the transaction.
+        # This is distinct from whether contract extraction results exist, because
+        # the QC pipeline intentionally avoids OCR-ing contract documents.
+        self.contract_provided = contract_provided
         # Raw contract package object forwarded from the extraction pipeline
         # (may carry execution-status metadata such as resolved_execution_status).
         # None when no contract was provided.
@@ -135,7 +140,7 @@ class QCContext:
 
     @property
     def has_contract(self) -> bool:
-        return self.contract.present
+        return self.contract.present or self.contract_provided
 
     @property
     def has_engagement(self) -> bool:

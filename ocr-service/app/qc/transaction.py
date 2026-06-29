@@ -56,10 +56,19 @@ def _first_pdf(folder: Path, sub: str) -> Optional[Path]:
 
 
 def extract_documents(folder: Path) -> Dict[str, object]:
-    """Extract each present document. Returns {role: ExtractionResultSet}."""
+    """Extract each present document. Returns {role: ExtractionResultSet}.
+
+    POLICY: the contract document is NEVER read/OCR'd/extracted. It is only
+    recorded as present (sets['_contract_provided']=True) so contract rules flag
+    it for manual review."""
     from app.extraction.layers.orchestrator import run_full_extraction
     sets: Dict[str, object] = {}
     for role, dtype in _DOC_TYPE.items():
+        if role == "contract":
+            # Do not extract the contract — just note it was provided.
+            if _first_pdf(folder, "contract") is not None:
+                sets["_contract_provided"] = True
+            continue
         pdf = _first_pdf(folder, role)
         if pdf is None:
             continue
@@ -75,8 +84,6 @@ def extract_documents(folder: Path) -> Dict[str, object]:
                 rs = _overlay_subject_llm(rs, pdf, dtype)
                 rs = _overlay_photos(rs, pdf, dtype)
                 rs = _overlay_comp_photos(rs, pdf, dtype)
-            elif role == "contract":
-                rs = _overlay_contract(rs, pdf, dtype)
             rs = _overlay_locate(rs, pdf)
             sets[role] = rs
         except Exception as exc:
@@ -919,7 +926,7 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
         has_appraisal_pdf=_appraisal_pdf is not None,
         has_appraisal_xml=False,    # folder-based path doesn't carry XML
         has_engagement=sets.get("engagement") is not None,
-        has_contract=sets.get("contract") is not None,
+        has_contract=bool(sets.get("_contract_provided")),
         transaction_type=_infer_txn_type(sets),
     )
     for warn in inventory.warnings:
@@ -940,11 +947,12 @@ def run_transaction_qc(folder, transaction_id: Optional[str] = None,
         transaction_id=transaction_id,
         appraisal=sets.get("appraisal"),
         engagement=sets.get("engagement"),
-        contract=sets.get("contract"),
+        contract=None,                       # contract is never extracted (policy)
         structured_conf=qc_config.structured_conf,
         checkbox_conf=qc_config.checkbox_conf,
         policy=policy,
         artifact_inventory=inventory,
+        contract_provided=bool(sets.get("_contract_provided")),
     )
     _t = perf_counter()
     llm_telemetry.set_span("rules")

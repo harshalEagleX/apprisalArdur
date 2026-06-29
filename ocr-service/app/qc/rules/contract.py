@@ -1,10 +1,14 @@
 """
 Contract section rules (C-1 .. C-5 / checklist 14-18).
 
+POLICY: the contract DOCUMENT is never read / OCR'd / extracted. These rules
+evaluate ONLY the appraisal report's contract section (which IS extracted) and,
+for anything that would require the contract document, report the appraisal's
+stated value and flag it for the reviewer to verify against the contract file
+manually. The contract PDF is still shown in the reviewer UI for that purpose.
+
 Applies only to PURCHASE transactions. For refinance, the section must be blank
-(C-1 fires a FAIL if populated). Contract price/date/concessions are matched
-against the sales contract document; the personal-property check (C-5) pairs the
-contract's chattel scan with an LLM read of the appraiser's commentary.
+(C-1 fires a FAIL if populated).
 """
 
 from __future__ import annotations
@@ -51,6 +55,35 @@ def _is_refi(ctx: QCContext) -> bool:
 
 
 _res = H.section_result("contract")
+
+
+def _manual_verify(ctx, rule_id, num, items, lead):
+    """Report the appraisal report's stated contract value(s) and flag the rule
+    for manual verification against the (intentionally un-extracted) contract.
+
+    items : list of (appraisal_field, human_label) to surface to the reviewer.
+    lead  : short opening sentence describing what is being checked.
+
+    Always returns a single VERIFY result — the reviewer compares against the
+    contract PDF (shown in the UI) by hand. Confidence 0.5 marks it advisory.
+    """
+    parts = []
+    ev = []
+    fields = []
+    for field, label in items:
+        v = ctx.appraisal.value(field)
+        fields.append(field)
+        ev.append(ctx.appraisal.evidence(field))
+        if v is not None and str(v).strip():
+            parts.append(f"{label} reported as {str(v).strip()}")
+        else:
+            parts.append(f"{label} not stated in the report")
+    detail = "; ".join(parts) if parts else "no contract-section values were extracted"
+    msg = (f"{lead} The appraisal report shows — {detail}. "
+           "The contract document is not auto-read; please verify these details "
+           "against the contract file manually.")
+    return _res(rule_id, num, RuleStatus.VERIFY, message=msg,
+                fields=fields, evidence=ev, confidence=0.5)
 
 
 # ---- C-EXEC contract must be fully executed by all parties -----------------
@@ -148,27 +181,24 @@ def c1_analyze(ctx: QCContext):
     return out
 
 
-# ---- C-2 contract price + date (cross-document vs contract) ---------------
+# ---- C-2 contract price + date (report appraisal value → verify vs contract) --
+# The contract document is not read. We surface the appraisal report's stated
+# contract price / date and ask the reviewer to verify against the contract PDF.
 
 @rule(id="C-2a", num="15", section="contract", phase=2,
       applies_when=_is_purchase, name="Contract price matches purchase agreement")
 def c2_price(ctx: QCContext):
-    if not ctx.has_contract:
-        # compare appraisal vs engagement contract_price as fallback authority
-        return H.cross_doc_match(ctx, "C-2a", "15", "contract", "contract_price", "C-2-price",
-                                 authority="engagement", kind="currency", label="contract price")
-    return H.cross_doc_match(ctx, "C-2a", "15", "contract", "contract_price", "C-2-price",
-                             authority="contract", kind="currency", label="contract price")
+    return _manual_verify(ctx, "C-2a", "15",
+                          [("contract_price", "Contract price")],
+                          "Contract price cross-check.")
 
 
 @rule(id="C-2b", num="16", section="contract", phase=2,
       applies_when=_is_purchase, name="Contract date matches purchase agreement")
 def c2_date(ctx: QCContext):
-    auth = "contract" if ctx.has_contract else "engagement"
-    # dates are identifiers: exact-day equality, never fuzzy string similarity
-    # (Jaro-Winkler would call 04/27/2026 vs 04/29/2026 a match)
-    return H.cross_doc_match(ctx, "C-2b", "16", "contract", "contract_date", "C-2-date",
-                             authority=auth, kind="date", label="contract date")
+    return _manual_verify(ctx, "C-2b", "16",
+                          [("contract_date", "Contract date")],
+                          "Contract date cross-check.")
 
 
 # ---- C-3 owner-of-record data source + No→commentary ------------------------
@@ -236,181 +266,74 @@ def c4_concessions(ctx: QCContext):
                                     "financial_assistance_description"],
                             template_id="C-4-desc", confidence=0.7, evidence=ev_box))
 
-    # cross-document: report amount vs purchase-agreement amount
-    contract_amt = ctx.contract.value("concessions_amount")
-    ev = [ctx.appraisal.evidence("financial_assistance_amount"),
-          ctx.contract.evidence("concessions_amount")]
-    if not ctx.has_contract:
-        out.append(_res("C-4", "18", RuleStatus.VERIFY,
-                        message="The purchase contract was not provided; please verify the "
-                                "reported concessions against the agreement manually.",
-                        fields=["concessions_amount"], evidence=ev, confidence=0.5))
-        return out
-    if contract_amt is None:
-        # nothing labelled a concession in the contract; only flag when the
-        # report claims one
-        if amt and amt > 0:
-            out.append(_res("C-4", "18", RuleStatus.VERIFY,
-                            message="The concession amount could not be read from the contract; please verify it matches the appraisal.",
-                            fields=["concessions_amount"], evidence=ev, confidence=0.5))
-        else:
-            out.append(_res("C-4", "18", RuleStatus.PASS,
-                            fields=["financial_assistance_amount"], evidence=ev))
-        return out
-    mr = matching.match_currency(report_amt, contract_amt)
-    if mr.verdict == "match":
-        out.append(_res("C-4", "18", RuleStatus.PASS,
-                        fields=["financial_assistance_amount"], evidence=ev))
-    else:
-        out.append(_res("C-4", "18", RuleStatus.VERIFY,
-                        message=qc_config.template("C-4-concession",
-                                                   a=report_amt or "0", b=contract_amt),
-                        fields=["financial_assistance_amount", "concessions_amount"],
-                        template_id="C-4-concession", evidence=ev, confidence=0.6))
+    # cross-document concessions: the contract is not read — surface the
+    # appraisal's stated concession amount/description and ask for manual verify.
+    out.append(_manual_verify(ctx, "C-4", "18",
+                              [("financial_assistance_amount", "Seller concessions / financial assistance"),
+                               ("financial_assistance_description", "Concession description")],
+                              "Seller-concessions cross-check."))
     return out
 
 
-# ---- C-5 personal property (contract chattel → commentary required) --------
+# ---- C-5 personal property (appraisal commentary → verify vs contract) ------
+# The contract chattel list is not read. We surface the appraiser's contract
+# analysis commentary and ask the reviewer to confirm any personal property in
+# the contract was addressed in the valuation.
 
 @rule(id="C-5", num="18", section="contract", phase=3,
-      applies_when=_is_purchase, name="Personal property addressed")
+      applies_when=lambda ctx: _is_purchase(ctx) and ctx.has_contract,
+      name="Personal property addressed")
 def c5_personal_property(ctx: QCContext):
-    items = (ctx.contract.value("personal_property_items") or "").strip()
-    if not ctx.has_contract or not items:
-        return _res("C-5", "18", RuleStatus.NOT_APPLICABLE,
-                    message="No personal property identified in the purchase contract.")
     commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
-    ev = [ctx.contract.evidence("personal_property_items"),
-          ctx.appraisal.evidence("contract_analysis_comment")]
-    if commentary:
-        addressed = None
-        try:
-            from app.extraction.llm_groq import assess_text
-            addressed = assess_text(
-                commentary,
-                "Does this appraisal contract-analysis commentary address whether the "
-                f"personal property items in the sale ({items}) contribute to or were "
-                "excluded from the appraised value?",
-            )
-        except Exception:
-            addressed = None
-        if addressed:
-            return _res("C-5", "18", RuleStatus.PASS,
-                        fields=["personal_property_items"], evidence=ev)
-        return _res("C-5", "18", RuleStatus.VERIFY,
-                    message=qc_config.template("C-5-personal", value=items),
-                    fields=["personal_property_items", "contract_analysis_comment"],
-                    template_id="C-5-personal", confidence=0.6, evidence=ev)
-    # no commentary extracted at all → reviewer confirms (an extraction gap is
-    # indistinguishable from genuinely missing commentary)
+    ev = [ctx.appraisal.evidence("contract_analysis_comment")]
+    snippet = (commentary[:120] + "…") if len(commentary) > 120 else (commentary or "no contract commentary extracted")
     return _res("C-5", "18", RuleStatus.VERIFY,
-                message=qc_config.template("C-5-personal", value=items),
-                fields=["personal_property_items"], template_id="C-5-personal",
-                confidence=0.5, evidence=ev)
+                message=("Personal property check. The appraiser's contract commentary "
+                         f"reads: \"{snippet}\". The contract document is not auto-read; "
+                         "please verify any personal property listed in the contract was "
+                         "addressed (included or excluded) in the valuation — confirm "
+                         "against the contract file manually."),
+                fields=["contract_analysis_comment"], evidence=ev, confidence=0.5)
 
 
-# ---- C-PKG-UNEXEC — document-level execution status from ContractPackage ----
-# C-EXEC (above) checks the appraiser's OWN written commentary about execution
-# status.  C-PKG-UNEXEC is a complementary, independent check that reads the
-# execution signals from the contract PDF itself via ContractPackage, so both
-# the appraiser's claim AND the document evidence are evaluated.
+# ---- C-PKG-EXEC — contract execution status (manual, document not read) -----
+# The contract PDF is not read, so execution status cannot be determined from
+# the document. C-EXEC (above) still catches the appraiser's OWN commentary that
+# the contract is unsigned. This rule reminds the reviewer to confirm the
+# contract is fully executed by inspecting the contract file directly.
 
-@rule(id="C-PKG-UNEXEC", num="C-pkg-unexec", section="contract", phase=1,
-      applies_when=_is_purchase, name="Contract package execution status (document-level)")
-def c_pkg_unexec(ctx: QCContext):
-    # Require a contract document to be present and parsed.
-    if not ctx.has_contract:
-        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.NOT_APPLICABLE,
-                    message="No purchase contract document provided; document-level "
-                            "execution check cannot run.")
-
-    # Read the ContractPackage attached by the transaction runner (Task 5).
-    pkg = getattr(ctx, "contract_package", None)
-    if pkg is None:
-        # Package was not built (extraction failure, old code path, or test) —
-        # gracefully skip rather than crash; C-EXEC still covers commentary.
-        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.SKIPPED,
-                    message="ContractPackage not available for this transaction; "
-                            "document-level execution check skipped.",
-                    fields=["contract_package"])
-
-    ev = [ctx.contract.evidence("buyer_names"),
-          ctx.contract.evidence("concessions_amount")]
-
-    if not pkg.documents:
-        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.SKIPPED,
-                    message="ContractPackage has no documents; document-level "
-                            "execution check skipped.",
-                    evidence=ev)
-
-    if pkg.resolved_execution_status:
-        return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.PASS,
-                    message="The contract document(s) appear to be fully executed.",
-                    evidence=ev)
-
-    return _res("C-PKG-UNEXEC", "C-pkg-unexec", RuleStatus.HOLD,
-                message=qc_config.template("C-EXEC-unsigned"),
-                fields=["contract_package"],
-                template_id="C-EXEC-unsigned", evidence=ev)
+@rule(id="C-PKG-EXEC", num="C-pkg-exec", section="contract", phase=1,
+      applies_when=lambda ctx: _is_purchase(ctx) and ctx.has_contract,
+      name="Contract fully executed (manual verification)")
+def c_pkg_exec(ctx: QCContext):
+    return _res("C-PKG-EXEC", "C-pkg-exec", RuleStatus.VERIFY,
+                message=("Contract execution check. The contract document is not "
+                         "auto-read; please open the contract file and confirm it is "
+                         "fully signed/executed by all parties (buyer and seller)."),
+                fields=["contract_analysis_comment"],
+                evidence=[ctx.appraisal.evidence("contract_analysis_comment")],
+                confidence=0.5)
 
 
-# ---- C-BUYER-MATCH — buyer names on contract vs borrower on engagement ------
-# When both documents are available, verify that every borrower named on the
-# engagement letter (order form) appears somewhere in the contract buyer list.
-# A mismatch does not automatically fail — the order may be in the buyer's
-# entity name, the buyer may be an LLC, or there may be a legitimate co-buyer
-# not yet on the order.  VERIFY surfaces it for human judgment.
+# ---- C-BUYER-MATCH — order borrower(s) → verify against contract buyers ------
+# The contract document is not read, so we cannot pull the buyer list from it.
+# We surface the order/engagement borrower name(s) and the appraisal's borrower
+# name, and ask the reviewer to confirm they match the contract's buyers.
 
 @rule(id="C-BUYER-MATCH", num="C-buyer-match", section="contract", phase=2,
       applies_when=lambda ctx: _is_purchase(ctx) and ctx.has_contract and ctx.has_engagement,
-      name="Buyer names on contract match borrower(s) on engagement")
+      name="Buyer names match borrower(s) on order")
 def c_buyer_match(ctx: QCContext):
-    # Collect buyer name string from the contract extractor.
-    contract_buyers_raw = (ctx.contract.value("buyer_names") or "").strip()
-    ev = [ctx.contract.evidence("buyer_names"),
-          ctx.engagement.evidence("borrower_name"),
-          ctx.engagement.evidence("co_borrower_name")]
-
-    if not contract_buyers_raw:
-        # Extraction did not find buyer names — cannot compare; skip silently.
-        return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.SKIPPED,
-                    message="Buyer name(s) could not be extracted from the contract; "
-                            "borrower-name comparison skipped.",
-                    fields=["buyer_names"], evidence=ev)
-
-    # Collect borrower names from the engagement letter.
     borrower = (ctx.engagement.value("borrower_name") or "").strip()
     co_borrower = (ctx.engagement.value("co_borrower_name") or "").strip()
-    order_names = [n for n in (borrower, co_borrower) if n]
-
-    if not order_names:
-        return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.SKIPPED,
-                    message="Borrower name(s) could not be extracted from the engagement "
-                            "letter; borrower-name comparison skipped.",
-                    fields=["borrower_name"], evidence=ev)
-
-    # Fuzzy token match: every engagement borrower name token should appear in
-    # the contract buyer string.  We compare lowercase token sets so "John A.
-    # Smith" matches "JOHN SMITH" — middle initials are ignored when absent.
-    contract_buyers_lower = contract_buyers_raw.lower()
-
-    def _name_present(name: str) -> bool:
-        """True if all significant tokens of `name` appear in the buyer string."""
-        tokens = [t for t in re.split(r"[\s,&.]+", name.lower()) if len(t) > 1]
-        return all(tok in contract_buyers_lower for tok in tokens)
-
-    mismatched = [n for n in order_names if not _name_present(n)]
-
-    if not mismatched:
-        return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.PASS,
-                    fields=["buyer_names", "borrower_name"], evidence=ev)
-
-    order_label = " / ".join(order_names)
+    order_names = " / ".join(n for n in (borrower, co_borrower) if n) or "not stated on order"
+    appr_borrower = (ctx.appraisal.value("borrower_name") or "").strip() or "not stated in report"
+    ev = [ctx.engagement.evidence("borrower_name"),
+          ctx.engagement.evidence("co_borrower_name"),
+          ctx.appraisal.evidence("borrower_name")]
     return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.VERIFY,
-                message=qc_config.template(
-                    "C-BUYER-MATCH",
-                    contract_buyers=contract_buyers_raw,
-                    order_borrowers=order_label,
-                ),
-                fields=["buyer_names", "borrower_name"],
-                template_id="C-BUYER-MATCH", evidence=ev, confidence=0.7)
+                message=(f"Buyer/borrower check. Order borrower(s): {order_names}; "
+                         f"appraisal borrower(s): {appr_borrower}. The contract document "
+                         "is not auto-read; please confirm the contract's buyer name(s) "
+                         "match these against the contract file manually."),
+                fields=["borrower_name", "co_borrower_name"], evidence=ev, confidence=0.5)
