@@ -435,6 +435,12 @@ public class ReviewerApiController {
                 ruleMap.put("verifyQuestion",  rule.getVerifyQuestion());
                 ruleMap.put("rejectionText",   rule.getRejectionText());
                 ruleMap.put("evidence",        parseEvidenceJson(rule.getEvidence()));
+                // Slim finding contract — backend-owned, generated at eval time. The
+                // collapsed reviewer row renders from THESE (summary + tier + the
+                // values to emphasize), not from a client-side derivation.
+                ruleMap.put("summary",         rule.getSummary());
+                ruleMap.put("confidenceTier",  rule.getConfidenceTier());
+                ruleMap.put("highlightedValues", parseEvidenceJson(rule.getHighlightedValues()));
                 ruleMap.put("help",            ruleHelp(rule.getRuleId(), rule.getRuleName()));
                 ruleMap.put("reviewerVerified",rule.getReviewerVerified());
                 ruleMap.put("reviewerComment", rule.getReviewerComment());
@@ -474,6 +480,56 @@ public class ReviewerApiController {
             log.error("Failed to get rules for qcResultId={}: {}", qcResultId, e.getMessage(), e);
             return ResponseEntity.badRequest().body(List.of());
         }
+    }
+
+    /**
+     * Full evidence for ONE rule result — the verbose payload the slim row defers
+     * until the reviewer expands it. Returns the document-tagged sources (each with
+     * value, page and the normalized bbox for click-to-scroll), the plain-language
+     * explanation, and the values to emphasize. Hitting this only on expand keeps
+     * the initial rules list lean.
+     */
+    @GetMapping("/qc/rules/{ruleResultId}/detail")
+    public ResponseEntity<Map<String, Object>> getRuleDetail(
+            @PathVariable Long ruleResultId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            com.shal.common.entity.QCRuleResult rule = qcRuleResultRepository.findById(ruleResultId)
+                    .orElseThrow(() -> new IllegalArgumentException("Rule result not found: " + ruleResultId));
+            Long qcResultId = rule.getQcResult() != null ? rule.getQcResult().getId() : null;
+            if (principal != null && principal.getUser().getRole() == Role.REVIEWER && qcResultId != null) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+            Map<String, Object> body = new HashMap<>();
+            body.put("id",               rule.getId());
+            body.put("ruleId",           rule.getRuleId());
+            body.put("sources",          parseEvidenceJson(rule.getEvidence()));
+            body.put("explanation",      firstNonBlank(rule.getVerifyQuestion(), rule.getRejectionText(), rule.getMessage()));
+            body.put("highlightedValues", parseEvidenceJson(rule.getHighlightedValues()));
+            body.put("pdfPage",          rule.getPdfPage());
+            body.put("bboxX",            rule.getBboxX());
+            body.put("bboxY",            rule.getBboxY());
+            body.put("bboxW",            rule.getBboxW());
+            body.put("bboxH",            rule.getBboxH());
+            return ResponseEntity.ok(body);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.warn("Failed to get rule detail for ruleResultId={}: {}", ruleResultId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** First non-blank of the candidates, or "" — used to pick the best explanation. */
+    private String firstNonBlank(String... candidates) {
+        if (candidates != null) {
+            for (String c : candidates) {
+                if (c != null && !c.isBlank()) {
+                    return c;
+                }
+            }
+        }
+        return "";
     }
 
     /**

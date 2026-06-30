@@ -22,6 +22,12 @@ public record PythonRuleResult(
         @JsonProperty("appraisal_value")  String appraisalValue,
         @JsonProperty("engagement_value") String engagementValue,
         Double confidence,
+        // Slim finding contract (collapsed-row presentation, generated at eval time):
+        // a clean one-liner, a plain-language trust tier (high|medium|low), and the
+        // distinct cited values the UI emphasizes inline without regex-guessing.
+        @JsonProperty("summary")           String summary,
+        @JsonProperty("confidence_tier")   String confidenceTier,
+        @JsonProperty("highlighted_values") java.util.List<String> highlightedValues,
         @JsonProperty("extracted_value")  Object extractedValue,
         @JsonProperty("expected_value")   Object expectedValue,
         @JsonProperty("verify_question")  String verifyQuestion,

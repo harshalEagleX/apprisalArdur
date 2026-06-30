@@ -17,7 +17,9 @@ class PythonRuleResultTest {
         return new PythonRuleResult(
                 "R-1", "Test rule", "section",
                 status, "msg", "severity", "action",
-                null, null, null, null, null, null,
+                null, null, null, null,        // details, appraisalValue, engagementValue, confidence
+                null, null, null,              // summary, confidenceTier, highlightedValues
+                null, null,                    // extractedValue, expectedValue
                 null, null, null, reviewRequired,
                 null, null, null, null, null, null,
                 null); // scope

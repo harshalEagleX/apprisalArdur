@@ -123,6 +123,19 @@ public class BatchApiController {
     }
 
     /**
+     * The exact set of batch statuses the backend recognises, in declaration order.
+     * The admin filter dropdown sources its options from here so the two can never
+     * drift — a status added to (or removed from) {@link BatchStatus} shows up in the
+     * filter with no frontend change, and the filter can never offer a value the
+     * backend would reject with "Unknown status".
+     */
+    @GetMapping("/statuses")
+    public ResponseEntity<List<String>> getStatuses() {
+        return ResponseEntity.ok(
+                java.util.Arrays.stream(BatchStatus.values()).map(Enum::name).toList());
+    }
+
+    /**
      * Converts a Batch to a summary map for the list API.
      * Uses denormalized fileCount column — no lazy-loading of the files collection required.
      */
@@ -167,13 +180,26 @@ public class BatchApiController {
                 ps.put("setName",      "__root__".equals(entry.getKey()) ? null : entry.getKey());
                 ps.put("files",        entry.getValue());
                 ps.put("fileCount",    entry.getValue().size());
-                ps.put("completedCount", entry.getValue().stream().filter(f -> "COMPLETED".equals(f.get("status"))).count());
-                ps.put("errorCount",   entry.getValue().stream().filter(f -> "ERROR".equals(f.get("status"))).count());
-                ps.put("pendingCount", entry.getValue().stream().filter(f -> "PENDING".equals(f.get("status"))).count());
+                ps.put("completedCount",        entry.getValue().stream().filter(f -> "COMPLETED".equals(f.get("status"))).count());
+                ps.put("errorCount",            entry.getValue().stream().filter(f -> "ERROR".equals(f.get("status"))).count());
+                ps.put("pendingCount",          entry.getValue().stream().filter(f -> "PENDING".equals(f.get("status"))).count());
+                ps.put("needsAssignmentCount",  entry.getValue().stream().filter(f -> "NEEDS_ASSIGNMENT".equals(f.get("status"))).count());
                 return ps;
             }).toList();
             m.put("propertySets", propertySets);
             m.put("setCount", (long) setMap.entrySet().stream().filter(e -> !"__root__".equals(e.getKey())).count());
+            // Surface unassigned files at the batch level so the admin UI can show
+            // the "Assign" panel without having to dig into each property set.
+            long needsAssignmentTotal = fileDtos.stream()
+                    .filter(f -> "NEEDS_ASSIGNMENT".equals(f.get("status"))).count();
+            m.put("needsAssignmentCount", needsAssignmentTotal);
+            if (needsAssignmentTotal > 0) {
+                m.put("unassignedFiles", fileDtos.stream()
+                        .filter(f -> "NEEDS_ASSIGNMENT".equals(f.get("status")))
+                        .toList());
+            } else {
+                m.put("unassignedFiles", List.of());
+            }
         } else {
             // Do NOT touch b.getFiles() here — the Hibernate session is closed after findAll()
             // returns (open-in-view=false). fileCount column has the accurate count.
@@ -331,6 +357,94 @@ public class BatchApiController {
         } catch (Exception e) {
             log.error("Failed to dismiss file error for file {}: {}", fileId, e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of("error", "Dismiss failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Manually assign a supporting file to a specific appraisal in the same batch.
+     *
+     * This is the resolution path for NEEDS_ASSIGNMENT files — those that could not
+     * be auto-matched at intake because their filename has no link to an appraisal
+     * (e.g. "EngagementLetter 2.pdf" in a 3-order batch).
+     *
+     * Creates a DocumentMatch(manual_admin, confidence=1.0) that FileMatchingService
+     * always honours and never overwrites during Re-QC. After assigning, trigger
+     * Re-QC on the appraisal to include the newly paired document.
+     *
+     * Body: { "appraisalFileId": <Long> }
+     */
+    @PostMapping("/{batchId}/files/{fileId}/assign")
+    public ResponseEntity<?> assignFileToAppraisal(
+            @PathVariable @NonNull Long batchId,
+            @PathVariable @NonNull Long fileId,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), batchId);
+        if (denied.isPresent()) return denied.get();
+        Object raw = body.get("appraisalFileId");
+        if (raw == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "appraisalFileId is required"));
+        }
+        Long appraisalFileId;
+        try {
+            appraisalFileId = Long.parseLong(raw.toString());
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "appraisalFileId must be a number"));
+        }
+        try {
+            batchService.manuallyAssignFile(fileId, appraisalFileId, batchId, principal.getUser());
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "fileId", fileId,
+                    "appraisalFileId", appraisalFileId,
+                    "message", "File assigned. Run Re-QC on the appraisal to include this document."));
+        } catch (Exception e) {
+            log.warn("Manual assign failed: batchId={} fileId={} appraisalFileId={} error={}",
+                    batchId, fileId, appraisalFileId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Change a file's document type.
+     *
+     * Used when intake classification was wrong — most commonly a MISMO XML that
+     * landed outside the appraisal/ folder and was classified as CONTRACT. After
+     * reclassifying, run Re-QC so the corrected type is picked up by matching.
+     *
+     * Body: { "fileType": "APPRAISAL_XML" }
+     */
+    @PostMapping("/{batchId}/files/{fileId}/reclassify")
+    public ResponseEntity<?> reclassifyFile(
+            @PathVariable @NonNull Long batchId,
+            @PathVariable @NonNull Long fileId,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), batchId);
+        if (denied.isPresent()) return denied.get();
+        String typeStr = body.get("fileType") instanceof String s ? s : null;
+        if (typeStr == null || typeStr.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "fileType is required"));
+        }
+        FileType newType;
+        try {
+            newType = FileType.valueOf(typeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Unknown fileType: " + typeStr,
+                    "valid", java.util.Arrays.stream(FileType.values()).map(Enum::name).toList()));
+        }
+        try {
+            batchService.reclassifyFile(fileId, batchId, newType, principal.getUser());
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "fileId", fileId,
+                    "newType", newType.name(),
+                    "message", "File reclassified to " + newType.name() + ". Run Re-QC to apply."));
+        } catch (Exception e) {
+            log.warn("Reclassify failed: batchId={} fileId={} type={} error={}",
+                    batchId, fileId, typeStr, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

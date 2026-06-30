@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 import { PageSpinner } from "@/components/shared/Spinner";
 import DeviceGate from "@/components/shared/DeviceGate";
-import { RuleCard } from "@/components/reviewer/RuleCard";
+import { FindingRow } from "@/components/reviewer/FindingRow";
 import { RuleGroup } from "@/components/reviewer/RuleGroup";
 import { SignOffDialog } from "@/components/reviewer/SignOffDialog";
 import { cleanRuleValue, evidenceText } from "@/lib/ruleEvidence";
@@ -609,7 +609,7 @@ export default function VerifyFilePage() {
   }
 
   const renderRuleCard = (rule: QCRuleResult) => (
-    <RuleCard
+    <FindingRow
       key={rule.id}
       rule={rule}
       decision={decisions[rule.id]}

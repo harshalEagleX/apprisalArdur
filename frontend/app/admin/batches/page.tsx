@@ -9,6 +9,7 @@ import {
   getAdminBatches, processQC, assignReviewer, deleteBatch,
   reconcileStuckBatches, cancelQC, getAdminDashboard, getAllUsers,
   bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer, getSystemHealth,
+  getBatchStatuses,
   type Batch, type User,
 } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
@@ -133,6 +134,10 @@ export default function BatchesPage() {
     return new URLSearchParams(window.location.search).get("search") ?? "";
   });
   const [debouncedSearch, setDebounced] = useState(search);
+  // Status filter options come from the backend (authoritative BatchStatus enum) so
+  // the dropdown can never offer a value the backend would reject. The hardcoded
+  // STATUSES list is only the initial/fallback set until the fetch resolves.
+  const [statusOptions, setStatusOptions] = useState<string[]>(STATUSES.filter(Boolean));
   const [loading, setLoading]         = useState(true);
   const [showUpload, setShowUpload]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Batch | null>(null);
@@ -285,6 +290,15 @@ export default function BatchesPage() {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // Load the authoritative status list from the backend once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getBatchStatuses()
+      .then(list => { if (!cancelled && Array.isArray(list) && list.length) setStatusOptions(list); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   // Sync URL params
   useEffect(() => {
@@ -487,7 +501,7 @@ export default function BatchesPage() {
               className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 sm:w-48"
               aria-label="Filter by status">
               <option value="">All statuses</option>
-              {STATUSES.filter(Boolean).map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+              {statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
             </select>
             {(search || statusFilter) && (
               <button onClick={() => { setSearch(""); setStatus(""); setPage(0); }}

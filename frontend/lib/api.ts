@@ -355,6 +355,25 @@ export const getAdminBatches = (page = 0, status?: string, search?: string) => {
 export const getBatchById = (id: number) =>
   apiFetch<Batch>(`/api/admin/batches/${id}`);
 
+/** The batch statuses the backend recognises — authoritative source for the admin
+ * status filter so its options can never drift from the BatchStatus enum. */
+export const getBatchStatuses = () =>
+  apiFetch<string[]>(`/api/admin/batches/statuses`);
+
+/** Manually assign a NEEDS_ASSIGNMENT supporting file to a specific appraisal. */
+export const assignFileToAppraisal = (batchId: number, fileId: number, appraisalFileId: number) =>
+  apiFetch<{ success: boolean; message: string }>(
+    `/api/admin/batches/${batchId}/files/${fileId}/assign`,
+    { method: "POST", body: JSON.stringify({ appraisalFileId }) },
+  );
+
+/** Change a file's document type (e.g. CONTRACT → APPRAISAL_XML after misclassification). */
+export const reclassifyBatchFile = (batchId: number, fileId: number, fileType: string) =>
+  apiFetch<{ success: boolean; message: string }>(
+    `/api/admin/batches/${batchId}/files/${fileId}/reclassify`,
+    { method: "POST", body: JSON.stringify({ fileType }) },
+  );
+
 export type SystemHealth = {
   degraded: boolean;
   pool: { active?: number; idle?: number; total?: number; waiting?: number; max?: number };
@@ -957,6 +976,10 @@ export interface Batch {
   errorMessage?: string;
   /** Non-fatal intake warnings (e.g. ambiguous document roles); newline-separated. */
   intakeWarnings?: string | null;
+  /** Total NEEDS_ASSIGNMENT files across all property sets; populated on GET /api/admin/batches/{id}. */
+  needsAssignmentCount?: number;
+  /** Supporting files that could not be auto-matched — same data as per-set, collected at batch level. */
+  unassignedFiles?: BatchFile[];
   createdAt: string;
   updatedAt: string;
 }
@@ -964,7 +987,7 @@ export interface Batch {
 export interface BatchFile {
   id: number;
   filename: string;
-  fileType: "APPRAISAL" | "ENGAGEMENT" | "CONTRACT";
+  fileType: "APPRAISAL" | "APPRAISAL_XML" | "ENGAGEMENT" | "CONTRACT";
   fileSize: number;
   status: string;
   orderId?: string;
@@ -980,6 +1003,8 @@ export interface PropertySet {
   completedCount: number;
   errorCount: number;
   pendingCount: number;
+  /** Supporting files that could not be auto-matched; admin must assign manually. */
+  needsAssignmentCount: number;
 }
 
 export interface QCResult {
@@ -1045,12 +1070,35 @@ export interface QCRuleResult {
   overrideRequestedAt?: string | null;
   verifiedAt?: string | null;
   severity?: string;
+  // Slim finding contract — backend-owned, generated at QC eval time. The collapsed
+  // reviewer row renders from these instead of deriving a one-liner client-side.
+  summary?: string | null;
+  confidenceTier?: "high" | "medium" | "low" | string | null;
+  highlightedValues?: string[] | null;
   pdfPage?: number | null;
   bboxX?: number | null;
   bboxY?: number | null;
   bboxW?: number | null;
   bboxH?: number | null;
 }
+
+/** Full per-rule evidence, fetched lazily when a reviewer expands a finding row. */
+export interface RuleDetail {
+  id: number;
+  ruleId: string;
+  sources: RuleEvidenceEntry[];
+  explanation: string;
+  highlightedValues: string[];
+  pdfPage?: number | null;
+  bboxX?: number | null;
+  bboxY?: number | null;
+  bboxW?: number | null;
+  bboxH?: number | null;
+}
+
+/** Lazy-load the full evidence for one rule result (on row expand). */
+export const getRuleDetail = (ruleResultId: number) =>
+  apiFetch<RuleDetail>(`/api/reviewer/qc/rules/${ruleResultId}/detail`);
 
 export interface RuleEvidenceEntry {
   document?: string;

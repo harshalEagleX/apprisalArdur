@@ -103,8 +103,19 @@ public class FileMatchingService {
      * Find a supporting file (engagement or contract) for an appraisal.
      * When the appraisal has a propertySetName, candidates are first restricted to
      * the same set so that a multi-property ZIP never cross-matches documents.
+     *
+     * A manual_admin DocumentMatch (created via the admin assign UI) is always
+     * honoured and never overwritten by auto-matching logic, even across Re-QC runs.
      */
     private Optional<BatchFile> findSupportingFile(BatchFile appraisal, FileType targetType) {
+        // Respect manual admin assignments unconditionally — never overwrite with auto-matching.
+        Optional<DocumentMatch> existingMatch = documentMatchRepository
+                .findByAppraisalFile_IdAndSupportingFileType(appraisal.getId(), targetType);
+        if (existingMatch.isPresent() && "manual_admin".equals(existingMatch.get().getMatchType())) {
+            log.debug("Honouring manual admin assignment for appraisal {} type {}", appraisal.getFilename(), targetType);
+            return Optional.ofNullable(existingMatch.get().getSupportingFile());
+        }
+
         String setName = appraisal.getPropertySetName();
         if (setName != null && !setName.isBlank()) {
             // Try same-set match first
@@ -289,13 +300,13 @@ public class FileMatchingService {
                 .toList();
 
         if (bestScore < 2 || best == null) {
-            // Last resort: when there is exactly ONE file of this type in the batch and
-            // the batch is small (≤5 appraisals), use it unambiguously. This handles the
-            // common case where a ZIP contains a flat or poorly-named file set — there is
-            // no other candidate to confuse it with, so orderId matching is irrelevant.
+            // Last resort: when there is exactly ONE file of this type in the batch AND
+            // this is a single-order batch (exactly 1 appraisal), use it unambiguously.
+            // Restricting to appraisalCount == 1 prevents a 3-order batch from silently
+            // grabbing the wrong engagement letter when only one survives fuzzy scoring.
             long appraisalCount = batchFileRepository.countByBatchIdAndFileType(
                     appraisalFile.getBatch().getId(), FileType.APPRAISAL);
-            if (candidates.size() == 1 && appraisalCount <= 5) {
+            if (candidates.size() == 1 && appraisalCount == 1) {
                 BatchFile sole = candidates.get(0);
                 log.info("Single-file fallback: using sole {} '{}' for appraisal '{}' (orderId/name match failed, 1 candidate, {} appraisals in batch)",
                         targetType, sole.getFilename(), appraisalFile.getFilename(), appraisalCount);
@@ -328,6 +339,11 @@ public class FileMatchingService {
         DocumentMatch match = documentMatchRepository
                 .findByAppraisalFile_IdAndSupportingFileType(appraisalFile.getId(), targetType)
                 .orElseGet(DocumentMatch::new);
+
+        // Never overwrite a manual admin assignment with auto-matching results.
+        if (match.getId() != null && "manual_admin".equals(match.getMatchType())) {
+            return;
+        }
 
         boolean isNew = match.getId() == null;
         boolean changed = isNew

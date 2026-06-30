@@ -42,7 +42,7 @@ RUN_PYTHON=true
 RUN_VOLUME=false
 RUN_REVIEWER=false
 BASE_URL="http://localhost:8080"
-PYTHON_URL="http://localhost:8000"
+PYTHON_URL="http://localhost:5001"
 ADMIN_USER="admin"
 ADMIN_PASS="admin123"
 

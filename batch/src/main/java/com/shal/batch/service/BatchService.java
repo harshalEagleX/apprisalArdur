@@ -441,18 +441,34 @@ public class BatchService {
                 // (e.g. "8234 E Pearson_no_appraisal/engagement/order.pdf" would incorrectly
                 // become APPRAISAL because "appraisal" appears in the set folder name).
                 String parentFolder = directParentFolder(entryName);
-                // XML files are the MISMO 2.6 GSE appraisal XML — only valid in the
-                // appraisal folder. An .xml anywhere else is excluded (a .xml is never
-                // an engagement letter or contract).
+                // XML files are the MISMO 2.6 GSE appraisal XML. If they sit inside the
+                // appraisal/ folder, classify immediately. If they are outside (common in
+                // flat ZIPs where vendor dumps everything at root), peek at the XML content
+                // to detect the MISMO namespace before deciding to include or exclude.
+                // ZipInputStream does not support mark/reset, so we must read all bytes now
+                // and write them manually; preReadXmlBytes is null for non-XML entries.
+                byte[] preReadXmlBytes = null;
                 FileType fileType;
                 if (parentFolder.startsWith("appraisal")) {
                     fileType = isXmlEntry ? FileType.APPRAISAL_XML : FileType.APPRAISAL;
                     hasAppraisalFolder = true;
                 } else if (isXmlEntry) {
-                    // XML outside the appraisal folder — not a document we process.
-                    excludedNonPdf.add(filenameOnly);
-                    log.info("Excluding XML outside appraisal folder: {}", entryName);
-                    continue;
+                    preReadXmlBytes = zis.readAllBytes();
+                    String xmlHeader = new String(preReadXmlBytes, 0,
+                            Math.min(preReadXmlBytes.length, 2048), java.nio.charset.StandardCharsets.UTF_8);
+                    boolean isMismo = xmlHeader.contains("VALUATION_RESPONSE")
+                            || xmlHeader.contains("MISMO")
+                            || xmlHeader.contains("ValuationResponse")
+                            || xmlHeader.contains("UCDP_");
+                    if (!isMismo) {
+                        excludedNonPdf.add(filenameOnly);
+                        log.info("Excluding non-MISMO XML outside appraisal folder: {}", entryName);
+                        zis.closeEntry();
+                        continue;
+                    }
+                    fileType = FileType.APPRAISAL_XML;
+                    hasAppraisalFolder = true;
+                    log.info("MISMO XML detected outside appraisal/ folder — reclassifying to APPRAISAL_XML: {}", entryName);
                 } else if (parentFolder.startsWith("engagement") || parentFolder.startsWith("eagagement")
                         || parentFolder.equals("order") || parentFolder.equals("orders")) {
                     fileType = FileType.ENGAGEMENT;
@@ -487,7 +503,11 @@ public class BatchService {
                             filename, storageFolderName, filePath.getFileName());
                     filename = filePath.getFileName().toString();
                 }
-                Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                if (preReadXmlBytes != null) {
+                    Files.write(filePath, preReadXmlBytes);
+                } else {
+                    Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
                 long fileBytes = Files.size(filePath);
                 if (fileBytes > maxUploadFileMb * 1024L * 1024L) {
                     Files.deleteIfExists(filePath);
@@ -547,6 +567,7 @@ public class BatchService {
         }
 
         flagDocumentRoleAmbiguity(batch);
+        markUnresolvableFilesNeedsAssignment(batch);
 
         if (!excludedNonPdf.isEmpty()) {
             String note = excludedNonPdf.size() + " non-PDF file(s) catalogued and excluded from extraction: "
@@ -655,6 +676,151 @@ public class BatchService {
             String existing = batch.getIntakeWarnings();
             batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
         }
+    }
+
+    /**
+     * For multi-order batches (more than one APPRAISAL file), mark every ENGAGEMENT,
+     * CONTRACT, and APPRAISAL_XML file that has no orderId overlap with any appraisal
+     * as NEEDS_ASSIGNMENT. These files cannot be auto-matched by filename alone; the
+     * admin must use the batch detail UI to manually pair them before Re-QC can run.
+     *
+     * Single-order batches are exempt — the single_file_fallback in FileMatchingService
+     * handles the "only one candidate" case correctly for them.
+     */
+    private void markUnresolvableFilesNeedsAssignment(Batch batch) {
+        long appraisalCount = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.APPRAISAL).count();
+        if (appraisalCount <= 1) {
+            return;
+        }
+        Set<String> appraisalOrderIds = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.APPRAISAL)
+                .map(BatchFile::getOrderId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(java.util.stream.Collectors.toSet());
+
+        for (BatchFile f : batch.getFiles()) {
+            if (f.getFileType() == FileType.APPRAISAL) {
+                continue;
+            }
+            String fOrderId = f.getOrderId();
+            // Primary check: orderId exact match
+            boolean linked = fOrderId != null && !fOrderId.isBlank()
+                    && appraisalOrderIds.contains(fOrderId);
+            // Secondary check: case-insensitive basename match (covers "ESCA-0019573.xml"
+            // vs appraisal orderId "ESCA-0019573" when orderId comes from the full basename)
+            if (!linked && fOrderId != null && !fOrderId.isBlank()) {
+                linked = appraisalOrderIds.stream()
+                        .anyMatch(aid -> aid.equalsIgnoreCase(fOrderId));
+            }
+            if (!linked) {
+                f.setStatus(FileStatus.NEEDS_ASSIGNMENT);
+                log.info("Batch {} — file '{}' ({}) marked NEEDS_ASSIGNMENT: no orderId match in {}-order batch",
+                        batch.getParentBatchId(), f.getFilename(), f.getFileType(), appraisalCount);
+            }
+        }
+
+        long needsCount = batch.getFiles().stream()
+                .filter(f -> f.getStatus() == FileStatus.NEEDS_ASSIGNMENT).count();
+        if (needsCount > 0) {
+            String note = needsCount + " supporting file(s) could not be automatically linked to an appraisal "
+                    + "and require manual assignment before QC can use them. Use the 'Assign' button "
+                    + "next to each NEEDS ASSIGNMENT file in the batch detail view.";
+            String existing = batch.getIntakeWarnings();
+            batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+        }
+    }
+
+    /**
+     * Manually assign a supporting file (ENGAGEMENT, CONTRACT, or APPRAISAL_XML) to a
+     * specific appraisal in the same batch. Creates (or updates) a DocumentMatch with
+     * match_type='manual_admin' and confidence 1.0.
+     *
+     * FileMatchingService.findSupportingFile() always honours manual_admin matches and
+     * never overwrites them during Re-QC, so the pairing survives re-runs.
+     *
+     * The file is moved from NEEDS_ASSIGNMENT → PENDING so the next Re-QC picks it up.
+     */
+    @Transactional
+    public void manuallyAssignFile(Long supportingFileId, Long appraisalFileId, Long batchId, User admin) {
+        BatchFile supporting = batchFileRepository.findById(supportingFileId)
+                .orElseThrow(() -> new com.shal.common.exception.ResourceNotFoundException(
+                        "BatchFile not found: " + supportingFileId));
+        BatchFile appraisal = batchFileRepository.findById(appraisalFileId)
+                .orElseThrow(() -> new com.shal.common.exception.ResourceNotFoundException(
+                        "BatchFile not found: " + appraisalFileId));
+
+        if (!batchId.equals(supporting.getBatch().getId()) || !batchId.equals(appraisal.getBatch().getId())) {
+            throw new ValidationException("files", "Both files must belong to batch " + batchId);
+        }
+        if (appraisal.getFileType() != FileType.APPRAISAL) {
+            throw new ValidationException("appraisalFileId", "Target must be an APPRAISAL file");
+        }
+        if (supporting.getFileType() == FileType.APPRAISAL) {
+            throw new ValidationException("fileId", "Cannot assign an APPRAISAL as a supporting file");
+        }
+
+        DocumentMatch match = documentMatchRepository
+                .findByAppraisalFile_IdAndSupportingFileType(appraisal.getId(), supporting.getFileType())
+                .orElseGet(DocumentMatch::new);
+        match.setAppraisalFile(appraisal);
+        match.setSupportingFile(supporting);
+        match.setSupportingFileType(supporting.getFileType());
+        match.setMatchType("manual_admin");
+        match.setConfidenceScore(1.0);
+        match.setMatchReason("Manually assigned by admin " + admin.getUsername()
+                + " on " + java.time.LocalDate.now());
+        match.setMatchedBy(admin);
+        match.setMatchWarning(null);
+        match.setAmbiguousCandidatesJson("[]");
+        match.setRejectedCandidatesJson("[]");
+        documentMatchRepository.save(match);
+
+        if (supporting.getStatus() == FileStatus.NEEDS_ASSIGNMENT
+                || supporting.getStatus() == FileStatus.PENDING) {
+            supporting.setStatus(FileStatus.PENDING);
+            batchFileRepository.save(supporting);
+        }
+
+        businessEventService.record("FILE_MANUALLY_ASSIGNED", admin, "java", "ASSIGNED",
+                "DocumentMatch", match.getId(), batchId, supportingFileId, null, null,
+                Map.of(
+                        "supporting_file", supporting.getFilename(),
+                        "supporting_type", supporting.getFileType().name(),
+                        "appraisal_file", appraisal.getFilename()
+                ));
+        log.info("Admin {} manually assigned '{}' ({}) → appraisal '{}' in batch {}",
+                admin.getUsername(), supporting.getFilename(), supporting.getFileType(),
+                appraisal.getFilename(), batchId);
+    }
+
+    /**
+     * Change a file's FileType. Used when intake classification was wrong — most commonly
+     * a MISMO XML that landed in the wrong folder and was classified as CONTRACT.
+     * After reclassification the admin should run Re-QC so the corrected type is used.
+     */
+    @Transactional
+    public void reclassifyFile(Long fileId, Long batchId, FileType newType, User admin) {
+        BatchFile file = batchFileRepository.findById(fileId)
+                .orElseThrow(() -> new com.shal.common.exception.ResourceNotFoundException(
+                        "BatchFile not found: " + fileId));
+        if (!batchId.equals(file.getBatch().getId())) {
+            throw new ValidationException("fileId", "File does not belong to batch " + batchId);
+        }
+        FileType oldType = file.getFileType();
+        if (oldType == newType) {
+            return;
+        }
+        file.setFileType(newType);
+        // If this file was previously unresolvable due to wrong type, reset its status
+        // so it is re-evaluated (matching will now use the correct type during Re-QC).
+        if (file.getStatus() == FileStatus.NEEDS_ASSIGNMENT) {
+            file.setStatus(FileStatus.PENDING);
+        }
+        batchFileRepository.save(file);
+        auditLogService.logEntity(admin, "FILE_RECLASSIFIED", "BatchFile", fileId);
+        log.info("Admin {} reclassified '{}' from {} → {} in batch {}",
+                admin.getUsername(), file.getFilename(), oldType, newType, batchId);
     }
 
     /**

@@ -21,7 +21,7 @@
         <gatling-plugin.version>4.9.6</gatling-plugin.version>
         <!-- Target server — override via -Dloadtest.baseUrl=http://... -->
         <loadtest.baseUrl>http://localhost:8080</loadtest.baseUrl>
-        <loadtest.pythonUrl>http://localhost:8000</loadtest.pythonUrl>
+        <loadtest.pythonUrl>http://localhost:5001</loadtest.pythonUrl>
         <!-- Scale knobs — override on the CLI -->
         <loadtest.users>5000</loadtest.users>
         <loadtest.rampSeconds>60</loadtest.rampSeconds>

@@ -946,6 +946,11 @@ public class QCProcessingService {
                         .verifyQuestion(textOr(pr.verifyQuestion(), ""))
                         .rejectionText(textOr(pr.rejectionText(), ""))
                         .evidence(pr.evidence() != null ? toJson(pr.evidence()) : "[]")
+                        // Slim finding contract — persisted at eval time so the reviewer
+                        // list endpoint is a pure read (no recompute, no LLM on read).
+                        .summary(textOr(pr.summary(), textOr(pr.ruleName(), pr.ruleId())))
+                        .confidenceTier(textOr(pr.confidenceTier(), "medium"))
+                        .highlightedValues(pr.highlightedValues() != null ? toJson(pr.highlightedValues()) : "[]")
                         .targetField(textOr(pr.targetField(), targetFieldFor(pr.ruleId())))
                         .pdfPage(pr.sourcePage() != null ? pr.sourcePage() : 0)
                         .bboxX(pr.bboxX() != null ? pr.bboxX() : 0.0f)

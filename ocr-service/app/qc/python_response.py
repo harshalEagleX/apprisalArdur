@@ -79,6 +79,30 @@ _SEVERITY = {
 _REVIEW = {RuleStatus.FAIL, RuleStatus.VERIFY, RuleStatus.HOLD}
 
 
+def _confidence_tier(confidence: float) -> str:
+    """Plain-language trust tier the reviewer UI shows instead of a bare percentage
+    (P-10: translate confidence, never expose the raw number as the only signal).
+    75-100 high · 41-74 medium · 0-40 low. Computed once here — the single source
+    of truth — so the band can never drift between the engine and the UI."""
+    pct = (confidence or 0.0) * 100
+    if pct >= 75:
+        return "high"
+    if pct >= 41:
+        return "medium"
+    return "low"
+
+
+def _highlighted_values(values: List[Optional[str]]) -> List[str]:
+    """The distinct, non-empty cited values the summary states inline, so the UI can
+    emphasize them without regex-guessing which words in the sentence are data."""
+    seen: List[str] = []
+    for v in values:
+        t = (v or "").strip()
+        if t and t not in seen:
+            seen.append(t)
+    return seen
+
+
 def _doc_value(r: RuleResult, doc: str) -> Optional[str]:
     for e in r.evidence:
         if e.document == doc and e.value:
@@ -180,9 +204,15 @@ def _rule_to_json(r: RuleResult) -> Dict:
         }
         for e in r.evidence if e.value
     ]
+    rule_name = _rule_display_name(r.rule_id, r.section)
+    # Slim, backend-owned one-liner for the collapsed reviewer row. For review
+    # rules this is the deterministic template message (qc_config.template), so no
+    # extra LLM call; for a clean PASS (empty message) it falls back to the rule
+    # name. The UI shows THIS, not a client-side derivation, as the row headline.
+    summary = (r.message or "").strip() or rule_name
     return {
         "rule_id": r.rule_id,
-        "rule_name": _rule_display_name(r.rule_id, r.section),
+        "rule_name": rule_name,
         # Authoritative section from the engine (UI groups on this). Sent as an
         # explicit field so Java/UI never re-derive it from the rule-id prefix.
         "section": r.section.upper(),
@@ -191,6 +221,10 @@ def _rule_to_json(r: RuleResult) -> Dict:
         "scope": _rule_scope(r),
         "status": _STATUS.get(r.status, "skipped"),
         "message": r.message or r.status.value,
+        # Slim finding contract (collapsed-row presentation, generated at eval time):
+        "summary": summary,
+        "confidence_tier": _confidence_tier(r.confidence),
+        "highlighted_values": _highlighted_values([appraisal_value, engagement_value]),
         "severity": _SEVERITY.get(r.status, "STANDARD"),
         "action_item": r.message if is_review else "No reviewer action required.",
         "reasoning": r.reasoning or "",

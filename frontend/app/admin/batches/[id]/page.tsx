@@ -6,12 +6,13 @@ import {
   ArrowLeft, ChevronRight, Package, FileText, CheckCircle2,
   AlertCircle, Clock, UserCheck, AlertTriangle, RefreshCw,
   Play, History, ChevronDown, ChevronUp, XCircle, Building2,
+  Link2, RotateCcw,
 } from "lucide-react";
 import {
   getBatchById, getQCResults, processQCFiles, getFileHistory,
-  getQCHistory,
-  type Batch, type QCResult, type PropertySet, type FileHistoryResponse,
-  type QCHistoryRun,
+  getQCHistory, assignFileToAppraisal, reclassifyBatchFile,
+  type Batch, type QCResult, type PropertySet, type BatchFile,
+  type FileHistoryResponse, type QCHistoryRun,
 } from "@/lib/api";
 import { TableSkeleton, Skeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
@@ -181,19 +182,244 @@ function FileHistoryDrawer({
   );
 }
 
+// ── Assign drawer ─────────────────────────────────────────────────────────────
+
+function AssignDrawer({
+  file,
+  appraisals,
+  batchId,
+  onClose,
+  onSuccess,
+}: {
+  file: BatchFile;
+  appraisals: BatchFile[];
+  batchId: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [selected, setSelected] = useState<number | "">("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleAssign() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await assignFileToAppraisal(batchId, file.id, selected);
+      toast.info("File assigned", "Run Re-QC on the appraisal to include this document.");
+      onSuccess();
+    } catch (e) {
+      toast.error("Assignment failed", String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
+      <div className="flex h-full w-full max-w-[460px] flex-col bg-[#0E1318] shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0E1318] px-5 py-3.5">
+          <div className="flex items-center gap-2">
+            <Link2 size={15} className="text-orange-400" />
+            <span className="text-sm font-semibold text-white">Assign to Appraisal</span>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+            <XCircle size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* File being assigned */}
+          <div className="rounded-lg border border-orange-500/25 bg-orange-950/20 px-4 py-3">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-orange-400 mb-1">Unassigned file</div>
+            <div className="text-sm font-medium text-white truncate">{file.filename}</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">{file.fileType}</div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">
+              Select appraisal to link this file to
+            </label>
+            {appraisals.length === 0 ? (
+              <div className="rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-[12px] text-slate-500">
+                No appraisals found in this batch.
+              </div>
+            ) : (
+              <select
+                value={selected}
+                onChange={e => setSelected(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-sm text-slate-200 focus:border-orange-500/50 focus:outline-none"
+              >
+                <option value="">— choose an appraisal —</option>
+                {appraisals.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.filename}{a.orderId ? ` (Order ${a.orderId})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="rounded-md border border-white/[0.06] bg-[#0B0F14] px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
+            After assigning, click <strong className="text-slate-400">Re-QC</strong> on the appraisal row to re-run quality checks with this document included.
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 p-4 flex gap-2">
+          <button
+            onClick={handleAssign}
+            disabled={!selected || busy}
+            className="flex-1 rounded-md border border-orange-500/40 bg-orange-950/40 py-2 text-sm font-medium text-orange-200 transition-colors hover:bg-orange-950/70 disabled:opacity-40"
+          >
+            {busy ? "Assigning…" : "Assign"}
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-md border border-white/10 bg-[#11161C] px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reclassify drawer ─────────────────────────────────────────────────────────
+
+const RECLASSIFY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "APPRAISAL_XML", label: "Appraisal XML (MISMO)" },
+  { value: "APPRAISAL",    label: "Appraisal (PDF)" },
+  { value: "ENGAGEMENT",   label: "Engagement Letter" },
+  { value: "CONTRACT",     label: "Contract" },
+];
+
+function ReclassifyDrawer({
+  file,
+  batchId,
+  onClose,
+  onSuccess,
+}: {
+  file: BatchFile;
+  batchId: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [selected, setSelected] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleReclassify() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await reclassifyBatchFile(batchId, file.id, selected);
+      toast.info("File reclassified", "Run Re-QC on the appraisal to apply the change.");
+      onSuccess();
+    } catch (e) {
+      toast.error("Reclassify failed", String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
+      <div className="flex h-full w-full max-w-[420px] flex-col bg-[#0E1318] shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0E1318] px-5 py-3.5">
+          <div className="flex items-center gap-2">
+            <RotateCcw size={14} className="text-slate-400" />
+            <span className="text-sm font-semibold text-white">Reclassify File</span>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+            <XCircle size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="rounded-lg border border-white/10 bg-[#11161C] px-4 py-3">
+            <div className="text-sm font-medium text-white truncate">{file.filename}</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">
+              Current type: <span className="text-slate-300">{fileTypeLabel(file.fileType)}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">New document type</label>
+            <select
+              value={selected}
+              onChange={e => setSelected(e.target.value)}
+              className="w-full rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-sm text-slate-200 focus:border-indigo-500/50 focus:outline-none"
+            >
+              <option value="">— choose a type —</option>
+              {RECLASSIFY_OPTIONS.filter(o => o.value !== file.fileType).map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded-md border border-white/[0.06] bg-[#0B0F14] px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
+            Use this when intake misclassified a file — most commonly a MISMO XML uploaded outside the <code className="text-slate-400">appraisal/</code> folder that was tagged as Contract. After reclassifying, run Re-QC.
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 p-4 flex gap-2">
+          <button
+            onClick={handleReclassify}
+            disabled={!selected || busy}
+            className="flex-1 rounded-md border border-indigo-500/30 bg-indigo-950/30 py-2 text-sm font-medium text-indigo-200 transition-colors hover:bg-indigo-950/60 disabled:opacity-40"
+          >
+            {busy ? "Reclassifying…" : "Reclassify"}
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-md border border-white/10 bg-[#11161C] px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fileTypeLabel(t: BatchFile["fileType"]): string {
+  switch (t) {
+    case "APPRAISAL":     return "Appraisal";
+    case "APPRAISAL_XML": return "Appraisal XML";
+    case "ENGAGEMENT":    return "Engagement";
+    case "CONTRACT":      return "Contract";
+  }
+}
+
+function fileTypeBadgeClass(t: BatchFile["fileType"]): string {
+  switch (t) {
+    case "APPRAISAL":     return "bg-indigo-950/50 text-indigo-300 border border-indigo-500/25";
+    case "APPRAISAL_XML": return "bg-violet-950/50 text-violet-300 border border-violet-500/25";
+    case "ENGAGEMENT":    return "bg-slate-800/60 text-slate-300 border border-white/10";
+    case "CONTRACT":      return "bg-slate-800/60 text-slate-400 border border-white/10";
+  }
+}
+
 // ── Property set section ──────────────────────────────────────────────────────
 
 function PropertySetSection({
   set,
+  allAppraisals,
   resultMap,
   onReQC,
   onHistory,
+  onAssign,
+  onReclassify,
   reQcBusy,
 }: {
   set: PropertySet;
+  allAppraisals: BatchFile[];
   resultMap: Map<number, QCResult>;
   onReQC: (fileId: number) => void;
   onHistory: (fileId: number) => void;
+  onAssign: (file: BatchFile) => void;
+  onReclassify: (file: BatchFile) => void;
   reQcBusy: Set<number>;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -225,6 +451,11 @@ function PropertySetSection({
               {set.pendingCount} pending
             </span>
           )}
+          {(set.needsAssignmentCount ?? 0) > 0 && (
+            <span className="rounded-full border border-orange-500/30 bg-orange-950/30 px-2 py-0.5 text-[10px] text-orange-300">
+              {set.needsAssignmentCount} unassigned
+            </span>
+          )}
           {set.completedCount > 0 && (
             <span className="rounded-full border border-green-900/40 bg-green-950/30 px-2 py-0.5 text-[10px] text-green-300">
               {set.completedCount} completed
@@ -251,16 +482,21 @@ function PropertySetSection({
               const qc = resultMap.get(f.id);
               const hasIssues = (qc?.failedCount ?? 0) > 0;
               const isAppraisal = f.fileType === "APPRAISAL";
+              const needsAssign = f.status === "NEEDS_ASSIGNMENT";
               const busy = reQcBusy.has(f.id);
               return (
-                <tr key={f.id} className="transition-colors hover:bg-white/[0.025]">
+                <tr
+                  key={f.id}
+                  className={`transition-colors hover:bg-white/[0.025] ${needsAssign ? "bg-orange-950/10" : ""}`}
+                >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 shrink-0 rounded-full ${
+                        needsAssign        ? "bg-orange-400" :
                         f.status === "ERROR" ? "bg-red-400" :
-                        hasIssues ? "bg-red-400" :
+                        hasIssues          ? "bg-red-400" :
                         qc?.finalDecision === "PASS" ? "bg-green-400" :
-                        qc ? "bg-amber-400" : "bg-slate-600"
+                        qc                 ? "bg-amber-400" : "bg-slate-600"
                       }`} />
                       <span className="truncate font-medium text-slate-200 max-w-[260px]" title={f.filename}>
                         {f.filename}
@@ -269,17 +505,15 @@ function PropertySetSection({
                     {f.orderId && <div className="ml-4 mt-0.5 text-[11px] text-slate-600">Order {f.orderId}</div>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      isAppraisal ? "bg-indigo-950/50 text-indigo-300 border border-indigo-500/25" :
-                      f.fileType === "ENGAGEMENT" ? "bg-slate-800/60 text-slate-300 border border-white/10" :
-                      "bg-slate-800/60 text-slate-400 border border-white/10"
-                    }`}>
-                      {f.fileType === "APPRAISAL" ? "Appraisal" : f.fileType === "ENGAGEMENT" ? "Engagement" : "Contract"}
+                    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${fileTypeBadgeClass(f.fileType)}`}>
+                      {fileTypeLabel(f.fileType)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     {qc ? (
                       <StatusBadge status={qc.finalDecision ?? qc.qcDecision} size="xs" />
+                    ) : needsAssign ? (
+                      <StatusBadge status="NEEDS_ASSIGNMENT" size="xs" />
                     ) : (
                       <span className="text-[11px] text-slate-600">{f.status?.replace(/_/g, " ") ?? "—"}</span>
                     )}
@@ -307,6 +541,26 @@ function PropertySetSection({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      {/* Assign — for unmatched supporting files */}
+                      {needsAssign && (
+                        <button
+                          onClick={() => onAssign(f)}
+                          title="Assign to an appraisal"
+                          className="inline-flex h-7 items-center gap-1 rounded border border-orange-500/30 bg-orange-950/30 px-2 text-[11px] text-orange-300 transition-colors hover:bg-orange-950/60"
+                        >
+                          <Link2 size={10} /> Assign
+                        </button>
+                      )}
+                      {/* Reclassify — available on all supporting files */}
+                      {!isAppraisal && (
+                        <button
+                          onClick={() => onReclassify(f)}
+                          title="Change document type"
+                          className="inline-flex h-7 items-center gap-1 rounded border border-white/10 bg-[#0B0F14] px-2 text-[11px] text-slate-500 transition-colors hover:text-slate-200"
+                        >
+                          <RotateCcw size={10} /> Reclassify
+                        </button>
+                      )}
                       {/* Re-QC — only appraisal files can be re-run */}
                       {isAppraisal && (
                         <button
@@ -353,11 +607,13 @@ function PropertySetSection({
 export default function BatchDetailPage() {
   const params = useParams();
   const id = Number(params?.id);
-  const [batch, setBatch]         = useState<Batch | null>(null);
-  const [results, setResults]     = useState<QCResult[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [batch, setBatch]           = useState<Batch | null>(null);
+  const [results, setResults]       = useState<QCResult[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [historyFileId, setHistoryFileId] = useState<number | null>(null);
-  const [reQcBusy, setReQcBusy]   = useState<Set<number>>(new Set());
+  const [assignFile, setAssignFile] = useState<BatchFile | null>(null);
+  const [reclassifyFile, setReclassifyFile] = useState<BatchFile | null>(null);
+  const [reQcBusy, setReQcBusy]     = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -390,13 +646,16 @@ export default function BatchDetailPage() {
 
   const propertySets = batch?.propertySets ?? [];
   const isMultiSet   = (batch?.setCount ?? 0) > 1;
+  const needsAssignmentTotal = batch?.needsAssignmentCount ?? 0;
+
+  // All appraisals across the batch — shown in the assign dropdown.
+  const allAppraisals = files.filter(f => f.fileType === "APPRAISAL");
 
   async function handleReQC(fileId: number) {
     setReQcBusy(s => new Set([...s, fileId]));
     try {
       await processQCFiles(id, [fileId]);
       toast.info("Re-QC started", "Results will update when processing completes.");
-      // Refresh after short delay to pick up the QC_PROCESSING status
       window.setTimeout(() => { void load(); }, 2000);
     } catch (e) {
       toast.error("Re-QC failed", String(e));
@@ -466,6 +725,22 @@ export default function BatchDetailPage() {
         </div>
       </header>
 
+      {/* Needs-assignment alert */}
+      {needsAssignmentTotal > 0 && (
+        <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-orange-500/30 bg-orange-950/20 px-4 py-3 text-sm text-orange-200">
+          <Link2 size={15} className="mt-0.5 shrink-0 text-orange-400" />
+          <div>
+            <div className="font-semibold">
+              {needsAssignmentTotal} file{needsAssignmentTotal !== 1 ? "s" : ""} need manual assignment
+            </div>
+            <div className="mt-0.5 text-[12px] leading-relaxed opacity-90">
+              These supporting files could not be automatically linked to an appraisal — filenames carry no shared order ID.
+              Click <strong>Assign</strong> on each highlighted row, pair it with the correct appraisal, then run Re-QC.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Intake warnings */}
       {batch?.intakeWarnings && (
         <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
@@ -495,26 +770,33 @@ export default function BatchDetailPage() {
           <EmptyState icon={FileText} title="No files" description="This batch has no attached files." />
         </div>
       ) : isMultiSet && propertySets.length > 0 ? (
-        /* Multi-set: one card per property set */
         <div className="space-y-4">
           {propertySets.map((ps, i) => (
             <PropertySetSection
               key={ps.setName ?? i}
               set={ps}
+              allAppraisals={allAppraisals}
               resultMap={resultMap}
               onReQC={handleReQC}
               onHistory={setHistoryFileId}
+              onAssign={setAssignFile}
+              onReclassify={setReclassifyFile}
               reQcBusy={reQcBusy}
             />
           ))}
         </div>
       ) : (
-        /* Single-set / flat: single card */
         <PropertySetSection
-          set={propertySets[0] ?? { setName: null, files, fileCount: files.length, completedCount: 0, errorCount: 0, pendingCount: 0 }}
+          set={propertySets[0] ?? {
+            setName: null, files, fileCount: files.length,
+            completedCount: 0, errorCount: 0, pendingCount: 0, needsAssignmentCount: 0,
+          }}
+          allAppraisals={allAppraisals}
           resultMap={resultMap}
           onReQC={handleReQC}
           onHistory={setHistoryFileId}
+          onAssign={setAssignFile}
+          onReclassify={setReclassifyFile}
           reQcBusy={reQcBusy}
         />
       )}
@@ -536,6 +818,29 @@ export default function BatchDetailPage() {
           key={historyFileId}
           batchFileId={historyFileId}
           onClose={() => setHistoryFileId(null)}
+        />
+      )}
+
+      {/* Assign drawer */}
+      {assignFile !== null && (
+        <AssignDrawer
+          key={assignFile.id}
+          file={assignFile}
+          appraisals={allAppraisals}
+          batchId={id}
+          onClose={() => setAssignFile(null)}
+          onSuccess={() => { setAssignFile(null); void load(); }}
+        />
+      )}
+
+      {/* Reclassify drawer */}
+      {reclassifyFile !== null && (
+        <ReclassifyDrawer
+          key={reclassifyFile.id}
+          file={reclassifyFile}
+          batchId={id}
+          onClose={() => setReclassifyFile(null)}
+          onSuccess={() => { setReclassifyFile(null); void load(); }}
         />
       )}
     </div>

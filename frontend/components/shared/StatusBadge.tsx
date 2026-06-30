@@ -5,8 +5,12 @@ const CONFIG: Record<string, { label: string; dot: string; text: string; bg: str
   QC_PROCESSING:     { label: "QC Running",       dot: "bg-slate-400 animate-pulse", text: "text-slate-200", bg: "bg-slate-950/40", border: "border-slate-500/25" },
   REVIEW_PENDING:    { label: "Awaiting Review",  dot: "bg-amber-400",  text: "text-amber-200",  bg: "bg-amber-950/40", border: "border-amber-500/25" },
   IN_REVIEW:         { label: "In Review",        dot: "bg-amber-400",  text: "text-amber-200",  bg: "bg-amber-950/40", border: "border-amber-500/25" },
+  PENDING:           { label: "Pending",          dot: "bg-slate-500",  text: "text-slate-400",  bg: "bg-[#161B22]", border: "border-white/10" },
+  PROCESSING:        { label: "Processing",       dot: "bg-slate-400 animate-pulse", text: "text-slate-300", bg: "bg-slate-950/40", border: "border-slate-500/25" },
   COMPLETED:         { label: "Completed",        dot: "bg-green-400",  text: "text-green-200",  bg: "bg-green-950/40", border: "border-green-500/25" },
   ERROR:             { label: "Error",            dot: "bg-red-400",    text: "text-red-200",    bg: "bg-red-950/40", border: "border-red-500/25" },
+  DISMISSED:         { label: "Dismissed",        dot: "bg-slate-600",  text: "text-slate-500",  bg: "bg-[#161B22]", border: "border-white/[0.06]" },
+  NEEDS_ASSIGNMENT:  { label: "Needs Assignment", dot: "bg-orange-400", text: "text-orange-200", bg: "bg-orange-950/40", border: "border-orange-500/25" },
   // QC decision badges
   AUTO_PASS:  { label: "Auto Pass",    dot: "bg-green-400", text: "text-green-200", bg: "bg-green-950/40", border: "border-green-500/25" },
   TO_VERIFY:  { label: "Needs Review", dot: "bg-amber-400", text: "text-amber-200", bg: "bg-amber-950/40", border: "border-amber-500/25" },
