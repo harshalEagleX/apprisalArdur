@@ -982,10 +982,11 @@ public class BatchService {
             if (slaDueStr != null) {
                 try { slaDueAt = java.time.LocalDateTime.parse(slaDueStr); } catch (Exception ignored) { }
             }
+            final java.time.LocalDateTime finalSlaDueAt = slaDueAt;
 
             // Find or create the transaction for this ref
             AppraisalTransaction tx = transactionService.findByRef(txRef).orElseGet(() ->
-                transactionService.createTransaction(amcCode, orderNumber, address, client, revisedFrom, slaDueAt));
+                transactionService.createTransaction(amcCode, orderNumber, address, client, revisedFrom, finalSlaDueAt));
 
             transactionService.linkBatchToTransaction(batch.getId(), tx.getId());
             log.info("Batch {} linked to transaction {} via manifest", batch.getId(), txRef);

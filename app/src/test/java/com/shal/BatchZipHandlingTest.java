@@ -90,8 +90,12 @@ class BatchZipHandlingTest {
         MockMultipartFile zipFile = makeZip(tag + "_nomfst.zip",
                 new String[]{"somefile.txt"}, new String[]{"hello"});
 
-        batchService.linkBatchToTransactionFromManifest(batch, zipFile,
-                loadClient());
+        // Load client within the same TX as linkBatchToTransactionFromManifest so it stays managed
+        tx.executeWithoutResult(s -> {
+            Client c = clientRepository.findById(clientId).orElseThrow();
+            try { batchService.linkBatchToTransactionFromManifest(batch, zipFile, c); }
+            catch (Exception e) { throw new RuntimeException(e); }
+        });
 
         Batch reloaded = tx.execute(s -> batchRepository.findById(batch.getId()).orElseThrow());
         assertThat(reloaded.getTransaction())
@@ -112,7 +116,12 @@ class BatchZipHandlingTest {
         MockMultipartFile zipFile = makeZip(tag + "_mfst.zip",
                 new String[]{"manifest.json"}, new String[]{manifest});
 
-        batchService.linkBatchToTransactionFromManifest(batch, zipFile, loadClient());
+        // Load client within the same TX so it stays managed inside createTransaction
+        tx.executeWithoutResult(s -> {
+            Client c = clientRepository.findById(clientId).orElseThrow();
+            try { batchService.linkBatchToTransactionFromManifest(batch, zipFile, c); }
+            catch (Exception e) { throw new RuntimeException(e); }
+        });
 
         // Find the created transaction and register for cleanup
         Batch reloaded = tx.execute(s -> batchRepository.findById(batch.getId()).orElseThrow());
@@ -136,7 +145,11 @@ class BatchZipHandlingTest {
                 new String[]{"not valid json { broken :"});
 
         // Must NOT throw — errors in manifest parsing are always non-fatal
-        batchService.linkBatchToTransactionFromManifest(batch, zipFile, loadClient());
+        tx.executeWithoutResult(s -> {
+            Client c = clientRepository.findById(clientId).orElseThrow();
+            try { batchService.linkBatchToTransactionFromManifest(batch, zipFile, c); }
+            catch (Exception e) { throw new RuntimeException(e); }
+        });
 
         Batch reloaded = tx.execute(s -> batchRepository.findById(batch.getId()).orElseThrow());
         assertThat(reloaded.getTransaction())
@@ -173,7 +186,11 @@ class BatchZipHandlingTest {
         MockMultipartFile zipFile = makeZip(tag + "_rev.zip",
                 new String[]{"manifest.json"}, new String[]{manifest});
 
-        batchService.linkBatchToTransactionFromManifest(batch, zipFile, loadClient());
+        tx.executeWithoutResult(s -> {
+            Client c = clientRepository.findById(clientId).orElseThrow();
+            try { batchService.linkBatchToTransactionFromManifest(batch, zipFile, c); }
+            catch (Exception e) { throw new RuntimeException(e); }
+        });
 
         Batch reloaded = tx.execute(s -> batchRepository.findById(batch.getId()).orElseThrow());
         assertThat(reloaded.getTransaction())

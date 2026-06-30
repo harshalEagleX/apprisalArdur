@@ -7,20 +7,23 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,18 +39,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *  (4) ADMIN → 200 regardless of assignment (no ownership check for admins)
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 class CorrectionsProxyTest {
 
-    @Autowired private MockMvc mvc;
-    @MockBean  private com.shal.qc.service.PythonClientService pythonClientService;
+    @Autowired private WebApplicationContext context;
+    @MockitoBean private com.shal.qc.service.PythonClientService pythonClientService;
 
     @Autowired private ClientRepository clientRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private BatchRepository batchRepository;
     @Autowired private BatchFileRepository batchFileRepository;
     @Autowired private QCResultRepository qcResultRepository;
+    @Autowired private AuditLogRepository auditLogRepository;
     @Autowired private TransactionTemplate tx;
+
+    private MockMvc mvc;
 
     private long assignedReviewerId;
     private long unassignedReviewerId;
@@ -58,6 +63,8 @@ class CorrectionsProxyTest {
 
     @BeforeEach
     void seed() {
+        mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+
         tag = "CPT_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         long[] ids = new long[5]; // [clientId, assignedId, unassignedId, adminId, batchId]
 
@@ -115,8 +122,12 @@ class CorrectionsProxyTest {
             qcResultRepository.findById(qcResultId).ifPresent(qcResultRepository::delete);
             batchFileRepository.findByBatchId(batchId).forEach(batchFileRepository::delete);
             batchRepository.findById(batchId).ifPresent(batchRepository::delete);
+            // Delete audit log entries before users (FK: audit_log.user_id → _user.id)
             for (String name : new String[]{tag + "_assigned", tag + "_unassigned", tag + "_admin"}) {
-                userRepository.findByUsername(name).ifPresent(userRepository::delete);
+                userRepository.findByUsername(name).ifPresent(u -> {
+                    auditLogRepository.findRecentByUserId(u.getId()).forEach(auditLogRepository::delete);
+                    userRepository.delete(u);
+                });
             }
             clientRepository.findAll().stream()
                     .filter(c -> tag.equals(c.getCode()))
@@ -128,11 +139,12 @@ class CorrectionsProxyTest {
 
     @Test
     void unauthenticated_blockedBySecurityFilter() throws Exception {
-        mvc.perform(post("/api/reviewer/corrections")
+        int statusCode = mvc.perform(post("/api/reviewer/corrections")
                         .with(anonymous())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(qcResultId)))
-                .andExpect(status().is(s -> s == 401 || s == 403));
+                .andReturn().getResponse().getStatus();
+        assertThat(statusCode).as("unauthenticated request must be blocked").isIn(401, 403);
     }
 
     // ── (2) REVIEWER not assigned to the QC result's batch → 403 ────────────

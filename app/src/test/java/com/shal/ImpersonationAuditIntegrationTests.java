@@ -59,6 +59,8 @@ class ImpersonationAuditIntegrationTests {
                     .anyMatch(l -> "IMPERSONATION_STARTED".equals(l.getAction())
                             && l.getEntityId() != null && l.getEntityId().equals(ids[1]));
         } finally {
+            // Always pop the ThreadLocal stack — without this, subsequent tests inherit the leftover entry
+            impersonationService.stopImpersonation();
             SecurityContextHolder.clearContext();
             cleanup(tag, ids);
         }

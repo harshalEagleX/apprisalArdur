@@ -19,7 +19,8 @@ class PythonRuleResultTest {
                 status, "msg", "severity", "action",
                 null, null, null, null, null, null,
                 null, null, null, reviewRequired,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                null); // scope
     }
 
     @Test

@@ -159,6 +159,9 @@ class QueryPlanTest {
 
     @SuppressWarnings("unchecked")
     private String explainAnalyze(String sql) {
+        // Disable seq scan in this session so small-table tests don't fool the planner into
+        // ignoring existing indexes — without this PostgreSQL picks Seq Scan for ~39 rows.
+        em.createNativeQuery("SET LOCAL enable_seqscan = off").executeUpdate();
         List<Object> rows = em.createNativeQuery("EXPLAIN ANALYZE " + sql).getResultList();
         return rows.stream().map(Object::toString).collect(Collectors.joining("\n"));
     }

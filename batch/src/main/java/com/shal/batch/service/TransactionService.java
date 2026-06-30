@@ -178,6 +178,7 @@ public class TransactionService {
 
     private String normalize(String s) {
         if (s == null || s.isBlank()) return "UNKNOWN";
-        return s.trim().toUpperCase().replaceAll("[^A-Z0-9]", "").substring(0, Math.min(s.length(), 20));
+        String clean = s.trim().toUpperCase().replaceAll("[^A-Z0-9]", "");
+        return clean.substring(0, Math.min(clean.length(), 20));
     }
 }

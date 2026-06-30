@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.Objects;
@@ -788,37 +789,8 @@ public class QCProcessingService {
         }
 
         QCResult result = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
-
-        // If the engagement letter OR contract was matched by filename heuristic or
-        // positional guess (confidence < 0.82) and the rules all auto-passed, force
-        // review. A confident rule-pass against the wrong document is not a pass.
-        // The 0.82 threshold sits above every ambiguous/fallback confidence tier
-        // (0.70 single-file, 0.72 multi-fuzzy, 0.78 substring, 0.80 multi-set/orderId)
-        // and below the clean tiers (0.90 exact-key, 0.95 sole-in-set, 1.0 orderId).
-        final double MATCH_CONFIDENCE_THRESHOLD = 0.82;
-        if (result.getQcDecision() == QCDecision.AUTO_PASS) {
-            double worstMatchConf = 1.0;
-            String worstDocType = null;
-            Optional<Double> engConf = fileMatchingService.getEngagementMatchConfidence(appraisal.getId());
-            if (engConf.isPresent() && engConf.get() < worstMatchConf) {
-                worstMatchConf = engConf.get();
-                worstDocType = "Engagement letter";
-            }
-            Optional<Double> conConf = fileMatchingService.getContractMatchConfidence(appraisal.getId());
-            if (conConf.isPresent() && conConf.get() < worstMatchConf) {
-                worstMatchConf = conConf.get();
-                worstDocType = "Contract";
-            }
-            if (worstDocType != null && worstMatchConf < MATCH_CONFIDENCE_THRESHOLD) {
-                final String docType = worstDocType;
-                final double conf = worstMatchConf;
-                self.downgradeToVerifyForLowMatchConfidence(result.getId(), conf, docType);
-                log.info("AUTO_PASS downgraded to TO_VERIFY for file {} — {} match confidence={} < {}",
-                        appraisal.getFilename(), docType, conf, MATCH_CONFIDENCE_THRESHOLD);
-            }
-            // Re-fetch so the switch below sees the updated decision
-            result = qcResultRepository.findById(result.getId()).orElse(result);
-        }
+        // Re-fetch so the switch below sees the decision after any match-confidence downgrade
+        result = qcResultRepository.findById(result.getId()).orElse(result);
 
         // Fire QC rule events in the background — user sees REVIEW_PENDING immediately,
         // 137 event inserts happen after the batch status is already unlocked.
@@ -1070,6 +1042,36 @@ public class QCProcessingService {
 
         // Capture per-section / per-rule timing breakdown (docStats)
         saveDocStats(qcResult, pythonResponse, appraisal);
+
+        // If the engagement letter OR contract was matched by filename heuristic or
+        // positional guess (confidence < 0.82) and the rules all auto-passed, force
+        // review. A confident rule-pass against the wrong document is not a pass.
+        // The 0.82 threshold sits above every ambiguous/fallback confidence tier
+        // (0.70 single-file, 0.72 multi-fuzzy, 0.78 substring, 0.80 multi-set/orderId)
+        // and below the clean tiers (0.90 exact-key, 0.95 sole-in-set, 1.0 orderId).
+        if (qcResult.getQcDecision() == QCDecision.AUTO_PASS) {
+            final double MATCH_CONFIDENCE_THRESHOLD = 0.82;
+            double worstMatchConf = 1.0;
+            String worstDocType = null;
+            Optional<Double> engConf = fileMatchingService.getEngagementMatchConfidence(appraisal.getId());
+            if (engConf.isPresent() && engConf.get() < worstMatchConf) {
+                worstMatchConf = engConf.get();
+                worstDocType = "Engagement letter";
+            }
+            Optional<Double> conConf = fileMatchingService.getContractMatchConfidence(appraisal.getId());
+            if (conConf.isPresent() && conConf.get() < worstMatchConf) {
+                worstMatchConf = conConf.get();
+                worstDocType = "Contract";
+            }
+            if (worstDocType != null && worstMatchConf < MATCH_CONFIDENCE_THRESHOLD) {
+                final String docType = worstDocType;
+                final double conf = worstMatchConf;
+                downgradeToVerifyForLowMatchConfidence(qcResult.getId(), conf, docType);
+                qcResult = qcResultRepository.findById(qcResult.getId()).orElse(qcResult);
+                log.info("AUTO_PASS downgraded to TO_VERIFY for file {} — {} match confidence={} < {}",
+                        appraisal.getFilename(), docType, conf, MATCH_CONFIDENCE_THRESHOLD);
+            }
+        }
 
         return qcResult;
     }

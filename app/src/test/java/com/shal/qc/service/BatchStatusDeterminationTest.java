@@ -4,9 +4,11 @@ import com.shal.common.dto.python.PythonQCResponse;
 import com.shal.common.dto.python.PythonRuleResult;
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -39,7 +41,15 @@ class BatchStatusDeterminationTest {
     @Autowired private QCResultRepository qcResultRepository;
     @Autowired private QCRuleResultRepository qcRuleResultRepository;
     @Autowired private ProcessingMetricsRepository processingMetricsRepository;
+    @Autowired private JdbcTemplate jdbc;
     @Autowired private TransactionTemplate tx;
+
+    @BeforeEach
+    void dropStaleStatusCheckConstraints() {
+        // ddl-auto=update created these constraints before DISMISSED was added to FileStatus
+        jdbc.execute("ALTER TABLE batch_file DROP CONSTRAINT IF EXISTS batch_file_status_check");
+        jdbc.execute("ALTER TABLE batch_file_aud DROP CONSTRAINT IF EXISTS batch_file_aud_status_check");
+    }
 
     // ── (1) All finalised → COMPLETED ────────────────────────────────────────
 
@@ -185,13 +195,14 @@ class BatchStatusDeterminationTest {
 
     private void cleanup(String tag, long[] ids) {
         tx.executeWithoutResult(s -> {
+            // processing_metrics has FK → qc_result; delete metrics FIRST
+            if (ids[0] != 0) processingMetricsRepository.deleteByBatchId(ids[0]);
             if (ids[2] != 0) qcRuleResultRepository.findByQcResultId(ids[2]).forEach(qcRuleResultRepository::delete);
             if (ids[1] != 0) {
                 qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(ids[1])
                         .forEach(r -> { qcRuleResultRepository.findByQcResultId(r.getId()).forEach(qcRuleResultRepository::delete); qcResultRepository.delete(r); });
             }
             if (ids[0] != 0) {
-                processingMetricsRepository.deleteByBatchId(ids[0]);
                 batchFileRepository.findByBatchId(ids[0]).forEach(batchFileRepository::delete);
                 batchRepository.findById(ids[0]).ifPresent(batchRepository::delete);
             }
