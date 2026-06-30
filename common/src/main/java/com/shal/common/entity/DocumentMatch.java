@@ -50,6 +50,14 @@ public class DocumentMatch {
     @Column(name = "rejected_candidates_json", columnDefinition = "TEXT")
     private String rejectedCandidatesJson;
 
+    /**
+     * Human-readable warning when multiple candidates were equally plausible and
+     * the match was a positional guess. Null = match was unambiguous.
+     * Surfaced in Batch.intakeWarnings so the admin sees it in the detail view.
+     */
+    @Column(name = "match_warning", columnDefinition = "TEXT")
+    private String matchWarning;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "matched_by")
     private User matchedBy;
@@ -89,6 +97,8 @@ public class DocumentMatch {
     public void setAmbiguousCandidatesJson(String ambiguousCandidatesJson) { this.ambiguousCandidatesJson = ambiguousCandidatesJson; }
     public String getRejectedCandidatesJson() { return rejectedCandidatesJson; }
     public void setRejectedCandidatesJson(String rejectedCandidatesJson) { this.rejectedCandidatesJson = rejectedCandidatesJson; }
+    public String getMatchWarning() { return matchWarning; }
+    public void setMatchWarning(String matchWarning) { this.matchWarning = matchWarning; }
     public User getMatchedBy() { return matchedBy; }
     public void setMatchedBy(User matchedBy) { this.matchedBy = matchedBy; }
     public LocalDateTime getMatchedAt() { return matchedAt; }

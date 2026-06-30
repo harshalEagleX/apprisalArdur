@@ -127,6 +127,24 @@ def _comparable_label(field: Optional[str], document: str) -> Optional[str]:
     return None
 
 
+_CROSS_DOC_SECTIONS = frozenset({"global", "cross_document", "semantic"})
+
+
+def _rule_scope(r: RuleResult) -> str:
+    """Classify a rule result as per_document, cross_document, or semantic.
+
+    per_document  — rule reads a single document only (most UAD rules)
+    cross_document — rule compares values ACROSS appraisal/engagement/contract
+    semantic       — rule uses LLM-based narrative/semantic analysis
+    """
+    if r.section in _CROSS_DOC_SECTIONS:
+        return r.section if r.section in ("semantic",) else "cross_document"
+    docs = {e.document for e in r.evidence if e.document}
+    if len(docs) > 1:
+        return "cross_document"
+    return "per_document"
+
+
 def _rule_to_json(r: RuleResult) -> Dict:
     appraisal_value = _doc_value(r, "appraisal")
     engagement_value = _doc_value(r, "engagement") or _doc_value(r, "contract")
@@ -168,6 +186,9 @@ def _rule_to_json(r: RuleResult) -> Dict:
         # Authoritative section from the engine (UI groups on this). Sent as an
         # explicit field so Java/UI never re-derive it from the rule-id prefix.
         "section": r.section.upper(),
+        # scope: "per_document" | "cross_document" | "semantic" — lets Java
+        # distinguish transaction-level findings from per-document ones (VF-4).
+        "scope": _rule_scope(r),
         "status": _STATUS.get(r.status, "skipped"),
         "message": r.message or r.status.value,
         "severity": _SEVERITY.get(r.status, "STANDARD"),

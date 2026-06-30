@@ -64,41 +64,78 @@ from fastapi.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ── Internal service authentication ─────────────────────────────────────────────
-# The Java backend already sends `X-API-Key: <INTERNAL_API_KEY>` on every call. This
-# middleware closes the gap where the service ACCEPTED but never VALIDATED it, leaving
-# OCR/QC/correction/config endpoints open to anyone who could reach the port.
+# Java sends `X-API-Key: <INTERNAL_API_KEY>` on every call.
 #
-# Backward-compatible by design:
-#   • Enforced ONLY when INTERNAL_API_KEY is configured (it is, via the root .env).
-#     If unset, enforcement is skipped so a bare local run is never broken.
-#   • Health/liveness + API docs stay public (load balancers, the brain test harness,
-#     and humans browsing /docs do not carry the key).
-#   • CORS pre-flight (OPTIONS) is always allowed so the browser handshake still works.
-# This is an additive guard — it changes NO architecture and NO data contract.
+# Enforcement model (fail-closed by default):
+#   • SHAL_REQUIRE_API_KEY defaults to "true". With it set, a missing
+#     INTERNAL_API_KEY at startup logs a loud error and the service rejects all
+#     non-public traffic with 503 until the key is supplied.
+#   • Set SHAL_REQUIRE_API_KEY=false ONLY for isolated local dev where no network
+#     access is possible. Never set it to false in a shared or production env.
+#   • /health and /live stay public for load-balancer probes. API docs
+#     (/docs etc.) are gated by SHAL_EXPOSE_DOCS (see below).
+#   • CORS pre-flight (OPTIONS) always passes.
 import hmac as _hmac
+import os as _os
 from app.config import INTERNAL_API_KEY as _INTERNAL_API_KEY
 
-_PUBLIC_PATHS = frozenset({"/health", "/live", "/docs", "/redoc", "/openapi.json"})
+_REQUIRE_API_KEY = _os.environ.get("SHAL_REQUIRE_API_KEY", "true").lower() != "false"
+# API schema docs: exposed only when explicitly opted in (never in production).
+_EXPOSE_DOCS = _os.environ.get("SHAL_EXPOSE_DOCS", "false").lower() == "true"
+
+_PUBLIC_PATHS = frozenset({"/health", "/live"})
+if _EXPOSE_DOCS:
+    _PUBLIC_PATHS = _PUBLIC_PATHS | frozenset({"/docs", "/redoc", "/openapi.json"})
 
 
 @app.middleware("http")
 async def _enforce_internal_api_key(request, call_next):
-    if _INTERNAL_API_KEY and request.method != "OPTIONS":
-        path = request.url.path
-        if path not in _PUBLIC_PATHS:
-            provided = request.headers.get("X-API-Key", "")
-            # constant-time compare so a wrong key can't be guessed by timing
-            if not _hmac.compare_digest(provided, _INTERNAL_API_KEY):
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Missing or invalid X-API-Key"},
-                )
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if path in _PUBLIC_PATHS:
+        return await call_next(request)
+
+    if not _INTERNAL_API_KEY:
+        if _REQUIRE_API_KEY:
+            # Key required but not configured — refuse traffic rather than allowing all.
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Service not ready: INTERNAL_API_KEY is not configured."},
+            )
+        # SHAL_REQUIRE_API_KEY=false: allow without a key (local dev only).
+        return await call_next(request)
+
+    provided = request.headers.get("X-API-Key", "")
+    # constant-time compare so a wrong key can't be guessed by timing
+    if not _hmac.compare_digest(provided, _INTERNAL_API_KEY):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid X-API-Key"},
+        )
     return await call_next(request)
 
 
 @app.on_event("startup")
 async def startup():
     log = logging.getLogger(__name__)
+
+    # ── Security gate: must be checked before the service accepts any traffic ──
+    # Raising here causes uvicorn/gunicorn to exit(1) immediately, which turns
+    # a misconfiguration into a visible startup failure rather than a silent 503
+    # that looks like "service is down" rather than "service is misconfigured."
+    if _REQUIRE_API_KEY and not _INTERNAL_API_KEY:
+        raise RuntimeError(
+            "STARTUP FAILED: INTERNAL_API_KEY is not set but SHAL_REQUIRE_API_KEY=true "
+            "(the default). Set INTERNAL_API_KEY in .env, or set SHAL_REQUIRE_API_KEY=false "
+            "for isolated local dev only."
+        )
+    if not _REQUIRE_API_KEY and not _INTERNAL_API_KEY:
+        log.warning(
+            "⚠ SHAL_REQUIRE_API_KEY=false: API key enforcement is DISABLED. "
+            "All protected endpoints are open. Only acceptable in isolated local dev."
+        )
+
     log.info("Schema: version=%s fields=%d", schema_loader.schema_version, len(schema_loader.all_fields()))
     if verify_connection():
         log.info("Database: connected")
@@ -260,6 +297,7 @@ async def qc_process(
     qc_result_id: Optional[str] = Form(None),
     source_hash: Optional[str] = Form(None),
     engagement_status: Optional[str] = Form(None),
+    client_id: Optional[str] = Form(None),              # AMC/client identifier for confidence routing
 ):
     """
     Run the full transaction QC (appraisal + engagement + contract) and return
@@ -301,6 +339,7 @@ async def qc_process(
             transaction_id=(file.filename or "transaction"),
             persist=True, progress=_progress,
             engagement_status=engagement_status,
+            amc_id=client_id,
         )
         resp = report_to_python_qc_response(
             report, ctx,
@@ -404,6 +443,7 @@ async def qc_submit(
     idempotency_key: Optional[str] = Form(None),
     source_hash: Optional[str] = Form(None),
     engagement_status: Optional[str] = Form(None),
+    client_id: Optional[str] = Form(None),              # AMC/client identifier for confidence routing
 ):
     """Enqueue a QC job on the Celery queue and return its job_id immediately.
 
@@ -454,6 +494,7 @@ async def qc_submit(
             "document_id": file.filename or "",
             "source_hash": file_hash,
             "engagement_status": engagement_status,
+            "amc_id": client_id,
         })
     except Exception as exc:
         # Broker unreachable — clean up the temp uploads and fail clearly (503) so the

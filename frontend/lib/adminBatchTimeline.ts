@@ -1,4 +1,5 @@
-export function adminBatchTimeline(_event: string, _payload: Record<string, unknown> = {}) {
+export function adminBatchTimeline(...args: unknown[]) {
+  void args;
   // intentionally no-op in all environments — timeline tracing removed
 }
 

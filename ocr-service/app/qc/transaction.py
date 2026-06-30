@@ -677,7 +677,8 @@ def _infer_txn_type_from_fields(eng_fields: dict) -> str:
 def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path=None,
                              xml_path=None,
                              transaction_id: Optional[str] = None, persist: bool = True,
-                             progress=None, engagement_status: Optional[str] = None):
+                             progress=None, engagement_status: Optional[str] = None,
+                             amc_id: Optional[str] = None):
     """Run QC from explicit document paths (what the Java backend supplies via
     the multipart /qc/process call) rather than a folder layout. `progress` is an
     optional callable(stage:str, message:str, pct:float) for live updates.
@@ -825,6 +826,12 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
             xml_result_set=xml_rs,
             engagement_raw_text=eng_raw_text,
         )
+
+    # If Java passed an explicit client_id (the Java Client.id), prefer it over the
+    # AMC name extracted from the engagement letter. This is the authoritative link
+    # that makes confidence routing (get_thresholds) work correctly (VF-3 fix).
+    if amc_id:
+        order.amc_id = amc_id
 
     _emit("sca_grid", "Reading the comparable sales grid", 28.0)
     rs = _overlay_comp_grid(rs, Path(appraisal_path), "appraisal_report")

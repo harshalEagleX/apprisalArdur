@@ -32,7 +32,8 @@ export interface UseBatchPollingReturn {
   stopPolling: (batchId: number) => void;
 }
 
-function batchPollingLog(_event: string, _payload?: unknown) {
+function batchPollingLog(...args: unknown[]) {
+  void args;
   // no-op
 }
 

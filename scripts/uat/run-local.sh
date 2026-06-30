@@ -30,8 +30,15 @@ mkdir -p "$RUN_DIR"
 REBUILD="${1:-}"
 
 # ── load env (dev first, then uat overrides) ─────────────────────────────────
-load_env() { [[ -f "$1" ]] && { set -a; # shellcheck disable=SC1090
-  source "$1"; set +a; echo "  sourced $1"; }; }
+load_env() {
+  if [[ -f "$1" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$1"
+    set +a
+    echo "  sourced $1"
+  fi
+}
 echo "==> Loading environment"
 load_env "$ROOT/.env"
 load_env "$ROOT/.env.uat"
@@ -53,7 +60,10 @@ command -v npm     >/dev/null || { echo "ERROR: 'npm' not on PATH"; exit 1; }
 start_bg() { # name "command…"
   local name="$1"; shift
   echo "==> Starting $name"
-  ( "$@" >"$RUN_DIR/$name.log" 2>&1 & echo $! >"$RUN_DIR/$name.pid" )
+  (
+    nohup "$@" >"$RUN_DIR/$name.log" 2>&1 </dev/null &
+    echo $! >"$RUN_DIR/$name.pid"
+  )
 }
 
 wait_http() { # name url

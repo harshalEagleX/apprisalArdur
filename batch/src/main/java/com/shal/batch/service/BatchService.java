@@ -64,6 +64,8 @@ public class BatchService {
     private final AuditLogService auditLogService;
     private final BusinessEventService businessEventService;
     private final RealtimeEventPublisher realtimeEventPublisher;
+    private final TransactionService transactionService;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
 
     @Value("${app.storage.path:./uploads}")
     private String storagePath;
@@ -81,7 +83,9 @@ public class BatchService {
             com.shal.common.repository.DocStatRepository docStatRepository,
             AuditLogService auditLogService,
             BusinessEventService businessEventService,
-            RealtimeEventPublisher realtimeEventPublisher) {
+            RealtimeEventPublisher realtimeEventPublisher,
+            TransactionService transactionService,
+            tools.jackson.databind.ObjectMapper objectMapper) {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository = qcResultRepository;
@@ -92,6 +96,8 @@ public class BatchService {
         this.auditLogService = auditLogService;
         this.businessEventService = businessEventService;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.transactionService = transactionService;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -363,6 +369,9 @@ public class BatchService {
         eventPayload.put("file_count", batch.getFiles().size());
         eventPayload.put("file_hash", fileHash);
         businessEventService.batchEvent("BATCH_CREATED", creator, batch, "UPLOADED", eventPayload);
+
+        // Parse manifest.json from ZIP if present and link to transaction.
+        linkBatchToTransactionFromManifest(batch, file, client);
 
         return batch;
     }
@@ -875,7 +884,119 @@ public class BatchService {
         return batchRepository.count();
     }
 
+    /**
+     * Mark a permanently-failing appraisal file as DISMISSED so the rest of its
+     * batch can complete. Use when the file is corrupt or unreadable and retrying
+     * via the partial-re-run path will never succeed.
+     *
+     * The file stays in the DB for audit purposes; DISMISSED files are excluded
+     * from the "has unreviewed errors" guard in recomputeBatchStatusFromActiveResults.
+     *
+     * @param fileId  the BatchFile to dismiss
+     * @param adminId the admin performing the dismissal (for audit)
+     * @throws ResourceNotFoundException if the file does not exist
+     * @throws IllegalStateException     if the file is not in ERROR status
+     */
+    @Transactional
+    public BatchFile dismissFileError(Long fileId, Long adminId) {
+        BatchFile file = batchFileRepository.findById(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("BatchFile not found: " + fileId));
+        if (file.getStatus() != FileStatus.ERROR) {
+            throw new IllegalStateException(
+                    "Only ERROR files can be dismissed; file " + fileId + " is " + file.getStatus());
+        }
+        file.setStatus(FileStatus.DISMISSED);
+        BatchFile saved = batchFileRepository.save(file);
+        auditLogService.logEntity(
+                userRef(adminId), "FILE_ERROR_DISMISSED", "BatchFile", fileId);
+        log.info("BatchFile {} dismissed as permanently unreviewable by admin {}", fileId, adminId);
+        return saved;
+    }
+
+    private com.shal.common.entity.User userRef(Long userId) {
+        com.shal.common.entity.User u = new com.shal.common.entity.User();
+        u.setId(userId);
+        return u;
+    }
+
     private long elapsedMs(long startedNanos) {
         return (System.nanoTime() - startedNanos) / 1_000_000L;
+    }
+
+    /**
+     * Scan the ZIP for a manifest.json at its root, parse it, and link the batch
+     * to an AppraisalTransaction. Creates the transaction if it does not yet exist.
+     *
+     * Manifest fields (all optional except transaction_ref):
+     *   transaction_ref   — stable ID; if absent, no transaction is linked
+     *   amc_code          — AMC identifier
+     *   order_number      — AMC order/loan number
+     *   property_address  — property address (pre-OCR)
+     *   is_revision_of    — transaction_ref of the transaction being revised
+     *   sla_due_at        — ISO-8601 SLA deadline (e.g. "2026-07-05T17:00:00")
+     *
+     * Errors are non-fatal: a malformed or missing manifest just means the batch
+     * is not linked to a transaction, which is the same as the pre-manifest state.
+     */
+    @Transactional
+    public void linkBatchToTransactionFromManifest(Batch batch, MultipartFile zipFile, Client client) {
+        byte[] manifestBytes = null;
+        try (ZipInputStream zis = new ZipInputStream(zipFile.getInputStream())) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName().toLowerCase();
+                // Accept manifest.json at the zip root or one level deep
+                if (!entry.isDirectory() && (name.equals("manifest.json")
+                        || name.endsWith("/manifest.json"))) {
+                    manifestBytes = zis.readAllBytes();
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not scan ZIP for manifest in batch {}: {}", batch.getId(), e.getMessage());
+            return;
+        }
+
+        if (manifestBytes == null) {
+            return;  // no manifest — batch runs without transaction linkage
+        }
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> manifest = objectMapper.readValue(manifestBytes, Map.class);
+
+            String txRef = manifest.get("transaction_ref") != null
+                    ? manifest.get("transaction_ref").toString().trim() : null;
+            if (txRef == null || txRef.isBlank()) {
+                log.debug("Manifest in batch {} has no transaction_ref — skipping linkage", batch.getId());
+                return;
+            }
+
+            String amcCode      = stringOrNull(manifest, "amc_code");
+            String orderNumber  = stringOrNull(manifest, "order_number");
+            String address      = stringOrNull(manifest, "property_address");
+            String revisedFrom  = stringOrNull(manifest, "is_revision_of");
+            String slaDueStr    = stringOrNull(manifest, "sla_due_at");
+
+            java.time.LocalDateTime slaDueAt = null;
+            if (slaDueStr != null) {
+                try { slaDueAt = java.time.LocalDateTime.parse(slaDueStr); } catch (Exception ignored) { }
+            }
+
+            // Find or create the transaction for this ref
+            AppraisalTransaction tx = transactionService.findByRef(txRef).orElseGet(() ->
+                transactionService.createTransaction(amcCode, orderNumber, address, client, revisedFrom, slaDueAt));
+
+            transactionService.linkBatchToTransaction(batch.getId(), tx.getId());
+            log.info("Batch {} linked to transaction {} via manifest", batch.getId(), txRef);
+
+        } catch (Exception e) {
+            log.warn("Failed to parse manifest for batch {}: {}", batch.getId(), e.getMessage());
+        }
+    }
+
+    private String stringOrNull(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        return (v != null && !v.toString().isBlank()) ? v.toString().trim() : null;
     }
 }

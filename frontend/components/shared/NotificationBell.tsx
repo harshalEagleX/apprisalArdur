@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bell, X, CheckCircle2, AlertTriangle, Info,
@@ -155,20 +155,33 @@ function NotificationDrawer({
 }) {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [now, setNow] = useState(0);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   const unread = notifs.filter(n => !n.read).length;
 
   // mount → paint → animate in
   useEffect(() => {
+    let frame: number | null = null;
+    let nestedFrame: number | null = null;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
     if (open) {
-      setMounted(true);
-      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+      frame = requestAnimationFrame(() => {
+        setNow(Date.now());
+        setMounted(true);
+        nestedFrame = requestAnimationFrame(() => setVisible(true));
+      });
     } else {
-      setVisible(false);
-      const t = setTimeout(() => setMounted(false), 320);
-      return () => clearTimeout(t);
+      frame = requestAnimationFrame(() => setVisible(false));
+      timeout = setTimeout(() => setMounted(false), 320);
     }
+
+    return () => {
+      if (frame != null) cancelAnimationFrame(frame);
+      if (nestedFrame != null) cancelAnimationFrame(nestedFrame);
+      if (timeout != null) clearTimeout(timeout);
+    };
   }, [open]);
 
   // ESC
@@ -189,10 +202,23 @@ function NotificationDrawer({
     }
   }, [visible, onClose]);
 
-  if (!mounted) return null;
+  const [today, earlier] = useMemo(() => {
+    const currentTime = now || 0;
+    const recent: Notification[] = [];
+    const older: Notification[] = [];
 
-  const today   = notifs.filter(n => Date.now() - new Date(n.occurredAt).getTime() < 86400000);
-  const earlier = notifs.filter(n => Date.now() - new Date(n.occurredAt).getTime() >= 86400000);
+    for (const notification of notifs) {
+      if (currentTime - new Date(notification.occurredAt).getTime() < 86400000) {
+        recent.push(notification);
+      } else {
+        older.push(notification);
+      }
+    }
+
+    return [recent, older];
+  }, [notifs, now]);
+
+  if (!mounted) return null;
 
   const drawer = (
     <>

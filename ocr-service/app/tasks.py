@@ -39,6 +39,7 @@ def qc_process_task(
     document_id: str = "",
     source_hash: str = "",
     engagement_status: Optional[str] = None,
+    amc_id: Optional[str] = None,
 ) -> dict:
     """Extract + run QC for one transaction; return the PythonQCResponse dict."""
     # Imported lazily so worker boot stays cheap and import errors surface per-task.
@@ -73,6 +74,7 @@ def qc_process_task(
             persist=True,
             progress=_progress,
             engagement_status=engagement_status,
+            amc_id=amc_id,
         )
         resp = report_to_python_qc_response(
             report,

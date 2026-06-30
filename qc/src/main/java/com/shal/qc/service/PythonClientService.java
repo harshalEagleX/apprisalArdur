@@ -90,6 +90,15 @@ public class PythonClientService {
                                       QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
                                       Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
                                       String engagementStatus) {
+        return processQC(appraisalPath, xmlPath, engagementPath, contractPath, modelConfig, stageCallback,
+                batchId, batchFileId, qcResultId, sourceHash, engagementStatus, null);
+    }
+
+    public PythonQCResponse processQC(Path appraisalPath, Path xmlPath,
+                                      Path engagementPath, Path contractPath,
+                                      QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
+                                      Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                      String engagementStatus, String clientId) {
         String url = config.getUrl() + "/qc/process";
         long callStarted = System.nanoTime();
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
@@ -106,7 +115,7 @@ public class PythonClientService {
         MultiValueMap<String, Object> body =
                 buildBaseBody(appraisalPath, xmlPath, engagementPath, contractPath, engagementStatus, safeModelConfig);
         body.add("progress_token", progressToken);   // sync path streams progress
-        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig);
+        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig, clientId);
         log.info(TimelineLog.event("admin_batches", "java_python_call_start",
                 "batch_id", batchId,
                 "batch_file_id", batchFileId,
@@ -375,6 +384,15 @@ public class PythonClientService {
                                          QCModelConfig modelConfig,
                                          Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
                                          String engagementStatus) {
+        return submitQCJob(appraisalPath, xmlPath, engagementPath, contractPath, modelConfig,
+                batchId, batchFileId, qcResultId, sourceHash, engagementStatus, null);
+    }
+
+    public JobSubmitResponse submitQCJob(Path appraisalPath, Path xmlPath,
+                                         Path engagementPath, Path contractPath,
+                                         QCModelConfig modelConfig,
+                                         Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                         String engagementStatus, String clientId) {
         String url = config.getUrl() + "/qc/submit";
         QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
         lastRetryCount.set(0);
@@ -388,7 +406,7 @@ public class PythonClientService {
 
         MultiValueMap<String, Object> body =
                 buildBaseBody(appraisalPath, xmlPath, engagementPath, contractPath, engagementStatus, cfg);
-        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, cfg);
+        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, cfg, clientId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -532,6 +550,30 @@ public class PythonClientService {
 
     public int getLastRetryCount() { return lastRetryCount.get(); }
 
+    /**
+     * Proxy a reviewer field correction to Python's /corrections endpoint.
+     * All corrections must flow through here (not directly to Python) so the Java
+     * authorization layer is in the critical path for every reviewer write (VF-6).
+     *
+     * @return the raw JSON body from Python, or null on error
+     */
+    public String submitCorrection(Map<String, Object> correctionPayload) {
+        try {
+            String url = config.getUrl() + "/corrections";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+                headers.set("X-API-Key", config.getApiKey());
+            }
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(correctionPayload, headers), String.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Python correction submit failed: {}", e.getMessage());
+            throw new RuntimeException("Failed to submit correction to Python service: " + e.getMessage(), e);
+        }
+    }
+
     public void submitFeedback(PythonFeedbackRequest feedback) {
         if (feedback == null || feedback.documentId() == null || feedback.documentId().isBlank()) {
             return;
@@ -619,6 +661,12 @@ public class PythonClientService {
     private String appendProcessingContext(MultiValueMap<String, Object> body,
                                          Long batchId, Long batchFileId, Long qcResultId,
                                          String sourceHash, QCModelConfig cfg) {
+        return appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, cfg, null);
+    }
+
+    private String appendProcessingContext(MultiValueMap<String, Object> body,
+                                         Long batchId, Long batchFileId, Long qcResultId,
+                                         String sourceHash, QCModelConfig cfg, String clientId) {
         String correlationId = org.slf4j.MDC.get("correlationId");
         if (correlationId == null || correlationId.isBlank()) {
             correlationId = batchId != null ? "batch:" + batchId : UUID.randomUUID().toString();
@@ -627,6 +675,7 @@ public class PythonClientService {
         if (batchId != null) body.add("batch_id", String.valueOf(batchId));
         if (batchFileId != null) body.add("batch_file_id", String.valueOf(batchFileId));
         if (qcResultId != null) body.add("qc_result_id", String.valueOf(qcResultId));
+        if (clientId != null && !clientId.isBlank()) body.add("client_id", clientId);
         if (sourceHash != null && !sourceHash.isBlank() && batchFileId != null) {
             body.add("idempotency_key", String.join("|",
                     String.valueOf(batchFileId),

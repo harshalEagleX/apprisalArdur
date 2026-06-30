@@ -84,6 +84,15 @@ public class Batch {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    /**
+     * The AppraisalTransaction this batch belongs to. One transaction may have
+     * many batches (original + revisions). Null for batches created before the
+     * transaction layer was introduced.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transaction_id")
+    private AppraisalTransaction transaction;
+
     /** Set when the batch is soft-deleted; non-null rows are hidden by @SQLRestriction. */
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
@@ -217,6 +226,9 @@ public class Batch {
     public void setDeletedBy(Long deletedBy) {
         this.deletedBy = deletedBy;
     }
+
+    public AppraisalTransaction getTransaction() { return transaction; }
+    public void setTransaction(AppraisalTransaction transaction) { this.transaction = transaction; }
 
     public String getIntakeWarnings() {
         return intakeWarnings;

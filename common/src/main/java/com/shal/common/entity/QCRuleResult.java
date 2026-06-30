@@ -142,6 +142,17 @@ public class QCRuleResult {
     @Column(name = "severity")
     private String severity = "STANDARD"; // BLOCKING | STANDARD | ADVISORY
 
+    /**
+     * Rule scope emitted by Python: "per_document" | "cross_document" | "semantic".
+     * Null for rows written before this column was added — ddl-auto=update adds
+     * the nullable column on first startup and existing rows stay null by default.
+     * ({@code @JsonIgnoreProperties(ignoreUnknown=true)} on {@link com.shal.common.dto.python.PythonRuleResult}
+     * is unrelated: it tolerates extra fields Python emits that Java hasn't mapped yet,
+     * not missing ones. A nullable Object field already deserializes to null on its own.)
+     */
+    @Column(name = "scope", length = 30)
+    private String scope;
+
     @Column(name = "target_field")
     private String targetField;
 
@@ -482,6 +493,9 @@ public class QCRuleResult {
         this.severity = severity;
     }
 
+    public String getScope() { return scope; }
+    public void setScope(String scope) { this.scope = scope; }
+
     public String getTargetField() {
         return targetField;
     }
@@ -561,6 +575,7 @@ public class QCRuleResult {
         private Float bboxY;
         private Float bboxW;
         private Float bboxH;
+        private String scope;
 
         public QCRuleResultBuilder qcResult(QCResult qcResult) {
             this.qcResult = qcResult;
@@ -657,6 +672,11 @@ public class QCRuleResult {
             return this;
         }
 
+        public QCRuleResultBuilder scope(String scope) {
+            this.scope = scope;
+            return this;
+        }
+
         public QCRuleResultBuilder targetField(String targetField) {
             this.targetField = targetField;
             return this;
@@ -714,6 +734,7 @@ public class QCRuleResult {
             result.bboxY = this.bboxY;
             result.bboxW = this.bboxW;
             result.bboxH = this.bboxH;
+            result.scope = this.scope;
             return result;
         }
     }

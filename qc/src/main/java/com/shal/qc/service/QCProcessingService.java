@@ -248,6 +248,32 @@ public class QCProcessingService {
      * findById() and save() share one Hibernate session so the @Version field is
      * consistent and no OptimisticLockingFailureException is thrown.
      */
+    /** Change an AUTO_PASS result to TO_VERIFY when a supporting document match was a guess. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void downgradeToVerifyForLowMatchConfidence(
+            @NonNull Long qcResultId, double matchConfidence, String documentType) {
+        qcResultRepository.findById(qcResultId).ifPresent(r -> {
+            if (r.getQcDecision() == QCDecision.AUTO_PASS) {
+                r.setQcDecision(QCDecision.TO_VERIFY);
+                r.setVerifyCount((r.getVerifyCount() != null ? r.getVerifyCount() : 0) + 1);
+                r.setReviewerNotes(documentType + " match confidence was "
+                        + String.format("%.0f%%", matchConfidence * 100)
+                        + " — verify the correct " + documentType.toLowerCase()
+                        + " was paired before accepting these results.");
+                qcResultRepository.save(r);
+            }
+        });
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void appendIntakeWarning(@NonNull Long batchId, String warning) {
+        batchRepository.findById(batchId).ifPresent(b -> {
+            String existing = b.getIntakeWarnings();
+            b.setIntakeWarnings(existing != null && !existing.isBlank()
+                    ? existing + "\n" + warning : warning);
+        });
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markBatchError(@NonNull Long batchId, String errorMessage) {
         batchRepository.findById(batchId).ifPresent(b -> {
@@ -366,6 +392,16 @@ public class QCProcessingService {
             }
         }
         log.info("QC batch {} — {} file pair(s) to process", batchId, pairs.size());
+        // Surface any ambiguous pairing warnings to the admin batch detail.
+        // Warnings are appended (not replaced) so they survive a partial re-run.
+        String matchWarnings = fileMatchingService.collectMatchWarnings(batchId);
+        if (!matchWarnings.isBlank()) {
+            try {
+                self.appendIntakeWarning(batchId, matchWarnings);
+            } catch (Exception warnEx) {
+                log.warn("Could not persist match warnings for batch {}: {}", batchId, warnEx.getMessage());
+            }
+        }
         updateProgress(batchId, "matched", "Found " + pairs.size() + " appraisal file(s) to process", 0, Math.max(pairs.size(), 1), true, safeModelConfig);
 
         if (pairs.isEmpty()) {
@@ -656,6 +692,8 @@ public class QCProcessingService {
         }
 
         Long progressBatchId = appraisal.getBatch().getId();
+        String clientId = (appraisal.getBatch().getClient() != null)
+                ? String.valueOf(appraisal.getBatch().getClient().getId()) : null;
         Instant pythonStartedAt = Instant.now();
         long queueWaitMs = queueWaitMs(progressBatchId, pythonStartedAt);
         int retryCount = 0;
@@ -667,7 +705,7 @@ public class QCProcessingService {
                     progressBatchId, appraisal.getFilename());
             updateSubProgress(progressBatchId, "python_sync",
                     "Celery worker unavailable — running OCR directly for " + appraisal.getFilename(), 0.05, 0);
-            pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
+            pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal, clientId);
             retryCount = pythonClient.getLastRetryCount();
             throwIfCancelled(progressBatchId);
         } else {
@@ -684,7 +722,8 @@ public class QCProcessingService {
                         appraisal.getId(),
                         null,
                         appraisal.getContentHash(),
-                        engagementStatusFor(pair));
+                        engagementStatusFor(pair),
+                        clientId);
 
                 updateSubProgress(progressBatchId, "queued",
                         "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
@@ -713,7 +752,8 @@ public class QCProcessingService {
                         appraisal.getId(),
                         null,
                         appraisal.getContentHash(),
-                        engagementStatusFor(pair));
+                        engagementStatusFor(pair),
+                        clientId);
                 retryCount = pythonClient.getLastRetryCount();
                 throwIfCancelled(progressBatchId);
 
@@ -741,13 +781,45 @@ public class QCProcessingService {
                 updateSubProgress(progressBatchId, "python_sync",
                         "Celery worker did not pick up queued job — running OCR directly for " + appraisal.getFilename(),
                         0.05, 0);
-                pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal);
+                pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal, clientId);
             }
             retryCount = pythonClient.getLastRetryCount();
             throwIfCancelled(progressBatchId);
         }
 
         QCResult result = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
+
+        // If the engagement letter OR contract was matched by filename heuristic or
+        // positional guess (confidence < 0.82) and the rules all auto-passed, force
+        // review. A confident rule-pass against the wrong document is not a pass.
+        // The 0.82 threshold sits above every ambiguous/fallback confidence tier
+        // (0.70 single-file, 0.72 multi-fuzzy, 0.78 substring, 0.80 multi-set/orderId)
+        // and below the clean tiers (0.90 exact-key, 0.95 sole-in-set, 1.0 orderId).
+        final double MATCH_CONFIDENCE_THRESHOLD = 0.82;
+        if (result.getQcDecision() == QCDecision.AUTO_PASS) {
+            double worstMatchConf = 1.0;
+            String worstDocType = null;
+            Optional<Double> engConf = fileMatchingService.getEngagementMatchConfidence(appraisal.getId());
+            if (engConf.isPresent() && engConf.get() < worstMatchConf) {
+                worstMatchConf = engConf.get();
+                worstDocType = "Engagement letter";
+            }
+            Optional<Double> conConf = fileMatchingService.getContractMatchConfidence(appraisal.getId());
+            if (conConf.isPresent() && conConf.get() < worstMatchConf) {
+                worstMatchConf = conConf.get();
+                worstDocType = "Contract";
+            }
+            if (worstDocType != null && worstMatchConf < MATCH_CONFIDENCE_THRESHOLD) {
+                final String docType = worstDocType;
+                final double conf = worstMatchConf;
+                self.downgradeToVerifyForLowMatchConfidence(result.getId(), conf, docType);
+                log.info("AUTO_PASS downgraded to TO_VERIFY for file {} — {} match confidence={} < {}",
+                        appraisal.getFilename(), docType, conf, MATCH_CONFIDENCE_THRESHOLD);
+            }
+            // Re-fetch so the switch below sees the updated decision
+            result = qcResultRepository.findById(result.getId()).orElse(result);
+        }
+
         // Fire QC rule events in the background — user sees REVIEW_PENDING immediately,
         // 137 event inserts happen after the batch status is already unlocked.
         self.recordQcEventsAsync(result, pythonResponse, result.getQcDecision(), modelConfig);
@@ -775,6 +847,15 @@ public class QCProcessingService {
             QCModelConfig modelConfig,
             Long progressBatchId,
             BatchFile appraisal) {
+        return runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal, null);
+    }
+
+    private PythonQCResponse runSyncPythonQc(
+            FilePair pair,
+            QCModelConfig modelConfig,
+            Long progressBatchId,
+            BatchFile appraisal,
+            String clientId) {
         return pythonClient.processQC(
                 pair.getAppraisalPath(),
                 pair.getAppraisalXmlPath(),
@@ -792,7 +873,8 @@ public class QCProcessingService {
                 appraisal.getId(),
                 null,
                 appraisal.getContentHash(),
-                engagementStatusFor(pair));
+                engagementStatusFor(pair),
+                clientId);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -898,6 +980,7 @@ public class QCProcessingService {
                         .bboxY(pr.bboxY() != null ? pr.bboxY() : 0.0f)
                         .bboxW(pr.bboxW() != null ? pr.bboxW() : 0.0f)
                         .bboxH(pr.bboxH() != null ? pr.bboxH() : 0.0f)
+                        .scope(pr.scope())
                         .build();
                 qcResult.addRuleResult(ruleResult);
             }
@@ -1243,7 +1326,7 @@ public class QCProcessingService {
      * result without a final decision keeps it REVIEW_PENDING (so the untouched files' review work
      * is preserved). No active results at all → ERROR.
      */
-    private BatchStatus recomputeBatchStatusFromActiveResults(Long batchId) {
+    BatchStatus recomputeBatchStatusFromActiveResults(Long batchId) {
         List<QCResult> active = qcResultRepository.findByBatchId(batchId).stream()
                 .filter(r -> r.getSupersededAt() == null)
                 .toList();
@@ -1252,7 +1335,15 @@ public class QCProcessingService {
         }
         boolean anyPending = active.stream()
                 .anyMatch(r -> r.getQcDecision() != QCDecision.AUTO_PASS && r.getFinalDecision() == null);
-        return anyPending ? BatchStatus.REVIEW_PENDING : BatchStatus.COMPLETED;
+        if (anyPending) return BatchStatus.REVIEW_PENDING;
+        // Do not mark COMPLETED while any appraisal file is still in ERROR — that file
+        // produced no QCResult and has no finalDecision to check above. The reviewer
+        // cannot act on it, but the admin can retry it (partial re-run) or dismiss it
+        // (FileStatus.DISMISSED) to explicitly accept that the file cannot be processed.
+        // DISMISSED files do not block completion — they are the terminal "accept failure" state.
+        long unreviewedErrors = batchFileRepository.countByBatchIdAndStatus(batchId, FileStatus.ERROR);
+        if (unreviewedErrors > 0) return BatchStatus.REVIEW_PENDING;
+        return BatchStatus.COMPLETED;
     }
 
     /**

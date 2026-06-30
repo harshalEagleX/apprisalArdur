@@ -33,7 +33,10 @@ public record PythonRuleResult(
         @JsonProperty("bbox_x")           Float bboxX,
         @JsonProperty("bbox_y")           Float bboxY,
         @JsonProperty("bbox_w")           Float bboxW,
-        @JsonProperty("bbox_h")           Float bboxH
+        @JsonProperty("bbox_h")           Float bboxH,
+        // "per_document" | "cross_document" | "semantic" — lets Java distinguish
+        // transaction-level findings from per-document ones (VF-4).
+        @JsonProperty("scope")            String scope
 ) {
     /** True when this rule result requires a human reviewer to make a decision. */
     public boolean needsVerification() {

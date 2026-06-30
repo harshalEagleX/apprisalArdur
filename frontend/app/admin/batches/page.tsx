@@ -33,7 +33,8 @@ type ReconcileResult = {
   stuckFound: number; retried: number; abandoned: number; pythonHealthy: boolean; message: string;
 };
 
-function batchLog(_event: string, _payload?: unknown) {
+function batchLog(...args: unknown[]) {
+  void args;
   // no-op
 }
 

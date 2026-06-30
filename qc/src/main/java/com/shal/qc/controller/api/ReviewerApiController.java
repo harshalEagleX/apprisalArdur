@@ -51,6 +51,7 @@ public class ReviewerApiController {
     private final AuditLogService auditLogService;
     private final AuditLogRepository auditLogRepository;
     private final ObjectMapper objectMapper;
+    private final com.shal.qc.service.PythonClientService pythonClientService;
 
     public ReviewerApiController(VerificationService verificationService,
                                  QCResultRepository qcResultRepository,
@@ -58,7 +59,8 @@ public class ReviewerApiController {
                                  RealtimeEventPublisher realtimeEventPublisher,
                                  AuditLogService auditLogService,
                                  AuditLogRepository auditLogRepository,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 com.shal.qc.service.PythonClientService pythonClientService) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
@@ -66,6 +68,7 @@ public class ReviewerApiController {
         this.auditLogService = auditLogService;
         this.auditLogRepository = auditLogRepository;
         this.objectMapper = objectMapper;
+        this.pythonClientService = pythonClientService;
     }
 
     // ── Review config (policy flags the UI must mirror) ───────────────────────
@@ -927,6 +930,51 @@ public class ReviewerApiController {
         } catch (Exception e) {
             log.error("Override decision failed: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of("success", false, "error", "Override decision failed"));
+        }
+    }
+
+    // ── Field corrections proxy (VF-6) ────────────────────────────────────────
+    // All reviewer field corrections MUST route through here so Spring Security's
+    // role/ownership checks apply. Python's /corrections is never called directly
+    // from the browser — it only accepts requests carrying X-API-Key (Java backend).
+
+    @PostMapping("/corrections")
+    public ResponseEntity<Object> submitCorrection(
+            @RequestBody Map<String, Object> correctionRequest,
+            @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest httpRequest) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
+        }
+
+        // Enforce QC result ownership for REVIEWER role: the qc_result_id in the
+        // payload must belong to a batch assigned to this reviewer.
+        Object qcResultIdObj = correctionRequest.get("qc_result_id");
+        if (qcResultIdObj != null && principal.getUser().getRole() == Role.REVIEWER) {
+            try {
+                Long qcResultId = Long.parseLong(String.valueOf(qcResultIdObj));
+                if (!qcResultRepository.isReviewerAssigned(qcResultId, principal.getUser().getId())) {
+                    return ResponseEntity.status(403).body(
+                            Map.of("error", "Not authorized to correct this document"));
+                }
+            } catch (NumberFormatException ignored) { }
+        }
+
+        // Stamp the authenticated reviewer's id so Python records who made the change.
+        Map<String, Object> payload = new HashMap<>(correctionRequest);
+        payload.put("reviewer_id", String.valueOf(principal.getUser().getId()));
+
+        auditLogService.log(principal.getUser(), "FIELD_CORRECTION_SUBMITTED",
+                "QCCorrection", null,
+                "document_id=" + correctionRequest.get("document_id"),
+                clientIp(httpRequest), httpRequest.getHeader("User-Agent"));
+
+        try {
+            String result = pythonClientService.submitCorrection(payload);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Correction submission failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", "Correction submission failed"));
         }
     }
 }

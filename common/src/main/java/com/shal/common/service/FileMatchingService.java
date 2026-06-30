@@ -151,6 +151,44 @@ public class FileMatchingService {
         return findSupportingFile(appraisalFile, FileType.CONTRACT);
     }
 
+    /**
+     * Collect any ambiguous-match warnings across all document pairings for this
+     * batch. Returns newline-joined warnings (empty string = all pairings clean).
+     * Call after getMatchedPairs() so DocumentMatch rows already exist.
+     */
+    @Transactional(readOnly = true)
+    public String collectMatchWarnings(Long batchId) {
+        return documentMatchRepository.findByAppraisalFile_Batch_Id(batchId).stream()
+                .map(DocumentMatch::getMatchWarning)
+                .filter(w -> w != null && !w.isBlank())
+                .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    /**
+     * Confidence score for the engagement letter paired with this appraisal file.
+     * Returns empty when no match record exists (no engagement was found at all).
+     */
+    @Transactional(readOnly = true)
+    public Optional<Double> getEngagementMatchConfidence(Long appraisalFileId) {
+        return getSupportingMatchConfidence(appraisalFileId, FileType.ENGAGEMENT);
+    }
+
+    /**
+     * Confidence score for the contract paired with this appraisal file.
+     * Returns empty when no contract match record exists.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Double> getContractMatchConfidence(Long appraisalFileId) {
+        return getSupportingMatchConfidence(appraisalFileId, FileType.CONTRACT);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Double> getSupportingMatchConfidence(Long appraisalFileId, FileType type) {
+        return documentMatchRepository
+                .findByAppraisalFile_IdAndSupportingFileType(appraisalFileId, type)
+                .map(DocumentMatch::getConfidenceScore);
+    }
+
     private MatchOutcome matchSupportingFile(BatchFile appraisalFile, FileType targetType) {
         if (appraisalFile.getFileType() != FileType.APPRAISAL) {
             throw new IllegalArgumentException("Expected APPRAISAL file type, got: " + appraisalFile.getFileType());
@@ -314,6 +352,19 @@ public class FileMatchingService {
         match.setMatchReason(outcome.matchReason());
         match.setAmbiguousCandidatesJson(ambiguousJson);
         match.setRejectedCandidatesJson(rejectedJson);
+        // Flag ambiguous picks so the admin is told to verify the pairing.
+        // Multiple equally-plausible candidates means we guessed — record that.
+        if (!outcome.ambiguousCandidates().isEmpty() && outcome.supportingFile().isPresent()) {
+            String names = outcome.ambiguousCandidates().stream()
+                    .map(BatchFile::getFilename)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            match.setMatchWarning(targetType + " match is ambiguous: selected \""
+                    + outcome.supportingFile().get().getFilename()
+                    + "\" from " + (outcome.ambiguousCandidates().size() + 1)
+                    + " equally-plausible candidates (" + names + "). Verify the correct document was paired.");
+        } else {
+            match.setMatchWarning(null);
+        }
 
         DocumentMatch saved = documentMatchRepository.save(match);
         Map<String, Object> payload = new LinkedHashMap<>();

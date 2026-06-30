@@ -303,6 +303,38 @@ public class BatchApiController {
     }
 
     /**
+     * Dismiss a permanently-failing appraisal file as unreviewable.
+     *
+     * Sets FileStatus → DISMISSED so the batch can complete without retrying a file
+     * that will never succeed (corrupt scan, unreadable PDF). This is the terminal
+     * "give up on this file" action. The file row is kept for audit; DISMISSED files
+     * are excluded from the completion gate in recomputeBatchStatusFromActiveResults.
+     *
+     * Only available for files in ERROR status. Admins only (enforced by SecurityConfig).
+     */
+    @PostMapping("/{batchId}/files/{fileId}/dismiss-error")
+    public ResponseEntity<?> dismissFileError(
+            @PathVariable @NonNull Long batchId,
+            @PathVariable @NonNull Long fileId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<ResponseEntity<?>> denied = assertClientAccess(principal.getUser(), batchId);
+        if (denied.isPresent()) return denied.get();
+        try {
+            batchService.dismissFileError(fileId, principal.getUser().getId());
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "fileId", fileId,
+                    "status", "DISMISSED",
+                    "message", "File marked as permanently unreviewable. The batch can now complete."));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to dismiss file error for file {}: {}", fileId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", "Dismiss failed: " + e.getMessage()));
+        }
+    }
+
+    /**
      * Delete a batch. Soft by default — the batch disappears from the app but its
      * data and audit trail are preserved. A hard purge (irreversible) requires the
      * explicit {@code hard=true} flag, which the UI gates behind a second

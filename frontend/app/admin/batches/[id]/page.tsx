@@ -33,7 +33,6 @@ function FileHistoryDrawer({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
     Promise.all([
       getFileHistory(batchFileId),
       getQCHistory(batchFileId),
@@ -187,14 +186,12 @@ function FileHistoryDrawer({
 function PropertySetSection({
   set,
   resultMap,
-  batchId,
   onReQC,
   onHistory,
   reQcBusy,
 }: {
   set: PropertySet;
   resultMap: Map<number, QCResult>;
-  batchId: number;
   onReQC: (fileId: number) => void;
   onHistory: (fileId: number) => void;
   reQcBusy: Set<number>;
@@ -505,7 +502,6 @@ export default function BatchDetailPage() {
               key={ps.setName ?? i}
               set={ps}
               resultMap={resultMap}
-              batchId={id}
               onReQC={handleReQC}
               onHistory={setHistoryFileId}
               reQcBusy={reQcBusy}
@@ -517,7 +513,6 @@ export default function BatchDetailPage() {
         <PropertySetSection
           set={propertySets[0] ?? { setName: null, files, fileCount: files.length, completedCount: 0, errorCount: 0, pendingCount: 0 }}
           resultMap={resultMap}
-          batchId={id}
           onReQC={handleReQC}
           onHistory={setHistoryFileId}
           reQcBusy={reQcBusy}
@@ -538,6 +533,7 @@ export default function BatchDetailPage() {
       {/* File history drawer */}
       {historyFileId !== null && (
         <FileHistoryDrawer
+          key={historyFileId}
           batchFileId={historyFileId}
           onClose={() => setHistoryFileId(null)}
         />

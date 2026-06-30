@@ -2,6 +2,7 @@ package com.shal.user.service;
 
 import com.shal.common.entity.User;
 import com.shal.common.security.UserPrincipal;
+import com.shal.common.service.AuditLogService;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -24,9 +25,11 @@ public class ImpersonationService {
     private static final ThreadLocal<Stack<Authentication>> originalAuthStack = ThreadLocal.withInitial(Stack::new);
 
     private final UserService userService;
+    private final AuditLogService auditLogService;
 
-    public ImpersonationService(UserService userService) {
+    public ImpersonationService(UserService userService, AuditLogService auditLogService) {
         this.userService = userService;
+        this.auditLogService = auditLogService;
     }
 
     /**
@@ -64,7 +67,26 @@ public class ImpersonationService {
         context.setAuthentication(impersonatedAuth);
         SecurityContextHolder.setContext(context);
 
+        // Log WHO initiated impersonation and WHOM they are impersonating.
+        // Actions taken under the impersonated identity are already logged under
+        // the target user's id; this separate event records the admin who chose
+        // to become someone else — the accountability gap noted in the audit.
+        User admin = currentAuthUser(currentAuth);
+        if (admin != null) {
+            auditLogService.log(admin, "IMPERSONATION_STARTED", "User", targetUserId,
+                    "admin_id=" + admin.getId() + " admin=" + admin.getUsername()
+                    + " target_id=" + targetUserId + " target=" + targetUser.getUsername(),
+                    null, null);
+        }
+
         return true;
+    }
+
+    private User currentAuthUser(Authentication auth) {
+        if (auth == null) return null;
+        Object principal = auth.getPrincipal();
+        if (principal instanceof UserPrincipal up) return up.getUser();
+        return null;
     }
 
     /**
@@ -80,6 +102,18 @@ public class ImpersonationService {
         }
 
         Authentication originalAuth = stack.pop();
+
+        // Log the stop event under the ORIGINAL admin identity before restoring it
+        User admin = currentAuthUser(originalAuth);
+        Authentication currentImpersonated = SecurityContextHolder.getContext().getAuthentication();
+        User impersonatedUser = currentAuthUser(currentImpersonated);
+        if (admin != null) {
+            auditLogService.log(admin, "IMPERSONATION_ENDED", "User",
+                    impersonatedUser != null ? impersonatedUser.getId() : null,
+                    "admin_id=" + admin.getId() + " admin=" + admin.getUsername()
+                    + (impersonatedUser != null ? " was_impersonating=" + impersonatedUser.getUsername() : ""),
+                    null, null);
+        }
 
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(originalAuth);
