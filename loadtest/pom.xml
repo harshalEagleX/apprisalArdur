@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.shal</groupId>
+        <artifactId>shal</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>loadtest</artifactId>
+    <packaging>jar</packaging>
+    <name>loadtest</name>
+    <description>Gatling load + performance test suite for SHAL platform</description>
+
+    <properties>
+        <gatling.version>3.10.5</gatling.version>
+        <gatling-plugin.version>4.9.6</gatling-plugin.version>
+        <!-- Target server — override via -Dloadtest.baseUrl=http://... -->
+        <loadtest.baseUrl>http://localhost:8080</loadtest.baseUrl>
+        <loadtest.pythonUrl>http://localhost:8000</loadtest.pythonUrl>
+        <!-- Scale knobs — override on the CLI -->
+        <loadtest.users>5000</loadtest.users>
+        <loadtest.rampSeconds>60</loadtest.rampSeconds>
+        <loadtest.holdSeconds>300</loadtest.holdSeconds>
+        <loadtest.docVolume>10000</loadtest.docVolume>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.gatling.highcharts</groupId>
+            <artifactId>gatling-charts-highcharts</artifactId>
+            <version>${gatling.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <testSourceDirectory>src/test/java</testSourceDirectory>
+        <plugins>
+            <plugin>
+                <groupId>io.gatling</groupId>
+                <artifactId>gatling-maven-plugin</artifactId>
+                <version>${gatling-plugin.version}</version>
+                <configuration>
+                    <simulationsFolder>src/test/java</simulationsFolder>
+                    <resultsFolder>target/gatling</resultsFolder>
+                    <runDescription>SHAL Platform Load Test</runDescription>
+                    <!-- Run ALL simulations with: mvn gatling:test -pl loadtest -->
+                </configuration>
+            </plugin>
+            <!-- Skip default surefire — Gatling is invoked via gatling:test -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

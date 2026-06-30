@@ -24,6 +24,7 @@
         <module>qc</module>
         <module>user</module>
         <module>app</module>
+        <module>loadtest</module>
     </modules>
 
     <properties>
