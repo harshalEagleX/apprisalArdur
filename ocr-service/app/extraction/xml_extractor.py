@@ -184,6 +184,7 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
             f["appraiser_license_type"] = _a(lic, "_Type")
             f["appraiser_license_state"] = _a(lic, "_State")
             f["appraiser_license_expiration"] = _a(lic, "_ExpirationDate")
+            f["appraiser_cert_expiration_date"] = f["appraiser_license_expiration"]
 
     lender = parties.find("LENDER")
     if lender is not None:
@@ -212,12 +213,14 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     f["zip_code"]         = _a(prop, "_PostalCode")
     f["county"]           = _a(prop, "_County")
     f["occupancy_type"]   = _a(prop, "_CurrentOccupancyType")
+    f["occupant_status"]  = f["occupancy_type"]               # S-7 uses occupant_status
     f["property_rights"]  = _a(prop, "_RightsType")
 
     ident = prop.find("_IDENTIFICATION")
     if ident is not None:
-        f["apn"]          = _a(ident, "AssessorsParcelIdentifier")
-        f["census_tract"] = _a(ident, "CensusTractIdentifier")
+        f["apn"]                    = _a(ident, "AssessorsParcelIdentifier")
+        f["assessors_parcel_number"] = f["apn"]               # S-4b uses assessors_parcel_number
+        f["census_tract"]           = _a(ident, "CensusTractIdentifier")
 
     struct = prop.find("STRUCTURE")
     if struct is not None:
@@ -246,19 +249,27 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     if nbhd is not None:
         f["neighborhood_name"]        = _a(nbhd, "_Name")
         f["location_type"]            = _a(nbhd, "PropertyNeighborhoodLocationType")
+        f["location"]                 = f["location_type"]            # N-1 _CHARACTERISTICS
         f["built_up"]                 = _a(nbhd, "_BuiltupRangeType")
         f["growth"]                   = _a(nbhd, "_GrowthPaceType")
+        f["growth_rate"]              = f["growth"]                   # N-1 _CHARACTERISTICS
         f["property_values_trend"]    = _a(nbhd, "_PropertyValueTrendType")
+        f["property_values"]          = f["property_values_trend"]    # N-2 _TRENDS
         f["demand_supply"]            = _a(nbhd, "_DemandSupplyType")
         f["marketing_time_typical"]   = _a(nbhd, "_TypicalMarketingTimeDurationType")
+        f["marketing_time"]           = f["marketing_time_typical"]   # N-2 _TRENDS
         housing = nbhd.find("_HOUSING")
         if housing is not None:
-            f["price_low"]           = _a(housing, "_LowPriceAmount")
-            f["price_high"]          = _a(housing, "_HighPriceAmount")
-            f["price_predominant"]   = _a(housing, "_PredominantPriceAmount")
-            f["age_low_years"]       = _a(housing, "_NewestYearsCount")
-            f["age_high_years"]      = _a(housing, "_OldestYearsCount")
-            f["age_predominant_years"] = _a(housing, "_PredominantAgeYearsCount")
+            f["price_low"]            = _a(housing, "_LowPriceAmount")
+            f["price_high"]           = _a(housing, "_HighPriceAmount")
+            f["price_predominant"]    = _a(housing, "_PredominantPriceAmount")
+            f["predominant_price"]    = f["price_predominant"]        # N-3, SCA-BR
+            f["age_low_years"]        = _a(housing, "_NewestYearsCount")
+            f["age_low"]              = f["age_low_years"]            # N-3 _range_check
+            f["age_high_years"]       = _a(housing, "_OldestYearsCount")
+            f["age_high"]             = f["age_high_years"]           # N-3 _range_check
+            f["age_predominant_years"]  = _a(housing, "_PredominantAgeYearsCount")
+            f["predominant_age"]        = f["age_predominant_years"]  # N-3 _range_check
 
     sc = prop.find("SALES_CONTRACT")
     if sc is not None:
@@ -291,6 +302,7 @@ def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
         f["cost_approach_value"]      = _a(ca, "ValueIndicatedByCostApproachAmount")
         f["site_value"]               = _a(ca, "SiteEstimatedValueAmount")
         f["total_improvements_cost"]  = _a(ca, "NewImprovementTotalCostAmount")
+        f["cost_new_improvements"]    = f["total_improvements_cost"]  # CA-3, reconciliation
         dep = ca.find("DEPRECIATION")
         if dep is not None:
             f["total_depreciation"]       = _a(dep, "_TotalAmount")
@@ -382,8 +394,10 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     _set(f"{pfx}_financing_adj",     "FinancingConcessions","_Amount")
     _set(f"{pfx}_location_rating",   "Location",           "_Description")
     _set(f"{pfx}_site_area",         "SiteArea",           "_Description")
+    _set(f"{pfx}_site_size",         "SiteArea",           "_Description")  # SCA-11 uses site_size
     _set(f"{pfx}_view",              "View",               "_Description")
     _set(f"{pfx}_design_style",      "DesignStyle",        "_Description")
+    _set(f"{pfx}_design",            "DesignStyle",        "_Description")  # SCA-13 uses design
     _set(f"{pfx}_quality_rating",    "Quality",            "_Description")
     _set(f"{pfx}_age",               "Age",                "_Description")
     _set(f"{pfx}_condition_rating",  "Condition",          "_Description")
@@ -391,6 +405,7 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     _set(f"{pfx}_gla",               "GrossLivingArea",    "_Description")
     _set(f"{pfx}_gla_adj",           "GrossLivingArea",    "_Amount")
     _set(f"{pfx}_garage",            "CarStorage",         "_Description")
+    _set(f"{pfx}_garage_carport",    "CarStorage",         "_Description")  # SCA-21 uses garage_carport
     _set(f"{pfx}_concessions",       "SalesConcessions",   "_Description")
 
 
