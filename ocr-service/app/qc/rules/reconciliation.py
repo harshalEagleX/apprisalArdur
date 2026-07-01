@@ -303,13 +303,15 @@ def ca3_arithmetic(ctx: QCContext):
     site = normalize_currency(ctx.appraisal.value("site_value_estimate"))
     depr_cost = normalize_currency(ctx.appraisal.value("depreciated_cost_improvements"))
     indicated = normalize_currency(ctx.appraisal.value("indicated_value_cost_approach"))
+    # "As-is" Value of Site Improvements — optional 3rd addend; blank = 0.
+    site_other = normalize_currency(ctx.appraisal.value("site_other_improvements")) or 0.0
     out = []
     fields = ["site_value_estimate", "depreciated_cost_improvements",
               "indicated_value_cost_approach"]
     ev = [ctx.appraisal.evidence(f) for f in fields]
-    # indicated == site value + depreciated cost of improvements (within $100)
+    # indicated == site value + depreciated cost of improvements [+ site other improvements] (within $100)
     if site and depr_cost and indicated:
-        if abs(indicated - (site + depr_cost)) <= 100:
+        if abs(indicated - (site + depr_cost + site_other)) <= 100:
             out.append(_res("CA-3", "92b", "cost_approach", RuleStatus.PASS,
                             fields=fields, evidence=ev))
         else:
@@ -321,7 +323,8 @@ def ca3_arithmetic(ctx: QCContext):
                 status = RuleStatus.FAIL
             out.append(_res("CA-3", "92b", "cost_approach", status,
                             message=qc_config.template("CA-3-arith", value=int(indicated),
-                                                       a=int(site), b=int(depr_cost)),
+                                                       a=int(site),
+                                                       b=int(depr_cost + site_other)),
                             fields=fields, template_id="CA-3-arith",
                             evidence=ev, confidence=0.7))
     # depreciation reasonableness vs the age-life baseline:

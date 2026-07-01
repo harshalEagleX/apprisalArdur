@@ -193,13 +193,14 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
     borrower = parties.find("BORROWER")
     if borrower is not None:
         raw_name = _a(borrower, "_UnparsedName")
-        # Split "John Smith & Jane Smith" into borrower and co-borrower
+        # Keep the full name for matching (e.g. "SCOTT & KELLY CARPER").
+        # Split only to populate co_borrower_name separately; do NOT truncate
+        # borrower_name to the first token — S-2 needs the full string to match
+        # engagement-letter values like "Kelly Carper; Scott Carper".
+        f["borrower_name"] = raw_name
         if "&" in raw_name:
             parts = [p.strip() for p in raw_name.split("&", 1)]
-            f["borrower_name"] = parts[0]
             f["co_borrower_name"] = parts[1]
-        else:
-            f["borrower_name"] = raw_name
 
 
 def _extract_property(root: ET.Element, f: dict) -> None:
@@ -299,10 +300,14 @@ def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
 
     ca = vm.find("COST_ANALYSIS")
     if ca is not None:
-        f["cost_approach_value"]      = _a(ca, "ValueIndicatedByCostApproachAmount")
-        f["site_value"]               = _a(ca, "SiteEstimatedValueAmount")
-        f["total_improvements_cost"]  = _a(ca, "NewImprovementTotalCostAmount")
-        f["cost_new_improvements"]    = f["total_improvements_cost"]  # CA-3, reconciliation
+        f["cost_approach_value"]       = _a(ca, "ValueIndicatedByCostApproachAmount")
+        f["site_value"]                = _a(ca, "SiteEstimatedValueAmount")
+        f["total_improvements_cost"]   = _a(ca, "NewImprovementTotalCostAmount")
+        f["cost_new_improvements"]     = f["total_improvements_cost"]  # CA-3, reconciliation
+        # "As-is" Value of Site Improvements — 3rd addend in cost approach total.
+        # URAR: Indicated = Site Value + Depreciated Cost + Site Improvements.
+        # Missing this term causes CA-ARITH to false-fail any report that uses the line.
+        f["site_other_improvements"]   = _a(ca, "SiteOtherImprovementsAsIsAmount")
         dep = ca.find("DEPRECIATION")
         if dep is not None:
             f["total_depreciation"]       = _a(dep, "_TotalAmount")

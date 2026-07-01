@@ -243,7 +243,8 @@ def _values_agree(a: str, b: str) -> bool:
 def _normalize_assignment(v: Optional[str]) -> Optional[str]:
     if not v:
         return None
-    t = v.lower()
+    # Strip hyphens and spaces so "Re-Finance" and "re finance" both match "refinance"
+    t = re.sub(r"[-\s]+", "", v.lower())
     if "purchase" in t:
         return "purchase"
     if "refinance" in t or "refi" in t:
@@ -295,18 +296,43 @@ _DATE_RE = re.compile(
     re.I,
 )
 
+# Labels searched in priority order. "Assigned On:" is the Equity Solutions USA /
+# ValueLink platform label for the order-placed timestamp. Fallbacks cover other
+# common AMC portal labels. We NEVER fall back to "grab first date in header"
+# because that reliably hits "Order Due Date" before the actual assignment date.
+_ENG_DATE_LABELS = [
+    "Assigned On:",
+    "Order Date:",
+    "Date Ordered:",
+    "Received:",
+    "Assignment Date:",
+    "Order Placed:",
+]
+
 
 def _parse_eng_date(text: str) -> Optional[datetime.date]:
-    """Extract the engagement letter date — first plausible date in the header."""
+    """Extract the engagement date by searching for a recognized AMC platform label.
+
+    Searches _ENG_DATE_LABELS in priority order and returns the date found
+    immediately after the first matching label. Returns None if no label is found
+    rather than falling back to the first date in the header, which would
+    incorrectly capture Order Due Date or other deadline fields.
+    """
     if not text:
         return None
-    # Look only in first ~800 chars (header / letterhead area)
-    header = text[:800]
-    for m in _DATE_RE.finditer(header):
-        raw = m.group(0)
-        for fmt in _DATE_FMTS:
-            try:
-                return datetime.datetime.strptime(raw.strip(), fmt).date()
-            except ValueError:
-                continue
+    for label in _ENG_DATE_LABELS:
+        idx = text.find(label)
+        if idx == -1:
+            continue
+        snippet = text[idx + len(label): idx + len(label) + 80]
+        for m in _DATE_RE.finditer(snippet):
+            raw = m.group(0)
+            for fmt in _DATE_FMTS:
+                try:
+                    result = datetime.datetime.strptime(raw.strip(), fmt).date()
+                    logger.debug("ORD-ENG-DATE: matched label=%r date=%s", label, result)
+                    return result
+                except ValueError:
+                    continue
+    logger.debug("ORD-ENG-DATE: no labeled date found in engagement letter text")
     return None

@@ -1139,6 +1139,25 @@ def _extract_pud_checked(pdf_path: Path) -> Dict[str, str]:
     return results
 
 
+# On TOTAL (a la mode) USPAP addendum pages, fitz reads the fill-in cells
+# (lender, borrower, etc.) before the boilerplate body text.  The exposure-time
+# fill-in value therefore appears as the last non-empty line BEFORE the USPAP
+# certification boilerplate anchor "- The statements of fact contained in this
+# report".  This is the structural extraction anchor.
+_USPAP_CERT_ANCHOR = re.compile(
+    r"[-–—]\s*The\s+statements\s+of\s+fact\s+contained\s+in\s+this\s+report",
+    re.I,
+)
+# Validate that a candidate looks like a time period (days/months/under/number)
+# and is not a section header or other fill-in value.
+_TIME_PERIOD_RE = re.compile(
+    r"\b(?:day|week|month|under|over|\d+)\b", re.I
+)
+_PRIOR_RE = re.compile(
+    r"I\s+have\s+(not\s+)?performed\s+services[^\n]{0,120}", re.I
+)
+
+
 def _extract_uspap_addendum(pdf_path: Path) -> Dict[str, str]:
     """Deterministic (no-LLM) extraction of USPAP addendum fields.
 
@@ -1149,13 +1168,14 @@ def _extract_uspap_addendum(pdf_path: Path) -> Dict[str, str]:
 
     This extractor runs as an L5 fallback so ADD-9 does not regress when
     the LLM tier is unavailable or times out.
+
+    Exposure-time extraction uses a structural anchor:
+      On TOTAL/a la mode forms fitz reads fill-in cells before body text, so
+      the actual value is the last non-empty line before the USPAP certification
+      anchor "- The statements of fact contained in this report".  A time-period
+      validation check rejects non-value lines (case numbers, lender names, etc.).
+    The matched source is stored in _exposure_time_source for audit.
     """
-    _EXPOSURE_RE = re.compile(
-        r"[Rr]easonable\s+[Ee]xposure\s+[Tt]ime[^:]*[:\-]?\s*([^\n]{3,80})"
-    )
-    _PRIOR_RE = re.compile(
-        r"I\s+have\s+(not\s+)?performed\s+services[^\n]{0,120}", re.I
-    )
     results: Dict[str, str] = {}
     try:
         import fitz
@@ -1171,13 +1191,31 @@ def _extract_uspap_addendum(pdf_path: Path) -> Dict[str, str]:
                     results["appraisal_report_type"] = "Restricted Appraisal Report"
                 elif "appraisal report" in low:
                     results["appraisal_report_type"] = "Appraisal Report"
-            # Reasonable exposure time: extract the text after the label.
+            # Reasonable exposure time — structural anchor extraction.
+            # On TOTAL/a la mode forms, fitz reads fill-in cell values before the
+            # boilerplate body, so the actual value is the last non-empty line
+            # immediately before the USPAP certification anchor.
             if "reasonable_exposure_time" not in results:
-                m = _EXPOSURE_RE.search(text)
-                if m:
-                    val = m.group(1).strip().rstrip(".")
-                    if val and len(val) > 2:
-                        results["reasonable_exposure_time"] = val
+                anchor_m = _USPAP_CERT_ANCHOR.search(text)
+                if anchor_m:
+                    before = text[:anchor_m.start()]
+                    lines_before = [ln for ln in before.split("\n") if ln.strip()]
+                    if lines_before:
+                        candidate = lines_before[-1].strip().rstrip(".")
+                        if (len(candidate) >= 3
+                                and _TIME_PERIOD_RE.search(candidate)
+                                and "certif" not in candidate.lower()):
+                            results["reasonable_exposure_time"] = candidate
+                            results["_exposure_time_source"] = "uspap_cert_anchor"
+                            logger.debug(
+                                "L5 exposure-time: cert-anchor page=%d val=%r",
+                                page_idx, candidate,
+                            )
+                if "reasonable_exposure_time" not in results:
+                    logger.debug(
+                        "L5 exposure-time: anchor not found or candidate invalid "
+                        "on page=%d", page_idx,
+                    )
             # Prior services.
             if "prior_services_performed" not in results:
                 m = _PRIOR_RE.search(text)

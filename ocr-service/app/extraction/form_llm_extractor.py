@@ -221,7 +221,11 @@ _FIELD_HINTS = {
     "appraiser_state_cert_number": "State Certification # or License #",
     "appraiser_cert_state": "the State of the certification/license (2-letter code)",
     "appraisal_report_type": "USPAP identification checkbox: Appraisal Report or Restricted Appraisal Report",
-    "reasonable_exposure_time": "Reasonable Exposure Time (verbatim, e.g. '30-90 days')",
+    "reasonable_exposure_time": (
+        "Copy ONLY the time-period value (e.g. '30-180 Days', 'Under 3 months', '90 days') "
+        "from the sentence 'My opinion of a reasonable exposure time … is: <VALUE>'. "
+        "Do NOT copy section headings such as 'Additional Certifications'."
+    ),
     "prior_services_performed": "the prior-services disclosure (HAVE / HAVE NOT performed services, plus any description)",
     # ---- neighborhood checkboxes (N-1 / N-2) ----
     "location":       "Location checkbox — mark the ONE checked box: Urban, Suburban, or Rural",

@@ -120,7 +120,13 @@ def c1_analyze(ctx: QCContext):
         # contract for sale" (no contract exists). Only the purchase-data fields
         # (contract price/date/concessions) should be empty — NOT did_analyze_contract.
         # Using _REFI_BLANK_FIELDS avoids a false FAIL on the "did not analyze" checkbox.
-        populated = [f for f in _REFI_BLANK_FIELDS if ctx.appraisal.value(f)]
+        # Also require checkbox_conf on each field — a low-confidence True read is not
+        # reliable enough to FAIL a refi for having purchase-contract fields populated.
+        populated = [
+            f for f in _REFI_BLANK_FIELDS
+            if ctx.appraisal.value(f)
+            and ctx.appraisal.confidence(f) >= ctx.checkbox_conf
+        ]
         if populated:
             txn_conf = max(ctx.appraisal.confidence("assignment_type"),
                            ctx.engagement.confidence("assignment_type"),

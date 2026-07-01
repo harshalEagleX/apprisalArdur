@@ -729,6 +729,19 @@ def cg_prior_sale_change(ctx: QCContext):
         any_prior = True
         price_change_pct = abs(current_price - prior_price) / prior_price * 100.0
 
+        # SCA-FLIP covers all rapid resales within its window (same 36-month default).
+        # When a comp falls inside that window, SCA-FLIP already surfaces it for review
+        # regardless of price change — avoid double-counting the same finding here.
+        flip_window = int(qc_config.semantic("comp_resale_window_months", 36))
+        if months <= flip_window:
+            out.append(RuleResult(
+                rule_id="CG-PRIOR-SALE", checklist_num="CG-prior-sale",
+                section="sales_comparison", status=RuleStatus.PASS,
+                fields_involved=[f"comp_{i}_prior_sale_date", f"comp_{i}_prior_sale_price"],
+                evidence=ev,
+            ))
+            continue
+
         if price_change_pct <= change_threshold:
             out.append(RuleResult(
                 rule_id="CG-PRIOR-SALE", checklist_num="CG-prior-sale", section="sales_comparison",

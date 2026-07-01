@@ -255,10 +255,18 @@ def n4_landuse(ctx: QCContext):
                             evidence=ev, confidence=0.6))
     other = vals.get("land_use_other")
     if other and other > 0:
-        # a non-zero Other needs a description; none is extracted as a field, so
-        # the reviewer confirms what the Other use is
         _n4o_conf = ctx.appraisal.confidence("land_use_other")
-        if _n4o_conf >= 0.95:
+        # Check if the appraiser described the Other land use in the neighborhood narrative.
+        # Acceptable: any sentence that mentions "other" alongside a land-type word.
+        _n4_narrative = (ctx.appraisal.value("neighborhood_description") or "").lower()
+        _LAND_TYPES = ("vacant", "commercial", "industrial", "agricultural",
+                       "recreational", "institutional", "public", "school",
+                       "church", "park", "open space", "exempt")
+        _other_described = (
+            "other" in _n4_narrative
+            and any(lt in _n4_narrative for lt in _LAND_TYPES)
+        )
+        if _n4o_conf >= 0.95 or _other_described:
             out.append(_res("N-4", "22", RuleStatus.PASS,
                             fields=["land_use_other"],
                             evidence=[ctx.appraisal.evidence("land_use_other")]))

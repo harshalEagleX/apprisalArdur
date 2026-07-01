@@ -108,6 +108,9 @@ def ca_arith_cost_approach(ctx: QCContext):
     improvements_raw = ctx.appraisal.value("total_improvements_cost")
     depreciation_raw = ctx.appraisal.value("total_depreciation")
     stated_raw = ctx.appraisal.value("cost_approach_value")
+    # "As-is" Value of Site Improvements — optional 3rd addend on the URAR cost approach.
+    # New construction or properties with site improvements use this line; blank = 0.
+    site_other_raw = ctx.appraisal.value("site_other_improvements")
 
     ev = [
         ctx.appraisal.evidence("site_value"),
@@ -120,6 +123,7 @@ def ca_arith_cost_approach(ctx: QCContext):
     improvements = _to_float(improvements_raw)
     depreciation = _to_float(depreciation_raw)
     stated_val = _to_float(stated_raw)
+    site_other = _to_float(site_other_raw) or 0.0  # blank → 0 (most reports omit this line)
 
     if any(v is None for v in (site_val, improvements, depreciation, stated_val)):
         missing = [
@@ -143,7 +147,7 @@ def ca_arith_cost_approach(ctx: QCContext):
 
     tolerance = float(qc_config.semantic("cost_approach_arith_tolerance", 50))
     depr_improvements = improvements - depreciation
-    computed = site_val + depr_improvements
+    computed = site_val + depr_improvements + site_other
     diff = abs(computed - stated_val)
 
     if diff <= tolerance:
