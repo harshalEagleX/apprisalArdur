@@ -49,10 +49,32 @@ def s1_address(ctx: QCContext):
                             message="" if ok else qc_config.template("S-1-state"),
                             fields=["state"], evidence=ev,
                             template_id=None if ok else "S-1-state"))
-    # county is optional but checked when present on both
-    if ctx.engagement.value("county") and ctx.appraisal.value("county"):
-        out.append(H.cross_doc_match(ctx, "S-1", "C", "subject", "county", "S-1-county",
-                                     authority="engagement", kind="generic", label="county"))
+    # county is optional but checked when present on both.
+    # County and city are DIFFERENT administrative levels in U.S. local government:
+    # a county contains cities/towns; a city is a municipality inside a county.
+    # normalize_county() strips "County"/"Parish"/"Borough" suffixes before comparing
+    # so "Harris County" == "Harris" but "Harris" (county) ≠ "Houston" (city in Harris
+    # County). The city field is compared separately above with kind="generic".
+    a_county = ctx.appraisal.value("county")
+    e_county = ctx.engagement.value("county")
+    if a_county and e_county:
+        na_c = matching.normalize_county(a_county)
+        ne_c = matching.normalize_county(e_county)
+        ev_c = [ctx.appraisal.evidence("county"), ctx.engagement.evidence("county")]
+        mr_c = matching.match_text(na_c, ne_c,
+                                   match_th=qc_config.match_threshold,
+                                   review_th=qc_config.review_threshold)
+        st_c = {"match": RuleStatus.PASS, "review": RuleStatus.VERIFY,
+                "mismatch": RuleStatus.FAIL}[mr_c.verdict]
+        if min(ctx.appraisal.confidence("county"),
+               ctx.engagement.confidence("county")) < ctx.structured_conf:
+            if st_c == RuleStatus.FAIL:
+                st_c = RuleStatus.VERIFY
+        msg_c = "" if st_c == RuleStatus.PASS else qc_config.template(
+            "S-1-county", value=e_county, a=a_county, b=e_county, field="county")
+        out.append(_res("S-1", "C", st_c, message=msg_c, fields=["county"],
+                        evidence=ev_c,
+                        template_id="S-1-county" if st_c != RuleStatus.PASS else None))
     return out
 
 

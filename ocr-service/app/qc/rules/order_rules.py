@@ -65,10 +65,31 @@ def ord_form_match(ctx: QCContext):
                     message="Required form type not extracted from engagement letter; cannot compare.",
                     fields=fields, evidence=ev)
 
-    # Normalize: "1004" matches "1004mc", "fnm1004" etc.
+    # Normalize form type strings to a comparable base.
+    # "Residential Appraisal" / "Residential Report" / "URAR" all map to "1004"
+    # because engagement letters often describe the form in plain English rather
+    # than by number; the appraisal XML always uses the MISMO form number.
+    _PLAIN_TO_NUM = {
+        "residential appraisal": "1004",
+        "residential report": "1004",
+        "urar": "1004",
+        "uniform residential appraisal report": "1004",
+        "condominium appraisal": "1073",
+        "individual condominium": "1073",
+        "small residential income property": "1025",
+        "multi family": "1025",
+        "multifamily": "1025",
+        "exterior only": "2055",
+        "drive by": "2055",
+    }
+
     def _base(v: str) -> str:
-        m = re.search(r"(1004mc|1004d|1004|1073|1025|1007|2055|216)", v.lower())
-        return m.group(1) if m else v.lower()
+        s = v.lower().strip()
+        for phrase, num in _PLAIN_TO_NUM.items():
+            if phrase in s:
+                return num
+        m = re.search(r"(1004mc|1004d|1004|1073|1025|1007|2055|216)", s)
+        return m.group(1) if m else s
 
     ord_base = _base(ordered)
     act_base = _base(actual) if actual else ""

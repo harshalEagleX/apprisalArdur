@@ -116,9 +116,20 @@ def doc1_license_current(ctx: QCContext):
 
 # ---- SIG-SUP supervisory appraiser section consistency -----------------------
 
+# URAR form prints "(only if required)" as placeholder text in the supervisor
+# section when no supervisor applies. OCR reads this as a name — filter it out.
+_SUPERVISOR_PLACEHOLDER = {
+    "only if required", "(only if required)", "n/a", "na", "not applicable",
+    "if applicable", "only if applicable",
+}
+
+
 def _has_supervisor(ctx: QCContext) -> bool:
-    return bool(ctx.appraisal.value("supervisory_appraiser_name")
-                or ctx.appraisal.value("supervisory_appraiser_cert_number"))
+    name = (ctx.appraisal.value("supervisory_appraiser_name") or "").strip().lower()
+    cert = ctx.appraisal.value("supervisory_appraiser_cert_number")
+    if name in _SUPERVISOR_PLACEHOLDER:
+        return False
+    return bool(name or cert)
 
 
 @rule(id="SIG-SUP", num="111", section="signature", phase=2, applies_when=_has_supervisor,

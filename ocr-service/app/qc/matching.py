@@ -43,6 +43,16 @@ _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
 _COMPANY_NOISE = {"inc", "llc", "corp", "corporation", "co", "company", "na",
                   "lp", "llp", "ltd", "pllc", "pc", "fsb", "isaoa", "atima"}
 
+# Administrative suffixes that appear in county names but not city names.
+# "Riverside County" and "Riverside" refer to the same county; a city named
+# "Riverside" located WITHIN "Riverside County" is a different entity but
+# shares the same base name — the comparison stays normalized so both match
+# their own field correctly without cross-contaminating city ↔ county checks.
+_COUNTY_SUFFIXES = {
+    "county", "parish", "borough", "census area", "municipality",
+    "city and county", "district", "township",
+}
+
 
 def _collapse_ws(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
@@ -104,6 +114,27 @@ def normalize_company(text: str) -> str:
     so "Champions Funding, LLC" == "Champions Funding"."""
     tokens = [t for t in normalize_basic(text).split() if t not in _COMPANY_NOISE]
     return " ".join(tokens)
+
+
+def normalize_county(text: str) -> str:
+    """Strip administrative suffixes from a county name for comparison.
+
+    "Riverside County" → "riverside"
+    "St. Louis City and County" → "st louis"
+    "Miami-Dade" → "miami dade"
+    Preserves the base name so county-field values match regardless of whether
+    the appraiser wrote "Harris County" or just "Harris". This normalization
+    must ONLY be applied to county fields — applying it to city fields would
+    allow "Los Angeles" (city) to match "Los Angeles County" (county), which
+    is a different administrative entity in U.S. local government.
+    """
+    s = normalize_basic(text)
+    # Strip multi-word suffixes first (e.g. "city and county")
+    for suffix in sorted(_COUNTY_SUFFIXES, key=len, reverse=True):
+        if s.endswith(" " + suffix):
+            s = s[: -(len(suffix) + 1)].strip()
+            break
+    return s
 
 
 def normalize_currency(text) -> Optional[float]:

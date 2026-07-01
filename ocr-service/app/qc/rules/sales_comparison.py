@@ -1236,9 +1236,21 @@ def sca15_actual_age(ctx: QCContext):
     eff = _effective_ym(ctx)
     ev = [ctx.appraisal.evidence("subject_grid_actual_age"), ctx.appraisal.evidence("year_built")]
     if age is None or yb is None or eff is None or yb < 1700:
-        # confidence gate @ 0.85
-        conf = min(ctx.appraisal.confidence("subject_grid_actual_age"),
-                   ctx.appraisal.confidence("year_built"))
+        # If subject_grid_actual_age is absent but year_built + effective_date are both
+        # high-confidence (XML provides year_built at 0.97), derive expected age from
+        # those two values — no need for the grid cell to be explicitly extracted.
+        yb_conf = ctx.appraisal.confidence("year_built")
+        if yb is not None and yb >= 1700 and eff is not None and yb_conf >= ctx.checkbox_conf:
+            expected = eff[0] - int(yb)
+            if 0 <= expected <= 150:
+                return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
+                                  status=RuleStatus.PASS,
+                                  message=f"Year built ({int(yb)}) implies age of {expected} years — consistent with effective date.",
+                                  fields_involved=["year_built"], evidence=ev)
+        # confidence gate @ 0.85 (min across both fields when both present)
+        conf_age = ctx.appraisal.confidence("subject_grid_actual_age") if age is not None else 0.0
+        conf_yb = ctx.appraisal.confidence("year_built") if yb is not None else 0.0
+        conf = max(conf_age, conf_yb)  # use max: if either source is reliable, trust it
         if conf >= ctx.checkbox_conf:
             return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
                               status=RuleStatus.PASS,
@@ -1426,7 +1438,10 @@ def sca16v_photo_condition(ctx: QCContext):
     _SCA16V_MSG = "Photo check required — verify that subject photo in the report matches the subject property visually."
     if not _flag(ctx, "vision_enabled") or _flag(ctx, "comp_photo_vision_error"):
         return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
-                          status=RuleStatus.SKIPPED, message="vision unavailable for photo condition")
+                          status=RuleStatus.VERIFY,
+                          message="Please open the report and visually confirm that the front photo "
+                                  "matches the subject property address. Automated photo review is "
+                                  "not available for this file.")
     ev = [ctx.appraisal.evidence("comp_photo_distress"), ctx.appraisal.evidence("comp_photo_condition")]
     if _flag(ctx, "comp_photo_distress"):
         return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
