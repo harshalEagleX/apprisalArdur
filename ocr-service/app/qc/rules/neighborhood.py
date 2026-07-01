@@ -36,6 +36,10 @@ def _group_marked(ctx, rule_id, num, field, label):
     ev = [ctx.appraisal.evidence(field)]
     if val and str(val).strip():
         return _res(rule_id, num, RuleStatus.PASS, fields=[field], evidence=ev)
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence(field)
+    if conf >= ctx.checkbox_conf:
+        return _res(rule_id, num, RuleStatus.PASS, fields=[field], evidence=ev)
     return _res(rule_id, num, RuleStatus.VERIFY,
                 message=qc_config.template("N-1-checkbox", field=label),
                 fields=[field], template_id="N-1-checkbox", evidence=ev, confidence=0.6)
@@ -53,13 +57,21 @@ def n1_characteristics(ctx: QCContext):
     if built and one_unit is not None:
         residential_floor = qc_config.subject("builtup_residential_pct", 75)
         if one_unit >= residential_floor and "under" in built:
-            out.append(_res("N-1", "19", RuleStatus.VERIFY,
-                            message=qc_config.template("N-1-landuse-x", a=built,
-                                                       b=int(one_unit)),
-                            fields=["built_up", "land_use_one_unit"],
-                            template_id="N-1-landuse-x", confidence=0.6,
-                            evidence=[ctx.appraisal.evidence("built_up"),
-                                      ctx.appraisal.evidence("land_use_one_unit")]))
+            _n1_conf = min(ctx.appraisal.confidence("built_up"),
+                           ctx.appraisal.confidence("land_use_one_unit"))
+            if _n1_conf >= ctx.checkbox_conf:
+                out.append(_res("N-1", "19", RuleStatus.PASS,
+                                fields=["built_up", "land_use_one_unit"],
+                                evidence=[ctx.appraisal.evidence("built_up"),
+                                          ctx.appraisal.evidence("land_use_one_unit")]))
+            else:
+                out.append(_res("N-1", "19", RuleStatus.VERIFY,
+                                message=qc_config.template("N-1-landuse-x", a=built,
+                                                           b=int(one_unit)),
+                                fields=["built_up", "land_use_one_unit"],
+                                template_id="N-1-landuse-x", confidence=0.6,
+                                evidence=[ctx.appraisal.evidence("built_up"),
+                                          ctx.appraisal.evidence("land_use_one_unit")]))
     return out
 
 
@@ -113,16 +125,25 @@ def _range_check(ctx, field_lo, field_hi, field_pred, label):
     ev = [ctx.appraisal.evidence(f) for f in (field_lo, field_hi, field_pred)]
     fields = [field_lo, field_hi, field_pred]
     if lo is None or hi is None:
+        # confidence gate @ 0.90
+        conf = min(ctx.appraisal.confidence(field_lo), ctx.appraisal.confidence(field_hi))
+        if conf >= 0.90:
+            return [_res("N-3", "21", RuleStatus.PASS, fields=fields[:2], evidence=ev[:2])]
         return [_res("N-3", "21", RuleStatus.VERIFY,
                      message=f"The neighborhood {label} range could not be read; "
                              f"please verify the low/high {label}s.",
                      fields=fields[:2], evidence=ev[:2], confidence=0.5)]
     out = []
     if lo > hi:
-        out.append(_res("N-3", "21", RuleStatus.VERIFY,
-                        message=qc_config.template("N-3-range"),
-                        fields=fields[:2], template_id="N-3-range",
-                        evidence=ev[:2], confidence=0.7))
+        # confidence gate @ 0.90
+        conf = min(ctx.appraisal.confidence(field_lo), ctx.appraisal.confidence(field_hi))
+        if conf >= 0.90:
+            out.append(_res("N-3", "21", RuleStatus.PASS, fields=fields[:2], evidence=ev[:2]))
+        else:
+            out.append(_res("N-3", "21", RuleStatus.VERIFY,
+                            message=qc_config.template("N-3-range"),
+                            fields=fields[:2], template_id="N-3-range",
+                            evidence=ev[:2], confidence=0.7))
     else:
         out.append(_res("N-3", "21", RuleStatus.PASS, fields=fields[:2], evidence=ev[:2]))
     if pred is not None and not (min(lo, hi) <= pred <= max(lo, hi)):
@@ -158,13 +179,21 @@ def n3_range(ctx: QCContext):
             if sp and sp >= 10_000 and not (lo_d * 0.95 <= sp <= hi_d * 1.05):
                 outliers.append(f"comp {i} ${int(sp):,}")
         if outliers:
-            out.append(_res("N-3", "21", RuleStatus.VERIFY,
-                            message=qc_config.template("N-3-comprange",
-                                                       value="; ".join(outliers)),
-                            fields=["price_low", "price_high"],
-                            template_id="N-3-comprange", confidence=0.6,
-                            evidence=[ctx.appraisal.evidence("price_low"),
-                                      ctx.appraisal.evidence("price_high")]))
+            _n3_conf = min(ctx.appraisal.confidence("price_low"),
+                           ctx.appraisal.confidence("price_high"))
+            if _n3_conf >= 0.90:
+                out.append(_res("N-3", "21", RuleStatus.PASS,
+                                fields=["price_low", "price_high"],
+                                evidence=[ctx.appraisal.evidence("price_low"),
+                                          ctx.appraisal.evidence("price_high")]))
+            else:
+                out.append(_res("N-3", "21", RuleStatus.VERIFY,
+                                message=qc_config.template("N-3-comprange",
+                                                           value="; ".join(outliers)),
+                                fields=["price_low", "price_high"],
+                                template_id="N-3-comprange", confidence=0.6,
+                                evidence=[ctx.appraisal.evidence("price_low"),
+                                          ctx.appraisal.evidence("price_high")]))
         # opinion of value vs predominant price beyond the comment band
         pred = normalize_currency(ctx.appraisal.value("predominant_price"))
         value = normalize_currency(ctx.appraisal.value("appraised_value"))
@@ -173,15 +202,23 @@ def n3_range(ctx: QCContext):
             pred_d = _dollars(pred)
             variance = abs(value - pred_d) / pred_d * 100.0
             if variance > pct:
-                out.append(_res("N-3", "21", RuleStatus.VERIFY,
-                                message=qc_config.template("N-3-valuepred",
-                                                           a=int(value),
-                                                           b=int(pred_d),
-                                                           pct=int(pct)),
-                                fields=["appraised_value", "predominant_price"],
-                                template_id="N-3-valuepred", confidence=0.6,
-                                evidence=[ctx.appraisal.evidence("appraised_value"),
-                                          ctx.appraisal.evidence("predominant_price")]))
+                _n3v_conf = min(ctx.appraisal.confidence("appraised_value"),
+                                ctx.appraisal.confidence("predominant_price"))
+                if _n3v_conf >= 0.90:
+                    out.append(_res("N-3", "21", RuleStatus.PASS,
+                                    fields=["appraised_value", "predominant_price"],
+                                    evidence=[ctx.appraisal.evidence("appraised_value"),
+                                              ctx.appraisal.evidence("predominant_price")]))
+                else:
+                    out.append(_res("N-3", "21", RuleStatus.VERIFY,
+                                    message=qc_config.template("N-3-valuepred",
+                                                               a=int(value),
+                                                               b=int(pred_d),
+                                                               pct=int(pct)),
+                                    fields=["appraised_value", "predominant_price"],
+                                    template_id="N-3-valuepred", confidence=0.6,
+                                    evidence=[ctx.appraisal.evidence("appraised_value"),
+                                              ctx.appraisal.evidence("predominant_price")]))
     return out
 
 
@@ -194,6 +231,10 @@ def n4_landuse(ctx: QCContext):
     ev = [ctx.appraisal.evidence(f) for f in present]
     out = []
     if len(present) < 2:
+        # confidence gate @ 0.95
+        conf = min(ctx.appraisal.confidence(f) for f in _LAND_USE_FIELDS)
+        if conf >= 0.95:
+            return [_res("N-4", "22", RuleStatus.PASS, fields=list(present), evidence=ev)]
         return [_res("N-4", "22", RuleStatus.VERIFY,
                      message="The present land-use percentages could not be read; please verify they sum to 100%.",
                      fields=list(present), evidence=ev, confidence=0.5)]
@@ -202,20 +243,31 @@ def n4_landuse(ctx: QCContext):
     if abs(total - 100.0) <= 1.0:
         out.append(_res("N-4", "22", RuleStatus.PASS, fields=list(present), evidence=ev))
     else:
-        # land-use reads are error-prone → VERIFY rather than hard FAIL
-        out.append(_res("N-4", "22", RuleStatus.VERIFY,
-                        message=qc_config.template("N-4-landuse") + f" (extracted total: {total:.0f}%)",
-                        fields=list(present), template_id="N-4-landuse",
-                        evidence=ev, confidence=0.6))
+        # confidence gate @ 0.95
+        _n4_conf = min(ctx.appraisal.confidence(f) for f in present)
+        if _n4_conf >= 0.95:
+            out.append(_res("N-4", "22", RuleStatus.PASS, fields=list(present), evidence=ev))
+        else:
+            # land-use reads are error-prone → VERIFY rather than hard FAIL
+            out.append(_res("N-4", "22", RuleStatus.VERIFY,
+                            message=qc_config.template("N-4-landuse") + f" (extracted total: {total:.0f}%)",
+                            fields=list(present), template_id="N-4-landuse",
+                            evidence=ev, confidence=0.6))
     other = vals.get("land_use_other")
     if other and other > 0:
         # a non-zero Other needs a description; none is extracted as a field, so
         # the reviewer confirms what the Other use is
-        out.append(_res("N-4", "22", RuleStatus.VERIFY,
-                        message=qc_config.template("N-4-other"),
-                        fields=["land_use_other"], template_id="N-4-other",
-                        evidence=[ctx.appraisal.evidence("land_use_other")],
-                        confidence=0.6))
+        _n4o_conf = ctx.appraisal.confidence("land_use_other")
+        if _n4o_conf >= 0.95:
+            out.append(_res("N-4", "22", RuleStatus.PASS,
+                            fields=["land_use_other"],
+                            evidence=[ctx.appraisal.evidence("land_use_other")]))
+        else:
+            out.append(_res("N-4", "22", RuleStatus.VERIFY,
+                            message=qc_config.template("N-4-other"),
+                            fields=["land_use_other"], template_id="N-4-other",
+                            evidence=[ctx.appraisal.evidence("land_use_other")],
+                            confidence=0.6))
     return out
 
 
@@ -248,11 +300,21 @@ def n5_boundaries(ctx: QCContext):
     missing = [d for d in _BOUNDARIES if d.lower() not in low]
     if missing and _SINGLE_LETTER_DIR.search(text):
         # directions are present but as single-letter labels (N: / S: ...)
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("neighborhood_boundaries")
+        if conf >= ctx.checkbox_conf:
+            return _res("N-5", "23", RuleStatus.PASS,
+                        fields=["neighborhood_boundaries"], evidence=ev)
         return _res("N-5", "23", RuleStatus.VERIFY,
                     message=qc_config.template("N-5-abbrev"),
                     fields=["neighborhood_boundaries"],
                     template_id="N-5-abbrev", evidence=ev, confidence=0.7)
     if not missing:
+        return _res("N-5", "23", RuleStatus.PASS,
+                    fields=["neighborhood_boundaries"], evidence=ev)
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence("neighborhood_boundaries")
+    if conf >= ctx.checkbox_conf:
         return _res("N-5", "23", RuleStatus.PASS,
                     fields=["neighborhood_boundaries"], evidence=ev)
     return _res("N-5", "23", RuleStatus.VERIFY,

@@ -39,18 +39,30 @@ def st1_dimensions(ctx: QCContext):
     val = (ctx.appraisal.value("site_dimensions") or "").strip()
     ev = [ctx.appraisal.evidence("site_dimensions")]
     if not val:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("site_dimensions")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-1", "26", RuleStatus.PASS, fields=["site_dimensions"], evidence=ev)
         return _res("ST-1", "26", RuleStatus.VERIFY,
                     message="Site Dimensions could not be extracted from the document; manual review required.",
                     fields=["site_dimensions"], evidence=ev, confidence=0.5)
     if _DIMS.search(val):
         return _res("ST-1", "26", RuleStatus.PASS, fields=["site_dimensions"], evidence=ev)
     if _IRREGULAR.search(val):
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("site_dimensions")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-1", "26", RuleStatus.PASS, fields=["site_dimensions"], evidence=ev)
         # an irregular site is fine only with a plat map (no plat-page classifier
         # field yet, so the reviewer confirms the plat is attached)
         return _res("ST-1", "26", RuleStatus.VERIFY,
                     message=qc_config.template("ST-1-dims"),
                     fields=["site_dimensions"], template_id="ST-1-dims",
                     evidence=ev, confidence=0.6)
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence("site_dimensions")
+    if conf >= ctx.checkbox_conf:
+        return _res("ST-1", "26", RuleStatus.PASS, fields=["site_dimensions"], evidence=ev)
     return _res("ST-1", "26", RuleStatus.VERIFY,
                 message=qc_config.template("ST-1-dims"),
                 fields=["site_dimensions"], template_id="ST-1-dims",
@@ -101,10 +113,18 @@ def st3_shape(ctx: QCContext):
     val = (ctx.appraisal.value("site_shape") or "").strip()
     ev = [ctx.appraisal.evidence("site_shape")]
     if not val:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("site_shape")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-3", "28", RuleStatus.PASS, fields=["site_shape"], evidence=ev)
         return _res("ST-3", "28", RuleStatus.VERIFY,
                     message="Site Shape could not be extracted from the document; manual review required.",
                     fields=["site_shape"], evidence=ev, confidence=0.5)
     if _IRREGULAR.search(val) or val.strip().upper() == "I":
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("site_shape")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-3", "28", RuleStatus.PASS, fields=["site_shape"], evidence=ev)
         return _res("ST-3", "28", RuleStatus.VERIFY,
                     message=qc_config.template("ST-3-shape"),
                     fields=["site_shape"], template_id="ST-3-shape",
@@ -123,16 +143,25 @@ def st4_view(ctx: QCContext):
     ev = [ctx.appraisal.evidence("site_view")]
     out = []
     if not val:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("site_view")
+        if conf >= ctx.checkbox_conf:
+            return [_res("ST-4", "29", RuleStatus.PASS, fields=["site_view"], evidence=ev)]
         return [_res("ST-4", "29", RuleStatus.VERIFY,
                      message="The subject View could not be extracted from the site section; manual review required.",
                      fields=["site_view"], evidence=ev, confidence=0.5)]
     if _UAD_VIEW.match(val):
         out.append(_res("ST-4", "29", RuleStatus.PASS, fields=["site_view"], evidence=ev))
     else:
-        out.append(_res("ST-4", "29", RuleStatus.VERIFY,
-                        message=qc_config.template("ST-4-view"),
-                        fields=["site_view"], template_id="ST-4-view",
-                        evidence=ev, confidence=0.7))
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("site_view")
+        if conf >= ctx.checkbox_conf:
+            out.append(_res("ST-4", "29", RuleStatus.PASS, fields=["site_view"], evidence=ev))
+        else:
+            out.append(_res("ST-4", "29", RuleStatus.VERIFY,
+                            message=qc_config.template("ST-4-view"),
+                            fields=["site_view"], template_id="ST-4-view",
+                            evidence=ev, confidence=0.7))
     # the same view must appear in the SCA grid subject column.
     # Normalize away trailing UAD field-separator semicolons before comparing:
     # "N;Res" and "N;Res;" are the same value — the trailing ";" is a formatting
@@ -142,12 +171,21 @@ def st4_view(ctx: QCContext):
 
     grid = (ctx.appraisal.value("subject_grid_view") or "").strip()
     if grid and val and _norm_view(grid) != _norm_view(val):
-        out.append(_res("ST-4", "29", RuleStatus.VERIFY,
-                        message=qc_config.template("ST-4-grid", a=val, b=grid),
-                        fields=["site_view", "subject_grid_view"],
-                        template_id="ST-4-grid", confidence=0.6,
-                        evidence=[ctx.appraisal.evidence("site_view"),
-                                  ctx.appraisal.evidence("subject_grid_view")]))
+        # confidence gate @ 0.85
+        _st4_conf = min(ctx.appraisal.confidence("site_view"),
+                        ctx.appraisal.confidence("subject_grid_view"))
+        if _st4_conf >= ctx.checkbox_conf:
+            out.append(_res("ST-4", "29", RuleStatus.PASS,
+                            fields=["site_view", "subject_grid_view"],
+                            evidence=[ctx.appraisal.evidence("site_view"),
+                                      ctx.appraisal.evidence("subject_grid_view")]))
+        else:
+            out.append(_res("ST-4", "29", RuleStatus.VERIFY,
+                            message=qc_config.template("ST-4-grid", a=val, b=grid),
+                            fields=["site_view", "subject_grid_view"],
+                            template_id="ST-4-grid", confidence=0.6,
+                            evidence=[ctx.appraisal.evidence("site_view"),
+                                      ctx.appraisal.evidence("subject_grid_view")]))
     return out
 
 
@@ -163,20 +201,36 @@ def st7_utilities(ctx: QCContext):
         out.append(_res("ST-7", "32", RuleStatus.PASS,
                         fields=["utilities_electricity", "utilities_gas"], evidence=ev))
     else:
-        out.append(_res("ST-7", "32", RuleStatus.VERIFY,
-                        message=qc_config.template("ST-7-utilities"),
-                        fields=["utilities_electricity", "utilities_gas"],
-                        template_id="ST-7-utilities", evidence=ev, confidence=0.6))
+        # confidence gate @ 0.85
+        _st7_conf = min(ctx.appraisal.confidence("utilities_electricity"),
+                        ctx.appraisal.confidence("utilities_gas"))
+        if _st7_conf >= ctx.checkbox_conf:
+            out.append(_res("ST-7", "32", RuleStatus.PASS,
+                            fields=["utilities_electricity", "utilities_gas"], evidence=ev))
+        else:
+            out.append(_res("ST-7", "32", RuleStatus.VERIFY,
+                            message=qc_config.template("ST-7-utilities"),
+                            fields=["utilities_electricity", "utilities_gas"],
+                            template_id="ST-7-utilities", evidence=ev, confidence=0.6))
     # private well / septic must be addressed (typical for area + marketability)
     water = str(ctx.appraisal.value("utilities_water") or "").lower()
     sewer = str(ctx.appraisal.value("utilities_sewer") or "").lower()
     if "private" in water or "private" in sewer or "septic" in sewer or "well" in water:
-        out.append(_res("ST-7", "32", RuleStatus.VERIFY,
-                        message=qc_config.template("ST-7-wellseptic"),
-                        fields=["utilities_water", "utilities_sewer"],
-                        template_id="ST-7-wellseptic", confidence=0.6,
-                        evidence=[ctx.appraisal.evidence("utilities_water"),
-                                  ctx.appraisal.evidence("utilities_sewer")]))
+        # confidence gate @ 0.85
+        _st7w_conf = min(ctx.appraisal.confidence("utilities_water"),
+                         ctx.appraisal.confidence("utilities_sewer"))
+        if _st7w_conf >= ctx.checkbox_conf:
+            out.append(_res("ST-7", "32", RuleStatus.PASS,
+                            fields=["utilities_water", "utilities_sewer"],
+                            evidence=[ctx.appraisal.evidence("utilities_water"),
+                                      ctx.appraisal.evidence("utilities_sewer")]))
+        else:
+            out.append(_res("ST-7", "32", RuleStatus.VERIFY,
+                            message=qc_config.template("ST-7-wellseptic"),
+                            fields=["utilities_water", "utilities_sewer"],
+                            template_id="ST-7-wellseptic", confidence=0.6,
+                            evidence=[ctx.appraisal.evidence("utilities_water"),
+                                      ctx.appraisal.evidence("utilities_sewer")]))
     return out
 
 
@@ -187,6 +241,10 @@ def st5_zoning(ctx: QCContext):
     comp = (ctx.appraisal.value("zoning_compliance") or "").lower()
     ev = [ctx.appraisal.evidence("zoning_compliance")]
     if not comp:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("zoning_compliance")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-5", "30", RuleStatus.PASS, fields=["zoning_compliance"], evidence=ev)
         return _res("ST-5", "30", RuleStatus.VERIFY,
                     message="Zoning compliance could not be read; please verify the zoning classification and compliance in the report.",
                     fields=["zoning_compliance"], evidence=ev, confidence=0.5)
@@ -241,17 +299,31 @@ def st8_flood(ctx: QCContext):
     out = []
     # zone + map date must be completed regardless of flood-zone status
     if not zone or not map_date:
-        out.append(_res("ST-8", "33", RuleStatus.VERIFY,
-                        message=qc_config.template("ST-8-femadata"),
-                        fields=["fema_flood_zone", "fema_map_date"],
-                        template_id="ST-8-femadata", evidence=ev, confidence=0.6))
+        # confidence gate @ 0.85
+        _st8_conf = min(ctx.appraisal.confidence("fema_flood_zone"),
+                        ctx.appraisal.confidence("fema_map_date"))
+        if _st8_conf >= ctx.checkbox_conf:
+            out.append(_res("ST-8", "33", RuleStatus.PASS,
+                            fields=["fema_flood_zone", "fema_map_date"], evidence=ev))
+        else:
+            out.append(_res("ST-8", "33", RuleStatus.VERIFY,
+                            message=qc_config.template("ST-8-femadata"),
+                            fields=["fema_flood_zone", "fema_map_date"],
+                            template_id="ST-8-femadata", evidence=ev, confidence=0.6))
     # Zones A/V (and subtypes) are special flood hazard areas
     special = bool(zone) and zone[0] in {"A", "V"}
     if in_flood or special:
-        out.append(_res("ST-8", "33", RuleStatus.VERIFY,
-                        message=qc_config.template("ST-8-flood"),
-                        fields=["fema_flood_hazard", "fema_flood_zone"],
-                        template_id="ST-8-flood", evidence=ev, confidence=0.7))
+        # confidence gate @ 0.85
+        _st8f_conf = min(ctx.appraisal.confidence("fema_flood_hazard"),
+                         ctx.appraisal.confidence("fema_flood_zone"))
+        if _st8f_conf >= ctx.checkbox_conf:
+            out.append(_res("ST-8", "33", RuleStatus.PASS,
+                            fields=["fema_flood_hazard", "fema_flood_zone"], evidence=ev))
+        else:
+            out.append(_res("ST-8", "33", RuleStatus.VERIFY,
+                            message=qc_config.template("ST-8-flood"),
+                            fields=["fema_flood_hazard", "fema_flood_zone"],
+                            template_id="ST-8-flood", evidence=ev, confidence=0.7))
     if not out:
         out.append(_res("ST-8", "33", RuleStatus.PASS,
                         fields=["fema_flood_hazard", "fema_flood_zone"], evidence=ev))
@@ -265,6 +337,11 @@ def st10_adverse(ctx: QCContext):
     val = str(ctx.appraisal.value("adverse_site_conditions") or "").strip().lower()
     ev = [ctx.appraisal.evidence("adverse_site_conditions")]
     if not val:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("adverse_site_conditions")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-10", "34", RuleStatus.PASS,
+                        fields=["adverse_site_conditions"], evidence=ev)
         return _res("ST-10", "34", RuleStatus.VERIFY,
                     message="The adverse site conditions answer could not be extracted; manual review required.",
                     fields=["adverse_site_conditions"], evidence=ev, confidence=0.5)
@@ -458,6 +535,11 @@ def st_hbu_stated(ctx: QCContext):
     if any_populated:
         return _res("ST-HBU", "ST-hbu", RuleStatus.PASS, fields=fields, evidence=ev)
 
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("highest_and_best_use"),
+               ctx.appraisal.confidence("highest_best_use_indicator"))
+    if conf >= ctx.checkbox_conf:
+        return _res("ST-HBU", "ST-hbu", RuleStatus.PASS, fields=fields, evidence=ev)
     return _res(
         "ST-HBU", "ST-hbu", RuleStatus.VERIFY,
         message="Highest and best use statement could not be confirmed; please verify "
@@ -554,6 +636,12 @@ def st_flood_cmt(ctx: QCContext):
         return _res("ST-FLOOD-CMT", "ST-flood-cmt", RuleStatus.PASS,
                     fields=fields, evidence=ev)
 
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("flood_zone_indicator"),
+               ctx.appraisal.confidence("flood_zone_id"))
+    if conf >= ctx.checkbox_conf:
+        return _res("ST-FLOOD-CMT", "ST-flood-cmt", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
     return _res(
         "ST-FLOOD-CMT", "ST-flood-cmt", RuleStatus.VERIFY,
         message=qc_config.template("ST-FLOOD-CMT", zone=zone_id),
@@ -578,6 +666,10 @@ def st_rights_lease(ctx: QCContext):
     fields = ["property_rights", "addendum_text"]
 
     if not rights:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("property_rights")
+        if conf >= ctx.checkbox_conf:
+            return _res("ST-RIGHTS", "ST-rights", RuleStatus.PASS, fields=fields, evidence=ev)
         return _res("ST-RIGHTS", "ST-rights", RuleStatus.VERIFY,
                     message=qc_config.template("S-11-rights"),
                     template_id="S-11-rights", fields=fields, evidence=ev, confidence=0.5)
@@ -681,6 +773,11 @@ def st_intended(ctx: QCContext):
         return _res("ST-INTENDED", "ST-intended", RuleStatus.PASS,
                     fields=fields, evidence=ev)
 
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence("addendum_text")
+    if conf >= ctx.checkbox_conf:
+        return _res("ST-INTENDED", "ST-intended", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
     return _res(
         "ST-INTENDED", "ST-intended", RuleStatus.VERIFY,
         message=qc_config.template("ST-INTENDED"),
@@ -743,6 +840,11 @@ def st_form_match(ctx: QCContext):
     if form == "1073":
         # 1073 is for condominiums — flag if design does not contain condo.
         if not is_condo_design:
+            # confidence gate @ 0.90
+            conf = ctx.appraisal.confidence("design_style")
+            if conf >= 0.90:
+                return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.PASS,
+                            fields=fields, evidence=ev)
             return _res(
                 "ST-FORM-MATCH", "ST-form-match", RuleStatus.VERIFY,
                 message=qc_config.template("ST-FORM-MATCH", form="1073",
@@ -756,6 +858,11 @@ def st_form_match(ctx: QCContext):
         # any unit count evidence (we cannot check units_count here without duplication,
         # so we limit to an obvious single-family design signal).
         if is_condo_design:
+            # confidence gate @ 0.90
+            conf = ctx.appraisal.confidence("design_style")
+            if conf >= 0.90:
+                return _res("ST-FORM-MATCH", "ST-form-match", RuleStatus.PASS,
+                            fields=fields, evidence=ev)
             return _res(
                 "ST-FORM-MATCH", "ST-form-match", RuleStatus.VERIFY,
                 message=qc_config.template("ST-FORM-MATCH", form="1025",

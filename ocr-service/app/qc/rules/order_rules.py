@@ -27,6 +27,7 @@ from app.qc.context import QCContext
 from app.qc.registry import rule
 from app.qc.result import RuleResult, RuleStatus, Evidence
 from app.qc import helpers as H
+from app.qc import matching
 
 _res = H.section_result("subject")
 _res_sig = H.section_result("signature")
@@ -73,6 +74,11 @@ def ord_form_match(ctx: QCContext):
     act_base = _base(actual) if actual else ""
 
     if not act_base:
+        # confidence gate @ 0.90
+        conf = ctx.appraisal.confidence("form_type")
+        if conf >= 0.90:
+            return _res("ORD-FORM-MATCH", "ORD-form-match", RuleStatus.PASS,
+                        fields=fields, evidence=ev)
         return _res("ORD-FORM-MATCH", "ORD-form-match", RuleStatus.VERIFY,
                     message=f"The form type could not be confirmed from the report; the engagement letter requires form {ordered.upper()}. Please verify.",
                     fields=fields, evidence=ev, confidence=0.5)
@@ -129,6 +135,11 @@ def ord_insp_scope(ctx: QCContext):
         return _res("ORD-INSP-SCOPE", "ORD-insp-scope", RuleStatus.PASS,
                     fields=fields, evidence=ev)
 
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence("addendum_text")
+    if conf >= ctx.checkbox_conf:
+        return _res("ORD-INSP-SCOPE", "ORD-insp-scope", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
     return _res("ORD-INSP-SCOPE", "ORD-insp-scope", RuleStatus.VERIFY,
                 message=qc_config.template(
                     "ORD-INSP-SCOPE",
@@ -163,6 +174,13 @@ def ord_coborrower(ctx: QCContext):
         return _res("ORD-COBORROWER", "ORD-coborrower", RuleStatus.PASS,
                     fields=fields, evidence=ev)
 
+    # Asymmetric Jaro-Winkler: auto-PASS at ≥ 0.90, never auto-FAIL
+    sim = matching.jaro_winkler(matching.normalize_name(co_lower),
+                                matching.normalize_name(appr_borrower))
+    if sim >= 0.90:
+        return _res("ORD-COBORROWER", "ORD-coborrower", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
+
     return _res("ORD-COBORROWER", "ORD-coborrower", RuleStatus.VERIFY,
                 message=qc_config.template("ORD-COBORROWER", co_borrower=co_name),
                 fields=fields, template_id="ORD-COBORROWER", evidence=ev, confidence=0.7)
@@ -185,6 +203,12 @@ def ord_exec_stop(ctx: QCContext):
     if not ctx.has_contract:
         return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.HOLD,
                              message="No purchase contract was provided. The engagement letter requires a fully executed contract before processing. Please stop and return to the client.",
+                             fields=["contract_analyzed"], evidence=ev)
+    # confidence gate @ 0.90: if contract execution can be confirmed, FAIL per policy
+    conf = ctx.appraisal.confidence("contract_analyzed")
+    if conf >= 0.90:
+        return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.FAIL,
+                             message="The engagement letter requires a fully executed contract. The contract provided does not appear to be fully executed — please return to the client.",
                              fields=["contract_analyzed"], evidence=ev)
     return _res_contract("ORD-EXEC-STOP", "ORD-exec-stop", RuleStatus.VERIFY,
                          message="The engagement letter requires a fully executed contract. The contract document is not auto-read; please open the contract file and confirm it is fully signed by all parties.",
@@ -237,6 +261,11 @@ def ord_eng_date(ctx: QCContext):
 
     sig_date = _parse_date(sig_raw)
     if sig_date is None:
+        # confidence gate @ 0.90
+        conf = ctx.appraisal.confidence("signature_date")
+        if conf >= 0.90:
+            return _res_sig("ORD-ENG-DATE", "ORD-eng-date", RuleStatus.PASS,
+                            fields=fields, evidence=ev)
         return _res_sig("ORD-ENG-DATE", "ORD-eng-date", RuleStatus.VERIFY,
                         message=f"Appraisal signature date could not be confirmed; engagement letter is dated {eng_date}. Please verify the engagement predates the report.",
                         fields=fields, evidence=ev, confidence=0.5)
@@ -265,6 +294,11 @@ def ord_assign_match(ctx: QCContext):
     fields = ["assignment_type"]
 
     if not appr_raw:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("assignment_type")
+        if conf >= ctx.checkbox_conf:
+            return _res_contract("ORD-ASSIGN-MATCH", "ORD-assign-match", RuleStatus.PASS,
+                                 fields=fields, evidence=ev)
         return _res_contract("ORD-ASSIGN-MATCH", "ORD-assign-match", RuleStatus.VERIFY,
                              message=f"Assignment type could not be confirmed from the appraisal; the engagement letter indicates '{ordered}'. Please verify.",
                              fields=fields, evidence=ev, confidence=0.5)

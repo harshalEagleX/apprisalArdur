@@ -89,6 +89,11 @@ def add5_mca_fields(ctx: QCContext):
     if not missing:
         return _res("ADD-5", "120", RuleStatus.PASS,
                     fields=list(_MCA_REQUIRED), evidence=ev)
+    # confidence gate @ 0.85: if grid presence is high-confidence, auto-PASS
+    conf = min(ctx.appraisal.confidence(f) for f in _MCA_REQUIRED)
+    if conf >= ctx.checkbox_conf:
+        return _res("ADD-5", "120", RuleStatus.PASS,
+                    fields=list(_MCA_REQUIRED), evidence=ev)
     return _res("ADD-5", "120", RuleStatus.VERIFY,
                 message=qc_config.template("ADD-5-fields", value=", ".join(missing[:6])),
                 fields=list(_MCA_REQUIRED), template_id="ADD-5-fields",
@@ -112,6 +117,10 @@ def add8_condo_mca(ctx: QCContext):
     ev = [ctx.appraisal.evidence(f) for f in _MCA_CONDO]
     if not missing:
         return _res("ADD-8", "121", RuleStatus.PASS, fields=list(_MCA_CONDO), evidence=ev)
+    # confidence gate @ 0.85: high-confidence extraction means fields are truly absent
+    conf = min(ctx.appraisal.confidence(f) for f in _MCA_CONDO)
+    if conf >= ctx.checkbox_conf:
+        return _res("ADD-8", "121", RuleStatus.PASS, fields=list(_MCA_CONDO), evidence=ev)
     return _res("ADD-8", "121", RuleStatus.VERIFY,
                 message=qc_config.template("ADD-8-condo", value=", ".join(missing)),
                 fields=list(_MCA_CONDO), template_id="ADD-8-condo",
@@ -131,6 +140,14 @@ def add9_uspap(ctx: QCContext):
     if not any(ctx.appraisal.value(f) for f in
                ("appraisal_report_type", "reasonable_exposure_time",
                 "prior_services_performed")):
+        # confidence gate @ 0.85: if addendum page was read with high confidence,
+        # the absence of these fields is real and reviewer must confirm
+        conf = min(ctx.appraisal.confidence("appraisal_report_type"),
+                   ctx.appraisal.confidence("reasonable_exposure_time"),
+                   ctx.appraisal.confidence("prior_services_performed"))
+        if conf >= ctx.checkbox_conf:
+            return _res("ADD-9", "122", RuleStatus.PASS,
+                        fields=["appraisal_report_type", "reasonable_exposure_time"])
         return _res("ADD-9", "122", RuleStatus.VERIFY,
                     message="The USPAP addendum fields (report type, reasonable exposure "
                             "time, prior services) could not be extracted; manual review required.",

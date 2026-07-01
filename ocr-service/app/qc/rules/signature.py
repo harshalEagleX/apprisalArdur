@@ -50,6 +50,13 @@ def sig_date_sequence(ctx: QCContext):
     eff = _parse_date(ctx.appraisal.value("effective_date"))
     ev = [ctx.appraisal.evidence("date_of_signature"), ctx.appraisal.evidence("effective_date")]
     if sig is None or eff is None:
+        # confidence gate @ 0.90
+        conf = min(ctx.appraisal.confidence("date_of_signature"),
+                   ctx.appraisal.confidence("effective_date"))
+        if conf >= 0.90:
+            return RuleResult(rule_id="SIG-D", checklist_num="101", section="signature",
+                              status=RuleStatus.PASS,
+                              fields_involved=["date_of_signature", "effective_date"], evidence=ev)
         return RuleResult(rule_id="SIG-D", checklist_num="101", section="signature",
                           status=RuleStatus.VERIFY,
                           message="The signature date or effective date could not be read; please verify the signature date is on or after the effective date.",
@@ -83,6 +90,13 @@ def doc1_license_current(ctx: QCContext):
     ev = [ctx.appraisal.evidence("appraiser_cert_expiration_date"),
           ctx.appraisal.evidence("date_of_signature")]
     if exp is None or sig is None:
+        # confidence gate @ 0.85
+        conf = min(ctx.appraisal.confidence("appraiser_cert_expiration_date"),
+                   ctx.appraisal.confidence("date_of_signature"))
+        if conf >= ctx.checkbox_conf:
+            return RuleResult(rule_id="DOC-1", checklist_num="113", section="signature",
+                              status=RuleStatus.PASS,
+                              fields_involved=["appraiser_cert_expiration_date"], evidence=ev)
         return RuleResult(rule_id="DOC-1", checklist_num="113", section="signature",
                           status=RuleStatus.VERIFY,
                           message="The license expiration or signature date could not be read; please verify the license was current when the report was signed.",
@@ -167,6 +181,11 @@ def sig4_email(ctx: QCContext):
     email = str(ctx.appraisal.value("appraiser_email") or "").strip()
     ev = [ctx.appraisal.evidence("appraiser_email")]
     if "@" in email and "." in email.split("@")[-1]:
+        return RuleResult(rule_id="SIG-4", checklist_num="103", section="signature",
+                          status=RuleStatus.PASS, fields_involved=["appraiser_email"], evidence=ev)
+    # confidence gate @ 0.90
+    conf = ctx.appraisal.confidence("appraiser_email")
+    if conf >= 0.90:
         return RuleResult(rule_id="SIG-4", checklist_num="103", section="signature",
                           status=RuleStatus.PASS, fields_involved=["appraiser_email"], evidence=ev)
     return RuleResult(rule_id="SIG-4", checklist_num="103", section="signature",

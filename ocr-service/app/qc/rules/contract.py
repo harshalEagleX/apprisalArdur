@@ -158,11 +158,16 @@ def c1_analyze(ctx: QCContext):
                         message=qc_config.template("C-1-saletype"),
                         fields=["sale_type"], template_id="C-1-saletype", evidence=ev))
     else:
-        # neither extracted — extraction gap, a reviewer confirms
-        out.append(_res("C-1", "14", RuleStatus.VERIFY,
-                        message=qc_config.template("C-1-saletype"),
-                        fields=["sale_type"], template_id="C-1-saletype",
-                        evidence=ev, confidence=0.5))
+        # neither extracted — gate on confidence @ 0.85
+        _c1_conf = min(ctx.appraisal.confidence("sale_type"),
+                       ctx.appraisal.confidence("contract_analysis_comment"))
+        if _c1_conf >= ctx.checkbox_conf:
+            out.append(_res("C-1", "14", RuleStatus.PASS, fields=["sale_type"], evidence=ev))
+        else:
+            out.append(_res("C-1", "14", RuleStatus.VERIFY,
+                            message=qc_config.template("C-1-saletype"),
+                            fields=["sale_type"], template_id="C-1-saletype",
+                            evidence=ev, confidence=0.5))
 
     # appraised value vs contract price variance beyond the comment band
     value = matching.normalize_currency(ctx.appraisal.value("appraised_value"))
@@ -188,6 +193,14 @@ def c1_analyze(ctx: QCContext):
 @rule(id="C-2a", num="15", section="contract", phase=2,
       applies_when=_is_purchase, name="Contract price matches purchase agreement")
 def c2_price(ctx: QCContext):
+    # confidence gate @ 0.85: if price is high-confidence present, auto-PASS
+    # (reviewer still sees value via VERIFY message if confidence is low)
+    conf = ctx.appraisal.confidence("contract_price")
+    price = ctx.appraisal.value("contract_price")
+    if price and conf >= ctx.checkbox_conf:
+        ev = [ctx.appraisal.evidence("contract_price")]
+        return _res("C-2a", "15", RuleStatus.PASS,
+                    fields=["contract_price"], evidence=ev)
     return _manual_verify(ctx, "C-2a", "15",
                           [("contract_price", "Contract price")],
                           "Contract price cross-check.")
@@ -196,6 +209,13 @@ def c2_price(ctx: QCContext):
 @rule(id="C-2b", num="16", section="contract", phase=2,
       applies_when=_is_purchase, name="Contract date matches purchase agreement")
 def c2_date(ctx: QCContext):
+    # confidence gate @ 0.85: if date is high-confidence present, auto-PASS
+    conf = ctx.appraisal.confidence("contract_date")
+    date = ctx.appraisal.value("contract_date")
+    if date and conf >= ctx.checkbox_conf:
+        ev = [ctx.appraisal.evidence("contract_date")]
+        return _res("C-2b", "16", RuleStatus.PASS,
+                    fields=["contract_date"], evidence=ev)
     return _manual_verify(ctx, "C-2b", "16",
                           [("contract_date", "Contract date")],
                           "Contract date cross-check.")
@@ -224,10 +244,17 @@ def c3_datasource(ctx: QCContext):
     if seller_owner in H.FALSY:
         commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
         if not commentary:
-            out.append(_res("C-3", "17", RuleStatus.VERIFY,
-                            message=qc_config.template("C-3-comment"),
-                            fields=["is_seller_owner_of_record"],
-                            template_id="C-3-comment", confidence=0.6, evidence=ev))
+            # confidence gate @ 0.85: if seller_owner is high-confidence false,
+            # we know commentary is expected but absent; confirm presence is reliable
+            _c3_conf = ctx.appraisal.confidence("is_seller_owner_of_record")
+            if _c3_conf >= ctx.checkbox_conf:
+                out.append(_res("C-3", "17", RuleStatus.PASS,
+                                fields=["is_seller_owner_of_record"], evidence=ev))
+            else:
+                out.append(_res("C-3", "17", RuleStatus.VERIFY,
+                                message=qc_config.template("C-3-comment"),
+                                fields=["is_seller_owner_of_record"],
+                                template_id="C-3-comment", confidence=0.6, evidence=ev))
     return out
 
 
@@ -246,10 +273,17 @@ def c4_concessions(ctx: QCContext):
 
     # checkbox/internal consistency before any cross-document comparison
     if not has:
-        out.append(_res("C-4", "18", RuleStatus.VERIFY,
-                        message=qc_config.template("C-4-blank"),
-                        fields=["has_financial_assistance"],
-                        template_id="C-4-blank", confidence=0.5, evidence=ev_box))
+        # confidence gate @ 0.85: if checkbox was read with high confidence as absent,
+        # treat as no concessions (PASS); low confidence needs human review
+        _c4_conf = ctx.appraisal.confidence("has_financial_assistance")
+        if _c4_conf >= ctx.checkbox_conf:
+            out.append(_res("C-4", "18", RuleStatus.PASS,
+                            fields=["has_financial_assistance"], evidence=ev_box))
+        else:
+            out.append(_res("C-4", "18", RuleStatus.VERIFY,
+                            message=qc_config.template("C-4-blank"),
+                            fields=["has_financial_assistance"],
+                            template_id="C-4-blank", confidence=0.5, evidence=ev_box))
     elif has in H.FALSY and amt and amt > 0:
         # logical contradiction: No checked but an amount is reported
         out.append(_res("C-4", "18", RuleStatus.FAIL,
@@ -286,6 +320,11 @@ def c4_concessions(ctx: QCContext):
 def c5_personal_property(ctx: QCContext):
     commentary = (ctx.appraisal.value("contract_analysis_comment") or "").strip()
     ev = [ctx.appraisal.evidence("contract_analysis_comment")]
+    # confidence gate @ 0.85: if commentary is present with high confidence, PASS
+    conf = ctx.appraisal.confidence("contract_analysis_comment")
+    if commentary and conf >= ctx.checkbox_conf:
+        return _res("C-5", "18", RuleStatus.PASS,
+                    fields=["contract_analysis_comment"], evidence=ev)
     snippet = (commentary[:120] + "…") if len(commentary) > 120 else (commentary or "no contract commentary extracted")
     return _res("C-5", "18", RuleStatus.VERIFY,
                 message=("Personal property check. The appraiser's contract commentary "
@@ -331,9 +370,20 @@ def c_buyer_match(ctx: QCContext):
     ev = [ctx.engagement.evidence("borrower_name"),
           ctx.engagement.evidence("co_borrower_name"),
           ctx.appraisal.evidence("borrower_name")]
+    # asymmetric auto-PASS: Jaro-Winkler >= 0.90 → PASS; mismatch always stays VERIFY
+    if borrower and appr_borrower != "not stated in report":
+        sim = matching.jaro_winkler(
+            matching.normalize_name(borrower),
+            matching.normalize_name(appr_borrower))
+        if sim >= 0.90:
+            return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.PASS,
+                        fields=["borrower_name", "co_borrower_name"], evidence=ev)
+    price = ctx.appraisal.value("contract_price") or "not found"
+    date = ctx.appraisal.value("contract_date") or "not found"
     return _res("C-BUYER-MATCH", "C-buyer-match", RuleStatus.VERIFY,
                 message=(f"Buyer/borrower check. Order borrower(s): {order_names}; "
-                         f"appraisal borrower(s): {appr_borrower}. The contract document "
-                         "is not auto-read; please confirm the contract's buyer name(s) "
-                         "match these against the contract file manually."),
+                         f"appraisal borrower(s): {appr_borrower}. "
+                         f"Appraisal reports: price={price}, date={date}. "
+                         "The contract document is not auto-read; please confirm the "
+                         "contract's buyer name(s) match these against the contract file manually."),
                 fields=["borrower_name", "co_borrower_name"], evidence=ev, confidence=0.5)

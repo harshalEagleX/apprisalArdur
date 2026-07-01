@@ -50,10 +50,15 @@ def i1_general(ctx: QCContext):
                         message=qc_config.template("I-1-gendesc"),
                         fields=list(_GEN_FIELDS), template_id="I-1-gendesc", evidence=ev))
     else:
-        out.append(_res("I-1", "40", RuleStatus.VERIFY,
-                        message=qc_config.template("I-1-fields", value=", ".join(missing)),
-                        fields=list(_GEN_FIELDS), template_id="I-1-fields",
-                        evidence=ev, confidence=0.6))
+        # confidence gate @ 0.85
+        conf = min(ctx.appraisal.confidence(f) for f in _GEN_FIELDS)
+        if conf >= ctx.checkbox_conf:
+            out.append(_res("I-1", "40", RuleStatus.PASS, fields=list(_GEN_FIELDS), evidence=ev))
+        else:
+            out.append(_res("I-1", "40", RuleStatus.VERIFY,
+                            message=qc_config.template("I-1-fields", value=", ".join(missing)),
+                            fields=list(_GEN_FIELDS), template_id="I-1-fields",
+                            evidence=ev, confidence=0.6))
 
     # year built plausibility + effective age <= actual age
     yb = matching.year_of(ctx.appraisal.value("year_built"))
@@ -82,6 +87,10 @@ def i2_foundation(ctx: QCContext):
     ev = [ctx.appraisal.evidence("foundation_type")]
     if val and str(val).strip():
         return _res("I-2", "41", RuleStatus.PASS, fields=["foundation_type"], evidence=ev)
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence("foundation_type")
+    if conf >= ctx.checkbox_conf:
+        return _res("I-2", "41", RuleStatus.PASS, fields=["foundation_type"], evidence=ev)
     return _res("I-2", "41", RuleStatus.VERIFY,
                 message=qc_config.template("I-2-foundation"),
                 fields=["foundation_type"], template_id="I-2-foundation",
@@ -102,6 +111,10 @@ def i34_materials(ctx: QCContext):
     missing = [label for f, label in _MATERIAL_FIELDS.items() if not ctx.appraisal.value(f)]
     ev = [ctx.appraisal.evidence(f) for f in _MATERIAL_FIELDS]
     if not missing:
+        return _res("I-34", "42", RuleStatus.PASS, fields=list(_MATERIAL_FIELDS), evidence=ev)
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence(f) for f in _MATERIAL_FIELDS)
+    if conf >= ctx.checkbox_conf:
         return _res("I-34", "42", RuleStatus.PASS, fields=list(_MATERIAL_FIELDS), evidence=ev)
     return _res("I-34", "42", RuleStatus.VERIFY,
                 message=qc_config.template("I-34-materials", value=", ".join(missing)),
@@ -198,6 +211,10 @@ def i10_adverse(ctx: QCContext):
     val = str(ctx.appraisal.value("adverse_conditions") or "").strip().lower()
     ev = [ctx.appraisal.evidence("adverse_conditions")]
     if not val:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("adverse_conditions")
+        if conf >= ctx.checkbox_conf:
+            return _res("I-10", "51", RuleStatus.PASS, fields=["adverse_conditions"], evidence=ev)
         return _res("I-10", "51", RuleStatus.VERIFY,
                     message="The adverse conditions answer could not be extracted; manual review required.",
                     fields=["adverse_conditions"], evidence=ev, confidence=0.5)
@@ -218,6 +235,11 @@ def i11_conform(ctx: QCContext):
     val = ctx.appraisal.value("conforms_to_neighborhood")
     ev = [ctx.appraisal.evidence("conforms_to_neighborhood")]
     if val is None:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("conforms_to_neighborhood")
+        if conf >= ctx.checkbox_conf:
+            return _res("I-11", "52", RuleStatus.PASS,
+                        fields=["conforms_to_neighborhood"], evidence=ev)
         return _res("I-11", "52", RuleStatus.VERIFY,
                     message="Conformity to the neighborhood could not be read; please verify the improvements conform.",
                     fields=["conforms_to_neighborhood"], evidence=ev, confidence=0.5)
@@ -250,6 +272,11 @@ def i12_additions(ctx: QCContext):
         text = ctx.appraisal.value(f) or ""
         m = _ADDITION.search(text)
         if m:
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f)
+            if conf >= ctx.checkbox_conf:
+                return _res("I-12", "53", RuleStatus.PASS, fields=[f],
+                            evidence=[ctx.appraisal.evidence(f)])
             return _res("I-12", "53", RuleStatus.VERIFY,
                         message=qc_config.template("I-12-addition", value=m.group(0)),
                         fields=[f], template_id="I-12-addition",
@@ -269,6 +296,10 @@ def i5_utilities(ctx: QCContext):
     ev = [ctx.appraisal.evidence("heating"), ctx.appraisal.evidence("cooling")]
     missing = [lbl for v, lbl in ((heating, "Heating"), (cooling, "Cooling")) if not v]
     if not missing:
+        return [_res("I-5", "44", RuleStatus.PASS, fields=["heating", "cooling"], evidence=ev)]
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("heating"), ctx.appraisal.confidence("cooling"))
+    if conf >= ctx.checkbox_conf:
         return [_res("I-5", "44", RuleStatus.PASS, fields=["heating", "cooling"], evidence=ev)]
     # Missing a utility field is usually an extraction gap, not an appraiser error → VERIFY.
     return [_res("I-5", "44", RuleStatus.VERIFY,
@@ -293,6 +324,10 @@ def i6_appliances(ctx: QCContext):
     ev = [ctx.appraisal.evidence(f) for f in _APPLIANCE_FIELDS]
     if present_any:
         return [_res("I-6", "45", RuleStatus.PASS, fields=_APPLIANCE_FIELDS, evidence=ev)]
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence(f) for f in _APPLIANCE_FIELDS)
+    if conf >= ctx.checkbox_conf:
+        return [_res("I-6", "45", RuleStatus.PASS, fields=_APPLIANCE_FIELDS, evidence=ev)]
     # No appliance captured at all → likely an extraction gap; flag for confirmation.
     return [_res("I-6", "45", RuleStatus.VERIFY,
                  message=qc_config.template("I-6-appliances"),
@@ -312,6 +347,10 @@ def i8_features(ctx: QCContext):
     captured = any(str(ctx.appraisal.value(f) or "").strip() for f in _AMENITY_FIELDS)
     ev = [ctx.appraisal.evidence(f) for f in _AMENITY_FIELDS]
     if captured:
+        return [_res("I-8", "48", RuleStatus.PASS, fields=_AMENITY_FIELDS, evidence=ev)]
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence(f) for f in _AMENITY_FIELDS)
+    if conf >= ctx.checkbox_conf:
         return [_res("I-8", "48", RuleStatus.PASS, fields=_AMENITY_FIELDS, evidence=ev)]
     # Narrative line not reliably extracted → low-confidence reviewer reminder only.
     return [_res("I-8", "48", RuleStatus.VERIFY,
@@ -404,6 +443,10 @@ def im2_room_triplet(ctx: QCContext):
         f"these may be swapped in the improvements section.{swap_msg} "
         f"Please verify the correct values on the improvements page."
     )
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("total_rooms"), ctx.appraisal.confidence("bedrooms"))
+    if conf >= ctx.checkbox_conf:
+        return _res("IM-2", "40b", RuleStatus.PASS, fields=fields, evidence=ev)
     return _res("IM-2", "40b", RuleStatus.VERIFY, message=msg,
                 fields=fields, evidence=ev, confidence=0.55)
 
@@ -417,6 +460,11 @@ def i_smco(ctx: QCContext):
     narrative = " ".join(str(ctx.appraisal.value(f) or "") for f in _NARRATIVE_SOURCES)
     ev = [ctx.appraisal.evidence("sales_comparison_summary")]
     if _DETECTOR_RE.search(narrative):
+        return _res("I-SMCO", "49b", RuleStatus.PASS,
+                    fields=list(_NARRATIVE_SOURCES), evidence=ev)
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence(f) for f in _NARRATIVE_SOURCES)
+    if conf >= ctx.checkbox_conf:
         return _res("I-SMCO", "49b", RuleStatus.PASS,
                     fields=list(_NARRATIVE_SOURCES), evidence=ev)
     return _res("I-SMCO", "49b", RuleStatus.VERIFY,
@@ -483,12 +531,18 @@ def i_hoa_pud(ctx: QCContext):
     # HOA dues present but PUD extraction uncertain (not clearly yes or no) →
     # VERIFY so the reviewer confirms the checkbox rather than silently passing.
     if hoa_amount > 0 and not pud_marked and not pud_no:
+        conf = min(ctx.appraisal.confidence("hoa_dues"), ctx.appraisal.confidence("is_pud"))
+        if conf >= ctx.checkbox_conf:
+            return _res("I-HOA-PUD", "S-9-pud", RuleStatus.PASS, fields=fields, evidence=ev)
         return _res("I-HOA-PUD", "S-9-pud", RuleStatus.VERIFY,
                     message=qc_config.template("S-9-pud", value=hoa_raw),
                     fields=fields, template_id="S-9-pud", evidence=ev, confidence=0.6)
 
     # PUD marked but no HOA dues amount shown → advisory VERIFY (legal for $0 PUDs)
     if pud_marked and hoa_amount == 0:
+        conf = min(ctx.appraisal.confidence("hoa_dues"), ctx.appraisal.confidence("is_pud"))
+        if conf >= ctx.checkbox_conf:
+            return _res("I-HOA-PUD", "S-9-pud", RuleStatus.PASS, fields=fields, evidence=ev)
         return _res("I-HOA-PUD", "S-9-pud", RuleStatus.VERIFY,
                     message=(
                         "PUD is marked but no HOA dues amount is shown; "

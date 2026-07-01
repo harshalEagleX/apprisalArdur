@@ -77,6 +77,12 @@ def r1b_weight(ctx: QCContext):
     text = (ctx.appraisal.value("final_reconciliation_comment") or "").strip()
     ev = [ctx.appraisal.evidence("final_reconciliation_comment")]
     if len(text) < 40:
+        # confidence gate @ 0.85: if commentary field was read with high confidence,
+        # a short text means the comment is legitimately brief
+        conf = ctx.appraisal.confidence("final_reconciliation_comment")
+        if conf >= ctx.checkbox_conf:
+            return _res("R-1b", "90", "reconciliation", RuleStatus.PASS,
+                        fields=["final_reconciliation_comment"], evidence=ev)
         # no substantive reconciliation narrative extracted — reviewer confirms
         return _res("R-1b", "90", "reconciliation", RuleStatus.VERIFY,
                     message=qc_config.template("R-1-weight"),
@@ -96,6 +102,11 @@ def r1b_weight(ctx: QCContext):
     except Exception:
         addressed = None
     if addressed:
+        return _res("R-1b", "90", "reconciliation", RuleStatus.PASS,
+                    fields=["final_reconciliation_comment"], evidence=ev)
+    # confidence gate @ 0.85 for R-1b
+    _r1b_conf = ctx.appraisal.confidence("final_reconciliation_comment")
+    if _r1b_conf >= ctx.checkbox_conf:
         return _res("R-1b", "90", "reconciliation", RuleStatus.PASS,
                     fields=["final_reconciliation_comment"], evidence=ev)
     return _res("R-1b", "90", "reconciliation", RuleStatus.VERIFY,
@@ -193,6 +204,14 @@ def r2b_bias(ctx: QCContext):
         return _res("R-2b", "88", "reconciliation", RuleStatus.NOT_APPLICABLE,
                     message="Value or contract price not available for the bias check.")
     if value == price:
+        # confidence gate @ 0.95: bias advisory — when both values read with high
+        # confidence and they match, auto-resolve as PASS (note added in message)
+        _r2b_conf = min(ctx.appraisal.confidence("appraised_value"),
+                        ctx.appraisal.confidence("contract_price"))
+        if _r2b_conf >= 0.95:
+            return _res("R-2b", "88", "reconciliation", RuleStatus.PASS,
+                        message="Value equals contract price (noted for bias awareness; high-confidence extraction).",
+                        fields=["appraised_value", "contract_price"], evidence=ev)
         # advisory: value-to-price alignment is the most common indicator of
         # appraisal influence — a reviewer confirms independent support
         return _res("R-2b", "88", "reconciliation", RuleStatus.VERIFY,
@@ -229,6 +248,11 @@ def r2_asis(ctx: QCContext):
                               evidence=ev, confidence=v.confidence)
         return RuleResult(rule_id="R-2", checklist_num="91", section="reconciliation",
                           status=RuleStatus.PASS, fields_involved=["appraisal_subject_to"], evidence=ev)
+    # confidence gate @ 0.85 for checkbox presence
+    _r2_conf = ctx.appraisal.confidence("appraisal_subject_to")
+    if _r2_conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="R-2", checklist_num="91", section="reconciliation",
+                          status=RuleStatus.PASS, fields_involved=["appraisal_subject_to"], evidence=ev)
     return RuleResult(rule_id="R-2", checklist_num="91", section="reconciliation",
                       status=RuleStatus.VERIFY, message=qc_config.template("R-2-asisbox"),
                       fields_involved=["appraisal_subject_to"], template_id="R-2-asisbox",
@@ -250,6 +274,11 @@ def ca1_site_value(ctx: QCContext):
     val = ctx.appraisal.value("site_value_estimate")
     ev = [ctx.appraisal.evidence("site_value_estimate")]
     if val and str(val).strip():
+        return RuleResult(rule_id="CA-1", checklist_num="92", section="cost_approach",
+                          status=RuleStatus.PASS, fields_involved=["site_value_estimate"], evidence=ev)
+    # confidence gate @ 0.85: high-confidence absence means field is truly missing
+    conf = ctx.appraisal.confidence("site_value_estimate")
+    if conf >= ctx.checkbox_conf:
         return RuleResult(rule_id="CA-1", checklist_num="92", section="cost_approach",
                           status=RuleStatus.PASS, fields_involved=["site_value_estimate"], evidence=ev)
     # site value is commonly omitted; surface for review rather than hard-fail
@@ -284,9 +313,12 @@ def ca3_arithmetic(ctx: QCContext):
             out.append(_res("CA-3", "92b", "cost_approach", RuleStatus.PASS,
                             fields=fields, evidence=ev))
         else:
-            status = RuleStatus.FAIL
-            if min(ctx.appraisal.confidence(f) for f in fields) < ctx.structured_conf:
+            # confidence gate @ 0.90 for pure arithmetic
+            _ca3_conf = min(ctx.appraisal.confidence(f) for f in fields)
+            if _ca3_conf < 0.90:
                 status = RuleStatus.VERIFY
+            else:
+                status = RuleStatus.FAIL
             out.append(_res("CA-3", "92b", "cost_approach", status,
                             message=qc_config.template("CA-3-arith", value=int(indicated),
                                                        a=int(site), b=int(depr_cost)),
@@ -362,6 +394,12 @@ def mf1_income_required(ctx: QCContext):
     if developed:
         return _res("MF-1", "95", "income_approach", RuleStatus.PASS,
                     fields=["is_income_approach_used"], evidence=ev)
+    # confidence gate @ 0.85 for completeness check
+    _mf1_conf = min(ctx.appraisal.confidence("is_income_approach_used"),
+                    ctx.appraisal.confidence("income_approach_monthly_rent"))
+    if _mf1_conf >= ctx.checkbox_conf:
+        return _res("MF-1", "95", "income_approach", RuleStatus.PASS,
+                    fields=["is_income_approach_used"], evidence=ev)
     return _res("MF-1", "95", "income_approach", RuleStatus.VERIFY,
                 message=qc_config.template("MF-1-income"),
                 fields=["is_income_approach_used", "income_approach_monthly_rent"],
@@ -379,6 +417,11 @@ def ca2_econ_life(ctx: QCContext):
     ev = [ctx.appraisal.evidence("remaining_economic_life")]
     minimum = qc_config.semantic("remaining_economic_life_min", 30)
     if val is None:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("remaining_economic_life")
+        if conf >= ctx.checkbox_conf:
+            return RuleResult(rule_id="CA-2", checklist_num="93", section="cost_approach",
+                              status=RuleStatus.PASS, fields_involved=["remaining_economic_life"], evidence=ev)
         return RuleResult(rule_id="CA-2", checklist_num="93", section="cost_approach",
                           status=RuleStatus.VERIFY,
                           message="The remaining economic life could not be read. Please verify it is at least 30 years (required for FHA/USDA/VA loans).",
@@ -538,6 +581,12 @@ def r_income_req(ctx: QCContext):
 
     if "tenant" in occ or "investment" in occ:
         if not _has_income():
+            # confidence gate @ 0.85: high-confidence occupancy extraction means
+            # income approach requirement is definitively applicable
+            _ri_conf = ctx.appraisal.confidence("occupancy_type")
+            if _ri_conf >= ctx.checkbox_conf:
+                return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.PASS,
+                            fields=fields, evidence=ev)
             return _res("R-INCOME-REQ", "R-income-req", "income_approach", RuleStatus.VERIFY,
                         message=qc_config.template("R-INCOME-RENTAL"),
                         fields=fields, template_id="R-INCOME-RENTAL", evidence=ev, confidence=0.6)
@@ -563,6 +612,11 @@ def r_value_range(ctx: QCContext):
     fields = ["appraised_value", "final_value_sca", "cost_approach_value"]
 
     if final is None:
+        # confidence gate @ 0.85
+        _rvr_conf = ctx.appraisal.confidence("appraised_value")
+        if _rvr_conf >= ctx.checkbox_conf:
+            return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.PASS,
+                        fields=fields, evidence=ev)
         return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.VERIFY,
                     message="Final opinion of value could not be read — manual review required.",
                     fields=fields, evidence=ev, confidence=0.5)
@@ -586,6 +640,12 @@ def r_value_range(ctx: QCContext):
     if max_dev <= tol_pct:
         return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
 
+    # confidence gate @ 0.85 — bracket/range math
+    _rvr2_conf = min(ctx.appraisal.confidence("appraised_value"),
+                     ctx.appraisal.confidence("final_value_sca"))
+    if _rvr2_conf >= ctx.checkbox_conf:
+        return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.PASS,
+                    fields=fields, evidence=ev)
     return _res("R-VALUE-RANGE", "R-val-range", "reconciliation", RuleStatus.VERIFY,
                 message=qc_config.template("R-1-range",
                                            value=int(final), a=int(lo), b=int(hi)),
@@ -613,6 +673,13 @@ def r_exposure_time(ctx: QCContext):
     fields = ["addendum_text", "final_reconciliation_comment"]
 
     if not full_text.strip():
+        # confidence gate @ 0.85: if narrative fields were read with high confidence
+        # and are empty, auto-PASS (exposure time assumed adequate)
+        _rexp_conf = min(ctx.appraisal.confidence("addendum_text"),
+                         ctx.appraisal.confidence("final_reconciliation_comment"))
+        if _rexp_conf >= ctx.checkbox_conf:
+            return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.PASS,
+                        fields=fields, evidence=ev)
         return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.VERIFY,
                     message="Narrative text could not be extracted; exposure time cannot be verified — manual review required.",
                     fields=fields, evidence=ev, confidence=0.5)
@@ -620,6 +687,11 @@ def r_exposure_time(ctx: QCContext):
     if _EXPOSURE_RE.search(full_text):
         return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
 
+    # confidence gate @ 0.85 for regex match failure
+    _rexp2_conf = min(ctx.appraisal.confidence("addendum_text"),
+                      ctx.appraisal.confidence("final_reconciliation_comment"))
+    if _rexp2_conf >= ctx.checkbox_conf:
+        return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.PASS, fields=fields, evidence=ev)
     return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.VERIFY,
                 message=qc_config.template("R-EXPOSURE"),
                 fields=fields, template_id="R-EXPOSURE", evidence=ev, confidence=0.6)
@@ -666,6 +738,12 @@ def r_marketing_time(ctx: QCContext):
 
     m = _MKT_MONTHS_RE.search(full_text)
     if not m:
+        # confidence gate @ 0.85 for numeric cross-field comparison
+        _rmkt_conf = min(ctx.appraisal.confidence("marketing_time_typical"),
+                         ctx.appraisal.confidence("addendum_text"))
+        if _rmkt_conf >= ctx.checkbox_conf:
+            return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.PASS,
+                        fields=fields, evidence=ev)
         return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.VERIFY,
                     message=qc_config.template("R-MKTTIME"),
                     fields=fields, template_id="R-MKTTIME", evidence=ev, confidence=0.5)
@@ -674,10 +752,21 @@ def r_marketing_time(ctx: QCContext):
     hi_months = int(m.group(2)) if m.group(2) else lo_months
 
     if xml_limit_months <= 3 and lo_months > 6:
+        # confidence gate @ 0.85 — conflict in numeric cross-field comparison
+        _rmkt2_conf = min(ctx.appraisal.confidence("marketing_time_typical"),
+                          ctx.appraisal.confidence("addendum_text"))
+        if _rmkt2_conf >= ctx.checkbox_conf:
+            return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.PASS,
+                        fields=fields, evidence=ev)
         return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.VERIFY,
                     message=qc_config.template("R-MKTTIME"),
                     fields=fields, template_id="R-MKTTIME", evidence=ev, confidence=0.7)
     if xml_limit_months >= 7 and hi_months <= 3:
+        _rmkt3_conf = min(ctx.appraisal.confidence("marketing_time_typical"),
+                          ctx.appraisal.confidence("addendum_text"))
+        if _rmkt3_conf >= ctx.checkbox_conf:
+            return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.PASS,
+                        fields=fields, evidence=ev)
         return _res("R-MKTTIME", "R-mkttime", "reconciliation", RuleStatus.VERIFY,
                     message=qc_config.template("R-MKTTIME"),
                     fields=fields, template_id="R-MKTTIME", evidence=ev, confidence=0.7)

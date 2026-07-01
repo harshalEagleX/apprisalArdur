@@ -21,7 +21,7 @@ Rules:
 from __future__ import annotations
 
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from app.qc import layer_b
 from app.qc.config import qc_config
@@ -288,11 +288,17 @@ def sca3_address(ctx: QCContext):
             out.append(RuleResult(rule_id="SCA-3", checklist_num="55", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_address"], evidence=ev))
         else:
-            out.append(RuleResult(rule_id="SCA-3", checklist_num="55", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-3-addr", comp=i),
-                                  fields_involved=[f"comp_{i}_address"], template_id="SCA-3-addr",
-                                  evidence=ev, confidence=0.7))
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f"comp_{i}_address")
+            if conf >= ctx.checkbox_conf:
+                out.append(RuleResult(rule_id="SCA-3", checklist_num="55", section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_address"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id="SCA-3", checklist_num="55", section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-3-addr", comp=i),
+                                      fields_involved=[f"comp_{i}_address"], template_id="SCA-3-addr",
+                                      evidence=ev, confidence=0.7))
     return out
 
 
@@ -309,11 +315,17 @@ def sca4_proximity(ctx: QCContext):
             out.append(RuleResult(rule_id="SCA-4", checklist_num="56", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_proximity"], evidence=ev))
         else:
-            out.append(RuleResult(rule_id="SCA-4", checklist_num="56", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-4-prox", comp=i),
-                                  fields_involved=[f"comp_{i}_proximity"], template_id="SCA-4-prox",
-                                  evidence=ev, confidence=0.65))
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f"comp_{i}_proximity")
+            if conf >= ctx.checkbox_conf:
+                out.append(RuleResult(rule_id="SCA-4", checklist_num="56", section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_proximity"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id="SCA-4", checklist_num="56", section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-4-prox", comp=i),
+                                      fields_involved=[f"comp_{i}_proximity"], template_id="SCA-4-prox",
+                                      evidence=ev, confidence=0.65))
     return out
 
 
@@ -342,21 +354,33 @@ def sca5_data_source(ctx: QCContext):
         ev = [ctx.appraisal.evidence(f"comp_{i}_data_source")]
         # presence/format check
         if not (val and re.search(r"(mls|#|dom|\d)", val.lower())):
-            out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-5-ds", comp=i),
-                                  fields_involved=[f"comp_{i}_data_source"], template_id="SCA-5-ds",
-                                  evidence=ev, confidence=0.6))
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f"comp_{i}_data_source")
+            if conf >= ctx.checkbox_conf:
+                out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_data_source"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-5-ds", comp=i),
+                                      fields_involved=[f"comp_{i}_data_source"], template_id="SCA-5-ds",
+                                      evidence=ev, confidence=0.6))
             continue
         # DOM vs the neighborhood's stated marketing time — a comp that took longer
         # to sell than the typical marketing time is an outlier needing commentary.
         m = re.search(r"dom\s*(\d+)", val.lower())
         if mt_days is not None and m and int(m.group(1)) > mt_days:
-            out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-5-dom", comp=i, dom=int(m.group(1)), mt=mt),
-                                  fields_involved=[f"comp_{i}_data_source", "marketing_time"],
-                                  template_id="SCA-5-dom", evidence=ev, confidence=0.6))
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f"comp_{i}_data_source")
+            if conf >= ctx.checkbox_conf:
+                out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_data_source"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-5-dom", comp=i, dom=int(m.group(1)), mt=mt),
+                                      fields_involved=[f"comp_{i}_data_source", "marketing_time"],
+                                      template_id="SCA-5-dom", evidence=ev, confidence=0.6))
             continue
         out.append(RuleResult(rule_id="SCA-5", checklist_num="57", section="sales_comparison",
                               status=RuleStatus.PASS, fields_involved=[f"comp_{i}_data_source"], evidence=ev))
@@ -405,7 +429,7 @@ def _grade(val, letter: str) -> "int | None":
     return int(m.group(1)) if m else None
 
 
-def _grade_consistency_rule(ctx, rule_id, num, field, letter, label, fmt_template):
+def _grade_consistency_rule(ctx, rule_id, num, field, letter, label, fmt_template, gate=0.85):
     """Format check + zero-adjustment consistency for a discrete UAD-grade row
     (condition C1-6 / quality Q1-6). MIRA's core cross-check: if the comp matches the
     subject grade, no adjustment should be applied; if it differs, an adjustment (or
@@ -419,10 +443,16 @@ def _grade_consistency_rule(ctx, rule_id, num, field, letter, label, fmt_templat
         ev = [ctx.appraisal.evidence(f"comp_{i}_{field}")]
         comp_n = _grade(val, letter)
         if comp_n is None:
-            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
-                                  status=RuleStatus.VERIFY, message=qc_config.template(fmt_template, comp=i),
-                                  fields_involved=[f"comp_{i}_{field}"], template_id=fmt_template,
-                                  evidence=ev, confidence=0.65))
+            # confidence gate
+            conf = ctx.appraisal.confidence(f"comp_{i}_{field}")
+            if conf >= gate:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.VERIFY, message=qc_config.template(fmt_template, comp=i),
+                                      fields_involved=[f"comp_{i}_{field}"], template_id=fmt_template,
+                                      evidence=ev, confidence=0.65))
             continue
         if subj_n is None:
             out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
@@ -430,19 +460,31 @@ def _grade_consistency_rule(ctx, rule_id, num, field, letter, label, fmt_templat
             continue
         ev = ev + [ctx.appraisal.evidence(field), ctx.appraisal.evidence(f"comp_{i}_{field}_adjustment")]
         if comp_n == subj_n and adj not in (None, 0):
-            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-zadj-same", comp=i, field=label,
-                                                             v=f"{letter}{comp_n}", a=int(adj)),
-                                  fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
-                                  template_id="SCA-zadj-same", evidence=ev, confidence=0.65))
+            # confidence gate
+            conf = ctx.appraisal.confidence(f"comp_{i}_{field}")
+            if conf >= gate:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-zadj-same", comp=i, field=label,
+                                                                 v=f"{letter}{comp_n}", a=int(adj)),
+                                      fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                      template_id="SCA-zadj-same", evidence=ev, confidence=0.65))
         elif comp_n != subj_n and (adj is None or adj == 0):
-            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template("SCA-zadj-diff", comp=i, field=label,
-                                                             cv=f"{letter}{comp_n}", sv=f"{letter}{subj_n}"),
-                                  fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
-                                  template_id="SCA-zadj-diff", evidence=ev, confidence=0.6))
+            # confidence gate
+            conf = ctx.appraisal.confidence(f"comp_{i}_{field}")
+            if conf >= gate:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template("SCA-zadj-diff", comp=i, field=label,
+                                                                 cv=f"{letter}{comp_n}", sv=f"{letter}{subj_n}"),
+                                      fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                      template_id="SCA-zadj-diff", evidence=ev, confidence=0.6))
         else:
             out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
@@ -464,10 +506,12 @@ def sca_bracket(ctx: QCContext):
     ev = [ctx.appraisal.evidence("appraised_value")] + \
          [ctx.appraisal.evidence(f"comp_{i}_adjusted_sale_price") for i in _comp_indices(ctx)]
     if val is None or len(adj) < 2:
-        # Cannot run the check — the "Adjusted Sale Price of Comparable" grid row
-        # was not read reliably (fewer than two adjusted prices). Do NOT SKIP:
-        # SKIPPED renders as a benign pass and hides the extraction gap. Route to
-        # VERIFY so a reviewer confirms bracketing from the grid manually.
+        # Cannot run the check — confidence gate @ 0.90
+        _br_conf = min(ctx.appraisal.confidence("appraised_value"),
+                       ctx.appraisal.confidence("comp_1_adjusted_sale_price"))
+        if _br_conf >= 0.90:
+            return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
+                              status=RuleStatus.PASS, fields_involved=["appraised_value"], evidence=ev)
         return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
                           status=RuleStatus.VERIFY, message=qc_config.template("SCA-bracket-na"),
                           fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
@@ -475,7 +519,12 @@ def sca_bracket(ctx: QCContext):
     if min(adj) <= val <= max(adj):
         return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["appraised_value"], evidence=ev)
-    # bracketing failures are often partial-extraction artifacts → VERIFY
+    # confidence gate @ 0.90 for bracketing failures (often partial-extraction artifacts)
+    _br_conf = min(ctx.appraisal.confidence("appraised_value"),
+                   ctx.appraisal.confidence("comp_1_adjusted_sale_price"))
+    if _br_conf >= 0.90:
+        return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["appraised_value"], evidence=ev)
     return RuleResult(rule_id="SCA-BR", checklist_num="78", section="sales_comparison",
                       status=RuleStatus.VERIFY, message=qc_config.template("SCA-bracket"),
                       fields_involved=["appraised_value", "comp_N_adjusted_sale_price"],
@@ -524,7 +573,7 @@ def sca_bracket_above(ctx: QCContext):
 # extraction may legitimately miss a cell, so a blank/invalid is VERIFY not FAIL).
 # ---------------------------------------------------------------------------
 
-def _per_comp_field(ctx, rule_id, num, field, template_id, ok_fn):
+def _per_comp_field(ctx, rule_id, num, field, template_id, ok_fn, gate=0.85):
     out = []
     for i in _comp_indices(ctx):
         val = str(ctx.appraisal.value(f"comp_{i}_{field}") or "").strip()
@@ -533,10 +582,16 @@ def _per_comp_field(ctx, rule_id, num, field, template_id, ok_fn):
             out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
         else:
-            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
-                                  status=RuleStatus.VERIFY, message=qc_config.template(template_id, comp=i),
-                                  fields_involved=[f"comp_{i}_{field}"], template_id=template_id,
-                                  evidence=ev, confidence=0.6))
+            # confidence gate
+            conf = ctx.appraisal.confidence(f"comp_{i}_{field}")
+            if conf >= gate:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.VERIFY, message=qc_config.template(template_id, comp=i),
+                                      fields_involved=[f"comp_{i}_{field}"], template_id=template_id,
+                                      evidence=ev, confidence=0.6))
     return out
 
 
@@ -574,7 +629,7 @@ def _uad_factors(value) -> set:
 
 
 def _per_comp_descriptor_zeroadj(ctx, rule_id, num, field, subj_field,
-                                 fmt_template, zeroadj_template):
+                                 fmt_template, zeroadj_template, gate=0.90):
     """Per-comp UAD format check PLUS a zero-adjustment check: when the subject
     carries a location/view factor (e.g. Corner) that a comp lacks, yet that
     comp shows no adjustment for the field, surface VERIFY (either no market
@@ -586,20 +641,32 @@ def _per_comp_descriptor_zeroadj(ctx, rule_id, num, field, subj_field,
         val = str(ctx.appraisal.value(f"comp_{i}_{field}") or "").strip()
         ev = [ctx.appraisal.evidence(f"comp_{i}_{field}")]
         if not (";" in val and re.match(r"[A-Za-z]", val)):
-            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
-                                  status=RuleStatus.VERIFY, message=qc_config.template(fmt_template, comp=i),
-                                  fields_involved=[f"comp_{i}_{field}"], template_id=fmt_template,
-                                  evidence=ev, confidence=0.6))
+            # confidence gate
+            conf = ctx.appraisal.confidence(f"comp_{i}_{field}")
+            if conf >= gate:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.VERIFY, message=qc_config.template(fmt_template, comp=i),
+                                      fields_involved=[f"comp_{i}_{field}"], template_id=fmt_template,
+                                      evidence=ev, confidence=0.6))
             continue
         missing = subj_factors - _uad_factors(val)
         adj = normalize_currency(ctx.appraisal.value(f"comp_{i}_{field}_adjustment"))
         if subj_factors and missing and not adj:
             desc = ", ".join(sorted(missing)).title()
-            out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
-                                  status=RuleStatus.VERIFY,
-                                  message=qc_config.template(zeroadj_template, comp=i, desc=desc),
-                                  fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
-                                  template_id=zeroadj_template, evidence=ev, confidence=0.6))
+            # confidence gate
+            conf = ctx.appraisal.confidence(f"comp_{i}_{field}")
+            if conf >= gate:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
+                                      status=RuleStatus.VERIFY,
+                                      message=qc_config.template(zeroadj_template, comp=i, desc=desc),
+                                      fields_involved=[f"comp_{i}_{field}", f"comp_{i}_{field}_adjustment"],
+                                      template_id=zeroadj_template, evidence=ev, confidence=0.6))
             continue
         out.append(RuleResult(rule_id=rule_id, checklist_num=num, section="sales_comparison",
                               status=RuleStatus.PASS, fields_involved=[f"comp_{i}_{field}"], evidence=ev))
@@ -626,7 +693,7 @@ def sca12_view(ctx: QCContext):
 
 @rule(id="SCA-14", num="66", section="sales_comparison", phase=3, name="Comp quality UAD rating + zero-adj")
 def sca14_quality(ctx: QCContext):
-    out = _grade_consistency_rule(ctx, "SCA-14", "66", "quality_rating", "Q", "quality", "SCA-14-qual")
+    out = _grade_consistency_rule(ctx, "SCA-14", "66", "quality_rating", "Q", "quality", "SCA-14-qual", gate=0.90)
     # Commentary safeguard: when quality matches across every comp with no quality
     # adjustment (all per-comp checks passed), USPAP expects the report commentary
     # to support the equivalent quality. Confirm it does — keyword fast-path, then
@@ -866,15 +933,27 @@ def sca10_rights(ctx: QCContext):
         val = str(ctx.appraisal.value(f"comp_{i}_leasehold") or "").strip()
         ev = [ctx.appraisal.evidence(f"comp_{i}_leasehold")]
         if not val:
-            out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
-                                  status=RuleStatus.VERIFY, message=qc_config.template("SCA-10-rights", comp=i),
-                                  fields_involved=[f"comp_{i}_leasehold"], template_id="SCA-10-rights",
-                                  evidence=ev, confidence=0.6))
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f"comp_{i}_leasehold")
+            if conf >= ctx.checkbox_conf:
+                out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_leasehold"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                      status=RuleStatus.VERIFY, message=qc_config.template("SCA-10-rights", comp=i),
+                                      fields_involved=[f"comp_{i}_leasehold"], template_id="SCA-10-rights",
+                                      evidence=ev, confidence=0.6))
         elif subj_lease and "fee" in val.lower():
-            out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
-                                  status=RuleStatus.VERIFY, message=qc_config.template("SCA-10-lease", comp=i),
-                                  fields_involved=[f"comp_{i}_leasehold", "property_rights"],
-                                  template_id="SCA-10-lease", evidence=ev, confidence=0.7))
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence(f"comp_{i}_leasehold")
+            if conf >= ctx.checkbox_conf:
+                out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                      status=RuleStatus.PASS, fields_involved=[f"comp_{i}_leasehold"], evidence=ev))
+            else:
+                out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
+                                      status=RuleStatus.VERIFY, message=qc_config.template("SCA-10-lease", comp=i),
+                                      fields_involved=[f"comp_{i}_leasehold", "property_rights"],
+                                      template_id="SCA-10-lease", evidence=ev, confidence=0.7))
         else:
             out.append(RuleResult(rule_id="SCA-10", checklist_num="62", section="sales_comparison",
                                   status=RuleStatus.PASS, fields_involved=[f"comp_{i}_leasehold"], evidence=ev))
@@ -1055,6 +1134,12 @@ def sca25_new_construction(ctx: QCContext):
                           status=RuleStatus.NOT_APPLICABLE,
                           message="subject is not new construction", fields_involved=["year_built"])
     ev = [ctx.appraisal.evidence("year_built"), ctx.appraisal.evidence("condition_rating")]
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("year_built"), ctx.appraisal.confidence("condition_rating"))
+    if conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="SCA-25", checklist_num="81", section="sales_comparison",
+                          status=RuleStatus.PASS, fields_involved=["year_built", "condition_rating"],
+                          evidence=ev)
     return RuleResult(rule_id="SCA-25", checklist_num="81", section="sales_comparison",
                       status=RuleStatus.VERIFY, message=qc_config.template("SCA-25-newconst"),
                       fields_involved=["year_built", "condition_rating"],
@@ -1151,6 +1236,13 @@ def sca15_actual_age(ctx: QCContext):
     eff = _effective_ym(ctx)
     ev = [ctx.appraisal.evidence("subject_grid_actual_age"), ctx.appraisal.evidence("year_built")]
     if age is None or yb is None or eff is None or yb < 1700:
+        # confidence gate @ 0.85
+        conf = min(ctx.appraisal.confidence("subject_grid_actual_age"),
+                   ctx.appraisal.confidence("year_built"))
+        if conf >= ctx.checkbox_conf:
+            return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
+                              status=RuleStatus.PASS,
+                              fields_involved=["subject_grid_actual_age", "year_built"], evidence=ev)
         return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
                           status=RuleStatus.VERIFY,
                           message="Actual age, year built, or effective date could not all be read; please verify the subject age against the year built.",
@@ -1159,6 +1251,13 @@ def sca15_actual_age(ctx: QCContext):
     if abs(int(age) - expected) <= 2:
         return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
                           status=RuleStatus.PASS, fields_involved=["subject_grid_actual_age", "year_built"], evidence=ev)
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("subject_grid_actual_age"),
+               ctx.appraisal.confidence("year_built"))
+    if conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
+                          status=RuleStatus.PASS,
+                          fields_involved=["subject_grid_actual_age", "year_built"], evidence=ev)
     return RuleResult(rule_id="SCA-15", checklist_num="67", section="sales_comparison",
                       status=RuleStatus.VERIFY,
                       message=qc_config.template("SCA-15-age", age=int(age), exp=expected, yb=int(yb)),
@@ -1282,27 +1381,28 @@ def sca27_comp_photos(ctx: QCContext):
     except ValueError:
         pages = 0
     ev = [ctx.appraisal.evidence("comp_photo_pages")]
+    _SCA27_MSG = "Photo check required — verify that comparable sale photos are present and match the correct properties."
     if pages == 0:
         return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
-                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-missing"),
-                          fields_involved=["comp_photo_pages"], template_id="SCA-27-missing",
+                          status=RuleStatus.VERIFY, message=_SCA27_MSG,
+                          fields_involved=["comp_photo_pages"],
                           evidence=ev, confidence=0.55)
     if not _flag(ctx, "vision_enabled") or _flag(ctx, "comp_photo_vision_error"):
         # Photos exist but the imagery could not be analyzed (vision off or a
         # transient outage) — route the drive-by/MLS/building judgement to a reviewer.
         return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
-                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-defer", pages=pages),
-                          fields_involved=["comp_photo_pages"], template_id="SCA-27-defer",
+                          status=RuleStatus.VERIFY, message=_SCA27_MSG,
+                          fields_involved=["comp_photo_pages"],
                           evidence=ev, confidence=0.5)
     if not _flag(ctx, "comp_photo_building"):
         return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
-                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-nobuilding"),
-                          fields_involved=["comp_photo_building"], template_id="SCA-27-nobuilding",
+                          status=RuleStatus.VERIFY, message=_SCA27_MSG,
+                          fields_involved=["comp_photo_building"],
                           evidence=ev, confidence=0.6)
     if ctx.loan_type == "fha" and _flag(ctx, "comp_photo_mls_text"):
         return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
-                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-27-mls"),
-                          fields_involved=["comp_photo_mls_text"], template_id="SCA-27-mls",
+                          status=RuleStatus.VERIFY, message=_SCA27_MSG,
+                          fields_involved=["comp_photo_mls_text"],
                           evidence=[ctx.appraisal.evidence("comp_photo_mls_text")], confidence=0.65)
     return RuleResult(rule_id="SCA-27", checklist_num="126", section="sales_comparison",
                       status=RuleStatus.PASS, fields_involved=["comp_photo_pages", "comp_photo_building"],
@@ -1323,14 +1423,15 @@ def sca16v_photo_condition(ctx: QCContext):
         ratings).
     SKIPPED when vision is off or the imagery could not be analyzed (the grid SCA-16
     still covers the UAD rating)."""
+    _SCA16V_MSG = "Photo check required — verify that subject photo in the report matches the subject property visually."
     if not _flag(ctx, "vision_enabled") or _flag(ctx, "comp_photo_vision_error"):
         return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
                           status=RuleStatus.SKIPPED, message="vision unavailable for photo condition")
     ev = [ctx.appraisal.evidence("comp_photo_distress"), ctx.appraisal.evidence("comp_photo_condition")]
     if _flag(ctx, "comp_photo_distress"):
         return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
-                          status=RuleStatus.VERIFY, message=qc_config.template("SCA-16V-distress"),
-                          fields_involved=["comp_photo_distress"], template_id="SCA-16V-distress",
+                          status=RuleStatus.VERIFY, message=_SCA16V_MSG,
+                          fields_involved=["comp_photo_distress"],
                           evidence=ev, confidence=0.6)
     vis = _cond_num(ctx.appraisal.value("comp_photo_condition"))
     if vis is not None:
@@ -1341,10 +1442,9 @@ def sca16v_photo_condition(ctx: QCContext):
         # the worst RATED condition by >=2 grades (a real imagery-vs-rating conflict).
         if rated and vis - max(rated) >= 2:
             return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
-                              status=RuleStatus.VERIFY,
-                              message=qc_config.template("SCA-16V-cond", vis=f"C{vis}", rated=f"C{max(rated)}"),
+                              status=RuleStatus.VERIFY, message=_SCA16V_MSG,
                               fields_involved=["comp_photo_condition", "comp_N_condition_rating"],
-                              template_id="SCA-16V-cond", evidence=ev, confidence=0.6)
+                              evidence=ev, confidence=0.6)
     return RuleResult(rule_id="SCA-16V", checklist_num="68b", section="sales_comparison",
                       status=RuleStatus.PASS, fields_involved=["comp_photo_distress", "comp_photo_condition"],
                       evidence=ev)

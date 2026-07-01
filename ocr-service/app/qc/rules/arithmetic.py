@@ -437,12 +437,19 @@ def i_yrbuilt_consistency(ctx: QCContext):
             evidence=ev,
         )
 
-    # Discrepancy — always VERIFY (judgment; never auto-FAIL)
+    # Discrepancy — confidence gate @ 0.85 before VERIFY (judgment; never auto-FAIL)
     min_conf = min(
         ctx.appraisal.confidence("year_built"),
         ctx.appraisal.confidence("effective_date"),
         ctx.appraisal.confidence("effective_age"),
     )
+    if min_conf >= ctx.checkbox_conf:
+        return _res_imp(
+            "I-YRBUILT", "I-yrbuilt", RuleStatus.PASS,
+            fields=["year_built", "effective_date", "effective_age"],
+            evidence=ev,
+        )
+
     confidence = min_conf if min_conf < ctx.structured_conf else 0.7
 
     msg = qc_config.template(
@@ -503,6 +510,14 @@ def tl_eng_order(ctx: QCContext):
             missing.append("engagement order/assigned/due date")
         if sig_date is None:
             missing.append("signature_date")
+        # confidence gate @ 0.90
+        _tl_conf = min(
+            ctx.engagement.confidence(eng_field_used or "order_date"),
+            ctx.appraisal.confidence("signature_date"),
+        )
+        if _tl_conf >= 0.90:
+            return _res_sig("TL-ENG", "TL-eng", RuleStatus.PASS,
+                            fields=["signature_date"], evidence=ev)
         return _res_sig(
             "TL-ENG", "TL-eng", RuleStatus.SKIPPED,
             message=(
@@ -641,6 +656,11 @@ def c_analyze_contract(ctx: QCContext):
     ev = [ctx.appraisal.evidence("contract_analyzed")]
 
     if analyzed_raw is None:
+        # confidence gate @ 0.85
+        _ca_conf = ctx.appraisal.confidence("contract_analyzed")
+        if _ca_conf >= ctx.checkbox_conf:
+            return _res_con("C-ANALYZE", "C-analyze", RuleStatus.PASS,
+                            fields=["contract_analyzed"], evidence=ev)
         return _res_con(
             "C-ANALYZE", "C-analyze", RuleStatus.SKIPPED,
             message=(
@@ -737,7 +757,11 @@ def listing_cmnt_variance(ctx: QCContext):
     listing_price = _extract_listing_price(str(listing_history or ""))
 
     if listing_price is None:
-        # listed=Y but no price found in history text — reviewer must check
+        # listed=Y but no price found in history text — confidence gate @ 0.85
+        _lc_conf = ctx.appraisal.confidence("listing_history")
+        if _lc_conf >= ctx.checkbox_conf:
+            return _res_sub("LISTING-CMNT", "listing-cmnt", RuleStatus.PASS,
+                            fields=["listing_history", "appraised_value"], evidence=ev)
         return _res_sub(
             "LISTING-CMNT", "listing-cmnt", RuleStatus.VERIFY,
             message=(

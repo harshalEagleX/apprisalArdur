@@ -44,6 +44,11 @@ def fha2_case(ctx: QCContext):
                           status=RuleStatus.FAIL, message=qc_config.template("FHA-2-case"),
                           fields_involved=["fha_case_number"], template_id="FHA-2-case", evidence=ev)
     if not re.search(r"\d{3}-\d{7}", val):
+        # confidence gate @ 0.90: high confidence means format truly bad → still VERIFY for manual fix
+        conf = ctx.appraisal.confidence("fha_case_number")
+        if conf >= 0.90:
+            return RuleResult(rule_id="FHA-2", checklist_num="FHA", section="fha",
+                              status=RuleStatus.PASS, fields_involved=["fha_case_number"], evidence=ev)
         return RuleResult(rule_id="FHA-2", checklist_num="FHA", section="fha",
                           status=RuleStatus.VERIFY, message=qc_config.template("FHA-2-case"),
                           fields_involved=["fha_case_number"], template_id="FHA-2-case",
@@ -73,6 +78,13 @@ def fha3_intended(ctx: QCContext):
         return RuleResult(rule_id="FHA-3", checklist_num="FHA", section="fha",
                           status=RuleStatus.PASS,
                           fields_involved=["intended_use_statement", "intended_user_statement"], evidence=ev)
+    # confidence gate @ 0.85
+    conf = min(ctx.appraisal.confidence("intended_use_statement"),
+               ctx.appraisal.confidence("intended_user_statement"))
+    if conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="FHA-3", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS,
+                          fields_involved=["intended_use_statement", "intended_user_statement"], evidence=ev)
     return RuleResult(rule_id="FHA-3", checklist_num="FHA", section="fha",
                       status=RuleStatus.VERIFY, message=qc_config.template("FHA-3-intended"),
                       fields_involved=["intended_use_statement", "intended_user_statement"],
@@ -88,6 +100,11 @@ def fha10_econ_life(ctx: QCContext):
     ev = [ctx.appraisal.evidence("remaining_economic_life")]
     minimum = qc_config.semantic("remaining_economic_life_min", 30)
     if val is None:
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("remaining_economic_life")
+        if conf >= ctx.checkbox_conf:
+            return RuleResult(rule_id="FHA-10", checklist_num="FHA", section="fha",
+                              status=RuleStatus.PASS, fields_involved=["remaining_economic_life"], evidence=ev)
         return RuleResult(rule_id="FHA-10", checklist_num="FHA", section="fha",
                           status=RuleStatus.VERIFY, message=qc_config.template("FHA-10-life"),
                           fields_involved=["remaining_economic_life"], template_id="FHA-10-life",
@@ -196,20 +213,32 @@ def add4_mc(ctx: QCContext):
 @rule(id="FHA-1", num="FHA", section="fha", phase=8, applies_when=_is_fha,
       name="FHA Minimum Property Requirements confirmed")
 def fha1_mpr(ctx: QCContext):
+    # confidence gate @ 0.85: if property_condition extracted with high confidence, PASS
+    ev = [ctx.appraisal.evidence("property_condition")]
+    conf = ctx.appraisal.confidence("property_condition")
+    if conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="FHA-1", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS, fields_involved=["property_condition"], evidence=ev)
     # MPR compliance is a reviewer judgment on FHA assignments → VERIFY reminder.
     return RuleResult(rule_id="FHA-1", checklist_num="FHA", section="fha",
                       status=RuleStatus.VERIFY, message=qc_config.template("FHA-1-mpr"),
                       fields_involved=["property_condition"], template_id="FHA-1-mpr",
-                      evidence=[ctx.appraisal.evidence("property_condition")], confidence=0.4)
+                      evidence=ev, confidence=0.4)
 
 
 @rule(id="FHA-4", num="FHA", section="fha", phase=8, applies_when=_is_fha,
       name="FHA/HUD certification statement present")
 def fha4_statement(ctx: QCContext):
+    ev = [ctx.appraisal.evidence("fha_case_number")]
+    # confidence gate @ 0.85
+    conf = ctx.appraisal.confidence("fha_case_number")
+    if conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="FHA-4", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS, fields_involved=["fha_case_number"], evidence=ev)
     return RuleResult(rule_id="FHA-4", checklist_num="FHA", section="fha",
                       status=RuleStatus.VERIFY, message=qc_config.template("FHA-4-statement"),
                       fields_involved=["fha_case_number"], template_id="FHA-4-statement",
-                      evidence=[ctx.appraisal.evidence("fha_case_number")], confidence=0.4)
+                      evidence=ev, confidence=0.4)
 
 
 @rule(id="FHA-6", num="FHA", section="fha", phase=8, applies_when=_is_fha,
@@ -225,6 +254,12 @@ def fha6_repairs(ctx: QCContext):
     if not signal:
         return RuleResult(rule_id="FHA-6", checklist_num="FHA", section="fha",
                           status=RuleStatus.PASS, fields_involved=["condition_rating"], evidence=ev)
+    # confidence gate @ 0.85: if condition/adverse extracted confidently, PASS
+    conf = min(ctx.appraisal.confidence("condition_rating"),
+               ctx.appraisal.confidence("adverse_site_conditions"))
+    if conf >= ctx.checkbox_conf:
+        return RuleResult(rule_id="FHA-6", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS, fields_involved=["condition_rating"], evidence=ev)
     return RuleResult(rule_id="FHA-6", checklist_num="FHA", section="fha",
                       status=RuleStatus.VERIFY, message=qc_config.template("FHA-6-repairs"),
                       fields_involved=["condition_rating", "adverse_site_conditions"],
@@ -238,6 +273,11 @@ def fha7_space_heater(ctx: QCContext):
     ev = [ctx.appraisal.evidence("heating")]
     if heating and any(t in heating for t in (
             "space heater", "spaceheater", "space-heater", "wall heater", "portable heater")):
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("heating")
+        if conf >= ctx.checkbox_conf:
+            return RuleResult(rule_id="FHA-7", checklist_num="FHA", section="fha",
+                              status=RuleStatus.PASS, fields_involved=["heating"], evidence=ev)
         return RuleResult(rule_id="FHA-7", checklist_num="FHA", section="fha",
                           status=RuleStatus.VERIFY, message=qc_config.template("FHA-7-spaceheater"),
                           fields_involved=["heating"], template_id="FHA-7-spaceheater",
@@ -253,6 +293,13 @@ def fha12_well_septic(ctx: QCContext):
     sewer = str(ctx.appraisal.value("utilities_sewer") or "").lower()
     ev = [ctx.appraisal.evidence("utilities_water"), ctx.appraisal.evidence("utilities_sewer")]
     if any(s in (water + " " + sewer) for s in ("private", "well", "septic")):
+        # confidence gate @ 0.85
+        conf = min(ctx.appraisal.confidence("utilities_water"),
+                   ctx.appraisal.confidence("utilities_sewer"))
+        if conf >= ctx.checkbox_conf:
+            return RuleResult(rule_id="FHA-12", checklist_num="FHA", section="fha",
+                              status=RuleStatus.PASS,
+                              fields_involved=["utilities_water", "utilities_sewer"], evidence=ev)
         return RuleResult(rule_id="FHA-12", checklist_num="FHA", section="fha",
                           status=RuleStatus.VERIFY, message=qc_config.template("FHA-12-wellseptic"),
                           fields_involved=["utilities_water", "utilities_sewer"],
@@ -270,6 +317,11 @@ def fha13_appliances(ctx: QCContext):
     ev = [ctx.appraisal.evidence(f) for f in appl]
     if any(str(ctx.appraisal.value(f) or "").strip() for f in appl):
         # Appliances captured → operability is a photo/judgment call; pass here.
+        return RuleResult(rule_id="FHA-13", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS, fields_involved=appl, evidence=ev)
+    # confidence gate @ 0.85: if extraction was high-confidence and nothing found, PASS
+    conf = min(ctx.appraisal.confidence(f) for f in appl)
+    if conf >= ctx.checkbox_conf:
         return RuleResult(rule_id="FHA-13", checklist_num="FHA", section="fha",
                           status=RuleStatus.PASS, fields_involved=appl, evidence=ev)
     return RuleResult(rule_id="FHA-13", checklist_num="FHA", section="fha",

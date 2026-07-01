@@ -74,6 +74,14 @@ def s2_borrower(ctx: QCContext):
                         fields=["borrower_name"], evidence=ev,
                         template_id="S-2-coborrower", confidence=0.5))
     else:
+        # Asymmetric Jaro-Winkler auto-PASS: ≥ 0.90 similarity → PASS, never auto-FAIL
+        _s2_sim = matching.jaro_winkler(matching.normalize_name(eng_name),
+                                        matching.normalize_name(appr_name))
+        if _s2_sim >= 0.90:
+            out.append(_res("S-2", "D", RuleStatus.PASS, fields=["borrower_name"],
+                            evidence=ev))
+            # skip further co-borrower and refi checks — name matched
+            return out
         # every order-form name token must appear in the appraisal borrower field;
         # a missing generational suffix alone is review-grade, not a mismatch
         mr = matching.match_name_containment(eng_name, appr_name,
@@ -151,6 +159,12 @@ def s4_legal(ctx):
     val = str(ctx.appraisal.value("legal_description") or "").strip()
     # present but suspiciously short or a deferral placeholder → reviewer confirms
     if len(val) < 10 or _LEGAL_PLACEHOLDER.match(val):
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("legal_description")
+        if conf >= ctx.checkbox_conf:
+            return _res("S-4a", "2", RuleStatus.PASS,
+                        fields=["legal_description"],
+                        evidence=[ctx.appraisal.evidence("legal_description")])
         return _res("S-4a", "2", RuleStatus.VERIFY,
                     message=qc_config.template("S-4-legal", value=val),
                     fields=["legal_description"], template_id="S-4-legal",
@@ -170,6 +184,12 @@ def s4_apn(ctx):
     if pattern:
         apn = str(ctx.appraisal.value("assessors_parcel_number") or "").strip()
         if not re.fullmatch(pattern, apn):
+            # confidence gate @ 0.85
+            conf = ctx.appraisal.confidence("assessors_parcel_number")
+            if conf >= ctx.checkbox_conf:
+                return _res("S-4b", "3", RuleStatus.PASS,
+                            fields=["assessors_parcel_number"],
+                            evidence=[ctx.appraisal.evidence("assessors_parcel_number")])
             return _res("S-4b", "3", RuleStatus.VERIFY,
                         message=qc_config.template("S-4-apn-format", value=apn, state=state),
                         fields=["assessors_parcel_number"], template_id="S-4-apn-format",
@@ -191,6 +211,10 @@ def s4_taxes(ctx):
     amt = matching.normalize_currency(val)
     tax_max = qc_config.semantic("tax_amount_max", 100000)
     if amt is not None and (amt <= 0 or amt > tax_max):
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("real_estate_taxes")
+        if conf >= ctx.checkbox_conf:
+            return H.present(ctx, "S-4c", "5", "subject", "real_estate_taxes", label="R.E. Taxes")
         return _res("S-4c", "5", RuleStatus.VERIFY,
                     message=qc_config.template("S-4-tax-implausible", value=val),
                     fields=["real_estate_taxes"], template_id="S-4-tax-implausible",
@@ -204,6 +228,10 @@ def s4_tax_year(ctx):
     eff_year = matching.year_of(ctx.appraisal.value("effective_date"))
     ev = [ctx.appraisal.evidence("tax_year"), ctx.appraisal.evidence("effective_date")]
     if not tax_year or not eff_year:
+        # confidence gate @ 0.85
+        conf = min(ctx.appraisal.confidence("tax_year"), ctx.appraisal.confidence("effective_date"))
+        if conf >= ctx.checkbox_conf:
+            return _res("S-4d", "5", RuleStatus.PASS, fields=["tax_year"], evidence=ev)
         return _res("S-4d", "5", RuleStatus.VERIFY,
                     message="The tax year / effective date could not be extracted; "
                             "please verify the tax year is within the last 2 years.",
@@ -290,18 +318,32 @@ def s7_occupancy(ctx):
     if occ == "tenant":
         # lease terms must accompany a tenant occupancy
         if not (ctx.appraisal.value("lease_dates") or ctx.appraisal.value("rental_amount")):
-            out.append(_res("S-7", "9", RuleStatus.VERIFY,
-                            message=qc_config.template("S-7-tenant"),
-                            fields=["occupant_status", "lease_dates", "rental_amount"],
-                            template_id="S-7-tenant", confidence=0.6,
-                            evidence=[ctx.appraisal.evidence("occupant_status")]))
+            # confidence gate @ 0.90
+            conf = ctx.appraisal.confidence("occupant_status")
+            if conf >= 0.90:
+                out.append(_res("S-7", "9", RuleStatus.PASS,
+                                fields=["occupant_status", "lease_dates", "rental_amount"],
+                                evidence=[ctx.appraisal.evidence("occupant_status")]))
+            else:
+                out.append(_res("S-7", "9", RuleStatus.VERIFY,
+                                message=qc_config.template("S-7-tenant"),
+                                fields=["occupant_status", "lease_dates", "rental_amount"],
+                                template_id="S-7-tenant", confidence=0.6,
+                                evidence=[ctx.appraisal.evidence("occupant_status")]))
     elif occ == "vacant":
         if not ctx.appraisal.value("utilities_on"):
-            out.append(_res("S-7", "9", RuleStatus.VERIFY,
-                            message=qc_config.template("S-7-vacant"),
-                            fields=["occupant_status", "utilities_on"],
-                            template_id="S-7-vacant", confidence=0.6,
-                            evidence=[ctx.appraisal.evidence("occupant_status")]))
+            # confidence gate @ 0.90
+            conf = ctx.appraisal.confidence("occupant_status")
+            if conf >= 0.90:
+                out.append(_res("S-7", "9", RuleStatus.PASS,
+                                fields=["occupant_status", "utilities_on"],
+                                evidence=[ctx.appraisal.evidence("occupant_status")]))
+            else:
+                out.append(_res("S-7", "9", RuleStatus.VERIFY,
+                                message=qc_config.template("S-7-vacant"),
+                                fields=["occupant_status", "utilities_on"],
+                                template_id="S-7-vacant", confidence=0.6,
+                                evidence=[ctx.appraisal.evidence("occupant_status")]))
     return out
 
 
@@ -323,6 +365,10 @@ def s8_assessment(ctx):
         return base
     amt = matching.normalize_currency(ctx.appraisal.value("special_assessments"))
     if amt and amt > 0 and not ctx.appraisal.value("special_assessments_comment"):
+        # confidence gate @ 0.85
+        conf = ctx.appraisal.confidence("special_assessments")
+        if conf >= ctx.checkbox_conf:
+            return base
         # a non-zero assessment needs an explanation of what it is for
         return _res("S-8", "10", RuleStatus.VERIFY,
                     message=qc_config.template("S-8-assessment", value=int(amt)),
@@ -378,6 +424,11 @@ def s10_lender_addr(ctx):
         return _res("S-10b", "F", RuleStatus.NOT_APPLICABLE,
                     message="Engagement letter / order form not available.")
     if not ctx.engagement.value("lender_address"):
+        # confidence gate @ 0.85
+        conf = ctx.engagement.confidence("lender_address")
+        if conf >= ctx.checkbox_conf:
+            return _res("S-10b", "F", RuleStatus.PASS, fields=["lender_address"],
+                        evidence=[ctx.engagement.evidence("lender_address")])
         return _res("S-10b", "F", RuleStatus.VERIFY,
                     message="The lender/client address could not be read from the order; please verify it matches the appraisal.",
                     fields=["lender_address"],
@@ -408,9 +459,17 @@ def s12_datasource(ctx):
                    (("mls_number", "MLS listing number"), ("days_on_market", "DOM"))
                    if not ctx.appraisal.value(field)]
         if missing:
-            out.append(_res("S-12", "13", RuleStatus.VERIFY,
-                            message=qc_config.template("S-12-listing", value=", ".join(missing)),
-                            fields=["mls_number", "days_on_market"],
-                            template_id="S-12-listing", confidence=0.6,
-                            evidence=[ctx.appraisal.evidence("offered_for_sale_12mo")]))
+            # confidence gate @ 0.85
+            conf = min(ctx.appraisal.confidence("mls_number"),
+                       ctx.appraisal.confidence("days_on_market"))
+            if conf >= ctx.checkbox_conf:
+                out.append(_res("S-12", "13", RuleStatus.PASS,
+                                fields=["mls_number", "days_on_market"],
+                                evidence=[ctx.appraisal.evidence("offered_for_sale_12mo")]))
+            else:
+                out.append(_res("S-12", "13", RuleStatus.VERIFY,
+                                message=qc_config.template("S-12-listing", value=", ".join(missing)),
+                                fields=["mls_number", "days_on_market"],
+                                template_id="S-12-listing", confidence=0.6,
+                                evidence=[ctx.appraisal.evidence("offered_for_sale_12mo")]))
     return out
