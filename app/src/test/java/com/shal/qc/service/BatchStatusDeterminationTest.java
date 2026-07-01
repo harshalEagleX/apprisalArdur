@@ -212,17 +212,18 @@ class BatchStatusDeterminationTest {
         });
     }
 
-    /** Minimal PythonRuleResult — 24 fields in record declaration order */
+    /** Minimal PythonRuleResult — 27 fields in record declaration order */
     private static PythonRuleResult rule(String status, boolean reviewRequired) {
         return new PythonRuleResult(
                 "R-1", "Test rule", "SUBJECT", status, "msg",
-                "STANDARD", null, null,        // actionItem, details
-                null, null,                    // appraisalValue, engagementValue
-                0.9, null, null,               // confidence, extractedValue, expectedValue
-                null, null, null,              // verifyQuestion, rejectionText, evidence
-                reviewRequired, null,          // reviewRequired, targetField
-                null, null, null, null, null,  // sourcePage, bboxX, bboxY, bboxW, bboxH
-                null                           // scope
+                "STANDARD", null, null,           // severity, actionItem, details
+                null, null,                       // appraisalValue, engagementValue
+                0.9, null, null, null,            // confidence, summary, confidenceTier, highlightedValues
+                null, null,                       // extractedValue, expectedValue
+                null, null, null,                 // verifyQuestion, rejectionText, evidence
+                reviewRequired, null,             // reviewRequired, targetField
+                null, null, null, null, null,     // sourcePage, bboxX, bboxY, bboxW, bboxH
+                null                              // scope
         );
     }
 
@@ -247,13 +248,14 @@ class BatchStatusDeterminationTest {
     private static PythonRuleResult scopedRule(String ruleId, String status, String scope) {
         return new PythonRuleResult(
                 ruleId, "Test rule", "SUBJECT", status, "msg",
-                "STANDARD", null, null,
-                null, null,
-                0.9, null, null,
-                null, null, null,
-                false, null,
-                null, null, null, null, null,
-                scope
+                "STANDARD", null, null,           // severity, actionItem, details
+                null, null,                       // appraisalValue, engagementValue
+                0.9, null, null, null,            // confidence, summary, confidenceTier, highlightedValues
+                null, null,                       // extractedValue, expectedValue
+                null, null, null,                 // verifyQuestion, rejectionText, evidence
+                false, null,                      // reviewRequired, targetField
+                null, null, null, null, null,     // sourcePage, bboxX, bboxY, bboxW, bboxH
+                scope                             // scope
         );
     }
 

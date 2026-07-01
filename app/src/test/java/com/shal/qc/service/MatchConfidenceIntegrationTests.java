@@ -232,9 +232,12 @@ class MatchConfidenceIntegrationTests {
     private static PythonQCResponse autoPassResponse() {
         PythonRuleResult passRule = new PythonRuleResult(
                 "S-1", "Subject", "SUBJECT", "pass", "OK",
-                "STANDARD", null, null, null, null,
-                0.95, null, null, null, null, null,
-                false, null, null, null, null, null, null, "per_document");
+                "STANDARD", null, null, null, null,             // severity, actionItem, details, appraisalValue, engagementValue
+                0.95, null, null, null,                         // confidence, summary, confidenceTier, highlightedValues
+                null, null,                                     // extractedValue, expectedValue
+                null, null, null,                               // verifyQuestion, rejectionText, evidence
+                false, null, null, null, null, null, null,      // reviewRequired, targetField, sourcePage, bboxX/Y/W/H
+                "per_document");                                // scope
         return new PythonQCResponse(
                 "1.0", true, 5, 1, "test",
                 Map.of(), Map.of(),
