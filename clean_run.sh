@@ -118,12 +118,63 @@ start_bg() { # name command…
     ( nohup "$@" >"$RUN_DIR/$name.log" 2>&1 </dev/null & echo $! >"$RUN_DIR/$name.pid" )
 }
 wait_http() { # name url
-    local name="$1" url="$2" tries=90
+    # NOTE (macOS bash 3.2): a single `local a=$1 b=$a` does NOT see `a` when
+    # expanding `b`, so `pidfile`/`pid` are assigned on their own lines below.
+    local name="$1" url="$2" tries=90 pid pidfile
+    pidfile="$RUN_DIR/$name.pid"
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
     printf "==> Waiting for %s (%s) " "$name" "$url"
     until curl -fsS -o /dev/null "$url" 2>/dev/null; do
+        # Fail fast if the process we started has already died (e.g. port still held
+        # by a stale server) — otherwise we'd falsely "succeed" against that old server.
+        if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+            echo " FAILED (process $pid exited — see log)"
+            echo "--- last 40 log lines ---"; tail -n 40 "$RUN_DIR/$name.log" 2>/dev/null
+            exit 1
+        fi
         ((tries--)) || { echo " FAILED"; echo "--- last 30 log lines ---"; tail -n 30 "$RUN_DIR/$name.log" 2>/dev/null; exit 1; }
         printf "."; sleep 2
     done; echo " OK"
+}
+
+# Free a TCP port: kill whatever is LISTENing on it (graceful, then SIGKILL), and
+# wait until it is actually released so the fresh process can bind it.
+free_port() { # port
+    local port="$1" pids waited=0
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    [[ -z "$pids" ]] && return 0
+    echo "   • freeing port $port (was held by: $(echo "$pids" | tr '\n' ' '))"
+    kill $pids 2>/dev/null || true
+    while lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; do
+        ((waited++))
+        if (( waited >= 10 )); then
+            echo "   • force-killing port $port"
+            kill -9 $(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null) 2>/dev/null || true
+            break
+        fi
+        sleep 1
+    done
+}
+
+# Stop any previously-running SHAL services BEFORE we reset the DB or start fresh.
+# Without this, an old server keeps holding its port, the new process can't bind,
+# and the health check passes against the STALE server (which is now pointed at a
+# freshly-wiped DB → login 500s). Stops by pid-file AND by port (a stale process
+# from a prior run is not in the current pid-file).
+stop_existing() {
+    echo "==> Stopping any existing SHAL services…"
+    local name pid
+    for name in frontend ocr java; do
+        pid="$(cat "$RUN_DIR/$name.pid" 2>/dev/null || true)"
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            echo "   • stopping $name (pid $pid)"
+            kill "$pid" 2>/dev/null || true
+        fi
+        rm -f "$RUN_DIR/$name.pid"
+    done
+    for port in "$FRONTEND_PORT" "$OCR_PORT" "$JAVA_PORT"; do
+        free_port "$port"
+    done
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -133,6 +184,11 @@ echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║           SHAL — clean rebuild & run                  ║"
 echo "╚══════════════════════════════════════════════════════╝"
+
+# Stop any old run FIRST — otherwise a stale server keeps its port and the fresh
+# build never actually takes over (the cause of "up" but login 500s on a wiped DB).
+stop_existing
+
 read -r -p "Reset and CLEAN the database (drops ALL data)? [y/N]: " RESET_ANS || RESET_ANS=""
 if [[ "${RESET_ANS:-}" =~ ^([Yy]|[Yy][Ee][Ss])$ ]]; then
     resolve_psql_url
