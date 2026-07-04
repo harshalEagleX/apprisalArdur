@@ -61,10 +61,14 @@ public class OrderStatusService {
         Optional<BatchFile> activeAppraisal = activeDocs.stream()
                 .filter(f -> f.getFileType() == FileType.APPRAISAL)
                 .findFirst();
-        boolean hasEngagement = activeDocs.stream().anyMatch(f -> f.getFileType() == FileType.ENGAGEMENT);
+        // Completeness uses the single shared definition (appraisal PDF + XML + engagement)
+        // so the order status can never say READY_FOR_QC while the QC gate refuses to run it.
+        java.util.Set<FileType> presentTypes = activeDocs.stream()
+                .map(BatchFile::getFileType)
+                .collect(java.util.stream.Collectors.toSet());
 
         if (hasNeedsAssignment) return OrderDocumentStatus.UNMATCHED;
-        if (activeAppraisal.isEmpty() || !hasEngagement) return OrderDocumentStatus.INCOMPLETE;
+        if (!OrderCompleteness.isComplete(presentTypes)) return OrderDocumentStatus.INCOMPLETE;
         if (hasErrorFile) return OrderDocumentStatus.ERROR;
 
         BatchFile appraisal = activeAppraisal.get();

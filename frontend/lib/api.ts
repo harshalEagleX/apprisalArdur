@@ -1176,6 +1176,11 @@ export interface Batch {
   intakeWarnings?: string | null;
   /** Total NEEDS_ASSIGNMENT files across all property sets; populated on GET /api/admin/batches/{id}. */
   needsAssignmentCount?: number;
+  /** Honest per-order breakdown for this batch: OrderDocumentStatus → count. Batch status is
+   *  only the intake/processing state; QC/review/completion are per-order. */
+  orderStatusRollup?: Record<string, number>;
+  /** Number of resolved orders in this batch (sum of orderStatusRollup). */
+  orderCount?: number;
   /** Supporting files that could not be auto-matched — same data as per-set, collected at batch level. */
   unassignedFiles?: BatchFile[];
   createdAt: string;

@@ -288,6 +288,22 @@ class BatchOrderIngestionTest {
                 .contains("Appraisal XML").contains("Engagement letter");
     }
 
+    // (12) Unified completeness: appraisal + engagement but no XML → order is INCOMPLETE,
+    //      matching the QC gate (never "Ready for QC" while QC would refuse it).
+    @Test
+    void orderMissingXml_isIncomplete() {
+        MockMultipartFile zip = makeZip(tag + "_noxml.zip", Map.of(
+                "MAGU96793/appraisal/MAGU96793.pdf", pdf(),
+                "MAGU96793/engagement/EngagementLetter.pdf", pdf()));
+        Long batchId = upload(zip);
+        Long orderId = distinctOrders(docsOf(batchId)).get(0);
+
+        OrderDocumentStatus status = tx.execute(s ->
+                orderRepository.findById(orderId).orElseThrow().getDocumentStatus());
+
+        assertThat(status).isEqualTo(OrderDocumentStatus.INCOMPLETE);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private void createFromZipTx(MockMultipartFile zip) {

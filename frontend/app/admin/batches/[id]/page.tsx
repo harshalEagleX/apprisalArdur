@@ -779,6 +779,21 @@ export default function BatchDetailPage() {
         </div>
       </header>
 
+      {/* Order-status rollup — the honest per-order breakdown. The batch status above is
+          only the intake/processing state; QC, review and completion are tracked per order. */}
+      {batch?.orderStatusRollup && Object.keys(batch.orderStatusRollup).length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-500">
+          <span className="text-slate-400">{batch.orderCount ?? 0} order{(batch.orderCount ?? 0) === 1 ? "" : "s"}</span>
+          {Object.entries(batch.orderStatusRollup).map(([status, count]) => (
+            <span key={status} className="inline-flex items-center gap-1.5">
+              <span className="text-slate-700">·</span>
+              <StatusBadge status={status} size="xs" />
+              <span className="tabular-nums text-slate-400">{count}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Needs-assignment alert */}
       {needsAssignmentTotal > 0 && (
         <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-orange-500/30 bg-orange-950/20 px-4 py-3 text-sm text-orange-200">

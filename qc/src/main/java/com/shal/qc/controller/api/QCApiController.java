@@ -404,25 +404,14 @@ public class QCApiController {
     }
 
     /**
-     * Required documents for QC. An order is NEVER QC'd unless it has an active
-     * appraisal PDF, appraisal XML, and engagement letter. Returns the labels of
-     * whichever are missing (empty list = complete). Contract is optional.
+     * Required documents for QC, via the single shared {@link com.shal.common.service.OrderCompleteness}
+     * definition — an order is NEVER QC'd unless it has an active appraisal PDF, appraisal XML,
+     * and engagement letter. Returns the labels of whichever are missing (empty = complete).
      */
     private List<String> missingRequiredDocs(Long orderId) {
-        List<String> missing = new java.util.ArrayList<>();
-        if (batchFileRepository.findActiveByOrderIdAndFileType(
-                orderId, com.shal.common.entity.FileType.APPRAISAL).isEmpty()) {
-            missing.add("Appraisal PDF");
-        }
-        if (batchFileRepository.findActiveByOrderIdAndFileType(
-                orderId, com.shal.common.entity.FileType.APPRAISAL_XML).isEmpty()) {
-            missing.add("Appraisal XML");
-        }
-        if (batchFileRepository.findActiveByOrderIdAndFileType(
-                orderId, com.shal.common.entity.FileType.ENGAGEMENT).isEmpty()) {
-            missing.add("Engagement letter");
-        }
-        return missing;
+        java.util.Set<com.shal.common.entity.FileType> present = batchFileRepository.findActiveByOrderId(orderId)
+                .stream().map(BatchFile::getFileType).collect(java.util.stream.Collectors.toSet());
+        return com.shal.common.service.OrderCompleteness.missingLabels(present);
     }
 
     /**

@@ -425,10 +425,11 @@ public class QCProcessingService {
         // optional. This backs the same rule enforced at the order-QC endpoint and in Python.
         List<String> incompleteNotes = new ArrayList<>();
         pairs = pairs.stream().filter(p -> {
-            List<String> missing = new ArrayList<>();
-            if (p.getAppraisal() == null) missing.add("appraisal PDF");
-            if (!p.hasAppraisalXml()) missing.add("appraisal XML");
-            if (!p.hasEngagement()) missing.add("engagement letter");
+            java.util.Set<com.shal.common.entity.FileType> present = new java.util.HashSet<>();
+            if (p.getAppraisal() != null) present.add(com.shal.common.entity.FileType.APPRAISAL);
+            if (p.hasAppraisalXml()) present.add(com.shal.common.entity.FileType.APPRAISAL_XML);
+            if (p.hasEngagement()) present.add(com.shal.common.entity.FileType.ENGAGEMENT);
+            List<String> missing = com.shal.common.service.OrderCompleteness.missingLabels(present);
             if (missing.isEmpty()) return true;
             String name = p.getAppraisal() != null ? p.getAppraisal().getFilename() : "unknown appraisal";
             incompleteNotes.add("\"" + name + "\" was not QC'd — missing " + String.join(", ", missing) + ".");

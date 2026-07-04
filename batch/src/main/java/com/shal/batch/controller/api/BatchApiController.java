@@ -204,6 +204,17 @@ public class BatchApiController {
             }).toList();
             m.put("propertySets", propertySets);
             m.put("setCount", (long) setMap.entrySet().stream().filter(e -> !"__root__".equals(e.getKey())).count());
+
+            // Order-status rollup — the honest per-order breakdown for this batch. The single
+            // batch status reflects only intake/processing; QC, review and completion are
+            // per-order, so the batch page shows this rollup rather than one lossy aggregate.
+            java.util.LinkedHashMap<String, Long> orderStatusRollup = new java.util.LinkedHashMap<>();
+            for (Map<String, Object> ps : propertySets) {
+                Object ds = ps.get("documentStatus");
+                if (ds != null) orderStatusRollup.merge(ds.toString(), 1L, Long::sum);
+            }
+            m.put("orderStatusRollup", orderStatusRollup);
+            m.put("orderCount", orderStatusRollup.values().stream().mapToLong(Long::longValue).sum());
             // Surface unassigned files at the batch level so the admin UI can show
             // the "Assign" panel without having to dig into each property set.
             long needsAssignmentTotal = fileDtos.stream()
