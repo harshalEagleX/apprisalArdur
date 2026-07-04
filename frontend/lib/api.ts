@@ -460,6 +460,39 @@ export const assignOrderReviewer = (orderId: number, reviewerId: number | null) 
     method: "POST", body: JSON.stringify({ reviewerId }), headers: { "Content-Type": "application/json" },
   });
 
+export interface ServerNotification {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  read: boolean;
+  createdAt: string | null;
+}
+
+/** The current user's persisted in-app notifications, newest first, with unread count. */
+export const getNotifications = (limit = 30) =>
+  apiFetch<{ items: ServerNotification[]; unreadCount: number }>(`/api/notifications?limit=${limit}`);
+
+export const markNotificationRead = (id: number) =>
+  apiFetch(`/api/notifications/${id}/read`, { method: "POST" });
+
+export const markAllNotificationsRead = () =>
+  apiFetch<{ markedRead: number }>(`/api/notifications/read-all`, { method: "POST" });
+
+/** Current order load per reviewer + the average — powers the manual-assign fairness hint. */
+export const getReviewerLoad = () =>
+  apiFetch<{ loads: { reviewerId: number; count: number }[]; average: number; total: number }>(
+    `/api/admin/orders/reviewer-load`
+  );
+
+/** Permanently delete an order and all of its documents (hard delete — not recoverable). */
+export const deleteOrder = (orderId: number) =>
+  apiFetch<{ success: boolean; deletedFiles: number; message: string }>(
+    `/api/admin/orders/${orderId}`,
+    { method: "DELETE" }
+  );
+
 /** Bulk-allocate several selected orders to one reviewer (or clear when null). */
 export const bulkAssignOrderReviewer = (orderIds: number[], reviewerId: number | null) =>
   apiFetch<{ assignedCount: number; assignedOrderIds: number[]; skippedOrderIds: number[] }>(
@@ -479,6 +512,20 @@ export const autoAssignOrders = (orderIds?: number[]) =>
 /** Thrown when the assign target fails content cross-validation — the document's
  * own text points to a different order. Caught by the UI to offer an override. */
 export class AddressMismatchError extends Error {}
+
+/**
+ * Thrown by {@link uploadBatch} when the backend rejects a ZIP (422) because its
+ * folder/file structure is invalid. Carries the list of user-fixable issues so the
+ * upload dialog can show exactly what to correct. The batch is never queued.
+ */
+export class BatchStructureError extends Error {
+  issues: string[];
+  constructor(issues: string[], message?: string) {
+    super(message ?? "The ZIP can't be accepted until its structure is fixed.");
+    this.name = "BatchStructureError";
+    this.issues = issues;
+  }
+}
 
 /**
  * Link a NEEDS_ASSIGNMENT file to an appraisal. By default the backend cross-checks
@@ -654,6 +701,17 @@ export async function uploadBatch(
         status: res.status,
         elapsed_ms: elapsedMs(started),
       });
+      // 422 = structural rejection carrying a fixable issue list.
+      if (res.status === 422) {
+        const body = (await res.json().catch(() => null)) as { error?: string; issues?: unknown } | null;
+        const issues = Array.isArray(body?.issues)
+          ? body!.issues.filter((i): i is string => typeof i === "string")
+          : [];
+        if (issues.length) {
+          throw new BatchStructureError(issues, typeof body?.error === "string" ? body.error : undefined);
+        }
+        throw new Error(typeof body?.error === "string" ? body.error : `Upload failed (${res.status})`);
+      }
       throw new Error(await readErrorMessage(res, `Upload failed (${res.status})`));
     }
     const parsed = await res.json();

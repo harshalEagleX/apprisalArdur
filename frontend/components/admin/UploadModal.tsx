@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { AlertCircle, CheckCircle2, X, Upload } from "lucide-react";
-import { getClients, uploadBatch, type Client } from "@/lib/api";
+import { AlertCircle, CheckCircle2, X, Upload, ChevronRight } from "lucide-react";
+import { getClients, uploadBatch, BatchStructureError, type Client } from "@/lib/api";
 import Spinner from "@/components/shared/Spinner";
 import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 
@@ -19,6 +19,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress]   = useState(0);
   const [error, setError]         = useState("");
+  const [structureIssues, setStructureIssues] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<{ client?: string; file?: string }>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -31,7 +32,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
     adminBatchTimeline("frontend_upload_modal_open", {});
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const timer = window.setTimeout(() => {
-      setFile(null); setClientId(""); setError(""); setFieldErrors({}); setProgress(0);
+      setFile(null); setClientId(""); setError(""); setStructureIssues([]); setFieldErrors({}); setProgress(0);
       getClients().then(nextClients => {
         setClients(nextClients);
         adminBatchTimeline("frontend_upload_modal_clients_loaded", {
@@ -77,6 +78,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
     if (!nextErrors.file) {
       setFile(f);
       setError("");
+      setStructureIssues([]);
       adminBatchTimeline("frontend_upload_file_selected", {
         filename: f.name,
         file_size_bytes: f.size,
@@ -107,7 +109,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
     }
     const selectedFile = file;
     if (!selectedFile) return;
-    setError(""); setUploading(true); setProgress(0);
+    setError(""); setStructureIssues([]); setUploading(true); setProgress(0);
     submitStartedRef.current = performance.now();
     adminBatchTimeline("frontend_upload_submit_start", {
       filename: selectedFile.name,
@@ -137,7 +139,12 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
         elapsed_ms: submitStartedRef.current ? elapsedMs(submitStartedRef.current) : undefined,
         error: err instanceof Error ? err.message : String(err),
       });
-      setError(err instanceof Error ? err.message : "Upload failed");
+      if (err instanceof BatchStructureError) {
+        setStructureIssues(err.issues);
+        setError("This ZIP can't be accepted yet — fix the items below and upload again.");
+      } else {
+        setError(err instanceof Error ? err.message : "Upload failed");
+      }
     } finally {
       setUploading(false);
       submitStartedRef.current = null;
@@ -194,7 +201,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h2 id="upload-dialog-title" className="text-sm font-semibold text-white">Upload batch</h2>
-            <p id="upload-dialog-description" className="text-[11px] text-slate-500 mt-0.5">ZIP must contain appraisal and engagement folders. Contracts are optional. PDF files only — each capped at 50&nbsp;MB.</p>
+            <p id="upload-dialog-description" className="text-[11px] text-slate-500 mt-0.5">One order per folder, files grouped by type. See the structure guide below. ZIP up to 256&nbsp;MB · each file up to 50&nbsp;MB.</p>
           </div>
           {!uploading && (
             <button onClick={onClose} className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300" aria-label="Close upload dialog">
@@ -210,6 +217,49 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
               <span>{error}</span>
             </div>
           )}
+
+          {structureIssues.length > 0 && (
+            <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-red-200">
+                <AlertCircle size={13} className="shrink-0" />
+                <span>{structureIssues.length} issue{structureIssues.length > 1 ? "s" : ""} to fix before this ZIP is accepted</span>
+              </div>
+              <ul className="space-y-1.5">
+                {structureIssues.map((issue, i) => (
+                  <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-red-200/90">
+                    <span className="mt-0.5 shrink-0 text-red-400">•</span>
+                    <span>{issue}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2.5 border-t border-red-500/15 pt-2 text-[10px] text-red-300/70">
+                Fix these in your folders, re-zip, and upload again. Nothing was queued.
+              </p>
+            </div>
+          )}
+
+          {/* Folder-structure guide — collapsed by default, subtle */}
+          <details className="group rounded-lg border border-white/[0.06] bg-[#0B0F14]/40">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-[11px] text-slate-500 transition-colors hover:text-slate-300 [&::-webkit-details-marker]:hidden">
+              <ChevronRight size={12} className="shrink-0 transition-transform group-open:rotate-90" />
+              <span>How to organise your ZIP</span>
+            </summary>
+
+            <div className="space-y-2.5 px-3 pb-3 pt-0.5">
+              <pre className="overflow-x-auto rounded-md bg-[#11161C] p-2.5 text-[10.5px] leading-relaxed text-slate-400">{`Batch.zip
+└─ MAGU96793/          one folder per order (named by order id)
+   ├─ appraisal/    MAGU96793.pdf + MAGU96793.xml
+   ├─ contract/     (optional)
+   └─ engagement/   (optional)`}</pre>
+              <ul className="space-y-1 text-[11px] leading-relaxed text-slate-500">
+                <li>XML goes <span className="text-slate-300">inside appraisal/</span>, next to its PDF, with the <span className="text-slate-300">same name</span>.</li>
+                <li>A single order can skip the outer folder — just zip <code>appraisal/ contract/ engagement/</code>.</li>
+              </ul>
+              <p className="text-[10.5px] leading-relaxed text-slate-600">
+                Missing contract/engagement is fine. An XML whose name doesn&rsquo;t match its PDF is held for manual assignment.
+              </p>
+            </div>
+          </details>
 
           {/* Client selector */}
           <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
@@ -230,7 +280,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
           <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
             <div className="mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Archive</h3>
-              <p className="mt-0.5 text-[11px] text-slate-600">Maximum 50 MB. The backend validates the folder structure after upload.</p>
+              <p className="mt-0.5 text-[11px] text-slate-600">ZIP up to 256 MB (each file inside up to 50 MB). The backend validates the folder structure after upload.</p>
             </div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">ZIP archive <span className="text-red-400">*</span></label>
             <div
@@ -262,7 +312,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
                 <div className="flex flex-col items-center gap-1.5">
                   <Upload size={20} className="text-slate-500" />
                   <span className="text-sm text-slate-400">Drop ZIP here or click to browse</span>
-                  <span className="text-xs text-slate-600">Maximum 50 MB</span>
+                  <span className="text-xs text-slate-600">ZIP up to 256 MB</span>
                 </div>
               )}
             </div>

@@ -54,6 +54,8 @@ public class OrderApiController {
     private final OrderResolutionService orderResolutionService;
     private final com.shal.common.repository.UserRepository userRepository;
     private final com.shal.common.service.BusinessEventService businessEventService;
+    private final com.shal.common.service.OrderDeletionService orderDeletionService;
+    private final com.shal.common.service.NotificationService notificationService;
 
     public OrderApiController(AppraisalTransactionRepository orderRepository,
                               BatchFileRepository batchFileRepository,
@@ -61,7 +63,9 @@ public class OrderApiController {
                               QCResultRepository qcResultRepository,
                               OrderResolutionService orderResolutionService,
                               com.shal.common.repository.UserRepository userRepository,
-                              com.shal.common.service.BusinessEventService businessEventService) {
+                              com.shal.common.service.BusinessEventService businessEventService,
+                              com.shal.common.service.OrderDeletionService orderDeletionService,
+                              com.shal.common.service.NotificationService notificationService) {
         this.orderRepository = orderRepository;
         this.batchFileRepository = batchFileRepository;
         this.batchRepository = batchRepository;
@@ -69,6 +73,8 @@ public class OrderApiController {
         this.orderResolutionService = orderResolutionService;
         this.userRepository = userRepository;
         this.businessEventService = businessEventService;
+        this.orderDeletionService = orderDeletionService;
+        this.notificationService = notificationService;
     }
 
     @GetMapping
@@ -121,6 +127,34 @@ public class OrderApiController {
         }
 
         return ResponseEntity.ok(toDetail(order));
+    }
+
+    /**
+     * Permanently delete an order and all of its documents (hard delete — not
+     * recoverable). Removes the order's batch_file rows, their QC results and
+     * matches, the order row, and the files on disk. Admins only.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteOrder(@PathVariable @NonNull Long id,
+                                         @AuthenticationPrincipal UserPrincipal principal) {
+        Optional<AppraisalTransaction> orderOpt = orderRepository.findWithClientById(id);
+        if (orderOpt.isEmpty()) return ResponseEntity.notFound().build();
+        AppraisalTransaction order = orderOpt.get();
+
+        Client adminClient = principal.getUser().getClient();
+        if (adminClient != null && (order.getClient() == null || !adminClient.getId().equals(order.getClient().getId()))) {
+            return ResponseEntity.status(403).body(Map.of("error", "ACCESS_DENIED",
+                    "message", "You do not have access to this order."));
+        }
+
+        String ref = order.getTransactionRef();
+        int removed = orderDeletionService.hardDeleteOrder(id);
+        log.info("Order {} (id={}) hard-deleted by {} — {} document(s) removed",
+                ref, id, principal.getUser().getUsername(), removed);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "deletedFiles", removed,
+                "message", "Order " + ref + " and its documents were permanently deleted."));
     }
 
     /**
@@ -210,6 +244,14 @@ public class OrderApiController {
     private ResponseEntity<?> applyAssignment(AppraisalTransaction order, Long reviewerId, User actor) {
         User reviewer = null;
         if (reviewerId != null) {
+            // Gate: an order can't be assigned to a reviewer until its QC is done. (Clearing
+            // an assignment — reviewerId null — is always allowed.)
+            if (!isQcComplete(order)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "QC_NOT_DONE",
+                        "message", "Order " + order.getTransactionRef()
+                                + " can't be assigned yet — QC has not completed for it."));
+            }
             Optional<User> reviewerOpt = userRepository.findById(reviewerId);
             if (reviewerOpt.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Reviewer not found: " + reviewerId));
@@ -223,6 +265,11 @@ public class OrderApiController {
         order.setAssignedReviewer(reviewer);
         order.setReviewerAssignedAt(reviewer != null ? com.shal.common.util.AppTime.now() : null);
         orderRepository.save(order);
+
+        // Notify the reviewer they received an order (best-effort; never blocks the assign).
+        if (reviewer != null) {
+            notificationService.notifyOrderAssigned(reviewer, order, actor);
+        }
 
         businessEventService.record(
                 reviewer != null ? "ORDER_REVIEWER_ASSIGNED" : "ORDER_REVIEWER_UNASSIGNED",
@@ -260,8 +307,11 @@ public class OrderApiController {
                     "error", "No active reviewers are available to auto-assign to."));
         }
 
-        // Candidate pool: unassigned orders in scope, optionally narrowed to a selection.
-        List<AppraisalTransaction> pool = orderRepository.findUnassigned(clientId);
+        // Candidate pool: unassigned orders in scope whose QC is done (an order can't be
+        // assigned until QC completes), optionally narrowed to a selection.
+        List<AppraisalTransaction> pool = orderRepository.findUnassigned(clientId).stream()
+                .filter(this::isQcComplete)
+                .toList();
         Object raw = body != null ? body.get("orderIds") : null;
         if (raw instanceof List<?> list && !list.isEmpty()) {
             java.util.Set<Long> wanted = new java.util.HashSet<>();
@@ -289,9 +339,11 @@ public class OrderApiController {
                     .min(Map.Entry.comparingByValue())
                     .map(Map.Entry::getKey)
                     .orElse(reviewers.get(0).getId());
-            order.setAssignedReviewer(reviewerById.get(targetId));
+            User target = reviewerById.get(targetId);
+            order.setAssignedReviewer(target);
             order.setReviewerAssignedAt(com.shal.common.util.AppTime.now());
             orderRepository.save(order);
+            notificationService.notifyOrderAssigned(target, order, principal.getUser());
             load.merge(targetId, 1L, Long::sum);
             perReviewer.merge(targetId, 1, Integer::sum);
             assigned++;
@@ -307,6 +359,46 @@ public class OrderApiController {
                 "message", "Auto-assigned " + assigned + " order(s) across " + reviewers.size() + " reviewer(s).",
                 "assignedCount", assigned,
                 "distribution", perReviewer));
+    }
+
+    /**
+     * Current order load per active reviewer (client-scoped), plus the average — powers
+     * the manual-assign fairness hint (the dropdown shows each reviewer's count and warns
+     * when the admin picks one already above the average).
+     */
+    @GetMapping("/reviewer-load")
+    public ResponseEntity<?> reviewerLoad(@AuthenticationPrincipal UserPrincipal principal) {
+        Client adminClient = principal.getUser().getClient();
+        Long clientId = adminClient != null ? adminClient.getId() : null;
+        List<User> reviewers = userRepository.findByRole(com.shal.common.entity.Role.REVIEWER).stream()
+                .filter(u -> Boolean.TRUE.equals(u.getActive()) || u.getActive() == null)
+                .filter(u -> clientId == null
+                        || (u.getClient() != null && clientId.equals(u.getClient().getId())))
+                .toList();
+
+        List<Map<String, Object>> loads = new ArrayList<>();
+        long total = 0;
+        for (User r : reviewers) {
+            long count = orderRepository.countByAssignedReviewer_Id(r.getId());
+            total += count;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("reviewerId", r.getId());
+            m.put("count", count);
+            loads.add(m);
+        }
+        double average = reviewers.isEmpty() ? 0.0 : (double) total / reviewers.size();
+        return ResponseEntity.ok(Map.of("loads", loads, "average", average, "total", total));
+    }
+
+    /**
+     * True when the order's QC has completed — its computed document status is past the
+     * QC stage (NEEDS_REVIEW = QC finished with items to review, or COMPLETED). Reviewer
+     * assignment is gated on this: an order can't be assigned until its QC is done.
+     * INCOMPLETE / UNMATCHED / READY_FOR_QC / QC_PROCESSING / ERROR are all not-yet-done.
+     */
+    private boolean isQcComplete(AppraisalTransaction order) {
+        OrderDocumentStatus s = order.getDocumentStatus();
+        return s == OrderDocumentStatus.NEEDS_REVIEW || s == OrderDocumentStatus.COMPLETED;
     }
 
     /** Client-scoped admins may only act on their own client's orders. */

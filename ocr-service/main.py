@@ -282,6 +282,29 @@ def _save_upload(upload: Optional[UploadFile]) -> Optional[Path]:
     return Path(tmp)
 
 
+def _incomplete_order_block(appraisal, xml, engagement) -> Optional[JSONResponse]:
+    """Hard completeness gate — QC is NEVER run for an order missing any required
+    document. Required: appraisal PDF, appraisal XML, engagement letter (contract is
+    optional). Returns a 422 JSONResponse to inform the caller when any is missing,
+    else None. Mirrors the Java gate so QC can't run incomplete from any entry point."""
+    missing = []
+    if not appraisal:
+        missing.append("Appraisal PDF")
+    if not xml:
+        missing.append("Appraisal XML")
+    if not engagement:
+        missing.append("Engagement letter")
+    if not missing:
+        return None
+    return JSONResponse(status_code=422, content={
+        "status": "INCOMPLETE_ORDER",
+        "error": "INCOMPLETE_ORDER",
+        "message": "QC was not run — this order is missing: " + ", ".join(missing)
+                   + ". Appraisal PDF, Appraisal XML, and Engagement letter are all required.",
+        "missing": missing,
+    })
+
+
 @app.post("/qc/process")
 async def qc_process(
     file: UploadFile = File(...),                       # appraisal report (required)
@@ -314,6 +337,16 @@ async def qc_process(
     engagement = _save_upload(engagement_letter)
     contract = _save_upload(contract_file)
     xml = _save_upload(xml_file)
+
+    # Hard completeness gate — refuse QC on an incomplete order (defense-in-depth; Java
+    # already gates, but Python never runs QC without appraisal PDF + XML + engagement).
+    _blocked = _incomplete_order_block(appraisal, xml, engagement)
+    if _blocked is not None:
+        logging.getLogger(__name__).warning(
+            "QC blocked — incomplete order: file=%s batch_id=%s order_ref=%s",
+            file.filename, batch_id, order_ref)
+        return _blocked
+
     token = progress_token or str(_uuid.uuid4())
     started = _time.time()
     _QC_PROGRESS[token] = {"stage": "received", "message": "Document received",
@@ -475,6 +508,13 @@ async def qc_submit(
                     _os.remove(p)
                 except OSError:
                     pass
+
+    # Hard completeness gate — never enqueue QC for an incomplete order.
+    _blocked = _incomplete_order_block(appraisal, xml, engagement)
+    if _blocked is not None:
+        _cleanup()
+        log.warning("QC submit blocked — incomplete order: file=%s order_ref=%s", file.filename, order_ref)
+        return _blocked
 
     client = _submit_redis()
     idem_redis_key = f"qc:idem:{idempotency_key}" if (idempotency_key and client is not None) else None

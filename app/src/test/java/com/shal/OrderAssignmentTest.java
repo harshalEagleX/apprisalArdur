@@ -148,6 +148,45 @@ class OrderAssignmentTest {
     }
 
     @Test
+    void assignBeforeQcDone_isBlocked() {
+        Long orderId = orderIds.get(0);
+        // Move it to a pre-QC state — assignment must be refused until QC is done.
+        tx.executeWithoutResult(s -> {
+            AppraisalTransaction o = orderRepository.findById(orderId).orElseThrow();
+            o.setDocumentStatus(OrderDocumentStatus.READY_FOR_QC);
+            orderRepository.save(o);
+        });
+
+        ResponseEntity<?> resp = tx.execute(s ->
+                orderApiController.assignReviewer(orderId, Map.of("reviewerId", reviewerIds.get(0)), admin()));
+
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        Long assigned = tx.execute(s -> {
+            AppraisalTransaction o = orderRepository.findById(orderId).orElseThrow();
+            return o.getAssignedReviewer() != null ? o.getAssignedReviewer().getId() : null;
+        });
+        assertThat(assigned).as("pre-QC order must not get a reviewer").isNull();
+    }
+
+    @Test
+    void autoAssign_skipsOrdersWithoutCompletedQc() {
+        Long preQc = orderIds.get(0);
+        tx.executeWithoutResult(s -> {
+            AppraisalTransaction o = orderRepository.findById(preQc).orElseThrow();
+            o.setDocumentStatus(OrderDocumentStatus.INCOMPLETE);
+            orderRepository.save(o);
+        });
+
+        tx.executeWithoutResult(s -> orderApiController.autoAssign(Map.of(), admin()));
+
+        Long assigned = tx.execute(s -> {
+            AppraisalTransaction o = orderRepository.findById(preQc).orElseThrow();
+            return o.getAssignedReviewer() != null ? o.getAssignedReviewer().getId() : null;
+        });
+        assertThat(assigned).as("pre-QC order must not be auto-assigned").isNull();
+    }
+
+    @Test
     void reviewerQueue_returnsOnlyOwnOrders() {
         Long reviewerId = reviewerIds.get(2);
         tx.executeWithoutResult(s -> orderApiController.assignReviewerBulk(

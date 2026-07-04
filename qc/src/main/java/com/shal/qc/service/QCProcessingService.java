@@ -418,6 +418,34 @@ public class QCProcessingService {
                     .filter(p -> p.getAppraisal() == null || !heldOutIds.contains(p.getAppraisal().getId()))
                     .toList();
         }
+
+        // Hard completeness gate: an order is NEVER QC'd unless it has all three required
+        // documents — appraisal PDF, appraisal XML, and engagement letter. Incomplete pairs
+        // are skipped (never processed) and reported to the admin batch detail. Contract is
+        // optional. This backs the same rule enforced at the order-QC endpoint and in Python.
+        List<String> incompleteNotes = new ArrayList<>();
+        pairs = pairs.stream().filter(p -> {
+            List<String> missing = new ArrayList<>();
+            if (p.getAppraisal() == null) missing.add("appraisal PDF");
+            if (!p.hasAppraisalXml()) missing.add("appraisal XML");
+            if (!p.hasEngagement()) missing.add("engagement letter");
+            if (missing.isEmpty()) return true;
+            String name = p.getAppraisal() != null ? p.getAppraisal().getFilename() : "unknown appraisal";
+            incompleteNotes.add("\"" + name + "\" was not QC'd — missing " + String.join(", ", missing) + ".");
+            return false;
+        }).toList();
+        if (!incompleteNotes.isEmpty()) {
+            String note = "Skipped " + incompleteNotes.size() + " order(s) missing required documents "
+                    + "(Appraisal PDF, Appraisal XML, and Engagement letter are all required):\n"
+                    + String.join("\n", incompleteNotes);
+            try {
+                self.appendIntakeWarning(batchId, note);
+            } catch (Exception ex) {
+                log.warn("Could not persist completeness warning for batch {}: {}", batchId, ex.getMessage());
+            }
+            log.info("Batch {} — {} pair(s) skipped for missing required documents", batchId, incompleteNotes.size());
+        }
+
         if (partial) {
             pairs = pairs.stream()
                     .filter(p -> p.getAppraisal() != null && onlyFileIds.contains(p.getAppraisal().getId()))

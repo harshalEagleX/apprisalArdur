@@ -1,13 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, ChevronRight, ClipboardList, FileText, Package,
-  RefreshCw, History, Play, UserPlus,
+  RefreshCw, History, Play, UserPlus, Trash2, Check, Minus, AlertTriangle,
 } from "lucide-react";
 import {
-  getOrderById, getAllUsers, processOrderQC, assignOrderReviewer,
+  getOrderById, getAllUsers, processOrderQC, assignOrderReviewer, deleteOrder, getReviewerLoad,
   type OrderDetail, type User,
 } from "@/lib/api";
 import { Skeleton, TableSkeleton } from "@/components/shared/Skeleton";
@@ -31,6 +31,20 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [reviewers, setReviewers] = useState<User[]>([]);
   const [actionRunning, setActionRunning] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [reviewerLoad, setReviewerLoad] = useState<Record<number, number>>({});
+  const [loadAverage, setLoadAverage] = useState(0);
+  const router = useRouter();
+
+  const refreshLoad = useCallback(() => {
+    getReviewerLoad().then(r => {
+      const map: Record<number, number> = {};
+      r.loads.forEach(l => { map[l.reviewerId] = l.count; });
+      setReviewerLoad(map);
+      setLoadAverage(r.average);
+    }).catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,7 +61,8 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     getAllUsers().then(list => setReviewers(list.filter(u => u.role === "REVIEWER"))).catch(() => undefined);
-  }, []);
+    refreshLoad();
+  }, [refreshLoad]);
 
   async function handleRunQC() {
     setActionRunning(true);
@@ -68,8 +83,21 @@ export default function OrderDetailPage() {
     setActionRunning(true);
     try {
       await assignOrderReviewer(id, reviewerId);
-      toast.success(reviewerId ? "Reviewer assigned." : "Reviewer cleared.");
+      if (reviewerId != null) {
+        const after = (reviewerLoad[reviewerId] ?? 0) + 1;
+        // Non-blocking fairness hint: warn when this reviewer is now clearly above the team average.
+        if (loadAverage > 0 && after > loadAverage + 1.5) {
+          const r = reviewers.find(x => x.id === reviewerId);
+          toast.info("Uneven load",
+            `${r?.fullName || r?.username || "This reviewer"} now has ${after} orders — above the team average of ${loadAverage.toFixed(1)}. Consider Auto-assign to rebalance.`);
+        } else {
+          toast.success("Reviewer assigned.");
+        }
+      } else {
+        toast.success("Reviewer cleared.");
+      }
       void load();
+      refreshLoad();
     } catch (e) {
       toast.error("Assignment failed", String(e));
     } finally {
@@ -77,8 +105,23 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await deleteOrder(id);
+      toast.success("Order deleted", `${res.deletedFiles} document(s) removed.`);
+      router.push("/admin/orders");
+    } catch (e) {
+      toast.error("Delete failed", String(e));
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
   const activeDocs = order?.documents.filter(d => d.active) ?? [];
   const historicalDocs = order?.documents.filter(d => !d.active) ?? [];
+  // An order can only be assigned to a reviewer once its QC is done.
+  const qcDone = order?.documentStatus === "NEEDS_REVIEW" || order?.documentStatus === "COMPLETED";
 
   return (
     <div className="w-full max-w-[1400px] p-6 lg:p-8">
@@ -114,21 +157,33 @@ export default function OrderDetailPage() {
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs text-indigo-200 transition-colors hover:bg-indigo-500/20 disabled:opacity-40">
             <Play size={12} /> Run QC
           </button>
-          <div className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-[#11161C] px-2">
+          <div className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-[#11161C] px-2"
+               title={qcDone ? undefined : "This order can be assigned to a reviewer only after its QC is done."}>
             <UserPlus size={12} className="text-slate-500" />
             <select
               value={order?.assignedReviewer?.id ?? ""}
               onChange={e => handleAssign(e.target.value)}
-              disabled={actionRunning}
+              disabled={actionRunning || !qcDone}
               aria-label="Assign reviewer"
               className="h-8 bg-transparent pr-1 text-xs text-slate-300 focus:outline-none disabled:opacity-40"
             >
               <option value="">Unassigned</option>
-              {reviewers.map(r => <option key={r.id} value={r.id}>{r.fullName || r.username}</option>)}
+              {reviewers.map(r => {
+                const c = reviewerLoad[r.id];
+                return (
+                  <option key={r.id} value={r.id}>
+                    {(r.fullName || r.username)}{c !== undefined ? ` · ${c} order${c === 1 ? "" : "s"}` : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <button onClick={() => load()} className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs text-slate-400 transition-colors hover:text-white">
             <RefreshCw size={12} /> Refresh
+          </button>
+          <button onClick={() => setConfirmDelete(true)} disabled={actionRunning || loading}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 text-xs text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-40">
+            <Trash2 size={12} /> Delete
           </button>
         </div>
       </header>
@@ -147,6 +202,37 @@ export default function OrderDetailPage() {
               {order.activeQcResult.passedCount} pass · {order.activeQcResult.failedCount} fail · {order.activeQcResult.verifyCount} review ·
               {" "}{order.activeQcResult.totalRules} rules
             </span>
+          </div>
+        </div>
+      )}
+
+      {!loading && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <ClipboardList size={13} /> Order documents
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {([
+              ["APPRAISAL", "Appraisal", true],
+              ["APPRAISAL_XML", "Appraisal XML", true],
+              ["ENGAGEMENT", "Engagement", true],
+              ["CONTRACT", "Contract", false],
+            ] as const).map(([type, label, required]) => {
+              const doc = activeDocs.find(d => d.fileType === type);
+              return (
+                <div key={type} className={`rounded-lg border p-3 ${doc ? "border-green-500/20 bg-green-950/10" : required ? "border-amber-500/20 bg-amber-950/10" : "border-white/[0.06] bg-[#0B0F14]/40"}`}>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    {doc ? <Check size={12} className="text-green-400" /> : <Minus size={12} className={required ? "text-amber-400" : "text-slate-600"} />}
+                    <span>{label}{!required ? " · optional" : ""}</span>
+                  </div>
+                  <div className="mt-1 truncate text-[12px] text-slate-300" title={doc?.filename}>
+                    {doc ? doc.filename
+                      : required ? <span className="text-amber-300/80">Missing — assign from batch</span>
+                      : <span className="text-slate-600">Not provided</span>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -242,6 +328,33 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={deleting ? undefined : () => setConfirmDelete(false)} />
+          <div className="relative w-full max-w-md rounded-lg border border-red-500/25 bg-[#11161C] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-200">
+              <AlertTriangle size={16} className="text-red-400" /> Delete this order permanently?
+            </div>
+            <p className="text-[12px] leading-relaxed text-slate-400">
+              <span className="font-mono text-slate-200">{order?.transactionRef}</span> and its{" "}
+              <strong className="text-slate-200">{activeDocs.length + historicalDocs.length} document(s)</strong>{" "}
+              (appraisal, XML, engagement, contract) will be permanently removed from the database and disk.
+              This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+                className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40">
+                Cancel
+              </button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 bg-red-600/80 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50">
+                <Trash2 size={13} /> {deleting ? "Deleting…" : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -319,12 +319,23 @@ public class QCApiController {
         // Group each order's active appraisal file(s) under their owning batch.
         Map<Long, java.util.LinkedHashSet<Long>> filesByBatch = new LinkedHashMap<>();
         List<Long> ordersWithoutAppraisal = new java.util.ArrayList<>();
+        List<Map<String, Object>> incompleteOrders = new java.util.ArrayList<>();
         int resolvedOrders = 0;
         for (Long orderId : orderIds) {
             List<BatchFile> appraisals = batchFileRepository.findActiveByOrderIdAndFileType(
                     orderId, com.shal.common.entity.FileType.APPRAISAL);
             if (appraisals.isEmpty()) {
                 ordersWithoutAppraisal.add(orderId);
+                continue;
+            }
+            // Hard completeness gate — an order is NEVER QC'd unless it has all three
+            // required documents: appraisal PDF, appraisal XML, and engagement letter.
+            List<String> missing = missingRequiredDocs(orderId);
+            if (!missing.isEmpty()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("orderId", orderId);
+                m.put("missing", missing);
+                incompleteOrders.add(m);
                 continue;
             }
             resolvedOrders++;
@@ -336,10 +347,15 @@ public class QCApiController {
         }
 
         if (filesByBatch.isEmpty()) {
+            String message = !incompleteOrders.isEmpty()
+                    ? "QC was not started — the selected order(s) are missing required documents. "
+                            + "Appraisal PDF, Appraisal XML, and Engagement letter are ALL required before QC can run."
+                    : "No runnable appraisal document was found for the selected order(s). "
+                            + "An order needs an active appraisal file before QC can run.";
             return ResponseEntity.badRequest().body(Map.of(
-                "message", "No runnable appraisal document was found for the selected order(s). "
-                        + "An order needs an active appraisal file before QC can run.",
-                "ordersWithoutAppraisal", ordersWithoutAppraisal));
+                "message", message,
+                "ordersWithoutAppraisal", ordersWithoutAppraisal,
+                "incompleteOrders", incompleteOrders));
         }
 
         // Reject up-front if Python is down — do not claim any batch.
@@ -381,9 +397,32 @@ public class QCApiController {
         resp.put("startedBatchIds", startedBatches);
         resp.put("alreadyRunningBatchIds", alreadyRunningBatches);
         resp.put("ordersWithoutAppraisal", ordersWithoutAppraisal);
+        resp.put("incompleteOrders", incompleteOrders);
         return startedBatches.isEmpty()
                 ? ResponseEntity.ok(resp)
                 : ResponseEntity.accepted().body(resp);
+    }
+
+    /**
+     * Required documents for QC. An order is NEVER QC'd unless it has an active
+     * appraisal PDF, appraisal XML, and engagement letter. Returns the labels of
+     * whichever are missing (empty list = complete). Contract is optional.
+     */
+    private List<String> missingRequiredDocs(Long orderId) {
+        List<String> missing = new java.util.ArrayList<>();
+        if (batchFileRepository.findActiveByOrderIdAndFileType(
+                orderId, com.shal.common.entity.FileType.APPRAISAL).isEmpty()) {
+            missing.add("Appraisal PDF");
+        }
+        if (batchFileRepository.findActiveByOrderIdAndFileType(
+                orderId, com.shal.common.entity.FileType.APPRAISAL_XML).isEmpty()) {
+            missing.add("Appraisal XML");
+        }
+        if (batchFileRepository.findActiveByOrderIdAndFileType(
+                orderId, com.shal.common.entity.FileType.ENGAGEMENT).isEmpty()) {
+            missing.add("Engagement letter");
+        }
+        return missing;
     }
 
     /**

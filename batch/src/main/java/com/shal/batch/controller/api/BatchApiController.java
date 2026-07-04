@@ -334,6 +334,16 @@ public class BatchApiController {
                     "file_count", batch.getFileCount(),
                     "elapsed_ms", TimelineLog.elapsedMs(started)));
             return ResponseEntity.ok(response);
+        } catch (com.shal.common.exception.BatchStructureException e) {
+            log.info(TimelineLog.event("admin_batches", "java_upload_rejected_structure",
+                    "client_id", clientId,
+                    "zip_name", file.getOriginalFilename(),
+                    "issue_count", e.getIssues().size(),
+                    "elapsed_ms", TimelineLog.elapsedMs(started)));
+            // 422 with the fixable issue list — the ZIP is rejected, nothing is queued.
+            return ResponseEntity.unprocessableEntity().body(Map.of(
+                    "error", e.getMessage(),
+                    "issues", e.getIssues()));
         } catch (Exception e) {
             log.warn(TimelineLog.event("admin_batches", "java_upload_failed",
                     "client_id", clientId,

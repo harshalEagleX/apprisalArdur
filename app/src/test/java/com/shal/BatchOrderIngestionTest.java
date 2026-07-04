@@ -23,7 +23,10 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.shal.common.exception.BatchStructureException;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * End-to-end coverage for the redesigned ZIP intake → order-grouping → order-linking
@@ -40,12 +43,23 @@ class BatchOrderIngestionTest {
     @Autowired private BatchRepository batchRepository;
     @Autowired private BatchFileRepository batchFileRepository;
     @Autowired private AppraisalTransactionRepository orderRepository;
+    @Autowired private com.shal.common.service.OrderDeletionService orderDeletionService;
+    @Autowired private com.shal.qc.controller.api.QCApiController qcApiController;
     @Autowired private TransactionTemplate tx;
 
     private long clientId;
     private long userId;
     private String tag;
     private final List<Long> batchIdsToCleanup = new ArrayList<>();
+
+    @BeforeEach
+    void authAdmin() {
+        // QCApiController is @PreAuthorize("hasRole('ADMIN')") — the AOP proxy needs an auth.
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "admin", "x",
+                        List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+    }
 
     @BeforeEach
     void seed() {
@@ -62,6 +76,7 @@ class BatchOrderIngestionTest {
 
     @AfterEach
     void cleanup() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
         for (Long bid : batchIdsToCleanup) {
             try { batchService.deleteBatch(bid); } catch (Exception ignored) { }
         }
@@ -181,7 +196,107 @@ class BatchOrderIngestionTest {
                 .isFalse();
     }
 
+    // ── Structural gate — malformed uploads are rejected at intake ────────────────
+
+    // (6) A stray non-PDF/non-XML file rejects the whole ZIP with a fixable issue.
+    @Test
+    void unsupportedFileType_rejectsUpload() {
+        MockMultipartFile zip = makeZip(tag + "_bad_ext.zip", Map.of(
+                "MAGU96793/appraisal/MAGU96793.pdf", pdf(),
+                "MAGU96793/appraisal/MAGU96793.xml", mismoXml(),
+                "MAGU96793/appraisal/scanner-notes.docx", pdf()));
+
+        assertThatThrownBy(() -> createFromZipTx(zip))
+                .isInstanceOf(BatchStructureException.class)
+                .satisfies(e -> assertThat(((BatchStructureException) e).getIssues())
+                        .anySatisfy(i -> assertThat(i).contains("scanner-notes.docx")));
+    }
+
+    // (7) An XML whose basename doesn't match its appraisal PDF is rejected.
+    @Test
+    void xmlNameMismatch_rejectsUpload() {
+        MockMultipartFile zip = makeZip(tag + "_bad_xml.zip", Map.of(
+                "MAGU96793/appraisal/MAGU96793.pdf", pdf(),
+                "MAGU96793/appraisal/report.xml", mismoXml()));
+
+        assertThatThrownBy(() -> createFromZipTx(zip))
+                .isInstanceOf(BatchStructureException.class)
+                .satisfies(e -> assertThat(((BatchStructureException) e).getIssues())
+                        .anySatisfy(i -> assertThat(i).contains("report.xml")));
+    }
+
+    // (8) A ZIP with no appraisal PDF at all is rejected.
+    @Test
+    void noAppraisalPdf_rejectsUpload() {
+        MockMultipartFile zip = makeZip(tag + "_no_appraisal.zip", Map.of(
+                "MAGU96793/engagement/EngagementLetter.pdf", pdf(),
+                "MAGU96793/contract/purchase contract.pdf", pdf()));
+
+        assertThatThrownBy(() -> createFromZipTx(zip))
+                .isInstanceOf(BatchStructureException.class)
+                .satisfies(e -> assertThat(((BatchStructureException) e).getIssues())
+                        .anySatisfy(i -> assertThat(i).contains("No appraisal PDF")));
+    }
+
+    // (9) A well-formed order with a name-matched XML passes the gate cleanly.
+    @Test
+    void wellFormedOrderWithXml_isAccepted() {
+        MockMultipartFile zip = makeZip(tag + "_good.zip", Map.of(
+                "MAGU96793/appraisal/MAGU96793.pdf", pdf(),
+                "MAGU96793/appraisal/MAGU96793.xml", mismoXml(),
+                "MAGU96793/contract/purchase contract.pdf", pdf(),
+                "MAGU96793/engagement/EngagementLetter.pdf", pdf()));
+
+        Long batchId = upload(zip);
+        assertThat(docsOf(batchId)).hasSize(4);
+    }
+
+    // (10) Hard-deleting an order removes the order row and all of its documents.
+    @Test
+    void hardDeleteOrder_removesOrderAndItsDocuments() {
+        MockMultipartFile zip = makeZip(tag + "_del.zip", Map.of(
+                "MAGU96793/appraisal/MAGU96793.pdf", pdf(),
+                "MAGU96793/appraisal/MAGU96793.xml", mismoXml(),
+                "MAGU96793/engagement/EngagementLetter.pdf", pdf()));
+        Long batchId = upload(zip);
+        Long orderId = distinctOrders(docsOf(batchId)).get(0);
+        assertThat(orderId).isNotNull();
+
+        int removed = tx.execute(s -> orderDeletionService.hardDeleteOrder(orderId));
+
+        assertThat(removed).as("documents removed").isGreaterThanOrEqualTo(2);
+        boolean orderGone = Boolean.TRUE.equals(tx.execute(s -> orderRepository.findById(orderId).isEmpty()));
+        assertThat(orderGone).as("order row deleted").isTrue();
+        assertThat(docsOf(batchId)).as("no files remain linked to the deleted order")
+                .noneMatch(d -> orderId.equals(d.orderId));
+    }
+
+    // (11) QC is refused for an order missing required docs (here: no XML, no engagement).
+    @Test
+    void qcRefused_whenOrderMissingRequiredDocs() {
+        MockMultipartFile zip = makeZip(tag + "_incomplete.zip", Map.of(
+                "MAGU96793/appraisal/MAGU96793.pdf", pdf()));
+        Long batchId = upload(zip);
+        Long orderId = distinctOrders(docsOf(batchId)).get(0);
+        assertThat(orderId).isNotNull();
+
+        org.springframework.http.ResponseEntity<Map<String, Object>> resp =
+                tx.execute(s -> qcApiController.processOrder(orderId, null));
+
+        assertThat(resp.getStatusCode().value()).as("QC must be refused for an incomplete order").isEqualTo(400);
+        assertThat(String.valueOf(resp.getBody().get("incompleteOrders")))
+                .contains("Appraisal XML").contains("Engagement letter");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
+
+    private void createFromZipTx(MockMultipartFile zip) {
+        tx.executeWithoutResult(s -> {
+            Client c = clientRepository.findById(clientId).orElseThrow();
+            User u = userRepository.findById(userId).orElseThrow();
+            batchService.createFromZip(zip, c, u);
+        });
+    }
 
     private Long upload(MockMultipartFile zip) {
         return tx.execute(s -> {

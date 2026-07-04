@@ -480,6 +480,14 @@ public class BatchService {
             //    Assigns propertySetName on every staged doc.
             assignOrderGroups(staged);
 
+            // ── Structural gate — reject a malformed upload with a fixable issue list
+            //    BEFORE any BatchFile is persisted, so a bad ZIP never enters the system.
+            List<String> structureIssues = validateStructure(staged, excludedNonPdf);
+            if (!structureIssues.isEmpty()) {
+                cleanupStaging(stagingDir);
+                throw new com.shal.common.exception.BatchStructureException(structureIssues);
+            }
+
             // ── Phase 3 — move staged bytes into their final <set>/<type> location and
             //    build the BatchFile rows.
             for (StagedDoc d : staged) {
@@ -751,6 +759,53 @@ public class BatchService {
                 }
             }
         }
+    }
+
+    /**
+     * Structural gate for an uploaded ZIP. Returns the list of user-fixable problems;
+     * an empty list means the structure is acceptable. Any non-empty result rejects
+     * the upload (see {@link #extractAndValidateZip}). Hard rules:
+     *   1. every internal file must be a PDF or MISMO XML (system junk is already
+     *      skipped in {@link #scanZip}, so anything here is a genuine stray file);
+     *   2. the ZIP must contain at least one appraisal PDF;
+     *   3. every appraisal XML must share a basename with an appraisal PDF so it pairs.
+     * Missing engagement/contract is NOT an error — those checks are simply skipped
+     * downstream. This runs before Phase 3, so a rejected ZIP persists nothing.
+     */
+    private List<String> validateStructure(List<StagedDoc> staged, List<String> excludedNonPdf) {
+        List<String> issues = new ArrayList<>();
+
+        // Rule 1 — unsupported internal file types.
+        if (!excludedNonPdf.isEmpty()) {
+            issues.add("Unsupported file" + (excludedNonPdf.size() > 1 ? "s" : "")
+                    + " — only PDF and MISMO XML are accepted: " + String.join(", ", excludedNonPdf)
+                    + ". Remove them; if one is the appraisal XML, put it inside the order's appraisal/ folder.");
+        }
+
+        // Rule 2 — at least one appraisal PDF.
+        List<StagedDoc> appraisals = staged.stream()
+                .filter(d -> d.fileType == FileType.APPRAISAL).toList();
+        if (appraisals.isEmpty()) {
+            issues.add("No appraisal PDF found. Every order must include one appraisal report PDF.");
+        }
+
+        // Rule 3 — every appraisal XML must name-match an appraisal PDF.
+        for (StagedDoc xml : staged) {
+            if (xml.fileType != FileType.APPRAISAL_XML) continue;
+            boolean paired = appraisals.stream()
+                    .anyMatch(a -> FileMatchingService.filenameMatchScore(xml.filenameOnly, a.filenameOnly) > 0);
+            if (!paired) {
+                String example = appraisals.isEmpty()
+                        ? "MAGU96793.pdf → MAGU96793.xml"
+                        : baseName(appraisals.get(0).filenameOnly) + ".pdf → "
+                          + baseName(appraisals.get(0).filenameOnly) + ".xml";
+                issues.add("The XML \"" + xml.filenameOnly + "\" doesn't match any appraisal PDF. "
+                        + "Rename it to exactly match its appraisal PDF (" + example
+                        + ") and keep it in the appraisal/ folder.");
+            }
+        }
+
+        return issues;
     }
 
     /** Map key for an order group: its propertySetName, or "__root__" for the flat/unset group. */

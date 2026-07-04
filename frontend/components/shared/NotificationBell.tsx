@@ -6,14 +6,18 @@ import {
   CheckCheck, Layers,
 } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { getNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/api";
 import Link from "next/link";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Notification {
   id: string;
+  /** Present for DB-persisted notifications (e.g. order-assigned); absent for live WS-only events. */
+  serverId?: number;
   type: string;
   message: string;
+  link?: string;
   batchId?: number;
   parentBatchId?: string;
   status?: string;
@@ -31,6 +35,7 @@ function notifIcon(type: string, status?: string) {
     return <Layers size={16} className="text-indigo-400" />;
   }
   if (type === "RE_REVIEW_REQUESTED") return <AlertTriangle size={16} className="text-amber-400" />;
+  if (type === "ORDER_ASSIGNED") return <CheckCheck size={16} className="text-indigo-400" />;
   return <Info size={16} className="text-slate-400" />;
 }
 
@@ -51,6 +56,7 @@ function notifLabel(type: string, status?: string) {
     return "QC Complete";
   }
   if (type === "RE_REVIEW_REQUESTED") return "Re-review Request";
+  if (type === "ORDER_ASSIGNED") return "Order Assigned";
   return "Notification";
 }
 
@@ -370,6 +376,50 @@ export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
     useCallback((_t: string, p: unknown) => addNotif(p), [addNotif]),
   );
 
+  // Persisted notifications (e.g. order-assigned) — fetched on mount and polled.
+  // Live WS-only events (no serverId) are preserved and merged newest-first.
+  const refreshPersisted = useCallback(async () => {
+    try {
+      const res = await getNotifications(30);
+      const persisted: Notification[] = res.items.map(it => ({
+        id: `db-${it.id}`,
+        serverId: it.id,
+        type: it.type,
+        message: it.message || it.title,
+        link: it.link ?? undefined,
+        occurredAt: it.createdAt ?? new Date().toISOString(),
+        read: it.read,
+      }));
+      setNotifs(prev => {
+        const wsOnly = prev.filter(n => n.serverId === undefined);
+        return [...wsOnly, ...persisted]
+          .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+          .slice(0, MAX_NOTIFS);
+      });
+    } catch {
+      /* offline / not authenticated — leave existing state */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPersisted();
+    const t = setInterval(() => void refreshPersisted(), 30000);
+    return () => clearInterval(t);
+  }, [refreshPersisted]);
+
+  const handleRead = useCallback((id: string) => {
+    setNotifs(prev => {
+      const target = prev.find(n => n.id === id);
+      if (target?.serverId) void markNotificationRead(target.serverId).catch(() => undefined);
+      return prev.map(n => (n.id === id ? { ...n, read: true } : n));
+    });
+  }, []);
+
+  const handleMarkAllRead = useCallback(() => {
+    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+    void markAllNotificationsRead().catch(() => undefined);
+  }, []);
+
   return (
     <>
       {/* Bell button in sidebar */}
@@ -391,10 +441,10 @@ export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
         notifs={notifs}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        onMarkAllRead={() => setNotifs(p => p.map(n => ({ ...n, read: true })))}
+        onMarkAllRead={handleMarkAllRead}
         onClearAll={() => { setNotifs([]); setDrawerOpen(false); }}
         onDismiss={id => setNotifs(p => p.filter(n => n.id !== id))}
-        onRead={id => setNotifs(p => p.map(n => n.id === id ? { ...n, read: true } : n))}
+        onRead={handleRead}
       />
     </>
   );
