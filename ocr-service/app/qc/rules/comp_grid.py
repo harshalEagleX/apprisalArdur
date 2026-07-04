@@ -42,10 +42,22 @@ def _comp_indices(ctx: QCContext) -> List[int]:
 
 
 def _parse_num(val) -> Optional[float]:
-    """Parse numeric string to float, return None if fails."""
+    """Parse numeric string to float, return None if fails.
+
+    Preserves a leading negative sign. Grid adjustment columns (net adjustment,
+    financing/date-of-sale adjustment, condition adjustment) are signed — a comp
+    adjusted DOWN toward the subject carries a negative value. The previous
+    ``[\\d.]+`` pattern silently dropped the '-', so every adjustment read as
+    positive and CG-NET-BIAS reported a false "all comps positive" directional
+    bias (and CG-CONC-DIR mis-fired on correctly-negative concession adjustments).
+    Normalises the UAD/typographic minus glyphs (‑ – −) to ASCII '-' first.
+    """
     if val is None:
         return None
-    m = re.search(r"[\d.]+", str(val).replace(",", "").replace("$", ""))
+    s = (str(val).replace(",", "").replace("$", "")
+         .replace("‐", "-").replace("‑", "-").replace("‒", "-")
+         .replace("–", "-").replace("—", "-").replace("−", "-"))
+    m = re.search(r"-?\d[\d.]*", s)
     try:
         return float(m.group(0)) if m else None
     except (ValueError, AttributeError):
@@ -123,14 +135,22 @@ def cg_dist_threshold(ctx: QCContext):
     # Read from PolicyProfile (sourced from amc_policies.yaml engagement-letter body).
     # Equity Solutions USA says: urban > 0.5 mi → comment; suburban > 1 mi → comment.
     # These are COMMENTARY TRIGGERS not hard limits — CG-DIST raises VERIFY if exceeded.
-    if "urban" in location_type:
-        threshold = ctx.policy.distance_commentary_trigger_urban_miles or \
-                    float(qc_config.semantic("comp_distance_urban_miles", 1.0))
-        area_label = "Urban"
+    # Order matters: test "suburban" BEFORE "urban" — the substring "urban" is
+    # contained in "suburban", so a naive `"urban" in location_type` misclassifies
+    # every Suburban property as Urban and applies the tighter urban threshold
+    # (this false-flagged suburban comps at ~1.2 mi against a 1.0 mi urban trigger).
+    if "suburban" in location_type:
+        threshold = ctx.policy.distance_commentary_trigger_suburban_miles or \
+                    float(qc_config.semantic("comp_distance_suburban_miles", 5.0))
+        area_label = "Suburban"
     elif "rural" in location_type:
         threshold = ctx.policy.distance_commentary_trigger_rural_miles or \
                     float(qc_config.semantic("comp_distance_rural_miles", 10.0))
         area_label = "Rural"
+    elif "urban" in location_type:
+        threshold = ctx.policy.distance_commentary_trigger_urban_miles or \
+                    float(qc_config.semantic("comp_distance_urban_miles", 1.0))
+        area_label = "Urban"
     else:
         threshold = ctx.policy.distance_commentary_trigger_suburban_miles or \
                     float(qc_config.semantic("comp_distance_suburban_miles", 5.0))
@@ -279,7 +299,7 @@ def cg_gla_bracket(ctx: QCContext):
 # ---------------------------------------------------------------------------
 
 @rule(id="CG-NET-BIAS", num="CG-net-bias", section="sales_comparison", phase=3,
-      applies_when=lambda ctx: ctx.has_sca_grid,
+      applies_when=lambda ctx: ctx.has_sca_grid, severity="advisory",
       name="Net adjustment directional bias")
 def cg_net_bias(ctx: QCContext):
     """When ALL comps' net adjustments are the same sign (all positive = comps
@@ -290,10 +310,16 @@ def cg_net_bias(ctx: QCContext):
     nets = []
     evidence = []
     for i in idx:
-        raw = ctx.appraisal.value(f"comp_{i}_net_adjustment")
         evidence.append(ctx.appraisal.evidence(f"comp_{i}_net_adjustment"))
-        val = _parse_num(raw)
-        if val is not None:
+        # Prefer the explicit UAD sign indicator (Y=positive, N=negative) — it is
+        # authoritative and immune to the amount-parsing sign loss. Fall back to the
+        # sign of the parsed amount only when the indicator wasn't extracted.
+        pos = str(ctx.appraisal.value(f"comp_{i}_net_adj_positive") or "").strip().upper()
+        if pos in ("Y", "N"):
+            nets.append(1.0 if pos == "Y" else -1.0)
+            continue
+        val = _parse_num(ctx.appraisal.value(f"comp_{i}_net_adjustment"))
+        if val is not None and val != 0:
             nets.append(val)
 
     if len(nets) < 3:

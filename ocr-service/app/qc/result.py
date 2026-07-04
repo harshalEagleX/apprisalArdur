@@ -66,6 +66,15 @@ class RuleResult:
     confidence: float = 1.0             # engine's confidence in THIS finding
     template_id: Optional[str] = None
     reasoning: Optional[str] = None     # Layer-B/C plain-language "why" for the reviewer
+    # Severity bucket assigned by the engine after evaluation (finding_type):
+    #   hard_fail         — a Fannie/LOE requirement is violated (real defect)
+    #   advisory          — a soft/directional check (FYI, not a must-fix)
+    #   manual_verify     — needs a human judgment call on real extracted data
+    #   extraction_failed — the field couldn't be read; a data gap, not an appraiser
+    #                       defect — route to a re-extract/QA queue, not the reviewer
+    # None for PASS / NOT_APPLICABLE / SKIPPED. This splits the single "needs
+    # attention" bucket without changing the 5-state RuleStatus (DB/UI stay stable).
+    finding_type: Optional[str] = None
 
     @property
     def is_exception(self) -> bool:
@@ -74,6 +83,7 @@ class RuleResult:
     def to_db_dict(self, document_id: str, transaction_id: Optional[str] = None) -> dict:
         snapshot = {
             "status": self.status.value,
+            "finding_type": self.finding_type,
             "checklist_num": self.checklist_num,
             "template_id": self.template_id,
             "evidence": [

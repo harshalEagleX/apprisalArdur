@@ -676,6 +676,14 @@ public class PythonClientService {
         if (batchFileId != null) body.add("batch_file_id", String.valueOf(batchFileId));
         if (qcResultId != null) body.add("qc_result_id", String.valueOf(qcResultId));
         if (clientId != null && !clientId.isBlank()) body.add("client_id", clientId);
+        // Order (AppraisalTransaction) traceability — set via MDC by QCProcessingService
+        // right before the Python call, same mechanism used for correlationId. Lets
+        // Python's own audit tables (adaptive_validation_results etc.) be traced back
+        // to the Java Order without adding a parameter to every overload of this method.
+        String orderRef = org.slf4j.MDC.get("orderRef");
+        if (orderRef != null && !orderRef.isBlank()) {
+            body.add("order_ref", orderRef);
+        }
         if (sourceHash != null && !sourceHash.isBlank() && batchFileId != null) {
             body.add("idempotency_key", String.join("|",
                     String.valueOf(batchFileId),

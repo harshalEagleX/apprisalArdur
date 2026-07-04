@@ -57,6 +57,14 @@ public class AppraisalTransaction {
     @Column(nullable = false)
     private TransactionStatus status = TransactionStatus.RECEIVED;
 
+    /**
+     * Computed document/QC lifecycle state — written only by OrderStatusService,
+     * never set directly. See {@link OrderDocumentStatus}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "document_status", nullable = false)
+    private OrderDocumentStatus documentStatus = OrderDocumentStatus.INCOMPLETE;
+
     /** When this is a revision, points to the original (or previous) transaction. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "revised_from_id")
@@ -85,6 +93,18 @@ public class AppraisalTransaction {
     /** SLA due date set at intake. */
     @Column(name = "sla_due_at")
     private LocalDateTime slaDueAt;
+
+    /**
+     * Reviewer this Order is allocated to. Assignment is per-Order (not per-batch): a
+     * single ZIP can carry dozens of orders, so each order is allocated to a reviewer
+     * independently rather than routing an entire batch to one person.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_reviewer_id")
+    private User assignedReviewer;
+
+    @Column(name = "reviewer_assigned_at")
+    private LocalDateTime reviewerAssignedAt;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -127,6 +147,9 @@ public class AppraisalTransaction {
     public TransactionStatus getStatus() { return status; }
     public void setStatus(TransactionStatus status) { this.status = status; }
 
+    public OrderDocumentStatus getDocumentStatus() { return documentStatus; }
+    public void setDocumentStatus(OrderDocumentStatus documentStatus) { this.documentStatus = documentStatus; }
+
     public AppraisalTransaction getRevisedFrom() { return revisedFrom; }
     public void setRevisedFrom(AppraisalTransaction revisedFrom) { this.revisedFrom = revisedFrom; }
 
@@ -147,6 +170,12 @@ public class AppraisalTransaction {
 
     public LocalDateTime getSlaDueAt() { return slaDueAt; }
     public void setSlaDueAt(LocalDateTime slaDueAt) { this.slaDueAt = slaDueAt; }
+
+    public User getAssignedReviewer() { return assignedReviewer; }
+    public void setAssignedReviewer(User assignedReviewer) { this.assignedReviewer = assignedReviewer; }
+
+    public LocalDateTime getReviewerAssignedAt() { return reviewerAssignedAt; }
+    public void setReviewerAssignedAt(LocalDateTime reviewerAssignedAt) { this.reviewerAssignedAt = reviewerAssignedAt; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

@@ -360,12 +360,152 @@ export const getBatchById = (id: number) =>
 export const getBatchStatuses = () =>
   apiFetch<string[]>(`/api/admin/batches/statuses`);
 
-/** Manually assign a NEEDS_ASSIGNMENT supporting file to a specific appraisal. */
-export const assignFileToAppraisal = (batchId: number, fileId: number, appraisalFileId: number) =>
-  apiFetch<{ success: boolean; message: string }>(
-    `/api/admin/batches/${batchId}/files/${fileId}/assign`,
-    { method: "POST", body: JSON.stringify({ appraisalFileId }) },
+// ── Admin: Orders ─────────────────────────────────────────────────────────────
+// "Order" is the canonical business entity: one real-world AMC order, with its
+// documents, QC result, and lifecycle status reachable here regardless of which
+// batch(es) it was uploaded through — this is what fixes the same order showing
+// up duplicated across multiple re-uploaded batches.
+
+export interface OrderSummary {
+  id: number;
+  transactionRef: string;
+  status: string;
+  documentStatus: "INCOMPLETE" | "UNMATCHED" | "READY_FOR_QC" | "QC_PROCESSING" | "NEEDS_REVIEW" | "COMPLETED" | "ERROR";
+  propertyAddress?: string | null;
+  amcCode?: string | null;
+  orderNumber?: string | null;
+  revisionNumber: number;
+  client: Client | null;
+  activeDocumentCount: number;
+  assignedReviewer?: { id: number; username: string; fullName?: string } | null;
+  reviewerAssignedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OrderDocument {
+  id: number;
+  filename: string;
+  fileType: BatchFile["fileType"];
+  status: string;
+  contentVersion: number;
+  active: boolean;
+  supersededAt?: string | null;
+  batchId?: number | null;
+  createdAt?: string;
+}
+
+export interface OrderBatchHistoryEntry {
+  id: number;
+  parentBatchId: string;
+  status: string;
+  createdAt?: string;
+}
+
+export interface OrderDetail extends OrderSummary {
+  documents: OrderDocument[];
+  activeQcResult?: {
+    id: number;
+    qcDecision: string;
+    finalDecision?: string | null;
+    totalRules: number;
+    passedCount: number;
+    failedCount: number;
+    verifyCount: number;
+    processedAt?: string;
+  } | null;
+  batchHistory: OrderBatchHistoryEntry[];
+}
+
+export const getOrders = (page = 0, documentStatus?: string, search?: string) => {
+  const params = new URLSearchParams({ page: String(page), size: "20" });
+  if (documentStatus) params.set("documentStatus", documentStatus);
+  if (search?.trim()) params.set("search", search.trim());
+  return apiFetch<{ content: OrderSummary[]; totalPages: number; number: number; totalElements?: number }>(
+    `/api/admin/orders?${params}`
   );
+};
+
+export const getOrderById = (id: number) =>
+  apiFetch<OrderDetail>(`/api/admin/orders/${id}`);
+
+export const getOrderStatuses = () =>
+  apiFetch<string[]>(`/api/admin/orders/statuses`);
+
+/** One-time, idempotent reconciliation: links pre-existing files with no
+ * resolved Order (ingested before this feature existed) using the same
+ * content-hash → orderId → propertySetName identity matching used at intake. */
+export const runOrderBackfill = () =>
+  apiFetch<{ filesProcessed: number; ordersTouched: number; ordersCreated: number; duplicatesFound: number }>(
+    `/api/admin/orders/backfill`, { method: "POST" }
+  );
+
+/** Run QC for a single order (resolves to its appraisal file and runs QC on it). */
+export const processOrderQC = (orderId: number, model?: QCModelSelection) =>
+  apiFetch<{ message: string; ordersResolved: number; startedBatchIds: number[]; alreadyRunningBatchIds: number[] }>(
+    `/api/qc/process/order/${orderId}`,
+    { method: "POST", body: JSON.stringify(model ?? {}), headers: { "Content-Type": "application/json" } }
+  );
+
+/** Run QC for several selected orders at once (grouped by batch server-side). */
+export const processOrdersQC = (orderIds: number[], model?: QCModelSelection) =>
+  apiFetch<{ message: string; ordersRequested: number; ordersResolved: number; startedBatchIds: number[]; alreadyRunningBatchIds: number[]; ordersWithoutAppraisal: number[] }>(
+    `/api/qc/process/orders`,
+    { method: "POST", body: JSON.stringify({ orderIds, ...(model ?? {}) }), headers: { "Content-Type": "application/json" } }
+  );
+
+/** Allocate (or clear, when reviewerId is null) a single order to a reviewer. */
+export const assignOrderReviewer = (orderId: number, reviewerId: number | null) =>
+  apiFetch(`/api/admin/orders/${orderId}/assign`, {
+    method: "POST", body: JSON.stringify({ reviewerId }), headers: { "Content-Type": "application/json" },
+  });
+
+/** Bulk-allocate several selected orders to one reviewer (or clear when null). */
+export const bulkAssignOrderReviewer = (orderIds: number[], reviewerId: number | null) =>
+  apiFetch<{ assignedCount: number; assignedOrderIds: number[]; skippedOrderIds: number[] }>(
+    `/api/admin/orders/assign`,
+    { method: "POST", body: JSON.stringify({ orderIds, reviewerId }), headers: { "Content-Type": "application/json" } }
+  );
+
+/** Auto-assign: system balances unassigned orders across active reviewers (only on click).
+ * Pass orderIds to limit distribution to a selection; omit to distribute every unassigned order. */
+export const autoAssignOrders = (orderIds?: number[]) =>
+  apiFetch<{ message: string; assignedCount: number; distribution?: Record<string, number> }>(
+    `/api/admin/orders/auto-assign`,
+    { method: "POST", body: JSON.stringify(orderIds && orderIds.length ? { orderIds } : {}), headers: { "Content-Type": "application/json" } }
+  );
+
+/** Manually assign a NEEDS_ASSIGNMENT supporting file to a specific appraisal. */
+/** Thrown when the assign target fails content cross-validation — the document's
+ * own text points to a different order. Caught by the UI to offer an override. */
+export class AddressMismatchError extends Error {}
+
+/**
+ * Link a NEEDS_ASSIGNMENT file to an appraisal. By default the backend cross-checks
+ * the document's own content against every appraisal in the batch and rejects
+ * (409) an assignment that confidently points elsewhere; pass force=true to
+ * override after the admin has manually verified it's correct.
+ */
+export async function assignFileToAppraisal(
+  batchId: number, fileId: number, appraisalFileId: number, force = false,
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${JAVA}/api/admin/batches/${batchId}/files/${fileId}/assign`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appraisalFileId, force }),
+  });
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}));
+    throw new AddressMismatchError(
+      typeof body.message === "string" ? body.message : "This document appears to belong to a different order.");
+  }
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Request failed (${res.status})`));
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : ({ success: true, message: "" });
+}
 
 /** Change a file's document type (e.g. CONTRACT → APPRAISAL_XML after misclassification). */
 export const reclassifyBatchFile = (batchId: number, fileId: number, fileType: string) =>
@@ -993,11 +1133,22 @@ export interface BatchFile {
   orderId?: string;
   propertySetName?: string | null;
   documentQualityFlags?: string | null;
+  /** Resolved Order (AppraisalTransaction) id — null for legacy files ingested
+   * before Order resolution existed (run the Orders backfill to fix). */
+  resolvedOrderId?: number | null;
+  orderDocumentStatus?: string | null;
 }
 
-/** A property set groups files from one property/case folder within a batch. */
+/**
+ * A property set groups files from one property/case folder within a batch —
+ * backed by the resolved Order when available (orderId set), falling back to
+ * the raw ZIP-folder-derived name for legacy files with no resolved order yet.
+ */
 export interface PropertySet {
   setName: string | null;
+  /** The canonical Order id this set resolves to — link through to /admin/orders/{orderId}. */
+  orderId?: number | null;
+  documentStatus?: string | null;
   files: BatchFile[];
   fileCount: number;
   completedCount: number;

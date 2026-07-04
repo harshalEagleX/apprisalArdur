@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import {
   getBatchById, getQCResults, processQCFiles, getFileHistory,
-  getQCHistory, assignFileToAppraisal, reclassifyBatchFile,
+  getQCHistory, assignFileToAppraisal, reclassifyBatchFile, AddressMismatchError,
   type Batch, type QCResult, type PropertySet, type BatchFile,
   type FileHistoryResponse, type QCHistoryRun,
 } from "@/lib/api";
@@ -199,16 +199,21 @@ function AssignDrawer({
 }) {
   const [selected, setSelected] = useState<number | "">("");
   const [busy, setBusy] = useState(false);
+  const [mismatch, setMismatch] = useState<string | null>(null);
 
-  async function handleAssign() {
+  async function handleAssign(force = false) {
     if (!selected) return;
     setBusy(true);
     try {
-      await assignFileToAppraisal(batchId, file.id, selected);
+      await assignFileToAppraisal(batchId, file.id, selected, force);
       toast.info("File assigned", "Run Re-QC on the appraisal to include this document.");
       onSuccess();
     } catch (e) {
-      toast.error("Assignment failed", String(e));
+      if (e instanceof AddressMismatchError) {
+        setMismatch(e.message);
+      } else {
+        toast.error("Assignment failed", String(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -246,7 +251,7 @@ function AssignDrawer({
             ) : (
               <select
                 value={selected}
-                onChange={e => setSelected(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={e => { setSelected(e.target.value === "" ? "" : Number(e.target.value)); setMismatch(null); }}
                 className="w-full rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-sm text-slate-200 focus:border-orange-500/50 focus:outline-none"
               >
                 <option value="">— choose an appraisal —</option>
@@ -259,19 +264,36 @@ function AssignDrawer({
             )}
           </div>
 
+          {mismatch && (
+            <div className="rounded-lg border border-red-500/25 bg-red-950/20 px-4 py-3">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-red-400 mb-1">Content mismatch</div>
+              <div className="text-[12px] leading-relaxed text-red-200">{mismatch}</div>
+            </div>
+          )}
+
           <div className="rounded-md border border-white/[0.06] bg-[#0B0F14] px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
             After assigning, click <strong className="text-slate-400">Re-QC</strong> on the appraisal row to re-run quality checks with this document included.
           </div>
         </div>
 
         <div className="border-t border-white/10 p-4 flex gap-2">
-          <button
-            onClick={handleAssign}
-            disabled={!selected || busy}
-            className="flex-1 rounded-md border border-orange-500/40 bg-orange-950/40 py-2 text-sm font-medium text-orange-200 transition-colors hover:bg-orange-950/70 disabled:opacity-40"
-          >
-            {busy ? "Assigning…" : "Assign"}
-          </button>
+          {mismatch ? (
+            <button
+              onClick={() => handleAssign(true)}
+              disabled={busy}
+              className="flex-1 rounded-md border border-red-500/40 bg-red-950/40 py-2 text-sm font-medium text-red-200 transition-colors hover:bg-red-950/70 disabled:opacity-40"
+            >
+              {busy ? "Assigning…" : "Assign anyway"}
+            </button>
+          ) : (
+            <button
+              onClick={() => handleAssign(false)}
+              disabled={!selected || busy}
+              className="flex-1 rounded-md border border-orange-500/40 bg-orange-950/40 py-2 text-sm font-medium text-orange-200 transition-colors hover:bg-orange-950/70 disabled:opacity-40"
+            >
+              {busy ? "Assigning…" : "Assign"}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="rounded-md border border-white/10 bg-[#11161C] px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
@@ -412,6 +434,7 @@ function PropertySetSection({
   onAssign,
   onReclassify,
   reQcBusy,
+  isUnlinkedPool = false,
 }: {
   set: PropertySet;
   allAppraisals: BatchFile[];
@@ -421,22 +444,27 @@ function PropertySetSection({
   onAssign: (file: BatchFile) => void;
   onReclassify: (file: BatchFile) => void;
   reQcBusy: Set<number>;
+  /** True for a folder with no appraisal — a pool of documents awaiting assignment,
+   * never an order (fixes documents forking pseudo-orders like "Order EngagementLetter 2"). */
+  isUnlinkedPool?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const appraisals = set.files.filter(f => f.fileType === "APPRAISAL");
   const supporting = set.files.filter(f => f.fileType !== "APPRAISAL");
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]">
+    <div className={`overflow-hidden rounded-xl border bg-[#11161C] ${isUnlinkedPool ? "border-orange-500/25" : "border-white/10"}`}>
       {/* Set header */}
-      <button
-        onClick={() => setExpanded(e => !e)}
-        className="flex w-full items-center justify-between border-b border-white/10 px-5 py-3 text-left"
-      >
-        <div className="flex items-center gap-2.5">
-          <Building2 size={15} className="text-slate-400 shrink-0" />
+      <div className={`flex w-full items-center justify-between border-b px-5 py-3 text-left ${isUnlinkedPool ? "border-orange-500/15 bg-orange-950/10" : "border-white/10"}`}>
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="flex flex-1 items-center gap-2.5 text-left"
+        >
+          {isUnlinkedPool
+            ? <Link2 size={15} className="text-orange-400 shrink-0" />
+            : <Building2 size={15} className="text-slate-400 shrink-0" />}
           <span className="font-medium text-white">
-            {set.setName ?? "All files"}
+            {isUnlinkedPool ? `Unlinked documents${set.setName ? ` — "${set.setName}"` : ""}` : (set.setName ?? "All files")}
           </span>
           <span className="rounded-full border border-white/10 bg-[#0B0F14] px-2 py-0.5 text-[10px] text-slate-500">
             {set.fileCount} file{set.fileCount !== 1 ? "s" : ""}
@@ -461,9 +489,30 @@ function PropertySetSection({
               {set.completedCount} completed
             </span>
           )}
+        </button>
+        <div className="flex items-center gap-2">
+          {set.orderId && (
+            <Link
+              href={`/admin/orders/${set.orderId}`}
+              onClick={e => e.stopPropagation()}
+              title="View this order's own status, documents, and batch history"
+              className="rounded-full border border-indigo-500/25 bg-indigo-950/20 px-2.5 py-0.5 text-[10px] font-medium text-indigo-300 transition-colors hover:bg-indigo-950/50"
+            >
+              View order ↗
+            </Link>
+          )}
+          <button onClick={() => setExpanded(e => !e)}>
+            {expanded ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
+          </button>
         </div>
-        {expanded ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
-      </button>
+      </div>
+
+      {expanded && isUnlinkedPool && (
+        <div className="border-b border-orange-500/10 bg-orange-950/5 px-5 py-2.5 text-[11px] leading-relaxed text-orange-300/80">
+          No appraisal was found for this group — these are not an order, just documents awaiting assignment.
+          Use <strong className="text-orange-200">Assign</strong> on each row to link it to the correct appraisal below.
+        </div>
+      )}
 
       {expanded && (
         <table className="w-full text-sm">
@@ -645,6 +694,11 @@ export default function BatchDetailPage() {
   const pending = results.filter(r => !r.finalDecision && r.qcDecision !== "AUTO_PASS").length;
 
   const propertySets = batch?.propertySets ?? [];
+  // A group with no appraisal is a pool of unlinked documents, never an order — a
+  // folder like "4" that only holds engagement letters must not render as
+  // "Order 4" (see PropertySetSection's isUnlinkedPool).
+  const orderSets    = propertySets.filter(ps => ps.files.some(f => f.fileType === "APPRAISAL"));
+  const unlinkedSets = propertySets.filter(ps => !ps.files.some(f => f.fileType === "APPRAISAL"));
   const isMultiSet   = (batch?.setCount ?? 0) > 1;
   const needsAssignmentTotal = batch?.needsAssignmentCount ?? 0;
 
@@ -693,7 +747,7 @@ export default function BatchDetailPage() {
               {isMultiSet && (
                 <>
                   <span className="text-slate-700">·</span>
-                  <span className="text-slate-400">{batch?.setCount} property sets</span>
+                  <span className="text-slate-400">{batch?.setCount} orders</span>
                 </>
               )}
               {batch?.assignedReviewer && (
@@ -734,8 +788,9 @@ export default function BatchDetailPage() {
               {needsAssignmentTotal} file{needsAssignmentTotal !== 1 ? "s" : ""} need manual assignment
             </div>
             <div className="mt-0.5 text-[12px] leading-relaxed opacity-90">
-              These supporting files could not be automatically linked to an appraisal — filenames carry no shared order ID.
-              Click <strong>Assign</strong> on each highlighted row, pair it with the correct appraisal, then run Re-QC.
+              These supporting files could not be linked automatically — either no order in this batch matches
+              them, or more than one plausible order does. Click <strong>Assign</strong> on each highlighted row,
+              pair it with the correct appraisal, then run Re-QC.
             </div>
           </div>
         </div>
@@ -771,9 +826,9 @@ export default function BatchDetailPage() {
         </div>
       ) : isMultiSet && propertySets.length > 0 ? (
         <div className="space-y-4">
-          {propertySets.map((ps, i) => (
+          {orderSets.map((ps, i) => (
             <PropertySetSection
-              key={ps.setName ?? i}
+              key={ps.orderId ?? ps.setName ?? i}
               set={ps}
               allAppraisals={allAppraisals}
               resultMap={resultMap}
@@ -784,6 +839,27 @@ export default function BatchDetailPage() {
               reQcBusy={reQcBusy}
             />
           ))}
+          {unlinkedSets.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <div className="text-xs font-medium uppercase tracking-wide text-orange-400/80">
+                Unlinked documents ({unlinkedSets.reduce((n, ps) => n + ps.fileCount, 0)})
+              </div>
+              {unlinkedSets.map((ps, i) => (
+                <PropertySetSection
+                  key={`unlinked-${ps.setName ?? i}`}
+                  set={ps}
+                  allAppraisals={allAppraisals}
+                  resultMap={resultMap}
+                  onReQC={handleReQC}
+                  onHistory={setHistoryFileId}
+                  onAssign={setAssignFile}
+                  onReclassify={setReclassifyFile}
+                  reQcBusy={reQcBusy}
+                  isUnlinkedPool
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <PropertySetSection

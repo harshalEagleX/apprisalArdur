@@ -47,6 +47,7 @@ public class QCApiController {
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
     private final DocumentMatchRepository documentMatchRepository;
+    private final com.shal.common.repository.AppraisalTransactionRepository orderRepository;
     private final StuckBatchReconciler reconciler;
     private final EnversAuditService enversAuditService;
     private final com.shal.common.repository.BusinessEventRepository businessEventRepository;
@@ -59,6 +60,7 @@ public class QCApiController {
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
             DocumentMatchRepository documentMatchRepository,
+            com.shal.common.repository.AppraisalTransactionRepository orderRepository,
             StuckBatchReconciler reconciler,
             EnversAuditService enversAuditService,
             com.shal.common.repository.BusinessEventRepository businessEventRepository) {
@@ -69,6 +71,7 @@ public class QCApiController {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
         this.documentMatchRepository = documentMatchRepository;
+        this.orderRepository = orderRepository;
         this.reconciler = reconciler;
         this.enversAuditService = enversAuditService;
         this.businessEventRepository = businessEventRepository;
@@ -258,6 +261,132 @@ public class QCApiController {
     }
 
     /**
+     * Run QC for a single Order. Resolves the order to its active appraisal document(s)
+     * and re-runs QC on just those files via the same partial-run path a batch uses —
+     * so QC is a first-class Order action, not only a batch action.
+     */
+    @PostMapping("/process/order/{orderId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> processOrder(
+            @PathVariable @NonNull Long orderId,
+            @RequestBody(required = false) Map<String, String> modelRequest) {
+        if (!orderRepository.existsById(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        return runQcForOrders(List.of(orderId), modelConfigFrom(modelRequest));
+    }
+
+    /**
+     * Run QC for several selected Orders at once (bulk from the Order view). Each order's
+     * active appraisal file is resolved and grouped by batch so every affected batch is
+     * claimed once and its files re-run together.
+     */
+    @PostMapping("/process/orders")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> processOrders(@RequestBody Map<String, Object> body) {
+        java.util.LinkedHashSet<Long> orderIds = new java.util.LinkedHashSet<>();
+        Object raw = body != null ? body.get("orderIds") : null;
+        if (raw instanceof List<?> list) {
+            for (Object o : list) {
+                try { orderIds.add(Long.valueOf(String.valueOf(o))); } catch (NumberFormatException ignore) { }
+            }
+        }
+        if (orderIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "message", "orderIds is required — a non-empty list of order ids to run QC on."));
+        }
+        QCModelConfig modelConfig = new QCModelConfig(
+                body.get("provider") instanceof String p ? p : null,
+                body.get("textModel") instanceof String t ? t : null,
+                body.get("visionModel") instanceof String v ? v : null);
+        return runQcForOrders(new java.util.ArrayList<>(orderIds), modelConfig);
+    }
+
+    private QCModelConfig modelConfigFrom(Map<String, String> modelRequest) {
+        return new QCModelConfig(
+                modelRequest != null ? modelRequest.get("provider") : null,
+                modelRequest != null ? modelRequest.get("textModel") : null,
+                modelRequest != null ? modelRequest.get("visionModel") : null);
+    }
+
+    /**
+     * Shared engine for single- and bulk-order QC. Resolves each order to its active
+     * appraisal file(s), groups by batch, and fires one partial re-run per batch. Never
+     * silently no-ops: orders with no runnable appraisal and batches that were already
+     * processing are reported back so the caller knows exactly what ran.
+     */
+    private ResponseEntity<Map<String, Object>> runQcForOrders(List<Long> orderIds, QCModelConfig modelConfig) {
+        // Group each order's active appraisal file(s) under their owning batch.
+        Map<Long, java.util.LinkedHashSet<Long>> filesByBatch = new LinkedHashMap<>();
+        List<Long> ordersWithoutAppraisal = new java.util.ArrayList<>();
+        int resolvedOrders = 0;
+        for (Long orderId : orderIds) {
+            List<BatchFile> appraisals = batchFileRepository.findActiveByOrderIdAndFileType(
+                    orderId, com.shal.common.entity.FileType.APPRAISAL);
+            if (appraisals.isEmpty()) {
+                ordersWithoutAppraisal.add(orderId);
+                continue;
+            }
+            resolvedOrders++;
+            for (BatchFile appraisal : appraisals) {
+                if (appraisal.getBatch() == null) continue;
+                filesByBatch.computeIfAbsent(appraisal.getBatch().getId(), k -> new java.util.LinkedHashSet<>())
+                        .add(appraisal.getId());
+            }
+        }
+
+        if (filesByBatch.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "message", "No runnable appraisal document was found for the selected order(s). "
+                        + "An order needs an active appraisal file before QC can run.",
+                "ordersWithoutAppraisal", ordersWithoutAppraisal));
+        }
+
+        // Reject up-front if Python is down — do not claim any batch.
+        if (!pythonClientService.isHealthy()) {
+            return ResponseEntity.status(503).body(Map.of(
+                "message", "QC service is unavailable — the OCR/QC engine is not responding. Nothing was started.",
+                "serviceAvailable", false));
+        }
+
+        List<Long> startedBatches = new java.util.ArrayList<>();
+        List<Long> alreadyRunningBatches = new java.util.ArrayList<>();
+        for (Map.Entry<Long, java.util.LinkedHashSet<Long>> e : filesByBatch.entrySet()) {
+            Long batchId = e.getKey();
+            var batchOpt = batchRepository.findById(batchId);
+            if (batchOpt.isPresent() && batchOpt.get().getStatus() == BatchStatus.QC_PROCESSING) {
+                alreadyRunningBatches.add(batchId);
+                continue;
+            }
+            if (!qcProcessingService.claimBatchForProcessing(batchId, modelConfig)) {
+                alreadyRunningBatches.add(batchId);
+                continue;
+            }
+            qcProcessingService.processBatchAsync(batchId, modelConfig, e.getValue());
+            startedBatches.add(batchId);
+        }
+
+        log.info(TimelineLog.event("admin_orders", "java_qc_order_run",
+                "orders_requested", orderIds.size(),
+                "orders_resolved", resolvedOrders,
+                "batches_started", startedBatches.size(),
+                "batches_already_running", alreadyRunningBatches.size()));
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("message", startedBatches.isEmpty()
+                ? "No QC run was started — the selected order(s) are already being processed."
+                : "QC processing started for " + resolvedOrders + " order(s).");
+        resp.put("ordersRequested", orderIds.size());
+        resp.put("ordersResolved", resolvedOrders);
+        resp.put("startedBatchIds", startedBatches);
+        resp.put("alreadyRunningBatchIds", alreadyRunningBatches);
+        resp.put("ordersWithoutAppraisal", ordersWithoutAppraisal);
+        return startedBatches.isEmpty()
+                ? ResponseEntity.ok(resp)
+                : ResponseEntity.accepted().body(resp);
+    }
+
+    /**
      * Best-effort stop for a running QC job.
      * If Python is already processing a request, Java interrupts the worker and
      * prevents any late result from being saved when control returns.
@@ -428,7 +557,15 @@ public class QCApiController {
                     List<BatchFile> documents = List.of();
                     if (primary != null && primary.getBatch() != null) {
                         Long batchId = primary.getBatch().getId();
-                        documents = batchFileRepository.findByBatchId(batchId);
+                        String propertySetName = primary.getPropertySetName();
+                        // Multi-property batches store more than one order/engagement/contract
+                        // set under the same batch — scope to this file's own set so the
+                        // reviewer only sees documents and quality flags for THIS property.
+                        // Flat (single-property) batches have a null propertySetName, so fall
+                        // back to the whole batch.
+                        documents = propertySetName != null
+                                ? batchFileRepository.findByBatchIdAndPropertySetName(batchId, propertySetName)
+                                : batchFileRepository.findByBatchId(batchId);
                     }
 
                     List<Map<String, Object>> documentDtos = documents.stream()

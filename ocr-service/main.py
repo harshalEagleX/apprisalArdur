@@ -298,6 +298,7 @@ async def qc_process(
     source_hash: Optional[str] = Form(None),
     engagement_status: Optional[str] = Form(None),
     client_id: Optional[str] = Form(None),              # AMC/client identifier for confidence routing
+    order_ref: Optional[str] = Form(None),              # Java Order (AppraisalTransaction) reference, for cross-system tracing
 ):
     """
     Run the full transaction QC (appraisal + engagement + contract) and return
@@ -317,6 +318,9 @@ async def qc_process(
     started = _time.time()
     _QC_PROGRESS[token] = {"stage": "received", "message": "Document received",
                            "sub_percent": 0.0, "elapsed_ms": 0}
+    logging.getLogger(__name__).info(
+        "QC process request: file=%s batch_id=%s batch_file_id=%s order_ref=%s",
+        file.filename, batch_id, batch_file_id, order_ref)
 
     def _progress(stage, message, pct):
         # `pct` is the pipeline stage percent on a 0–100 scale; `sub_percent` is the
@@ -444,6 +448,7 @@ async def qc_submit(
     source_hash: Optional[str] = Form(None),
     engagement_status: Optional[str] = Form(None),
     client_id: Optional[str] = Form(None),              # AMC/client identifier for confidence routing
+    order_ref: Optional[str] = Form(None),              # Java Order (AppraisalTransaction) reference, for cross-system tracing
 ):
     """Enqueue a QC job on the Celery queue and return its job_id immediately.
 
@@ -519,7 +524,8 @@ async def qc_submit(
         except Exception as exc:
             log.warning("Idempotency claim skipped (Redis error: %s)", exc)
 
-    log.info("QC job queued: job_id=%s file=%s", async_result.id, file.filename)
+    log.info("QC job queued: job_id=%s file=%s batch_id=%s order_ref=%s",
+             async_result.id, file.filename, batch_id, order_ref)
     return {"job_id": async_result.id, "status": "QUEUED", "file_hash": file_hash}
 
 

@@ -15,7 +15,9 @@ import java.time.LocalDateTime;
        indexes = {
            @Index(name = "idx_batch_file_batch", columnList = "batch_id"),
            @Index(name = "idx_batch_file_order_type", columnList = "batch_id, order_id, file_type"),
-           @Index(name = "idx_batch_file_status", columnList = "status")
+           @Index(name = "idx_batch_file_status", columnList = "status"),
+           @Index(name = "idx_batch_file_txn", columnList = "transaction_id"),
+           @Index(name = "idx_batch_file_content_hash", columnList = "content_hash")
        })
 public class BatchFile {
 
@@ -81,6 +83,27 @@ public class BatchFile {
      */
     @Column(name = "property_set_name", length = 500)
     private String propertySetName;
+
+    /**
+     * The canonical Order (AppraisalTransaction) this document belongs to.
+     * Resolved by OrderResolutionService at ingest time using content-hash →
+     * orderId → propertySetName identity matching, so the same real-world
+     * order re-uploaded under a differently-named folder still links here
+     * instead of forking a disconnected duplicate. Null for legacy files
+     * ingested before this feature existed.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transaction_id")
+    private AppraisalTransaction order;
+
+    /**
+     * Set when a newer document supersedes this one for the same
+     * (order, fileType) slot, or when this file is a pure content-hash
+     * duplicate of a document that already exists on its order. Null means
+     * this is the active document for its slot.
+     */
+    @Column(name = "superseded_at")
+    private LocalDateTime supersededAt;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -222,6 +245,26 @@ public class BatchFile {
 
     public void setPropertySetName(String propertySetName) {
         this.propertySetName = propertySetName;
+    }
+
+    public AppraisalTransaction getOrder() {
+        return order;
+    }
+
+    public void setOrder(AppraisalTransaction order) {
+        this.order = order;
+    }
+
+    public LocalDateTime getSupersededAt() {
+        return supersededAt;
+    }
+
+    public void setSupersededAt(LocalDateTime supersededAt) {
+        this.supersededAt = supersededAt;
+    }
+
+    public boolean isActive() {
+        return supersededAt == null;
     }
 
     public LocalDateTime getCreatedAt() {

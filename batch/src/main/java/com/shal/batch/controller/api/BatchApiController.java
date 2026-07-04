@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -162,28 +163,43 @@ public class BatchApiController {
                 fm.put("orderId",               f.getOrderId() != null ? f.getOrderId() : "");
                 fm.put("propertySetName",       f.getPropertySetName());
                 fm.put("documentQualityFlags",  f.getDocumentQualityFlags());
+                // Resolved Order (AppraisalTransaction) link — null for legacy files
+                // ingested before Order resolution existed (run the backfill to fix).
+                fm.put("resolvedOrderId",       f.getOrder() != null ? f.getOrder().getId() : null);
+                fm.put("orderDocumentStatus",   f.getOrder() != null ? f.getOrder().getDocumentStatus().name() : null);
                 return fm;
             }).toList();
             m.put("files", fileDtos);
 
-            // Group files by propertySetName → propertySets list for the detail view.
-            // Sets are ordered by their first occurrence in the file list.
+            // Group files by resolved Order (falling back to the raw propertySetName
+            // string for legacy files with no resolved order yet) → propertySets list
+            // for the detail view. Sets are ordered by their first occurrence.
             java.util.LinkedHashMap<String, List<Map<String, Object>>> setMap = new java.util.LinkedHashMap<>();
             for (Map<String, Object> f : fileDtos) {
+                Object resolvedOrderId = f.get("resolvedOrderId");
                 String setKey = (String) f.get("propertySetName");
                 setKey = setKey != null && !setKey.isBlank() ? setKey : null;
-                String bucket = setKey != null ? setKey : "__root__";
+                String bucket = resolvedOrderId != null ? ("order:" + resolvedOrderId) : (setKey != null ? setKey : "__root__");
                 setMap.computeIfAbsent(bucket, k -> new ArrayList<>()).add(f);
             }
             List<Map<String, Object>> propertySets = setMap.entrySet().stream().map(entry -> {
+                List<Map<String, Object>> setFiles = entry.getValue();
+                Object resolvedOrderId = setFiles.stream().map(f -> f.get("resolvedOrderId")).filter(Objects::nonNull).findFirst().orElse(null);
+                Object orderDocumentStatus = setFiles.stream().map(f -> f.get("orderDocumentStatus")).filter(Objects::nonNull).findFirst().orElse(null);
+                String displaySetName = setFiles.stream()
+                        .map(f -> (String) f.get("propertySetName"))
+                        .filter(n -> n != null && !n.isBlank())
+                        .findFirst().orElse(null);
                 Map<String, Object> ps = new HashMap<>();
-                ps.put("setName",      "__root__".equals(entry.getKey()) ? null : entry.getKey());
-                ps.put("files",        entry.getValue());
-                ps.put("fileCount",    entry.getValue().size());
-                ps.put("completedCount",        entry.getValue().stream().filter(f -> "COMPLETED".equals(f.get("status"))).count());
-                ps.put("errorCount",            entry.getValue().stream().filter(f -> "ERROR".equals(f.get("status"))).count());
-                ps.put("pendingCount",          entry.getValue().stream().filter(f -> "PENDING".equals(f.get("status"))).count());
-                ps.put("needsAssignmentCount",  entry.getValue().stream().filter(f -> "NEEDS_ASSIGNMENT".equals(f.get("status"))).count());
+                ps.put("setName",      displaySetName);
+                ps.put("orderId",      resolvedOrderId);
+                ps.put("documentStatus", orderDocumentStatus);
+                ps.put("files",        setFiles);
+                ps.put("fileCount",    setFiles.size());
+                ps.put("completedCount",        setFiles.stream().filter(f -> "COMPLETED".equals(f.get("status"))).count());
+                ps.put("errorCount",            setFiles.stream().filter(f -> "ERROR".equals(f.get("status"))).count());
+                ps.put("pendingCount",          setFiles.stream().filter(f -> "PENDING".equals(f.get("status"))).count());
+                ps.put("needsAssignmentCount",  setFiles.stream().filter(f -> "NEEDS_ASSIGNMENT".equals(f.get("status"))).count());
                 return ps;
             }).toList();
             m.put("propertySets", propertySets);
@@ -371,7 +387,12 @@ public class BatchApiController {
      * always honours and never overwrites during Re-QC. After assigning, trigger
      * Re-QC on the appraisal to include the newly paired document.
      *
-     * Body: { "appraisalFileId": <Long> }
+     * Body: { "appraisalFileId": <Long>, "force": <boolean, optional> }
+     *
+     * force=false (default) runs content cross-validation: if the document's own
+     * text confidently identifies it as belonging to a DIFFERENT order in this
+     * batch, the assignment is rejected with error "ADDRESS_MISMATCH" so the admin
+     * can re-check before resubmitting with force=true to override.
      */
     @PostMapping("/{batchId}/files/{fileId}/assign")
     public ResponseEntity<?> assignFileToAppraisal(
@@ -391,13 +412,23 @@ public class BatchApiController {
         } catch (NumberFormatException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "appraisalFileId must be a number"));
         }
+        boolean force = Boolean.TRUE.equals(body.get("force")) || "true".equals(String.valueOf(body.get("force")));
         try {
-            batchService.manuallyAssignFile(fileId, appraisalFileId, batchId, principal.getUser());
+            batchService.manuallyAssignFile(fileId, appraisalFileId, batchId, principal.getUser(), force);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "fileId", fileId,
                     "appraisalFileId", appraisalFileId,
                     "message", "File assigned. Run Re-QC on the appraisal to include this document."));
+        } catch (com.shal.common.exception.ValidationException e) {
+            if ("addressMismatch".equals(e.getField())) {
+                return ResponseEntity.status(409).body(Map.of(
+                        "error", "ADDRESS_MISMATCH",
+                        "message", e.getMessage()));
+            }
+            log.warn("Manual assign failed: batchId={} fileId={} appraisalFileId={} error={}",
+                    batchId, fileId, appraisalFileId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.warn("Manual assign failed: batchId={} fileId={} appraisalFileId={} error={}",
                     batchId, fileId, appraisalFileId, e.getMessage());

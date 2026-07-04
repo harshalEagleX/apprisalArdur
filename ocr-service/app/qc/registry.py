@@ -25,6 +25,13 @@ class RuleSpec:
     fn: Callable
     applies_when: Optional[Callable[[QCContext], bool]] = None
     name: str = ""
+    # Guide-anchored severity of this rule's findings. "standard" = a Fannie hard
+    # requirement (missing field/narrative → real defect). "advisory" = a soft /
+    # directional check Fannie does NOT mandate (e.g. net-adjustment direction,
+    # list-vs-value gap) — the engine tags its findings finding_type="advisory" so
+    # the reviewer queue can separate must-fix from FYI. Drives the severity split,
+    # never suppresses a finding.
+    severity: str = "standard"
 
     def applicable(self, ctx: QCContext) -> bool:
         if self.applies_when is None:
@@ -39,11 +46,13 @@ _REGISTRY: List[RuleSpec] = []
 
 
 def rule(id: str, num: str, section: str, phase: int,
-         applies_when: Optional[Callable[[QCContext], bool]] = None, name: str = ""):
+         applies_when: Optional[Callable[[QCContext], bool]] = None, name: str = "",
+         severity: str = "standard"):
     def deco(fn: Callable) -> Callable:
         _REGISTRY.append(RuleSpec(
             rule_id=id, checklist_num=num, section=section, phase=phase,
             fn=fn, applies_when=applies_when, name=name or fn.__name__,
+            severity=severity,
         ))
         return fn
     return deco

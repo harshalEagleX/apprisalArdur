@@ -153,31 +153,87 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
     _escalate_sections(report)
     _coerce_data_skipped_to_verify(report)
     _dedup_findings(report)
+    _coerce_hold_to_fail(report)
+    _classify_findings(report)
     return report
+
+
+# Phrases a rule uses when a field could not be read (data gap), as opposed to an
+# appraiser genuinely omitting required content. Used to peel "extraction_failed"
+# out of the reviewer's real defect queue.
+_EXTRACTION_FAIL_MARKERS = (
+    "could not be extracted", "could not be read", "could not be confirmed",
+    "cannot be verified", "not be extracted", "was not extracted",
+    "not available", "could not be located", "manual review required",
+    "rule execution error",
+)
+
+
+def _classify_findings(report: QCReport) -> None:
+    """Assign each finding a severity bucket (finding_type) — the severity split.
+
+    Splits the single "needs attention" bucket into: extraction_failed (a data gap,
+    not a defect), advisory (soft/directional, guide-anchored via RuleSpec.severity),
+    hard_fail (a real requirement violation), and manual_verify (human judgment on
+    real data). Does not change RuleStatus, so persistence/UI are unaffected; it is
+    purely additive metadata the reviewer queue can route on.
+    """
+    sev = {s.rule_id: s.severity for s in all_rules()}
+    for r in report.results:
+        if r.status in (RuleStatus.PASS, RuleStatus.NOT_APPLICABLE, RuleStatus.SKIPPED):
+            r.finding_type = None
+            continue
+        vals = [e.value for e in r.evidence]
+        all_blank = (not r.evidence) or all(v is None or not str(v).strip() for v in vals)
+        msg = (r.message or "").lower()
+        extraction_gap = any(k in msg for k in _EXTRACTION_FAIL_MARKERS)
+        if all_blank and extraction_gap:
+            r.finding_type = "extraction_failed"
+        elif sev.get(r.rule_id, "standard") == "advisory":
+            r.finding_type = "advisory"
+        elif r.status == RuleStatus.FAIL:
+            r.finding_type = "hard_fail"
+        else:
+            r.finding_type = "manual_verify"
+
+
+def _coerce_hold_to_fail(report: QCReport) -> None:
+    """No finding may remain HOLD in the final report.
+
+    HOLD was an internal "escalate to compliance" severity used during evaluation
+    and section-escalation. Downstream (DB persistence, reviewer UI, overall roll-up)
+    treats HOLD and FAIL identically (both are blocking, both map to DB 'fail'), so
+    the final report collapses every surviving HOLD to FAIL. This runs LAST — after
+    section escalation may have *created* HOLDs — so the emitted report is HOLD-free.
+    """
+    coerced = 0
+    for r in report.results:
+        if r.status == RuleStatus.HOLD:
+            r.status = RuleStatus.FAIL
+            coerced += 1
+    if coerced:
+        logger.debug("Coerced %d HOLD findings to FAIL (no HOLD in final report)", coerced)
 
 
 def _coerce_data_skipped_to_verify(report: QCReport) -> None:
     """
-    Enforce the 3-outcome model: SKIPPED is only for rule crashes.
-    Any SKIPPED returned for a data/policy reason becomes VERIFY so the reviewer
-    sees it rather than it silently disappearing.
-
-    Crash SKIPPED (message starts with 'Rule execution error') is preserved —
-    it represents a genuine system failure, not a data gap.
+    No finding may remain SKIPPED in the final report — SKIPPED is invisible to the
+    reviewer and hides both data gaps and rule crashes. Every SKIPPED becomes VERIFY
+    so it surfaces for manual review; a crash keeps its 'Rule execution error'
+    message (later tagged extraction_failed by _classify_findings) so the operator
+    can still tell a system failure from a data gap.
     """
     coerced = 0
     for r in report.results:
         if r.status != RuleStatus.SKIPPED:
             continue
-        if r.message and r.message.startswith("Rule execution error"):
-            continue  # genuine crash — keep SKIPPED
         r.status = RuleStatus.VERIFY
         if r.message and not r.message.endswith("(manual review required)"):
             r.message = r.message.rstrip(". ") + " — manual review required."
         r.confidence = min(r.confidence or 0.5, 0.5)
         coerced += 1
     if coerced:
-        logger.debug("Coerced %d data-SKIPPED findings to VERIFY", coerced)
+        logger.debug("Coerced %d SKIPPED findings to VERIFY (no SKIPPED in final report)", coerced)
 
 
 # Worst-first precedence so a rule that emits several sub-results is labelled by
@@ -219,8 +275,8 @@ def _escalate_sections(report: QCReport) -> None:
                 rule_id=f"{section.upper()}-HOLD", checklist_num="",
                 section=section, status=RuleStatus.HOLD,
                 message=(f"{n} failures in the {section.replace('_', ' ')} section indicate "
-                         "systematic problems (not isolated errors); the section is placed on "
-                         "HOLD for a full manual review."),
+                         "systematic problems (not isolated errors); the section is escalated "
+                         "for a full manual review."),
             ))
 
 

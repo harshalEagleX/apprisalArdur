@@ -67,6 +67,8 @@ public class QCProcessingService {
     private final ObjectMapper objectMapper;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final BusinessEventService businessEventService;
+    private final com.shal.common.service.OrderStatusService orderStatusService;
+    private final com.shal.common.service.LinkageGateService linkageGateService;
     // Cross-node cancellation signal. Backed by Redis in production (so "Stop QC"
     // reaches a worker on another instance) with a graceful in-memory fallback, so
     // single-host behaviour is unchanged. Best-effort — never throws into the pipeline.
@@ -100,7 +102,9 @@ public class QCProcessingService {
             ObjectMapper objectMapper,
             RealtimeEventPublisher realtimeEventPublisher,
             BusinessEventService businessEventService,
-            com.shal.common.cluster.ClusterCoordinator clusterCoordinator) {
+            com.shal.common.cluster.ClusterCoordinator clusterCoordinator,
+            com.shal.common.service.OrderStatusService orderStatusService,
+            com.shal.common.service.LinkageGateService linkageGateService) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
@@ -113,6 +117,8 @@ public class QCProcessingService {
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.businessEventService = businessEventService;
         this.clusterCoordinator = clusterCoordinator;
+        this.orderStatusService = orderStatusService;
+        this.linkageGateService = linkageGateService;
     }
 
     /**
@@ -380,7 +386,38 @@ public class QCProcessingService {
         businessEventService.batchEvent("BATCH_QC_STARTED", null, batch, "STARTED", Map.of("model", safeModelConfig.label()));
         updateProgress(batchId, "matching", "Matching appraisal, engagement, and contract files", 0, 1, true, safeModelConfig);
 
+        // Linkage gate (G-A): an appraisal whose engagement/contract is sitting
+        // unresolved elsewhere in this same batch (content sniff found it as a tied
+        // candidate at intake, but couldn't auto-link it) must NOT run QC yet — that
+        // would silently record NOT_PROVIDED for a document that is actually present,
+        // which is exactly the false cross-doc VERIFY flood this gate exists to stop.
+        // An appraisal whose supporting doc is genuinely absent from the batch is not
+        // held out; that is the legitimate NOT_PROVIDED path.
+        java.util.List<com.shal.common.service.LinkageGateService.HeldOutAppraisal> heldOut =
+                linkageGateService.computeHoldOuts(batch);
+        Set<Long> heldOutIds = heldOut.stream()
+                .map(com.shal.common.service.LinkageGateService.HeldOutAppraisal::appraisalFileId)
+                .collect(java.util.stream.Collectors.toSet());
+        if (!heldOut.isEmpty()) {
+            String note = heldOut.size() + " appraisal(s) held out of this QC run — an unresolved candidate "
+                    + "document exists in this batch for them:\n" + heldOut.stream()
+                            .map(h -> "\"" + h.appraisalFilename() + "\" — candidate(s): "
+                                    + String.join(", ", h.candidateFilenames())
+                                    + ". Use the Assign button to link the correct one, then Re-QC.")
+                            .collect(java.util.stream.Collectors.joining("\n"));
+            try {
+                self.appendIntakeWarning(batchId, note);
+            } catch (Exception warnEx) {
+                log.warn("Could not persist linkage-gate warning for batch {}: {}", batchId, warnEx.getMessage());
+            }
+        }
+
         List<FilePair> pairs = fileMatchingService.getMatchedPairs(batchId);
+        if (!heldOutIds.isEmpty()) {
+            pairs = pairs.stream()
+                    .filter(p -> p.getAppraisal() == null || !heldOutIds.contains(p.getAppraisal().getId()))
+                    .toList();
+        }
         if (partial) {
             pairs = pairs.stream()
                     .filter(p -> p.getAppraisal() != null && onlyFileIds.contains(p.getAppraisal().getId()))
@@ -406,6 +443,17 @@ public class QCProcessingService {
         updateProgress(batchId, "matched", "Found " + pairs.size() + " appraisal file(s) to process", 0, Math.max(pairs.size(), 1), true, safeModelConfig);
 
         if (pairs.isEmpty()) {
+            if (!heldOutIds.isEmpty()) {
+                // Every appraisal in this batch is held out pending manual linkage —
+                // not a system error, but BatchStatus's forward-only state machine only
+                // allows QC_PROCESSING → {REVIEW_PENDING, COMPLETED, ERROR}, so ERROR is
+                // the legal target; the message (surfaced via intakeWarnings above and
+                // errorMessage here) makes clear this needs the Assign button, not a rerun.
+                log.info("Batch {} — all {} appraisal(s) held out pending linkage resolution", batchId, heldOutIds.size());
+                self.markBatchError(batchId, "Held out pending manual document assignment — see warnings for which files to assign, then Re-QC.");
+                updateProgress(batchId, "complete", "Held out pending manual document assignment", 0, 1, false, safeModelConfig);
+                return new QCProcessingSummary(0, 0, 0, 0, 0, BatchStatus.ERROR);
+            }
             log.warn("Batch {} has no matched appraisal-engagement pairs — check folder structure", batchId);
             self.markBatchError(batchId, "No matched appraisal files found");
             updateProgress(batchId, "error", "No matched appraisal files found", 0, 1, false, safeModelConfig);
@@ -618,7 +666,10 @@ public class QCProcessingService {
                 Instant.now().toString(),
                 subStage,
                 subMessage,
-                subPercent,
+                // Never let sub-progress go backward within the same file. updateProgress()
+                // resets subPercent to 0.0 when a new file starts, which is the only valid
+                // reset point. Any decrease here is a Python retry resetting its state.
+                Math.max(existing.subPercent(), subPercent),
                 subElapsedMs
         ));
         if (merged != null) {
@@ -699,8 +750,16 @@ public class QCProcessingService {
         long queueWaitMs = queueWaitMs(progressBatchId, pythonStartedAt);
         int retryCount = 0;
 
-        PythonQCResponse pythonResponse;
+        // Order (AppraisalTransaction) traceability: threaded to Python via MDC — same
+        // mechanism appendProcessingContext already uses for correlationId — so Python's
+        // own audit tables can be cross-referenced back to the Java Order without adding
+        // a new parameter to every processQC/submitQCJob overload.
+        if (appraisal.getOrder() != null) {
+            org.slf4j.MDC.put("orderRef", appraisal.getOrder().getTransactionRef());
+        }
 
+        PythonQCResponse pythonResponse;
+        try {
         if (!pythonClient.isCeleryWorkerRunning()) {
             log.warn("Celery worker is not connected; using synchronous Python QC for batch {} file {}",
                     progressBatchId, appraisal.getFilename());
@@ -796,6 +855,9 @@ public class QCProcessingService {
         // 137 event inserts happen after the batch status is already unlocked.
         self.recordQcEventsAsync(result, pythonResponse, result.getQcDecision(), modelConfig);
         return result;
+        } finally {
+            org.slf4j.MDC.remove("orderRef");
+        }
     }
 
     /**
@@ -1076,6 +1138,12 @@ public class QCProcessingService {
                 log.info("AUTO_PASS downgraded to TO_VERIFY for file {} — {} match confidence={} < {}",
                         appraisal.getFilename(), docType, conf, MATCH_CONFIDENCE_THRESHOLD);
             }
+        }
+
+        // Roll this per-file QC result up into its Order's computed lifecycle status.
+        // Legacy files ingested before Order resolution existed have no order — skip.
+        if (appraisal.getOrder() != null) {
+            orderStatusService.recompute(appraisal.getOrder());
         }
 
         return qcResult;

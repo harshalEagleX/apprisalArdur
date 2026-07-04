@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Timer, ChevronLeft, ChevronRight, Gauge, FileSearch, ArrowRight,
@@ -74,6 +75,7 @@ export default function DocStatsPage() {
 
 /* ── Appraisals: searchable per-file list ─────────────────────────────────── */
 function AppraisalsPanel() {
+  const router = useRouter();
   const [rows, setRows]       = useState<DocStatSummary[]>([]);
   const [page, setPage]       = useState(0);
   const [total, setTotal]     = useState(1);
@@ -145,7 +147,10 @@ function AppraisalsPanel() {
                       <div className="text-[11px] text-slate-500">
                         {d.clientName ?? "—"}
                         {d.batchId != null && (
-                          <> · <Link href={`/admin/batches/${d.batchId}`} className="hover:text-indigo-300 hover:underline" onClick={e => e.stopPropagation()}>batch #{d.batchId}</Link></>
+                          <> · <span
+                            className="hover:text-indigo-300 hover:underline cursor-pointer"
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); router.push(`/admin/batches/${d.batchId}`); }}
+                          >batch #{d.batchId}</span></>
                         )}
                       </div>
                     </Link>

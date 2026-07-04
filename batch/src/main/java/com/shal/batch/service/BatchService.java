@@ -4,6 +4,7 @@ import com.shal.common.entity.*;
 import com.shal.common.exception.BatchProcessingException;
 import com.shal.common.exception.ResourceNotFoundException;
 import com.shal.common.exception.ValidationException;
+import com.shal.common.repository.AppraisalTransactionRepository;
 import com.shal.common.repository.BatchFileRepository;
 import com.shal.common.repository.BatchRepository;
 import com.shal.common.repository.DocumentMatchRepository;
@@ -13,7 +14,10 @@ import com.shal.common.repository.QCRuleResultRepository;
 import com.shal.common.realtime.RealtimeEventPublisher;
 import com.shal.common.service.AuditLogService;
 import com.shal.common.service.BusinessEventService;
+import com.shal.common.service.DocumentContentSniffer;
 import com.shal.common.service.FileMatchingService;
+import com.shal.common.service.OrderResolutionService;
+import com.shal.common.service.OrderStatusService;
 import com.shal.common.util.AppTime;
 import com.shal.common.util.TimelineLog;
 import org.slf4j.Logger;
@@ -53,9 +57,12 @@ public class BatchService {
 
     private static final Logger log = LoggerFactory.getLogger(BatchService.class);
     private static final int MAX_ZIP_ENTRIES = 1000;
+    /** Guard against nested-ZIP bombs — an order ZIP inside a batch ZIP is depth 1. */
+    private static final int MAX_ZIP_DEPTH = 4;
 
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
+    private final AppraisalTransactionRepository appraisalTransactionRepository;
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
     private final DocumentMatchRepository documentMatchRepository;
@@ -65,6 +72,9 @@ public class BatchService {
     private final BusinessEventService businessEventService;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final TransactionService transactionService;
+    private final OrderResolutionService orderResolutionService;
+    private final OrderStatusService orderStatusService;
+    private final DocumentContentSniffer contentSniffer;
     private final tools.jackson.databind.ObjectMapper objectMapper;
 
     @Value("${app.storage.path:./uploads}")
@@ -76,6 +86,7 @@ public class BatchService {
 
     public BatchService(BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
+            AppraisalTransactionRepository appraisalTransactionRepository,
             QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
             DocumentMatchRepository documentMatchRepository,
@@ -85,9 +96,13 @@ public class BatchService {
             BusinessEventService businessEventService,
             RealtimeEventPublisher realtimeEventPublisher,
             TransactionService transactionService,
+            OrderResolutionService orderResolutionService,
+            OrderStatusService orderStatusService,
+            DocumentContentSniffer contentSniffer,
             tools.jackson.databind.ObjectMapper objectMapper) {
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
+        this.appraisalTransactionRepository = appraisalTransactionRepository;
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.documentMatchRepository = documentMatchRepository;
@@ -97,6 +112,9 @@ public class BatchService {
         this.businessEventService = businessEventService;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.transactionService = transactionService;
+        this.orderResolutionService = orderResolutionService;
+        this.orderStatusService = orderStatusService;
+        this.contentSniffer = contentSniffer;
         this.objectMapper = objectMapper;
     }
 
@@ -179,6 +197,12 @@ public class BatchService {
      * audit trail are fully preserved. This is the default delete path — a hard
      * purge ({@link #deleteBatch}) is a separate, explicit admin action.
      *
+     * A soft-deleted batch is hidden from the whole app, so its documents must stop
+     * counting toward any Order. We unlink this batch's files from their Orders (the
+     * rows themselves are kept for the audit trail) and then remove any Order that is
+     * left with no documents — a deleted batch must never leave a ghost Order behind.
+     * Orders still referenced by another live batch survive and are recomputed.
+     *
      * @param batchId the batch to soft-delete
      * @param actorId id of the admin performing the deletion (recorded on the row)
      * @throws ResourceNotFoundException if batch not found
@@ -187,10 +211,39 @@ public class BatchService {
     public void softDeleteBatch(@NonNull Long batchId, Long actorId) {
         Batch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", "id", batchId));
-        batch.setDeletedAt(java.time.LocalDateTime.now());
+
+        // Capture the Orders this batch's files touched before we unlink them.
+        Set<Long> touchedOrderIds = batch.getFiles().stream()
+                .map(BatchFile::getOrder)
+                .filter(Objects::nonNull)
+                .map(AppraisalTransaction::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        // Unlink so the deleted batch's documents no longer haunt the Order views.
+        for (BatchFile f : batch.getFiles()) {
+            if (f.getOrder() != null) {
+                f.setOrder(null);
+            }
+        }
+
+        batch.setDeletedAt(AppTime.now());
         batch.setDeletedBy(actorId);
         batchRepository.save(batch);
-        log.info("Soft-deleted batch {} (id={}) by user {}", batch.getParentBatchId(), batchId, actorId);
+
+        int ordersDeleted = 0;
+        for (Long orderId : touchedOrderIds) {
+            // countAllByOrderId counts every physical batch_file → order link that
+            // remains (the FK), so a zero here means nothing references the Order and
+            // it is safe to delete without a constraint violation.
+            if (batchFileRepository.countAllByOrderId(orderId) == 0) {
+                appraisalTransactionRepository.deleteById(orderId);
+                ordersDeleted++;
+            } else {
+                appraisalTransactionRepository.findById(orderId).ifPresent(orderStatusService::recompute);
+            }
+        }
+        log.info("Soft-deleted batch {} (id={}) by user {} — unlinked files, removed {} orphaned order(s)",
+                batch.getParentBatchId(), batchId, actorId, ordersDeleted);
     }
 
     /**
@@ -213,6 +266,13 @@ public class BatchService {
         // in-memory objects, so they remain accessible after the context clear.
         String clientCode = batch.getClient().getCode();
         int fileCount = batch.getFiles().size();
+        // Orders this batch's files touched — captured now (see comment above: bulk
+        // deletes below clear the persistence context, and BatchFile.order is lazy).
+        Set<Long> touchedOrderIds = batch.getFiles().stream()
+                .map(BatchFile::getOrder)
+                .filter(Objects::nonNull)
+                .map(AppraisalTransaction::getId)
+                .collect(java.util.stream.Collectors.toSet());
 
         long started = System.nanoTime();
         log.info("Deleting batch {} with {} files", batch.getParentBatchId(), fileCount);
@@ -264,6 +324,21 @@ public class BatchService {
         long batchDeleteStarted = System.nanoTime();
         batchRepository.delete(batch);
         log.info("Deleted batch {} row in {} ms", batch.getParentBatchId(), elapsedMs(batchDeleteStarted));
+
+        // An Order with no remaining documents (this was its only batch) is now
+        // orphaned — remove it too. An Order still referenced by another batch's
+        // files is left alone.
+        int ordersDeleted = 0;
+        for (Long orderId : touchedOrderIds) {
+            if (batchFileRepository.countAllByOrderId(orderId) == 0) {
+                appraisalTransactionRepository.deleteById(orderId);
+                ordersDeleted++;
+            }
+        }
+        if (ordersDeleted > 0) {
+            log.info("Deleted {} orphaned order(s) after batch {} removal", ordersDeleted, batch.getParentBatchId());
+        }
+
         log.info("Batch {} deleted successfully in {} ms", batch.getParentBatchId(), elapsedMs(started));
     }
 
@@ -335,7 +410,7 @@ public class BatchService {
             long extractStarted = System.nanoTime();
             Path batchDir = Paths.get(storagePath, client.getCode(), parentBatchId);
             Files.createDirectories(batchDir);
-            extractAndValidateZip(file, batch, batchDir);
+            extractAndValidateZip(file, batch, batchDir, creator);
             batch.setStatus(BatchStatus.UPLOADED);
         } catch (ValidationException e) {
             log.warn("Batch validation failed for '{}': {}", parentBatchId, e.getMessage());
@@ -376,198 +451,118 @@ public class BatchService {
         return batch;
     }
 
-    private void extractAndValidateZip(MultipartFile file, Batch batch, Path batchDir) throws IOException {
-        boolean hasAppraisalFolder = false;
-        boolean hasEngagementFolder = false;
-        int entryCount = 0;
-        // Non-PDF files are catalogued (so nothing is silently dropped) but excluded
-        // from the extraction pipeline, which only handles PDFs.
+    private void extractAndValidateZip(MultipartFile file, Batch batch, Path batchDir, User creator) throws IOException {
+        // Non-PDF/XML entries are catalogued (so nothing is silently dropped) but excluded.
         List<String> excludedNonPdf = new ArrayList<>();
-        // Files over the per-file cap (default 50 MB) are excluded with a clear note rather than
-        // silently processed — appraisals run 5–50 MB, so this catches corrupt/runaway files.
+        // Files over the per-file cap (default 50 MB) are excluded with a clear note.
         List<String> oversizeFiles = new ArrayList<>();
+        List<StagedDoc> staged = new ArrayList<>();
+        int[] entryCount = {0};
 
-        try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                entryCount++;
-                if (entryCount > MAX_ZIP_ENTRIES) {
-                    throw new ValidationException("ZIP file contains too many entries (max: " + MAX_ZIP_ENTRIES + ")");
-                }
+        Path stagingDir = batchDir.resolve(".staging");
+        Files.createDirectories(stagingDir);
 
-                String entryName = entry.getName();
-                String lowerEntryName = entryName.toLowerCase();
+        // ── Phase 1 — recursively scan the ZIP (including nested .zip archives),
+        //    classify every document, and stage its bytes on disk. Never silently
+        //    dropped: unclassifiable entries land in excludedNonPdf / oversizeFiles.
+        try {
+            try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
+                scanZip(zis, "", 0, stagingDir, staged, excludedNonPdf, oversizeFiles, entryCount);
+            }
 
-                // Security: prevent path traversal attacks
-                if (entryName.contains("..")) {
-                    throw new ValidationException("Invalid ZIP entry path: " + entryName);
-                }
+            if (staged.isEmpty()) {
+                throw new ValidationException("No valid PDF or appraisal-XML files were found in the ZIP.");
+            }
 
-                // Ignore macOS archive metadata. These often look like PDFs
-                // under __MACOSX/.../._file.pdf but are not real documents.
-                String filenameOnly = Paths.get(entryName).getFileName() != null
-                        ? Paths.get(entryName).getFileName().toString()
-                        : entryName;
-                if (lowerEntryName.startsWith("__macosx/")
-                        || filenameOnly.equals(".DS_Store")
-                        || filenameOnly.startsWith("._")) {
-                    continue;
-                }
+            // ── Phase 2 — group documents into Orders. Folder-first: each distinct order
+            //    folder (numbered or named) is one order; when several appraisals share a
+            //    single type folder, split them into one order per appraisal by filename.
+            //    Assigns propertySetName on every staged doc.
+            assignOrderGroups(staged);
 
-                if (entry.isDirectory()) {
-                    // Classify only by the folder's own name, not the full path, so a set folder
-                    // like "8234 E Pearson_no_appraisal" doesn't falsely set hasAppraisalFolder.
-                    String dirSegment = lastPathSegment(entryName).toLowerCase();
-                    if (dirSegment.startsWith("appraisal")) hasAppraisalFolder = true;
-                    if (dirSegment.startsWith("engagement") || dirSegment.startsWith("eagagement")
-                            || dirSegment.equals("order") || dirSegment.equals("orders")) hasEngagementFolder = true;
-                    continue;
-                }
-
-                // Accept PDFs (all document types) AND .xml (MISMO appraisal XML).
-                // Everything else (images, spreadsheets, etc.) is catalogued but excluded.
-                String lowerEntry = entryName.toLowerCase();
-                boolean isPdf = lowerEntry.endsWith(".pdf");
-                boolean isXmlEntry = lowerEntry.endsWith(".xml");
-                if (!isPdf && !isXmlEntry) {
-                    excludedNonPdf.add(filenameOnly);
-                    log.info("Cataloguing non-PDF/non-XML entry (excluded from extraction): {}", entryName);
-                    continue;
-                }
-
-                // Classify by the DIRECT PARENT FOLDER name only (the segment immediately
-                // containing this PDF), not the full entry path. Using the full path causes
-                // misclassification when a set folder name contains type keywords
-                // (e.g. "8234 E Pearson_no_appraisal/engagement/order.pdf" would incorrectly
-                // become APPRAISAL because "appraisal" appears in the set folder name).
-                String parentFolder = directParentFolder(entryName);
-                // XML files are the MISMO 2.6 GSE appraisal XML. If they sit inside the
-                // appraisal/ folder, classify immediately. If they are outside (common in
-                // flat ZIPs where vendor dumps everything at root), peek at the XML content
-                // to detect the MISMO namespace before deciding to include or exclude.
-                // ZipInputStream does not support mark/reset, so we must read all bytes now
-                // and write them manually; preReadXmlBytes is null for non-XML entries.
-                byte[] preReadXmlBytes = null;
-                FileType fileType;
-                if (parentFolder.startsWith("appraisal")) {
-                    fileType = isXmlEntry ? FileType.APPRAISAL_XML : FileType.APPRAISAL;
-                    hasAppraisalFolder = true;
-                } else if (isXmlEntry) {
-                    preReadXmlBytes = zis.readAllBytes();
-                    String xmlHeader = new String(preReadXmlBytes, 0,
-                            Math.min(preReadXmlBytes.length, 2048), java.nio.charset.StandardCharsets.UTF_8);
-                    boolean isMismo = xmlHeader.contains("VALUATION_RESPONSE")
-                            || xmlHeader.contains("MISMO")
-                            || xmlHeader.contains("ValuationResponse")
-                            || xmlHeader.contains("UCDP_");
-                    if (!isMismo) {
-                        excludedNonPdf.add(filenameOnly);
-                        log.info("Excluding non-MISMO XML outside appraisal folder: {}", entryName);
-                        zis.closeEntry();
-                        continue;
-                    }
-                    fileType = FileType.APPRAISAL_XML;
-                    hasAppraisalFolder = true;
-                    log.info("MISMO XML detected outside appraisal/ folder — reclassifying to APPRAISAL_XML: {}", entryName);
-                } else if (parentFolder.startsWith("engagement") || parentFolder.startsWith("eagagement")
-                        || parentFolder.equals("order") || parentFolder.equals("orders")) {
-                    fileType = FileType.ENGAGEMENT;
-                    hasEngagementFolder = true;
-                } else if (parentFolder.startsWith("contract") || parentFolder.startsWith("purchase")
-                        || parentFolder.startsWith("agreement")) {
-                    fileType = FileType.CONTRACT;
-                } else {
-                    continue;
-                }
-
-                // Extract the property set name from the ZIP path.
-                // e.g. "SHAL-sorted/8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson"
-                // e.g. "8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson"
-                // e.g. "appraisal/file.pdf" → null
-                String propertySetName = extractPropertySetName(entryName);
-
-                String filename = filenameOnly;
-                // Store files in a sub-directory keyed by propertySetName (sanitized) so
-                // files from different property sets never collide on disk.
-                String storageFolderName = propertySetName != null
-                        ? sanitizeFolderName(propertySetName) + "/" + fileType.name().toLowerCase()
-                        : fileType.name().toLowerCase();
+            // ── Phase 3 — move staged bytes into their final <set>/<type> location and
+            //    build the BatchFile rows.
+            for (StagedDoc d : staged) {
+                String storageFolderName = (d.propertySetName != null && !d.propertySetName.isBlank())
+                        ? sanitizeFolderName(d.propertySetName) + "/" + d.fileType.name().toLowerCase()
+                        : d.fileType.name().toLowerCase();
                 Path typeDir = batchDir.resolve(storageFolderName);
                 Files.createDirectories(typeDir);
-                // Two entries can share a filename but hold different content (e.g.
-                // two "appraisal.pdf" under different subfolders). Never overwrite —
-                // store under a suffixed name and log the collision so both survive.
-                Path filePath = uniqueFilePath(typeDir, filename);
-                if (!filePath.getFileName().toString().equals(filename)) {
-                    log.warn("Filename collision in ZIP: '{}' already present in {} folder — stored as '{}'",
-                            filename, storageFolderName, filePath.getFileName());
-                    filename = filePath.getFileName().toString();
+                Path filePath = uniqueFilePath(typeDir, d.filenameOnly);
+                String filename = filePath.getFileName().toString();
+                if (!filename.equals(d.filenameOnly)) {
+                    log.warn("Filename collision in ZIP: '{}' already present in {} — stored as '{}'",
+                            d.filenameOnly, storageFolderName, filename);
                 }
-                if (preReadXmlBytes != null) {
-                    Files.write(filePath, preReadXmlBytes);
-                } else {
-                    Files.copy(zis, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                Files.move(d.stagedPath, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+                String qualityFlags = documentQualityFlags(d.fileType, filename, d.contentHash,
+                        batch.getFiles(), d.propertySetName);
+                if (d.typeInferredFromFilename) {
+                    String note = "Document type was inferred as " + d.fileType.name()
+                            + " from the filename (the ZIP had no type folder for it) — verify it is correct.";
+                    qualityFlags = qualityFlags == null ? note : qualityFlags + "\n" + note;
                 }
-                long fileBytes = Files.size(filePath);
-                if (fileBytes > maxUploadFileMb * 1024L * 1024L) {
-                    Files.deleteIfExists(filePath);
-                    oversizeFiles.add(filename + " (" + (fileBytes / (1024 * 1024)) + " MB)");
-                    log.warn("Excluding oversize file '{}' ({} MB > {} MB cap) from batch {}",
-                            filename, fileBytes / (1024 * 1024), maxUploadFileMb, batch.getParentBatchId());
-                    zis.closeEntry();
-                    continue;
-                }
-                String contentHash = computeSha256(filePath);
-                String qualityFlags = documentQualityFlags(fileType, filename, contentHash, batch.getFiles(), propertySetName);
 
                 BatchFile batchFile = BatchFile.builder()
                         .batch(batch)
-                        .fileType(fileType)
+                        .fileType(d.fileType)
                         .filename(filename)
-                        .originalPath(entryName)
+                        .originalPath(d.entryPath)
                         .storagePath(filePath.toString())
-                        .fileSize(Files.size(filePath))
-                        .contentHash(contentHash)
+                        .fileSize(d.fileSize)
+                        .contentHash(d.contentHash)
                         .contentVersion(1L)
                         .documentQualityFlags(qualityFlags)
                         .status(FileStatus.PENDING)
                         .orderId(FileMatchingService.extractOrderId(filename))
-                        .propertySetName(propertySetName)
+                        .propertySetName(d.propertySetName)
                         .build();
-
                 batch.addFile(batchFile);
-                zis.closeEntry();
             }
+        } finally {
+            cleanupStaging(stagingDir);
         }
 
-        if (!hasAppraisalFolder || !hasEngagementFolder) {
+        // A batch is processable when it contains at least one appraisal document. The
+        // old rule required literal 'appraisal' AND 'engagement' folders, which rejected
+        // flat order ZIPs that actually contained every document.
+        boolean hasAppraisal = batch.getFiles().stream()
+                .anyMatch(f -> f.getFileType() == FileType.APPRAISAL);
+        if (!hasAppraisal) {
             throw new ValidationException(
-                    "Invalid folder structure: requires 'appraisal' and 'engagement' folders");
+                    "No appraisal document found in the ZIP. Each order must include an appraisal PDF.");
         }
 
-        if (batch.getFiles().isEmpty()) {
-            throw new ValidationException("No valid PDF files found in the batch");
-        }
+        // Order identity from inside the documents: the MISMO XML carries the AMC
+        // order number and subject address for each order group. Extracted once,
+        // used by the content sniff below AND by order resolution (true order-number
+        // identity instead of filename stems).
+        Map<String, DocumentContentSniffer.OrderIdentity> identityBySet = contentSniffer.extractOrderIdentities(batch);
 
-        // If only ONE distinct non-null propertySetName exists, all files are under the
-        // same folder — that folder is the batch root, not a meaningful property set.
-        // Clear propertySetName so the batch is treated as a flat (single-property) upload.
+        // S3 content-ID sniff: a supporting document not co-located with any
+        // appraisal (e.g. all engagement letters dumped in one folder) states its
+        // order number / subject address INSIDE the document — read it and re-home
+        // the file to its order group before anything is marked unassignable.
+        sniffLinkUnanchoredDocs(batch, identityBySet);
+
         Set<String> distinctSets = batch.getFiles().stream()
                 .map(BatchFile::getPropertySetName)
                 .filter(Objects::nonNull)
                 .collect(java.util.stream.Collectors.toSet());
-        if (distinctSets.size() <= 1) {
-            for (BatchFile f : batch.getFiles()) {
-                f.setPropertySetName(null);
-            }
-        } else {
-            log.debug("Batch {} — {} distinct property sets", batch.getParentBatchId(), distinctSets.size());
-            // Check each set for completeness and warn about incomplete ones
+        if (distinctSets.size() > 1) {
+            log.debug("Batch {} — {} order groups", batch.getParentBatchId(), distinctSets.size());
             warnIncompleteSets(batch, distinctSets);
         }
 
         flagDocumentRoleAmbiguity(batch);
         markUnresolvableFilesNeedsAssignment(batch);
+
+        // Resolve each file to its canonical Order (AppraisalTransaction) — content-hash
+        // → orderId → propertySetName identity matching against every previously
+        // ingested batch, so a re-upload under a differently-named folder links back
+        // to the order that already exists instead of forking a duplicate.
+        orderResolutionService.resolveOrdersForBatch(batch, batch.getClient(), creator, identityBySet);
 
         if (!excludedNonPdf.isEmpty()) {
             String note = excludedNonPdf.size() + " non-PDF file(s) catalogued and excluded from extraction: "
@@ -585,6 +580,355 @@ public class BatchService {
             batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
             log.warn("Batch {} excluded {} oversize file(s)", batch.getParentBatchId(), oversizeFiles.size());
         }
+    }
+
+    /**
+     * A document extracted from the ZIP, staged on disk, awaiting order grouping.
+     * Holds everything needed to build a {@link BatchFile} once {@link #assignOrderGroups}
+     * has decided which order it belongs to.
+     */
+    private static final class StagedDoc {
+        String entryPath;                 // full ZIP path (incl. nested-zip prefix)
+        String filenameOnly;              // leaf filename
+        Path stagedPath;                  // temp location under batchDir/.staging
+        FileType fileType;
+        long fileSize;
+        String contentHash;
+        String groupKey;                  // batch-local order-folder path (null = ZIP root)
+        String setLabel;                  // human-readable order-folder name (leaf of groupKey)
+        String propertySetName;           // assigned in phase 2
+        boolean typeInferredFromFilename; // true when no type folder — flagged for review
+    }
+
+    /**
+     * Recursively walk a ZIP (descending into nested {@code .zip} archives up to
+     * {@link #MAX_ZIP_DEPTH}), classify each PDF/appraisal-XML, and stage its bytes.
+     * {@code pathPrefix} namespaces nested-zip entries so an order ZIP named "1.zip"
+     * behaves exactly like an order folder "1/".
+     */
+    private void scanZip(ZipInputStream zis, String pathPrefix, int depth, Path stagingDir,
+                         List<StagedDoc> staged, List<String> excludedNonPdf,
+                         List<String> oversizeFiles, int[] entryCount) throws IOException {
+        ZipEntry entry;
+        while ((entry = zis.getNextEntry()) != null) {
+            entryCount[0]++;
+            if (entryCount[0] > MAX_ZIP_ENTRIES) {
+                throw new ValidationException("ZIP file contains too many entries (max: " + MAX_ZIP_ENTRIES + ")");
+            }
+
+            String rawName = entry.getName();
+            if (rawName.contains("..")) {
+                throw new ValidationException("Invalid ZIP entry path: " + rawName);
+            }
+
+            String filenameOnly = leafName(rawName);
+            String lowerLeaf = filenameOnly.toLowerCase();
+            // Ignore macOS archive metadata (__MACOSX/.../._file.pdf, .DS_Store).
+            if (rawName.toLowerCase().startsWith("__macosx/")
+                    || lowerLeaf.equals(".ds_store") || filenameOnly.startsWith("._")) {
+                zis.closeEntry();
+                continue;
+            }
+            if (entry.isDirectory()) {
+                zis.closeEntry();
+                continue;
+            }
+
+            String entryName = pathPrefix + rawName;
+
+            // Nested ZIP → recurse so an order-zip inside a batch-zip is handled.
+            if (lowerLeaf.endsWith(".zip")) {
+                byte[] nestedBytes = zis.readAllBytes();
+                zis.closeEntry();
+                if (depth >= MAX_ZIP_DEPTH) {
+                    log.warn("Skipping nested ZIP '{}' — max nesting depth {} exceeded", entryName, MAX_ZIP_DEPTH);
+                    continue;
+                }
+                String nestedPrefix = entryName.substring(0, entryName.length() - 4); // drop ".zip"
+                if (!nestedPrefix.endsWith("/")) nestedPrefix = nestedPrefix + "/";
+                try (ZipInputStream nested = new ZipInputStream(new java.io.ByteArrayInputStream(nestedBytes))) {
+                    scanZip(nested, nestedPrefix, depth + 1, stagingDir, staged,
+                            excludedNonPdf, oversizeFiles, entryCount);
+                }
+                continue;
+            }
+
+            boolean isPdf = lowerLeaf.endsWith(".pdf");
+            boolean isXml = lowerLeaf.endsWith(".xml");
+            if (!isPdf && !isXml) {
+                excludedNonPdf.add(filenameOnly);
+                log.info("Cataloguing non-PDF/non-XML entry (excluded from extraction): {}", entryName);
+                zis.closeEntry();
+                continue;
+            }
+
+            byte[] bytes = zis.readAllBytes();
+            zis.closeEntry();
+            if (bytes.length > maxUploadFileMb * 1024L * 1024L) {
+                oversizeFiles.add(filenameOnly + " (" + (bytes.length / (1024 * 1024)) + " MB)");
+                log.warn("Excluding oversize file '{}' ({} MB > {} MB cap)",
+                        filenameOnly, bytes.length / (1024 * 1024), maxUploadFileMb);
+                continue;
+            }
+
+            // Classify: folder keyword first, then filename/content fallback so a flat
+            // order folder (no type subfolders) still resolves instead of being dropped.
+            String typeFolder = typeFolderKeyword(directParentFolder(entryName));
+            boolean inferred = false;
+            FileType fileType;
+            if (isXml) {
+                boolean apprFolder = typeFolder != null && typeFolder.equals("appraisal");
+                if (apprFolder || isMismoXml(bytes)) {
+                    fileType = FileType.APPRAISAL_XML;
+                } else {
+                    excludedNonPdf.add(filenameOnly);
+                    log.info("Excluding non-MISMO XML outside appraisal folder: {}", entryName);
+                    continue;
+                }
+            } else if (typeFolder != null) {
+                fileType = fileTypeForFolder(typeFolder);
+            } else {
+                fileType = classifyPdfByFilename(filenameOnly);
+                inferred = true;
+            }
+
+            Path stagedPath = uniqueFilePath(stagingDir, filenameOnly);
+            Files.write(stagedPath, bytes);
+
+            StagedDoc d = new StagedDoc();
+            d.entryPath = entryName;
+            d.filenameOnly = filenameOnly;
+            d.stagedPath = stagedPath;
+            d.fileType = fileType;
+            d.fileSize = bytes.length;
+            d.contentHash = computeSha256(stagedPath);
+            d.groupKey = orderGroupKey(entryName);
+            d.setLabel = leafSegment(d.groupKey);
+            d.typeInferredFromFilename = inferred;
+            staged.add(d);
+        }
+    }
+
+    /**
+     * Folder-first order grouping with filename fallback. Files sharing an order-folder
+     * path form one order; when a single folder holds several appraisals (properties
+     * flattened into one type folder), each appraisal becomes its own order and the
+     * supporting documents are attached to the best filename match. Every doc leaves
+     * this method with a {@code propertySetName} that identifies its order.
+     */
+    private void assignOrderGroups(List<StagedDoc> staged) {
+        Map<String, List<StagedDoc>> byGroup = new java.util.LinkedHashMap<>();
+        for (StagedDoc d : staged) {
+            byGroup.computeIfAbsent(d.groupKey != null ? d.groupKey : "__root__", k -> new ArrayList<>()).add(d);
+        }
+
+        for (List<StagedDoc> group : byGroup.values()) {
+            List<StagedDoc> appraisals = group.stream()
+                    .filter(d -> d.fileType == FileType.APPRAISAL).toList();
+            String folderLabel = group.get(0).setLabel;
+
+            if (appraisals.size() <= 1) {
+                // One (or zero) appraisal → the whole folder is a single order.
+                String label = (folderLabel != null && !folderLabel.isBlank())
+                        ? folderLabel
+                        : (appraisals.isEmpty() ? null : baseName(appraisals.get(0).filenameOnly));
+                for (StagedDoc d : group) d.propertySetName = label;
+            } else {
+                // Several appraisals under one folder → split into one order per appraisal,
+                // labelled by the appraisal's own filename (a distinctive property identity).
+                for (StagedDoc a : appraisals) a.propertySetName = baseName(a.filenameOnly);
+                for (StagedDoc d : group) {
+                    if (d.fileType == FileType.APPRAISAL) continue;
+                    StagedDoc best = null;
+                    int bestScore = 0;
+                    for (StagedDoc a : appraisals) {
+                        int score = FileMatchingService.filenameMatchScore(d.filenameOnly, a.filenameOnly);
+                        if (score > bestScore) { bestScore = score; best = a; }
+                    }
+                    // No confident filename match → leave in the folder group so the
+                    // multi-appraisal NEEDS_ASSIGNMENT path surfaces it for manual pairing.
+                    d.propertySetName = best != null ? best.propertySetName : folderLabel;
+                }
+            }
+        }
+    }
+
+    /** Map key for an order group: its propertySetName, or "__root__" for the flat/unset group. */
+    private static String setKey(String propertySetName) {
+        return DocumentContentSniffer.setKeyOf(propertySetName);
+    }
+
+    // extractOrderIdentities lives on DocumentContentSniffer — shared with the QC
+    // linkage gate, which recomputes the same map live at QC-run time.
+
+    /**
+     * S3 content-ID sniff. For every supporting document whose order group holds no
+     * appraisal (structural evidence gave no answer — e.g. a "4" folder holding all
+     * the batch's engagement letters), read the document's own text and match its
+     * stated order number / subject address against the batch's appraisal anchors.
+     * A unique match re-homes the file into that appraisal's order group, so the
+     * normal set-based pairing and Order resolution downstream treat it exactly as
+     * if it had been co-located; no match (or an ambiguous one) leaves the file for
+     * the NEEDS_ASSIGNMENT manual flow.
+     */
+    private void sniffLinkUnanchoredDocs(Batch batch, Map<String, DocumentContentSniffer.OrderIdentity> identityBySet) {
+        List<BatchFile> appraisals = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.APPRAISAL)
+                .toList();
+        if (appraisals.isEmpty()) return;
+
+        Set<String> anchorSetKeys = new HashSet<>();
+        Map<String, BatchFile> appraisalBySetKey = new HashMap<>();
+        List<DocumentContentSniffer.Anchor> anchors = new ArrayList<>();
+        for (BatchFile a : appraisals) {
+            String key = setKey(a.getPropertySetName());
+            anchorSetKeys.add(key);
+            appraisalBySetKey.putIfAbsent(key, a);
+            anchors.add(contentSniffer.anchorFor(a, identityBySet.get(key)));
+        }
+
+        List<String> linkedNotes = new ArrayList<>();
+        for (BatchFile f : batch.getFiles()) {
+            if (f.getFileType() == FileType.APPRAISAL) continue;
+            if (anchorSetKeys.contains(setKey(f.getPropertySetName()))) continue; // structurally linked
+
+            String text = contentSniffer.sniffableText(f);
+            Optional<DocumentContentSniffer.SniffMatch> match = contentSniffer.match(text, anchors);
+            if (match.isEmpty()) continue;
+
+            DocumentContentSniffer.SniffMatch m = match.get();
+            BatchFile anchorAppraisal = appraisalBySetKey.get(m.anchor().setKey());
+            if (anchorAppraisal == null) continue;
+
+            f.setPropertySetName(anchorAppraisal.getPropertySetName());
+            String note = "Linked to order \"" + m.anchor().displayName() + "\" by document content ("
+                    + m.reason() + "; confidence " + m.confidence() + ").";
+            f.setDocumentQualityFlags(f.getDocumentQualityFlags() == null
+                    ? note : f.getDocumentQualityFlags() + "\n" + note);
+            linkedNotes.add("\"" + f.getFilename() + "\" → order \"" + m.anchor().displayName()
+                    + "\" (" + m.reason() + ")");
+            log.info("Batch {} — content sniff linked '{}' ({}) to order group '{}' ({}, confidence {})",
+                    batch.getParentBatchId(), f.getFilename(), f.getFileType(),
+                    m.anchor().displayName(), m.reason(), m.confidence());
+        }
+
+        if (!linkedNotes.isEmpty()) {
+            String note = linkedNotes.size() + " supporting document(s) were automatically linked to their "
+                    + "orders by the identifiers stated inside the document:\n" + String.join("\n", linkedNotes);
+            String existing = batch.getIntakeWarnings();
+            batch.setIntakeWarnings(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+        }
+    }
+
+    private void cleanupStaging(Path stagingDir) {
+        try {
+            if (Files.exists(stagingDir)) {
+                try (var paths = Files.walk(stagingDir)) {
+                    paths.sorted((a, b) -> b.compareTo(a)).forEach(p -> {
+                        try { Files.deleteIfExists(p); } catch (IOException ignored) { }
+                    });
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Failed to clean up staging dir {}: {}", stagingDir, e.getMessage());
+        }
+    }
+
+    /** Canonical type-folder keyword for a folder segment, or null if it names no doc type. */
+    private static String typeFolderKeyword(String segment) {
+        if (segment == null) return null;
+        String s = segment.trim().toLowerCase();
+        if (s.startsWith("appraisal")) return "appraisal"; // covers appraisal_xml too
+        if (s.startsWith("engagement") || s.startsWith("eagagement")
+                || s.equals("order") || s.equals("orders")) return "engagement";
+        if (s.startsWith("contract") || s.startsWith("purchase") || s.startsWith("agreement")) return "contract";
+        return null;
+    }
+
+    private static FileType fileTypeForFolder(String keyword) {
+        return switch (keyword) {
+            case "engagement" -> FileType.ENGAGEMENT;
+            case "contract" -> FileType.CONTRACT;
+            default -> FileType.APPRAISAL;
+        };
+    }
+
+    /**
+     * Classify a PDF by filename when the ZIP gives no type folder (flat order layout).
+     * Contract/engagement keywords win; anything else defaults to APPRAISAL and is
+     * flagged for review so nothing is dropped and no order is left without an anchor.
+     */
+    private static FileType classifyPdfByFilename(String filename) {
+        String n = filename == null ? "" : filename.toLowerCase();
+        if (n.contains("engagement") || n.contains("eng letter") || n.contains("engage")
+                || n.contains("order form") || n.contains("assignment")) {
+            return FileType.ENGAGEMENT;
+        }
+        if (n.contains("contract") || n.contains("purchase") || n.contains("agreement")
+                || n.contains("as-is") || n.contains("as is") || n.contains("addendum")
+                || n.contains("disclosure") || n.contains("hoa") || n.contains("counter")) {
+            return FileType.CONTRACT;
+        }
+        return FileType.APPRAISAL;
+    }
+
+    /** MISMO 2.6 GSE appraisal XML detection by header sniff. */
+    private static boolean isMismoXml(byte[] bytes) {
+        String header = new String(bytes, 0, Math.min(bytes.length, 2048),
+                java.nio.charset.StandardCharsets.UTF_8);
+        return header.contains("VALUATION_RESPONSE") || header.contains("MISMO")
+                || header.contains("ValuationResponse") || header.contains("UCDP_");
+    }
+
+    /**
+     * The batch-local order-folder path for a ZIP entry: the folder chain up to (but
+     * not including) a type folder, or the full folder chain when there is none.
+     * Null when the file sits at the ZIP root with no enclosing folder.
+     *   "EQSS/xBatch/appraisal/f.pdf" → "EQSS/xBatch"
+     *   "VIKAS/1/1/appraisal/f.pdf"   → "VIKAS/1/1"
+     *   "xml1/1/f.pdf"                → "xml1/1"   (flat, no type folder)
+     *   "appraisal/f.pdf"             → null       (type folder at root, single order)
+     *   "f.pdf"                       → null
+     */
+    static String orderGroupKey(String entryPath) {
+        if (entryPath == null || entryPath.isBlank()) return null;
+        List<String> segs = new ArrayList<>();
+        for (String p : entryPath.replace("\\", "/").split("/")) {
+            if (!p.isBlank()) segs.add(p);
+        }
+        if (segs.size() < 2) return null; // file at root, no folder
+        int fileIdx = segs.size() - 1;
+        int typeIdx = -1;
+        for (int i = 0; i < fileIdx; i++) {
+            if (typeFolderKeyword(segs.get(i)) != null) typeIdx = i; // deepest type folder wins
+        }
+        int endExclusive = typeIdx >= 0 ? typeIdx : fileIdx;
+        if (endExclusive <= 0) return null;
+        return String.join("/", segs.subList(0, endExclusive));
+    }
+
+    /** Leaf filename of a path, original case. */
+    private static String leafName(String path) {
+        if (path == null || path.isBlank()) return "";
+        String t = path.replace("\\", "/");
+        while (t.endsWith("/")) t = t.substring(0, t.length() - 1);
+        int s = t.lastIndexOf('/');
+        return s >= 0 ? t.substring(s + 1) : t;
+    }
+
+    /** Last folder segment of a folder path (order label), or null. */
+    private static String leafSegment(String folderPath) {
+        if (folderPath == null || folderPath.isBlank()) return null;
+        String seg = leafName(folderPath).trim();
+        return seg.isBlank() ? null : seg;
+    }
+
+    /** Filename without its extension. */
+    private static String baseName(String filename) {
+        if (filename == null) return null;
+        String n = leafName(filename);
+        int dot = n.lastIndexOf('.');
+        return (dot > 0 ? n.substring(0, dot) : n).trim();
     }
 
     /**
@@ -619,6 +963,14 @@ public class BatchService {
             long engagements = files.stream().filter(f -> f.getFileType() == FileType.ENGAGEMENT).count();
             long contracts   = files.stream().filter(f -> f.getFileType() == FileType.CONTRACT).count();
 
+            // A group with no appraisal is a pool of unlinked documents, not one
+            // order — "3 engagement letters found, confirm which applies" would be
+            // nonsense there (they belong to 3 different orders). warnIncompleteSets
+            // reports that situation truthfully.
+            if (appraisals == 0) {
+                continue;
+            }
+
             if (appraisals > 1) {
                 warnings.add("Set " + setLabel + ": " + appraisals
                         + " appraisal PDFs found — confirm they belong to the same appraisal.");
@@ -642,14 +994,28 @@ public class BatchService {
     }
 
     /**
-     * Warn about property sets that are missing required documents.
+     * Warn about order groups that are missing required documents — truthfully.
      *
-     * A set without an appraisal cannot be QC'd at all — it should be uploaded as a
-     * separate batch once the appraisal PDF is available.
-     * A set without an engagement letter can still be QC'd but with reduced accuracy —
-     * the admin should be aware and ideally upload it as its own batch with the full set.
+     * Two different situations must never be conflated:
+     *  - MISSING: the document is genuinely not in this upload → QC proceeds with
+     *    it marked "not provided"; it can be attached to the order later.
+     *  - UNLINKED CANDIDATE EXISTS: the document IS in this batch but is not
+     *    attached to any order → the fix is the in-app Assign button, never
+     *    re-uploading the ZIP.
+     * A folder with no appraisal is not an order at all — it is a pool of
+     * unlinked documents awaiting assignment.
      */
     private void warnIncompleteSets(Batch batch, Set<String> distinctSets) {
+        Set<String> appraisalSets = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.APPRAISAL)
+                .map(BatchFile::getPropertySetName)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        long unlinkedEngagements = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.ENGAGEMENT)
+                .filter(f -> f.getPropertySetName() == null || !appraisalSets.contains(f.getPropertySetName()))
+                .count();
+
         List<String> warnings = new ArrayList<>();
         for (String setName : distinctSets) {
             List<BatchFile> setFiles = batch.getFiles().stream()
@@ -659,16 +1025,23 @@ public class BatchService {
             boolean hasEngagement = setFiles.stream().anyMatch(f -> f.getFileType() == FileType.ENGAGEMENT);
 
             if (!hasAppraisal) {
-                warnings.add("Set \"" + setName + "\" has no appraisal PDF — this set will be skipped during QC. "
-                        + "Remove it from the ZIP and upload it as a separate batch once the appraisal is available.");
-                log.warn("Batch {} set '{}' has no appraisal — it will be skipped during QC",
+                warnings.add("Folder \"" + setName + "\" contains " + setFiles.size()
+                        + " supporting document(s) but no appraisal — these are unlinked documents, not an "
+                        + "order. Assign each one to its order with the Assign button in this batch.");
+                log.warn("Batch {} folder '{}' holds only supporting documents — unlinked pool",
                         batch.getParentBatchId(), setName);
             } else if (!hasEngagement) {
-                warnings.add("Set \"" + setName + "\" has no engagement letter — QC will proceed without it, "
-                        + "which reduces accuracy. Consider removing it and uploading as a separate batch "
-                        + "once the engagement letter is available.");
-                log.warn("Batch {} set '{}' has no engagement letter — QC accuracy may be reduced",
-                        batch.getParentBatchId(), setName);
+                if (unlinkedEngagements > 0) {
+                    warnings.add("Order \"" + setName + "\" has no engagement letter linked, but "
+                            + unlinkedEngagements + " unlinked engagement letter(s) exist in this batch — "
+                            + "assign the correct one with the Assign button before running QC.");
+                } else {
+                    warnings.add("Order \"" + setName + "\": no engagement letter was included in this upload. "
+                            + "QC can still run and will treat it as not provided; attach the letter to this "
+                            + "order when it becomes available.");
+                }
+                log.warn("Batch {} order '{}' has no engagement letter linked ({} unlinked candidate(s) in batch)",
+                        batch.getParentBatchId(), setName, unlinkedEngagements);
             }
         }
         if (!warnings.isEmpty()) {
@@ -698,16 +1071,27 @@ public class BatchService {
                 .map(BatchFile::getOrderId)
                 .filter(id -> id != null && !id.isBlank())
                 .collect(java.util.stream.Collectors.toSet());
+        // An appraisal's order group (propertySetName) already links its supporting docs —
+        // a supporting file in the same group is resolvable even if its orderId differs.
+        Set<String> appraisalSets = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.APPRAISAL)
+                .map(BatchFile::getPropertySetName)
+                .filter(s -> s != null && !s.isBlank())
+                .collect(java.util.stream.Collectors.toSet());
 
         for (BatchFile f : batch.getFiles()) {
             if (f.getFileType() == FileType.APPRAISAL) {
                 continue;
             }
             String fOrderId = f.getOrderId();
-            // Primary check: orderId exact match
-            boolean linked = fOrderId != null && !fOrderId.isBlank()
-                    && appraisalOrderIds.contains(fOrderId);
-            // Secondary check: case-insensitive basename match (covers "ESCA-0019573.xml"
+            // Primary check: shares an appraisal's order group (folder-first grouping).
+            boolean linked = f.getPropertySetName() != null && !f.getPropertySetName().isBlank()
+                    && appraisalSets.contains(f.getPropertySetName());
+            // Secondary check: orderId exact match
+            if (!linked) {
+                linked = fOrderId != null && !fOrderId.isBlank() && appraisalOrderIds.contains(fOrderId);
+            }
+            // Tertiary check: case-insensitive basename match (covers "ESCA-0019573.xml"
             // vs appraisal orderId "ESCA-0019573" when orderId comes from the full basename)
             if (!linked && fOrderId != null && !fOrderId.isBlank()) {
                 linked = appraisalOrderIds.stream()
@@ -743,6 +1127,27 @@ public class BatchService {
      */
     @Transactional
     public void manuallyAssignFile(Long supportingFileId, Long appraisalFileId, Long batchId, User admin) {
+        manuallyAssignFile(supportingFileId, appraisalFileId, batchId, admin, false);
+    }
+
+    /**
+     * As above, plus address/order-number cross-validation: even a manual assignment
+     * is blocked when the document's own content confidently identifies it as
+     * belonging to a DIFFERENT order in this batch (the reverse of the intake bug —
+     * a human dropping the right-looking file into the wrong order). Catches this
+     * before it reaches QC rather than after, when it would show up as a bewildering
+     * cross-doc mismatch on the wrong order.
+     *
+     * {@code forceOverride=true} bypasses the check for the rare legitimate case
+     * (e.g. the same engagement letter genuinely covers two orders) — the override
+     * is recorded on the DocumentMatch for audit.
+     *
+     * @throws ValidationException with field "addressMismatch" when a conflicting
+     *         match was found and {@code forceOverride} is false.
+     */
+    @Transactional
+    public void manuallyAssignFile(Long supportingFileId, Long appraisalFileId, Long batchId, User admin,
+                                   boolean forceOverride) {
         BatchFile supporting = batchFileRepository.findById(supportingFileId)
                 .orElseThrow(() -> new com.shal.common.exception.ResourceNotFoundException(
                         "BatchFile not found: " + supportingFileId));
@@ -760,6 +1165,13 @@ public class BatchService {
             throw new ValidationException("fileId", "Cannot assign an APPRAISAL as a supporting file");
         }
 
+        if (!forceOverride) {
+            Optional<String> mismatch = detectAssignmentMismatch(supporting, appraisal);
+            if (mismatch.isPresent()) {
+                throw new ValidationException("addressMismatch", mismatch.get());
+            }
+        }
+
         DocumentMatch match = documentMatchRepository
                 .findByAppraisalFile_IdAndSupportingFileType(appraisal.getId(), supporting.getFileType())
                 .orElseGet(DocumentMatch::new);
@@ -769,7 +1181,8 @@ public class BatchService {
         match.setMatchType("manual_admin");
         match.setConfidenceScore(1.0);
         match.setMatchReason("Manually assigned by admin " + admin.getUsername()
-                + " on " + java.time.LocalDate.now());
+                + " on " + java.time.LocalDate.now()
+                + (forceOverride ? " (address-mismatch check overridden)" : ""));
         match.setMatchedBy(admin);
         match.setMatchWarning(null);
         match.setAmbiguousCandidatesJson("[]");
@@ -782,6 +1195,16 @@ public class BatchService {
             batchFileRepository.save(supporting);
         }
 
+        // A supporting file resolved to no Order at intake (no confident appraisal
+        // match) now has an explicit human-confirmed match — link it to the
+        // appraisal's Order retroactively so it's part of that order's document
+        // cluster instead of staying permanently unresolved.
+        if (appraisal.getOrder() != null && !appraisal.getOrder().equals(supporting.getOrder())) {
+            supporting.setOrder(appraisal.getOrder());
+            batchFileRepository.save(supporting);
+            orderStatusService.recompute(appraisal.getOrder());
+        }
+
         businessEventService.record("FILE_MANUALLY_ASSIGNED", admin, "java", "ASSIGNED",
                 "DocumentMatch", match.getId(), batchId, supportingFileId, null, null,
                 Map.of(
@@ -792,6 +1215,46 @@ public class BatchService {
         log.info("Admin {} manually assigned '{}' ({}) → appraisal '{}' in batch {}",
                 admin.getUsername(), supporting.getFilename(), supporting.getFileType(),
                 appraisal.getFilename(), batchId);
+    }
+
+    /**
+     * Cross-validate a proposed manual assignment against document content. Scores
+     * {@code supporting}'s text against EVERY appraisal anchor in the batch (not just
+     * the target) — if the document confidently identifies a DIFFERENT order than the
+     * one the admin is assigning it to, that is a real mismatch worth blocking. A
+     * unique match confirming the target, a tie, or no signal at all (unreadable PDF,
+     * generic template with no identifiers) are all treated as "cannot disprove" and
+     * allowed through — this check only fires on positive contrary evidence, never on
+     * absence of evidence, matching intake's own "never fail on missing signal" rule.
+     */
+    private Optional<String> detectAssignmentMismatch(BatchFile supporting, BatchFile appraisal) {
+        Batch batch = appraisal.getBatch();
+        List<BatchFile> appraisals = batch.getFiles().stream()
+                .filter(f -> f.getFileType() == FileType.APPRAISAL && f.isActive())
+                .toList();
+        if (appraisals.size() <= 1) return Optional.empty(); // nothing else to conflict with
+
+        Map<String, DocumentContentSniffer.OrderIdentity> identityBySet = contentSniffer.extractOrderIdentities(batch);
+        Map<String, BatchFile> appraisalBySetKey = new HashMap<>();
+        List<DocumentContentSniffer.Anchor> anchors = new ArrayList<>();
+        for (BatchFile a : appraisals) {
+            String key = setKey(a.getPropertySetName());
+            appraisalBySetKey.putIfAbsent(key, a);
+            anchors.add(contentSniffer.anchorFor(a, identityBySet.get(key)));
+        }
+
+        String text = contentSniffer.sniffableText(supporting);
+        List<DocumentContentSniffer.SniffMatch> top = contentSniffer.candidatesAtTopScore(text, anchors);
+        if (top.size() != 1) return Optional.empty(); // no signal, or tied — cannot disprove the assignment
+
+        DocumentContentSniffer.SniffMatch m = top.get(0);
+        String targetKey = setKey(appraisal.getPropertySetName());
+        if (m.anchor().setKey().equals(targetKey)) return Optional.empty(); // confirms the assignment
+
+        return Optional.of("\"" + supporting.getFilename() + "\" appears to belong to a different order — its "
+                + m.reason() + ", which points to \"" + m.anchor().displayName() + "\", not \""
+                + (appraisal.getPropertySetName() != null ? appraisal.getPropertySetName() : appraisal.getFilename())
+                + "\". Re-check before assigning, or confirm to override.");
     }
 
     /**
@@ -823,55 +1286,9 @@ public class BatchService {
                 admin.getUsername(), file.getFilename(), oldType, newType, batchId);
     }
 
-    /**
-     * Extract the property set (top-level property folder) name from a ZIP entry path.
-     * Looks for the directory segment that is a document-type keyword and returns
-     * the segment immediately before it.
-     *
-     * Examples:
-     *   "8234 E Pearson/appraisal/file.pdf"             → "8234 E Pearson"
-     *   "SHAL-sorted/8234 E Pearson/appraisal/file.pdf" → "8234 E Pearson"
-     *   "appraisal/file.pdf"                            → null (no set)
-     */
-    static String extractPropertySetName(String entryPath) {
-        if (entryPath == null || entryPath.isBlank()) return null;
-        String[] parts = entryPath.split("/");
-        // Iterate over directory segments (all except the last, which is the filename)
-        for (int i = 0; i < parts.length - 1; i++) {
-            if (isDocTypeFolder(parts[i])) {
-                return i > 0 ? parts[i - 1].trim() : null;
-            }
-        }
-        return null;
-    }
-
-    private static boolean isDocTypeFolder(String segment) {
-        if (segment == null) return false;
-        String lower = segment.trim().toLowerCase();
-        return lower.equals("appraisal")   || lower.equals("appraisals")
-            || lower.equals("engagement")  || lower.equals("engagements")
-            || lower.equals("eagagement")  || lower.equals("eagagements")
-            || lower.equals("contract")    || lower.equals("contracts")
-            || lower.equals("order")       || lower.equals("orders")
-            || lower.equals("purchase")    || lower.equals("agreement");
-    }
-
     /** Strip characters that are unsafe in filesystem path segments. */
     private static String sanitizeFolderName(String name) {
         return name.replaceAll("[/\\\\:*?\"<>|]", "_").trim();
-    }
-
-    /**
-     * Returns the last non-empty path segment of a ZIP entry name (directory or file),
-     * lower-cased and with trailing slashes stripped.
-     * e.g. "SHAL-sorted/8234 E Pearson/appraisal/" → "appraisal"
-     */
-    private static String lastPathSegment(String entryName) {
-        if (entryName == null || entryName.isBlank()) return "";
-        String trimmed = entryName.replace("\\", "/").stripTrailing();
-        if (trimmed.endsWith("/")) trimmed = trimmed.substring(0, trimmed.length() - 1);
-        int slash = trimmed.lastIndexOf('/');
-        return (slash >= 0 ? trimmed.substring(slash + 1) : trimmed).trim().toLowerCase();
     }
 
     /**

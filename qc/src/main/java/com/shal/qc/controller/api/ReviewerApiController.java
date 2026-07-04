@@ -52,6 +52,8 @@ public class ReviewerApiController {
     private final AuditLogRepository auditLogRepository;
     private final ObjectMapper objectMapper;
     private final com.shal.qc.service.PythonClientService pythonClientService;
+    private final com.shal.common.repository.AppraisalTransactionRepository orderRepository;
+    private final com.shal.common.repository.BatchFileRepository batchFileRepository;
 
     public ReviewerApiController(VerificationService verificationService,
                                  QCResultRepository qcResultRepository,
@@ -60,7 +62,9 @@ public class ReviewerApiController {
                                  AuditLogService auditLogService,
                                  AuditLogRepository auditLogRepository,
                                  ObjectMapper objectMapper,
-                                 com.shal.qc.service.PythonClientService pythonClientService) {
+                                 com.shal.qc.service.PythonClientService pythonClientService,
+                                 com.shal.common.repository.AppraisalTransactionRepository orderRepository,
+                                 com.shal.common.repository.BatchFileRepository batchFileRepository) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
@@ -69,6 +73,52 @@ public class ReviewerApiController {
         this.auditLogRepository = auditLogRepository;
         this.objectMapper = objectMapper;
         this.pythonClientService = pythonClientService;
+        this.orderRepository = orderRepository;
+        this.batchFileRepository = batchFileRepository;
+    }
+
+    /**
+     * A reviewer's own work queue: the Orders allocated to them (order-level assignment),
+     * optionally filtered by document status. This is the reviewer-side counterpart to the
+     * admin allocation in OrderApiController.
+     */
+    @GetMapping("/orders")
+    public ResponseEntity<?> myAssignedOrders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String documentStatus,
+            @AuthenticationPrincipal com.shal.common.security.UserPrincipal principal) {
+        com.shal.common.entity.OrderDocumentStatus status = null;
+        if (documentStatus != null && !documentStatus.isBlank()) {
+            try {
+                status = com.shal.common.entity.OrderDocumentStatus.valueOf(documentStatus.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unknown documentStatus: " + documentStatus));
+            }
+        }
+        Long reviewerId = principal.getUser().getId();
+        var pageResult = orderRepository.findByAssignedReviewer(reviewerId, status,
+                org.springframework.data.domain.PageRequest.of(page, size));
+        return ResponseEntity.ok(Map.of(
+                "content", pageResult.getContent().stream().map(this::toAssignedOrderSummary).toList(),
+                "totalPages", pageResult.getTotalPages(),
+                "number", pageResult.getNumber(),
+                "totalElements", pageResult.getTotalElements()));
+    }
+
+    private Map<String, Object> toAssignedOrderSummary(com.shal.common.entity.AppraisalTransaction order) {
+        Map<String, Object> m = new java.util.HashMap<>();
+        m.put("id", order.getId());
+        m.put("transactionRef", order.getTransactionRef());
+        m.put("documentStatus", order.getDocumentStatus() != null ? order.getDocumentStatus().name() : null);
+        m.put("propertyAddress", order.getPropertyAddress());
+        m.put("updatedAt", order.getUpdatedAt() != null ? order.getUpdatedAt().toString() : null);
+        m.put("activeDocumentCount", batchFileRepository.findActiveByOrderId(order.getId()).size());
+        if (order.getClient() != null) {
+            m.put("client", Map.of("id", order.getClient().getId(),
+                    "name", order.getClient().getName() != null ? order.getClient().getName() : ""));
+        }
+        return m;
     }
 
     // ── Review config (policy flags the UI must mirror) ───────────────────────

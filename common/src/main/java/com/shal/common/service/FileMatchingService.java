@@ -87,6 +87,12 @@ public class FileMatchingService {
             if (appraisal.getFilename() != null && appraisal.getFilename().startsWith("._")) {
                 continue;
             }
+            // Superseded means this exact document already exists (and was/being
+            // processed) on its resolved Order — a pure re-upload duplicate that must
+            // not trigger a second QC run.
+            if (!appraisal.isActive()) {
+                continue;
+            }
 
             Optional<BatchFile> xml        = findSupportingFile(appraisal, FileType.APPRAISAL_XML);
             Optional<BatchFile> engagement = findSupportingFile(appraisal, FileType.ENGAGEMENT);
@@ -120,7 +126,8 @@ public class FileMatchingService {
         if (setName != null && !setName.isBlank()) {
             // Try same-set match first
             List<BatchFile> setCandidates = batchFileRepository
-                    .findByBatchIdAndPropertySetNameAndFileType(appraisal.getBatch().getId(), setName, targetType);
+                    .findByBatchIdAndPropertySetNameAndFileType(appraisal.getBatch().getId(), setName, targetType)
+                    .stream().filter(BatchFile::isActive).toList();
             if (!setCandidates.isEmpty()) {
                 // Use orderId within the set
                 String orderId = appraisal.getOrderId();
@@ -214,7 +221,8 @@ public class FileMatchingService {
                     List.of(), List.of());
         } else {
             List<BatchFile> exactMatches = batchFileRepository.findByBatchIdAndOrderIdAndFileType(
-                    appraisalFile.getBatch().getId(), orderId, targetType);
+                    appraisalFile.getBatch().getId(), orderId, targetType)
+                    .stream().filter(BatchFile::isActive).toList();
 
             if (!exactMatches.isEmpty()) {
                 List<BatchFile> orderedMatches = exactMatches.stream()
@@ -265,7 +273,8 @@ public class FileMatchingService {
 
     private MatchOutcome findBestFilenameMatch(BatchFile appraisalFile, FileType targetType) {
         List<BatchFile> candidates = batchFileRepository.findByBatchIdAndFileType(
-                appraisalFile.getBatch().getId(), targetType);
+                appraisalFile.getBatch().getId(), targetType)
+                .stream().filter(BatchFile::isActive).toList();
 
         String appraisalKey = normalizedMatchKey(appraisalFile.getFilename());
         Set<String> appraisalTokens = matchTokens(appraisalFile.getFilename());
@@ -464,6 +473,22 @@ public class FileMatchingService {
                 .trim();
 
         return value;
+    }
+
+    /**
+     * Public filename-similarity score reused by the intake pipeline when it must
+     * split several appraisals that share a single type folder into separate orders
+     * (folder-first grouping, filename fallback). Higher = more similar; 0 = unrelated.
+     * Same normalization/scoring the internal fuzzy matcher uses, so intake grouping
+     * and QC-time pairing agree on what "the same property" means.
+     */
+    public static int filenameMatchScore(String a, String b) {
+        return scoreMatch(normalizedMatchKey(a), matchTokens(a), normalizedMatchKey(b), matchTokens(b));
+    }
+
+    /** Public accessor for the normalized address/property key derived from a filename. */
+    public static String filenameMatchKey(String filename) {
+        return normalizedMatchKey(filename);
     }
 
     private record ScoredCandidate(BatchFile file, int score) {}

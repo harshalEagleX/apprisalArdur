@@ -194,7 +194,7 @@ def val1_appraised_value_integrity(ctx: QCContext):
 # ---- R-2b value == contract price exactly (appraisal-bias advisory) ---------
 
 @rule(id="R-2b", num="88", section="reconciliation", phase=3,
-      applies_when=lambda ctx: ctx.transaction_type == "purchase",
+      applies_when=lambda ctx: ctx.transaction_type == "purchase", severity="advisory",
       name="Value equals contract price (bias advisory)")
 def r2b_bias(ctx: QCContext):
     value = normalize_currency(ctx.appraisal.value("appraised_value"))
@@ -657,10 +657,17 @@ def r_value_range(ctx: QCContext):
 
 # ---- R-EXPOSURE exposure time stated as a specific period -------------------
 
+# A stated exposure period: the phrase "exposure time" followed — within a short
+# window that tolerates intervening punctuation/words ("exposure time: 0 – 9
+# months", "exposure time is estimated at 3 to 6 months") — by a specific numeric
+# or worded period. The previous pattern required the number to immediately follow
+# "exposure time", so it rejected the very common colon/prose forms (false VERIFY).
 _EXPOSURE_RE = re.compile(
-    r"exposure\s+time\s+(?:of\s+)?(\d+[\s\-–]+(?:to[\s\-–]+)?\d*\s*(?:months?|days?|weeks?|years?)"
+    r"exposure\s+time\b.{0,80}?"
+    r"(\d+\s*(?:[\-–—]|to)\s*\d*\s*(?:months?|days?|weeks?|years?)"
+    r"|\d+\s*(?:months?|days?|weeks?|years?)"
     r"|(?:one|two|three|four|five|six)\s+(?:to\s+(?:one|two|three|four|five|six)\s+)?months?)",
-    re.I,
+    re.I | re.S,
 )
 
 

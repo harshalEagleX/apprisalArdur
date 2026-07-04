@@ -64,6 +64,7 @@ Canonical field names produced (partial list):
 from __future__ import annotations
 
 import logging
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -117,6 +118,8 @@ def extract_xml(xml_path) -> "ExtractionResultSet":
     _extract_report(root, fields)
     _extract_parties(root, fields)
     _extract_property(root, fields)
+    _extract_market_inventory(root, fields)
+    _extract_conditions(root, fields)
     _extract_valuation_methods(root, fields)
     _extract_valuation(root, fields)
     _extract_comp_grid(root, fields)
@@ -232,6 +235,20 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         f["stories"]      = _a(struct, "StoriesCount")
         f["year_built"]   = _a(struct, "PropertyStructureBuiltYear")
         f["design_style"] = _a(struct, "_DesignDescription")
+        f["baths"]        = f["bathrooms"]                   # I-7 reads "baths"
+        f["units_count"]  = _a(struct, "LivingUnitCount")    # I-1 general description
+        f["dwelling_type"] = _a(struct, "AttachmentType")    # I-1 (Detached/Attached)
+        # Foundation: URAR prints it as an exterior-feature row ("Post & Pier"),
+        # with the FOUNDATION type elements as a fallback. Feeds I-2.
+        for feat in struct.findall("EXTERIOR_FEATURE"):
+            if _a(feat, "_Type") == "Foundation" and _a(feat, "_Description"):
+                f["foundation_type"] = _a(feat, "_Description")
+                break
+        if not f.get("foundation_type"):
+            for found in struct.findall("FOUNDATION"):
+                if _a(found, "_ExistsIndicator").upper() == "Y":
+                    f["foundation_type"] = _a(found, "_Type")
+                    break
         sa = struct.find("STRUCTURE_ANALYSIS")
         if sa is not None:
             f["effective_age"] = _a(sa, "EffectiveAgeYearsCount")
@@ -239,8 +256,41 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     site = prop.find("SITE")
     if site is not None:
         f["site_area"]          = _a(site, "_AreaDescription")
+        f["site_dimensions"]    = _a(site, "_DimensionsDescription")     # ST-1
         f["zoning"]             = _a(site, "_ZoningClassificationIdentifier")
         f["zoning_description"] = _a(site, "_ZoningClassificationDescription")
+        f["zoning_compliance"]  = _a(site, "_ZoningComplianceType")      # ST-5
+        _hbu = _a(site, "HighestBestUseIndicator")                       # ST-6 / ST-HBU
+        if _hbu:
+            f["highest_and_best_use"] = {"Y": "Yes", "N": "No"}.get(_hbu.strip().upper(), _hbu)
+        # SITE_FEATURE rows carry Shape / View comments (ST-3 / ST-4)
+        for feat in site.findall("SITE_FEATURE"):
+            t = _a(feat, "_Type")
+            c = _a(feat, "_Comment")
+            if not c:
+                continue
+            if t == "Shape":
+                f["site_shape"] = c
+            elif t == "View":
+                f["site_view"] = c
+                f.setdefault("subject_grid_view", c)
+        # SITE_UTILITY rows → utilities_* (Public / None / Private well-septic),
+        # feeding ST-7 (utilities marked) and ST-9 (typicality). Gas as "None" is a
+        # valid no-service answer in many markets — do not treat as an unread blank.
+        _UTIL_FIELD = {"Electricity": "utilities_electricity", "Gas": "utilities_gas",
+                       "Water": "utilities_water", "SanitarySewer": "utilities_sewer"}
+        for util in site.findall("SITE_UTILITY"):
+            key = _UTIL_FIELD.get(_a(util, "_Type"))
+            if not key:
+                continue
+            if _a(util, "_PublicIndicator").upper() == "Y":
+                f[key] = "Public"
+            elif _a(util, "_NonPublicDescription"):
+                f[key] = _a(util, "_NonPublicDescription")
+            elif _a(util, "_NonPublicIndicator").upper() == "Y":
+                f[key] = "Private"
+            else:
+                f[key] = "None"
         fz = site.find("FLOOD_ZONE")
         if fz is not None:
             f["flood_zone_indicator"] = _a(fz, "SpecialFloodHazardAreaIndicator")
@@ -259,6 +309,27 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         f["demand_supply"]            = _a(nbhd, "_DemandSupplyType")
         f["marketing_time_typical"]   = _a(nbhd, "_TypicalMarketingTimeDurationType")
         f["marketing_time"]           = f["marketing_time_typical"]   # N-2 _TRENDS
+        # Neighborhood narratives — boundaries (N-5), general description (N-6),
+        # and market-conditions commentary (N-7). Previously unmapped, so all three
+        # rules saw a blank field and raised false FAIL/VERIFYs.
+        f["neighborhood_boundaries"]      = _a(nbhd, "_BoundaryAndCharacteristicsDescription")
+        f["neighborhood_description"]     = _a(nbhd, "_Description")
+        f["market_conditions_commentary"] = _a(nbhd, "_MarketConditionsDescription")
+        # Present land-use mix (N-4): MISMO _PRESENT_LAND_USE rows → land_use_*
+        # percents the rule sums to 100. "Other" carries its own descriptor (e.g.
+        # Vacant) so N-4's "Other must be described" sub-check can be satisfied.
+        _LAND_USE = {"SingleFamily": "land_use_one_unit",
+                     "TwoToFourFamily": "land_use_2_4_unit",
+                     "Apartment": "land_use_multi_family",
+                     "Commercial": "land_use_commercial",
+                     "Other": "land_use_other"}
+        for lu in nbhd.findall(".//_PRESENT_LAND_USE"):
+            t = _a(lu, "_Type")
+            key = _LAND_USE.get(t)
+            if key and _a(lu, "_Percent"):
+                f[key] = _a(lu, "_Percent")
+            if t == "Other" and _a(lu, "_TypeOtherDescription"):
+                f["land_use_other_description"] = _a(lu, "_TypeOtherDescription")
         housing = nbhd.find("_HOUSING")
         if housing is not None:
             f["price_low"]            = _a(housing, "_LowPriceAmount")
@@ -285,6 +356,55 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     if lh is not None:
         f["listed_past_year"]    = _a(lh, "ListedWithinPreviousYearIndicator")
         f["listing_history"]     = _a(lh, "ListedWithinPreviousYearDescription")
+
+
+def _extract_market_inventory(root: ET.Element, f: dict) -> None:
+    """1004MC market-conditions grid (ADD-5, N-2).
+
+    MISMO MARKET_INVENTORY rows are keyed by _Type + _MonthRangeType (order-
+    independent) — never by column position. The prior extractor did not read
+    them at all, so every mca_* field was blank and ADD-5 false-flagged. Trend
+    rows (_TrendType, no month range) feed the N-2 1004MC consistency check.
+    """
+    _RANGE = {"Prior7To12Months": "prior_7_12", "Prior4To6Months": "prior_4_6",
+              "Last3Months": "current_3"}
+    _TYPE = {"TotalSales": "total_sales", "AbsorptionRate": "absorption_rate",
+             "Supply": "months_supply", "MedianSalesPrice": "median_sale_price",
+             "TotalListings": "total_listings", "MedianSalesDOM": "median_dom"}
+    for mi in root.findall(".//MARKET_INVENTORY"):
+        t = _TYPE.get(_a(mi, "_Type"))
+        if not t:
+            continue
+        # value lives in whichever of _Count / _Rate / _Amount is populated
+        value = _a(mi, "_Count") or _a(mi, "_Rate") or _a(mi, "_Amount")
+        rng = _RANGE.get(_a(mi, "_MonthRangeType"))
+        if rng and value:
+            f[f"mca_{t}_{rng}"] = value
+        trend = _a(mi, "_TrendType")
+        if trend:
+            f[f"mca_trend_{t}"] = trend
+
+
+def _extract_conditions(root: ET.Element, f: dict) -> None:
+    """Adverse-condition checkboxes and the as-is/subject-to assignment condition.
+
+    * _CONDITION rows (Infestation / Dampness / Settlement) → adverse_conditions
+      (I-10). All "N" is the common, correct "No adverse conditions" answer —
+      previously unread, so I-10 false-flagged.
+    * _CONDITION_OF_APPRAISAL @_Type (AsIs / SubjectTo…) → assignment_condition
+      (R-ASSIGN-COND) and appraisal_subject_to (R-2 as-is box).
+    """
+    conds = [c for c in root.findall(".//_CONDITION")
+             if _a(c, "_Type") in ("Infestation", "Dampness", "Settlement")]
+    if conds:
+        any_yes = any(_a(c, "_ExistsIndicator").upper() == "Y" for c in conds)
+        f["adverse_conditions"] = "Yes" if any_yes else "No"
+
+    coa = root.find(".//_CONDITION_OF_APPRAISAL")
+    if coa is not None and _a(coa, "_Type"):
+        t = _a(coa, "_Type")
+        f["assignment_condition"] = t
+        f["appraisal_subject_to"] = "As Is" if t.lower() in ("asis", "as is") else t
 
 
 def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
@@ -375,6 +495,10 @@ def _extract_comp_grid(root: ET.Element, f: dict) -> None:
             f[f"{pfx}_adjusted_sale_price"] = comp.get("AdjustedSalesPriceAmount", "")
             f[f"{pfx}_net_adjustment"]      = comp.get("SalePriceTotalAdjustmentAmount", "")
             f[f"{pfx}_net_adj_pct"]         = comp.get("SalePriceTotalAdjustmentNetPercent", "")
+            # Explicit UAD net-adjustment sign (Y = positive, N = negative). This is
+            # the authoritative direction — CG-NET-BIAS reads it instead of trying to
+            # infer a sign from the amount string (which loses the '-').
+            f[f"{pfx}_net_adj_positive"]    = comp.get("SalesPriceTotalAdjustmentPositiveIndicator", "")
             f[f"{pfx}_gross_adj_pct"]       = comp.get("SalesPriceTotalAdjustmentGrossPercent", "")
             if rooms_el is not None:
                 f[f"{pfx}_rooms"]    = _a(rooms_el, "TotalRoomCount")
@@ -396,6 +520,13 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
             f[key] = v
 
     _set(f"{pfx}_sale_date",         "DateOfSale",         "_Description")
+    # UAD Date-of-Sale token → settlement date (s-token). "Active"/"Listing" has no
+    # s-token, so no settlement date is set — SCA-2 then classifies it as a listing
+    # rather than a "closed sale with missing settlement date" status conflict.
+    _dos = _get("DateOfSale", "_Description")
+    _m = re.search(r"s\s*(\d{1,2}/\d{2,4})", _dos or "", re.I)
+    if _m:
+        f[f"{pfx}_settlement_date"] = _m.group(1)
     _set(f"{pfx}_financing_adj",     "FinancingConcessions","_Amount")
     _set(f"{pfx}_location_rating",   "Location",           "_Description")
     _set(f"{pfx}_site_area",         "SiteArea",           "_Description")

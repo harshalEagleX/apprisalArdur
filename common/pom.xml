@@ -47,6 +47,13 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- PDF text extraction for intake content-ID sniffing (DocumentContentSniffer) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.5</version>
+        </dependency>
+
         <!-- Testing (version managed by spring-boot-starter-parent) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

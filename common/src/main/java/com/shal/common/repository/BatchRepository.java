@@ -57,7 +57,9 @@ public interface BatchRepository extends JpaRepository<Batch, Long> {
     // assignedReviewer must be fetched too: toSummary() maps it after the session
     // closes (open-in-view=false), so a missing fetch throws LazyInitializationException
     // and 500s the single-batch GET for any batch that has a reviewer assigned.
-    @EntityGraph(attributePaths = {"files", "client", "assignedReviewer"})
+    // files.order is fetched too: toSummary() reads each file's resolved Order
+    // (AppraisalTransaction) to group the property-set view by real Order identity.
+    @EntityGraph(attributePaths = {"files", "files.order", "client", "assignedReviewer"})
     Optional<Batch> findWithFilesById(Long id);
 
     /**

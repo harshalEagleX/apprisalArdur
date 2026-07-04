@@ -8,6 +8,7 @@ import com.shal.common.repository.QCResultRepository;
 import com.shal.common.repository.QCRuleResultRepository;
 import com.shal.common.service.AuditLogService;
 import com.shal.common.service.BusinessEventService;
+import com.shal.common.service.OrderStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ public class VerificationService {
     private final AuditLogService auditLogService;
     private final BusinessEventService businessEventService;
     private final PythonClientService pythonClientService;
+    private final OrderStatusService orderStatusService;
 
     /**
      * Whether a FAIL→Pass override must be approved by a SECOND reviewer (two-person rule).
@@ -66,7 +68,8 @@ public class VerificationService {
             OperatorSessionRepository operatorSessionRepository,
             AuditLogService auditLogService,
             BusinessEventService businessEventService,
-            PythonClientService pythonClientService) {
+            PythonClientService pythonClientService,
+            OrderStatusService orderStatusService) {
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
         this.batchRepository = batchRepository;
@@ -75,6 +78,7 @@ public class VerificationService {
         this.auditLogService = auditLogService;
         this.businessEventService = businessEventService;
         this.pythonClientService = pythonClientService;
+        this.orderStatusService = orderStatusService;
     }
 
     @Transactional
@@ -522,6 +526,10 @@ public class VerificationService {
         BatchFile batchFile = qcResult.getBatchFile();
         if (batchFile == null || batchFile.getBatch() == null) {
             return;
+        }
+
+        if (batchFile.getOrder() != null) {
+            orderStatusService.recompute(batchFile.getOrder());
         }
 
         Batch batch = batchFile.getBatch();

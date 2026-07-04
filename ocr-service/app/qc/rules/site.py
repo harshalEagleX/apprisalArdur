@@ -194,7 +194,17 @@ def st4_view(ctx: QCContext):
 @rule(id="ST-7", num="32", section="site", phase=4, name="Utilities marked; private systems addressed")
 def st7_utilities(ctx: QCContext):
     elec = str(ctx.appraisal.value("utilities_electricity") or "").lower() in H.TRUTHY | {"public"}
-    gas = str(ctx.appraisal.value("utilities_gas") or "").lower() in H.TRUTHY | {"public"}
+    # Gas is satisfied when it is affirmatively marked (Public/Yes) OR the row is
+    # explicitly addressed as "None"/"Other"/"No gas" — many market areas (e.g.
+    # Maui) legitimately have no gas service, which is permissible with commentary.
+    # Only a genuinely blank/unread gas row (Python None → "") falls through so the
+    # confidence gate below can decide PASS vs VERIFY. A hard "None-disallowed" ban
+    # produced false VERIFYs (ST-7 false-positive).
+    _gas_raw = ctx.appraisal.value("utilities_gas")
+    _gas_str = str(_gas_raw or "").strip().lower()
+    gas = (_gas_str in H.TRUTHY | {"public"}
+           or _gas_str in {"none", "no gas", "no", "other", "not available",
+                           "n/a", "na", "bottled", "propane", "lp"})
     ev = [ctx.appraisal.evidence("utilities_electricity"), ctx.appraisal.evidence("utilities_gas")]
     out = []
     if elec and gas:
@@ -798,7 +808,13 @@ def st_scope(ctx: QCContext):
     ev = [ctx.appraisal.evidence("addendum_text")]
     fields = ["addendum_text"]
 
-    if re.search(r"scope\s+of\s+work", combined, re.I):
+    # Match the USPAP "scope of work" statement under any of the common headings
+    # appraisers use — "Scope of Work", "Scope of the Appraisal", "Scope of this
+    # Assignment", "Scope of the Analysis". A literal "scope of work"-only match
+    # missed reports that head the section "Scope of the Appraisal:" (false VERIFY).
+    if re.search(r"scope\s+of\s+(?:the\s+|this\s+)?"
+                 r"(?:work|appraisal|assignment|analysis|investigation|review)",
+                 combined, re.I):
         return _res("ST-SCOPE", "ST-scope", RuleStatus.PASS, fields=fields, evidence=ev)
 
     return _res(

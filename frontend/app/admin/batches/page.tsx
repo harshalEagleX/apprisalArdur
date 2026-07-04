@@ -16,6 +16,7 @@ import { displayName } from "@/lib/displayName";
 import { removeJob } from "@/lib/jobs";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import UploadModal from "@/components/admin/UploadModal";
+import BatchOrderViewToggle from "@/components/shared/BatchOrderViewToggle";
 import { BatchRow } from "@/components/admin/BatchRow";
 import { BatchRecoveryDrawer } from "@/components/admin/BatchRecoveryDrawer";
 import { BatchHistoryDrawer } from "@/components/admin/BatchHistoryDrawer";
@@ -454,9 +455,13 @@ export default function BatchesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 mb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
+          <div className="mb-2"><BatchOrderViewToggle active="batch" /></div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Document intake</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white">Batches</h1>
-          <p className="mt-1 text-sm text-slate-500">Upload, validate, process, assign, and recover appraisal document sets.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Upload, validate, process, assign, and recover appraisal document sets. Batch status reflects the
+            upload/QC pipeline — switch to Order view for each order&apos;s own lifecycle status.
+          </p>
         </div>
         <div data-guide="admin-batches-actions" className="flex flex-wrap items-center gap-2">
           <button onClick={handleReconcile} disabled={reconciling} title="Find and recover batches stuck in QC_PROCESSING"

@@ -728,7 +728,7 @@ def _subject_listed(ctx: QCContext) -> bool:
 
 
 @rule(id="LISTING-CMNT", num="listing-cmnt", section="subject", phase=5,
-      applies_when=_subject_listed,
+      applies_when=_subject_listed, severity="advisory",
       name="Listing price vs appraised value commentary")
 def listing_cmnt_variance(ctx: QCContext):
     """

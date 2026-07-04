@@ -39,10 +39,16 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
      */
     List<BatchFile> findByBatchIdAndOrderId(Long batchId, String orderId);
 
+    // order is fetched too: QCProcessingService.processFilePair reads
+    // appraisal.getOrder() after this method's own transaction has already closed
+    // (the long Python/OCR call deliberately runs without holding a DB transaction),
+    // so the association must already be populated or it throws
+    // LazyInitializationException ("no session") on the detached entity.
     @Query("""
         SELECT bf FROM BatchFile bf
         JOIN FETCH bf.batch b
         LEFT JOIN FETCH b.assignedReviewer
+        LEFT JOIN FETCH bf.order
         WHERE bf.id = :batchFileId
         """)
     java.util.Optional<BatchFile> findWithBatchAndReviewerById(@Param("batchFileId") Long batchFileId);
@@ -77,4 +83,79 @@ public interface BatchFileRepository extends JpaRepository<BatchFile, Long> {
      */
     @Query("SELECT f FROM BatchFile f JOIN FETCH f.batch WHERE f.batch.id IN :batchIds ORDER BY f.batch.id, f.id")
     List<BatchFile> findByBatchIdIn(@Param("batchIds") List<Long> batchIds);
+
+    // ── Order identity resolution (cross-batch) ─────────────────────────────
+
+    /**
+     * Cross-batch content-hash dedup lookup: is there already a document with
+     * this exact content that's linked to a resolved Order? Used to detect a
+     * pure re-upload before creating a new Order.
+     *
+     * Written as explicit JPQL (not a derived method name) because the
+     * "order" property name collides with Spring Data's "OrderBy" method-name
+     * keyword parsing.
+     */
+    @Query("""
+        SELECT bf FROM BatchFile bf
+        WHERE bf.contentHash = :contentHash AND bf.order IS NOT NULL
+        ORDER BY bf.createdAt ASC
+        """)
+    List<BatchFile> findByContentHashLinkedToOrder(@Param("contentHash") String contentHash);
+
+    /** Cross-batch orderId identity match, scoped to the same client. */
+    @Query("""
+        SELECT bf FROM BatchFile bf
+        WHERE bf.order IS NOT NULL
+          AND bf.orderId = :orderId
+          AND bf.batch.client.id = :clientId
+        ORDER BY bf.createdAt ASC
+        """)
+    List<BatchFile> findByOrderIdStringAndClientId(@Param("orderId") String orderId, @Param("clientId") Long clientId);
+
+    /** Cross-batch propertySetName identity match, scoped to the same client. */
+    @Query("""
+        SELECT bf FROM BatchFile bf
+        WHERE bf.order IS NOT NULL
+          AND bf.propertySetName = :propertySetName
+          AND bf.batch.client.id = :clientId
+        ORDER BY bf.createdAt ASC
+        """)
+    List<BatchFile> findByPropertySetNameAndClientId(@Param("propertySetName") String propertySetName, @Param("clientId") Long clientId);
+
+    /**
+     * Active (non-superseded) documents for a resolved Order. Joins bf.batch so the
+     * Batch @SQLRestriction (deleted_at IS NULL) applies — a soft-deleted batch's
+     * documents must never count toward an Order, keeping the Order summary count
+     * consistent with the detail view (findAllByOrderId).
+     */
+    @Query("SELECT bf FROM BatchFile bf JOIN bf.batch b WHERE bf.order.id = :orderId AND bf.supersededAt IS NULL")
+    List<BatchFile> findActiveByOrderId(@Param("orderId") Long orderId);
+
+    @Query("SELECT bf FROM BatchFile bf WHERE bf.order.id = :orderId AND bf.fileType = :fileType AND bf.supersededAt IS NULL")
+    List<BatchFile> findActiveByOrderIdAndFileType(@Param("orderId") Long orderId, @Param("fileType") FileType fileType);
+
+    /**
+     * All documents (active + superseded) ever linked to a resolved Order — version
+     * history. batch is fetched too: OrderApiController.toDetail() reads
+     * f.getBatch().getId() for each document after this query's own transaction has
+     * closed (open-in-view=false) — a missing fetch throws LazyInitializationException.
+     */
+    @Query("SELECT bf FROM BatchFile bf LEFT JOIN FETCH bf.batch WHERE bf.order.id = :orderId ORDER BY bf.createdAt DESC")
+    List<BatchFile> findAllByOrderId(@Param("orderId") Long orderId);
+
+    /** Batch-membership rollup: which batches touched this Order. */
+    @Query("SELECT DISTINCT bf.batch.id FROM BatchFile bf WHERE bf.order.id = :orderId")
+    List<Long> findDistinctBatchIdsByOrderId(@Param("orderId") Long orderId);
+
+    /** Total documents (active + superseded) still linked to an Order — used to detect an
+     * orphaned Order after its last referencing batch is deleted. */
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.order.id = :orderId")
+    long countAllByOrderId(@Param("orderId") Long orderId);
+
+    /** Legacy files (ingested before Order resolution existed) awaiting one-time backfill. */
+    @Query("SELECT bf FROM BatchFile bf WHERE bf.order IS NULL")
+    List<BatchFile> findUnresolvedOrderFiles();
+
+    @Query("SELECT COUNT(bf) FROM BatchFile bf WHERE bf.order IS NULL")
+    long countUnresolvedOrderFiles();
 }
