@@ -14,6 +14,7 @@ Days 1-6 endpoints:
 
 import json
 import logging
+import os as _os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -45,12 +46,19 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# Allow the Next.js dev frontend to call the QC endpoints directly (demo).
+# CORS origins are configuration, never hardcoded. Comma-separated CORS_ALLOWED_ORIGINS
+# env var; falls back to the local Next.js dev origins so a laptop run still works.
 from fastapi.middleware.cors import CORSMiddleware
+
+_cors_origins = [
+    o.strip() for o in _os.environ.get(
+        "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",") if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
