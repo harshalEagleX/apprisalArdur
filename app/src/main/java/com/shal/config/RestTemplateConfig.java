@@ -33,7 +33,7 @@ public class RestTemplateConfig {
 
     /**
      * Default client for SHORT Python calls — /live, /health, /qc/submit, /qc/job,
-     * /qc/progress, /qc/rules, /qc/feedback. A 30s read timeout means a stalled
+     * /qc/progress, /qc/rules, /corrections. A 30s read timeout means a stalled
      * Python can never block a health check or a poll for the processing timeout.
      */
     @Bean

@@ -574,24 +574,6 @@ public class PythonClientService {
         }
     }
 
-    public void submitFeedback(PythonFeedbackRequest feedback) {
-        if (feedback == null || feedback.documentId() == null || feedback.documentId().isBlank()) {
-            return;
-        }
-        try {
-            String url = config.getUrl() + "/qc/feedback";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
-                headers.set("X-API-Key", config.getApiKey());
-            }
-            restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(feedback, headers), String.class);
-        } catch (Exception e) {
-            log.warn("Python feedback sync skipped for document {} rule {}: {}",
-                    feedback.documentId(), feedback.ruleId(), e.getMessage());
-        }
-    }
-
     /**
      * Build the multipart body shared by the sync (/qc/process) and async
      * (/qc/submit) calls: the document files, the per-document engagement status,
@@ -695,27 +677,6 @@ public class PythonClientService {
         }
         return correlationId;
     }
-
-    public record PythonFeedbackRequest(
-            @JsonProperty("document_id") String documentId,
-            @JsonProperty("processing_job_id") String processingJobId,
-            @JsonProperty("correlation_id") String correlationId,
-            @JsonProperty("rule_id") String ruleId,
-            @JsonProperty("field_name") String fieldName,
-            @JsonProperty("original_value") String originalValue,
-            @JsonProperty("corrected_value") String correctedValue,
-            @JsonProperty("feedback_type") String feedbackType,
-            @JsonProperty("operator_comment") String operatorComment,
-            @JsonProperty("reviewer_role") String reviewerRole,
-            @JsonProperty("decision_latency_ms") Long decisionLatencyMs,
-            @JsonProperty("acknowledged") Boolean acknowledged,
-            @JsonProperty("source_page") Integer sourcePage,
-            @JsonProperty("bbox_x") Float bboxX,
-            @JsonProperty("bbox_y") Float bboxY,
-            @JsonProperty("bbox_w") Float bboxW,
-            @JsonProperty("bbox_h") Float bboxH,
-            @JsonProperty("confidence_score") Double confidenceScore
-    ) {}
 
     /**
      * Check if Python service is healthy.
