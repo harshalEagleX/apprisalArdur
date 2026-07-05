@@ -1,7 +1,7 @@
 "use client";
 import React, { memo } from "react";
 import Link from "next/link";
-import { Play, RefreshCw, Square, Trash2, AlertTriangle, AlertCircle, UserPlus, History } from "lucide-react";
+import { Trash2, AlertTriangle, AlertCircle, UserPlus, History } from "lucide-react";
 import type { Batch, User } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
 import StatusBadge from "@/components/shared/StatusBadge";
@@ -16,8 +16,6 @@ export interface BatchRowProps {
   startedMs?: number;
   reviewers: User[];
   reviewerWorkload: Record<string, number>;
-  onProcessQC: (batch: Batch) => void;
-  onStopQC: (batch: Batch) => void;
   onAssign: (batchId: number, reviewerId: number) => void;
   onDelete: (batch: Batch) => void;
   onOpenRecovery: (batch: Batch) => void;
@@ -34,8 +32,6 @@ export const BatchRow = memo(function BatchRow({
   startedMs,
   reviewers,
   reviewerWorkload,
-  onProcessQC,
-  onStopQC,
   onAssign,
   onDelete,
   onOpenRecovery,
@@ -229,55 +225,16 @@ export const BatchRow = memo(function BatchRow({
       {/* Actions */}
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1.5">
-          {/* Run QC */}
-          {(b.status === "UPLOADED" ||
-            b.status === "VALIDATING" ||
-            b.status === "ERROR") && (
-            <button
-              onClick={() => onProcessQC(b)}
-              disabled={isLoading}
-              className="inline-flex h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-md border border-slate-500/25 bg-slate-950/45 px-2.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-900/50 disabled:opacity-40"
-            >
-              {isLoading ? spinnerSvg : <Play size={12} />}
-              {b.status === "ERROR" ? "Retry" : "Run QC"}
-            </button>
-          )}
-
-          {/* Processing spinner (no progress yet) — turns amber if it looks stuck */}
+          {/* QC is order-scoped — run it from the Order view. The batch row only shows
+              progress for any batch still mid-run (e.g. a legacy run being reconciled). */}
           {b.status === "QC_PROCESSING" && !progress && (
             <span
               className={`text-[11px] flex items-center gap-1 ${maybeStuck ? "text-amber-400" : "text-slate-400"}`}
-              title={maybeStuck ? "No progress for a while — use Stop, then Run QC again" : undefined}
+              title={maybeStuck ? "No progress for a while — the QC worker may have stopped." : undefined}
             >
               {maybeStuck ? <AlertTriangle size={12} /> : spinnerSvg}
               {maybeStuck ? "Stuck?" : "Processing"}
             </span>
-          )}
-
-          {/* Re-run QC — available after a successful QC or for review-pending batches */}
-          {(b.status === "COMPLETED" || b.status === "REVIEW_PENDING" || b.status === "IN_REVIEW") && (
-            <button
-              onClick={() => onProcessQC(b)}
-              disabled={isLoading}
-              className="inline-flex h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-md border border-indigo-500/25 bg-indigo-950/30 px-2.5 text-xs font-medium text-indigo-300 transition-colors hover:bg-indigo-950/60 disabled:opacity-40"
-              title="Re-run QC with current rules and model — previous results are preserved until the new run completes"
-            >
-              {isLoading ? spinnerSvg : <RefreshCw size={12} />}
-              Re-run QC
-            </button>
-          )}
-
-          {/* Stop QC */}
-          {b.status === "QC_PROCESSING" && (
-            <button
-              onClick={() => onStopQC(b)}
-              disabled={isLoading}
-              className="inline-flex h-8 min-w-[70px] items-center justify-center gap-1 rounded-md border border-red-500/25 bg-red-950/30 px-2.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-950/60 disabled:opacity-40"
-              title="Stop QC processing"
-            >
-              <Square size={11} />
-              Stop
-            </button>
           )}
 
           {/* Assign reviewer */}

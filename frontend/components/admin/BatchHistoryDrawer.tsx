@@ -5,7 +5,7 @@ import {
   ArrowRight, ChevronDown, ChevronRight, GitCompare, Download,
 } from "lucide-react";
 import {
-  getBatchById, getQCHistory, getQCResultDiff, downloadFindingsExport, processQCFiles,
+  getBatchById, getQCHistory, getQCResultDiff, downloadFindingsExport, processOrderQC,
   type Batch, type BatchFile, type QCHistoryRun, type QCResultDiff, type QCDiffFinding,
   type QCDiffRevision,
 } from "@/lib/api";
@@ -327,14 +327,18 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
 
   const handleRerunFile = useCallback(async (fileId: number) => {
     if (!batch) return;
+    // Re-QC is order-scoped now — resolve the file's owning Order and run QC for it.
+    const orderId = files.find(f => f.id === fileId)?.resolvedOrderId;
+    if (!orderId) {
+      toast.error("Re-run unavailable", "This file isn't linked to an order yet — assign it first.");
+      return;
+    }
     setRerunning(prev => new Set(prev).add(fileId));
     try {
-      const res = await processQCFiles(batch.id, [fileId]);
+      await processOrderQC(orderId);
       toast.success(
-        "Re-run started for this file",
-        res.reviewerActive
-          ? "A reviewer is active on this batch — they will be notified that this file was re-processed."
-          : "The matched document set (appraisal + engagement + contract) is re-read by the OCR service. QC findings are updated for this appraisal file only.",
+        "Re-run started for this order",
+        "The matched document set (appraisal + engagement + contract) is re-read by the OCR service and the order's QC findings are updated.",
       );
       // Give the worker a moment, then refresh this file's run chain.
       window.setTimeout(() => { void loadHistory(batch.id); }, 2500);
@@ -343,7 +347,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
     } finally {
       setRerunning(prev => { const n = new Set(prev); n.delete(fileId); return n; });
     }
-  }, [batch, loadHistory]);
+  }, [batch, files, loadHistory]);
 
   useEffect(() => {
     if (!batch) return;

@@ -9,7 +9,7 @@ import {
   Link2, RotateCcw,
 } from "lucide-react";
 import {
-  getBatchById, getQCResults, processQCFiles, getFileHistory,
+  getBatchById, getQCResults, processOrderQC, getFileHistory,
   getQCHistory, assignFileToAppraisal, reclassifyBatchFile, AddressMismatchError,
   type Batch, type QCResult, type PropertySet, type BatchFile,
   type FileHistoryResponse, type QCHistoryRun,
@@ -705,10 +705,18 @@ export default function BatchDetailPage() {
   // All appraisals across the batch — shown in the assign dropdown.
   const allAppraisals = files.filter(f => f.fileType === "APPRAISAL");
 
+  // Re-QC is order-scoped: QC is a per-Order action now. Resolve the file's owning Order
+  // and run QC for that order (the whole batch is never QC'd).
   async function handleReQC(fileId: number) {
+    const file = files.find(f => f.id === fileId);
+    const orderId = file?.resolvedOrderId;
+    if (!orderId) {
+      toast.error("Re-QC unavailable", "This file isn't linked to an order yet — assign it first.");
+      return;
+    }
     setReQcBusy(s => new Set([...s, fileId]));
     try {
-      await processQCFiles(id, [fileId]);
+      await processOrderQC(orderId);
       toast.info("Re-QC started", "Results will update when processing completes.");
       window.setTimeout(() => { void load(); }, 2000);
     } catch (e) {

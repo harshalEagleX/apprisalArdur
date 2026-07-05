@@ -94,7 +94,8 @@ export interface BatchRecoveryDrawerProps {
   batch: Batch | null;
   busy: boolean;
   onClose: () => void;
-  onRetry: (batch: Batch) => void;
+  /** Optional — batch-grain QC retry was removed (QC is order-scoped); omit to hide the button. */
+  onRetry?: (batch: Batch) => void;
   onDelete: (batch: Batch) => void;
   onReupload: () => void;
 }
@@ -223,13 +224,15 @@ export function BatchRecoveryDrawer({
             >
               <FileStack size={14} /> Copy error
             </button>
-            <button
-              onClick={() => onRetry(batch)}
-              disabled={busy || batch.status === "VALIDATION_FAILED"}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40"
-            >
-              <Play size={14} /> Retry QC
-            </button>
+            {onRetry && (
+              <button
+                onClick={() => onRetry(batch)}
+                disabled={busy || batch.status === "VALIDATION_FAILED"}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-40"
+              >
+                <Play size={14} /> Retry QC
+              </button>
+            )}
             <button
               onClick={onReupload}
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"

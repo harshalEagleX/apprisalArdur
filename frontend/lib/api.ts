@@ -736,26 +736,6 @@ export async function uploadBatch(
 // ── Admin: Bulk Batch Operations ──────────────────────────────────────────────
 
 /**
- * Bulk-process QC on multiple batches in parallel.
- * Returns a summary of how many succeeded / failed.
- */
-export async function bulkProcessQC(
-  batchIds: number[],
-  model?: QCModelSelection,
-): Promise<{ succeeded: number[]; failed: number[] }> {
-  const results = await Promise.allSettled(
-    batchIds.map(id => processQC(id, model))
-  );
-  const succeeded: number[] = [];
-  const failed:    number[] = [];
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled") succeeded.push(batchIds[i]);
-    else failed.push(batchIds[i]);
-  });
-  return { succeeded, failed };
-}
-
-/**
  * Bulk-delete batches in parallel.
  */
 export async function bulkDeleteBatches(
@@ -804,50 +784,8 @@ export interface QCModelSelection {
   visionModel?: string;
 }
 
-export async function processQC(batchId: number, model?: QCModelSelection) {
-  const started = performance.now();
-  adminBatchTimeline("frontend_qc_trigger_api_start", {
-    batch_id: batchId,
-    model_provider: model?.provider,
-    text_model: model?.textModel,
-    vision_model: model?.visionModel,
-  });
-  try {
-    const response = await apiFetch<{ message: string; batchId: number; pollUrl?: string; status?: string; reviewerActive?: boolean }>(
-    `/api/qc/process/${batchId}`,
-    { method: "POST", body: JSON.stringify(model ?? {}) }
-    );
-    adminBatchTimeline("frontend_qc_trigger_api_complete", {
-      batch_id: response.batchId,
-      status: response.status,
-      elapsed_ms: elapsedMs(started),
-    });
-    return response;
-  } catch (err) {
-    adminBatchTimeline("frontend_qc_trigger_api_failed", {
-      batch_id: batchId,
-      elapsed_ms: elapsedMs(started),
-      error: err instanceof Error ? err.message : String(err),
-    });
-    throw err;
-  }
-}
-
-export const cancelQC = (batchId: number) =>
-  apiFetch<{ message: string; batchId: number; cancelled: boolean; status: string }>(
-    `/api/qc/cancel/${batchId}`,
-    { method: "POST" }
-  );
-
-/**
- * Partial re-run: re-process ONLY the given appraisal files. Their prior results are
- * superseded; every other file in the batch keeps its results and reviewer state.
- */
-export const processQCFiles = (batchId: number, fileIds: number[], model?: QCModelSelection) =>
-  apiFetch<{ message: string; batchId: number; fileCount?: number; reviewerActive?: boolean; pollUrl?: string; status?: string }>(
-    `/api/qc/process/${batchId}/files`,
-    { method: "POST", body: JSON.stringify({ fileIds, ...(model ?? {}) }) }
-  );
+// Batch-grain QC triggering was removed — QC is initiated per Order only
+// (processOrderQC / processOrdersQC). The Batch is upload-only.
 
 export const getBatchQCProgress = (batchId: number) =>
   apiFetch<{

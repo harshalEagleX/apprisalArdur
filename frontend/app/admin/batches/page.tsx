@@ -6,14 +6,13 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import {
-  getAdminBatches, processQC, assignReviewer, deleteBatch,
-  reconcileStuckBatches, cancelQC, getAdminDashboard, getAllUsers,
-  bulkProcessQC, bulkDeleteBatches, bulkAssignReviewer, getSystemHealth,
+  getAdminBatches, assignReviewer, deleteBatch,
+  reconcileStuckBatches, getAdminDashboard, getAllUsers,
+  bulkDeleteBatches, bulkAssignReviewer, getSystemHealth,
   getBatchStatuses,
   type Batch, type User,
 } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
-import { removeJob } from "@/lib/jobs";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import UploadModal from "@/components/admin/UploadModal";
 import BatchOrderViewToggle from "@/components/shared/BatchOrderViewToggle";
@@ -174,22 +173,6 @@ export default function BatchesPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSelectedIds(new Set()); }, [page, statusFilter, debouncedSearch]);
 
-  const handleBulkQC = useCallback(async () => {
-    if (selectedIds.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const ids = Array.from(selectedIds);
-      const { succeeded, failed } = await bulkProcessQC(ids);
-      if (succeeded.length > 0) toast.success(`QC started for ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
-      if (failed.length > 0) toast.error(`Failed to start QC for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
-      clearSelection();
-    } catch {
-      toast.error("Bulk QC failed");
-    } finally {
-      setBulkLoading(false);
-    }
-  }, [selectedIds, clearSelection]);
-
   const handleBulkDelete = useCallback(async () => {
     if (selectedIds.size === 0) return;
     if (!window.confirm(`Delete ${selectedIds.size} batch${selectedIds.size > 1 ? "es" : ""}? This cannot be undone.`)) return;
@@ -310,7 +293,9 @@ export default function BatchesPage() {
     window.history.replaceState(null, "", params.toString() ? `/admin/batches?${params}` : "/admin/batches");
   }, [debouncedSearch, page, statusFilter]);
 
-  const { progress, startedAt, startPolling, stopPolling } = useBatchPolling(batches, () => {
+  // Progress display for any batch still shown as QC_PROCESSING (e.g. a legacy run being
+  // reconciled). QC can no longer be triggered from the batch view — it is order-scoped.
+  const { progress, startedAt } = useBatchPolling(batches, () => {
     void load();
   });
 
@@ -339,59 +324,6 @@ export default function BatchesPage() {
       batch_ids: batches.map(b => b.id),
     });
   }, [batches, loading, page, totalElements]);
-
-  async function handleProcessQC(batch: Batch) {
-    const started = performance.now();
-    adminBatchTimeline("frontend_qc_button_clicked", {
-      batch_id: batch.id,
-      batch_ref: batch.parentBatchId,
-      current_status: batch.status,
-    });
-    setActionBusy(batch.id, true);
-    try {
-      const res = await processQC(batch.id);
-      setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "QC_PROCESSING", errorMessage: undefined } : b));
-      if (res.reviewerActive) {
-        toast.info(`QC re-running for "${batch.parentBatchId}"`,
-          "A reviewer currently has this report open — they'll be notified and their decisions are preserved.");
-      } else {
-        toast.info(`QC started for "${batch.parentBatchId}"`, "Running OCR + QC rules");
-      }
-      adminBatchTimeline("frontend_qc_trigger_complete", {
-        batch_id: batch.id,
-        batch_ref: batch.parentBatchId,
-        elapsed_ms: elapsedMs(started),
-      });
-      startPolling({ ...batch, status: "QC_PROCESSING" });
-      await load();
-    } catch (e) {
-      adminBatchTimeline("frontend_qc_trigger_failed", {
-        batch_id: batch.id,
-        batch_ref: batch.parentBatchId,
-        elapsed_ms: elapsedMs(started),
-        error: e instanceof Error ? e.message : String(e),
-      });
-      toast.error("QC trigger failed", String(e));
-    } finally {
-      setActionBusy(batch.id, false);
-    }
-  }
-
-  async function handleStopQC(batch: Batch) {
-    setActionBusy(batch.id, true);
-    try {
-      await cancelQC(batch.id);
-      stopPolling(batch.id);
-      removeJob(`qc-${batch.id}`);
-      setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: "UPLOADED", errorMessage: "QC stopped by admin. Click Run QC to start again." } : b));
-      toast.info(`QC stopped for "${batch.parentBatchId}"`, "Run QC is available again");
-      await load();
-    } catch (e) {
-      toast.error("Stop QC failed", String(e));
-    } finally {
-      setActionBusy(batch.id, false);
-    }
-  }
 
   async function handleAssign(batchId: number, reviewerId: number) {
     setActionBusy(batchId, true);
@@ -533,13 +465,6 @@ export default function BatchesPage() {
             {selectedIds.size} batch{selectedIds.size > 1 ? "es" : ""} selected
           </span>
           <span className="mx-1 h-4 w-px bg-white/10" />
-          <button
-            onClick={handleBulkQC}
-            disabled={bulkLoading}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-900/30 px-3 text-xs font-medium text-indigo-200 transition-colors hover:bg-indigo-900/60 disabled:opacity-40"
-          >
-            <Play size={12} /> Run QC on selected
-          </button>
           {reviewers.length > 0 && (
             <select
               disabled={bulkLoading}
@@ -623,8 +548,6 @@ export default function BatchesPage() {
                   startedMs={startedAt[b.id]}
                   reviewers={reviewers}
                   reviewerWorkload={reviewerWorkload}
-                  onProcessQC={handleProcessQC}
-                  onStopQC={handleStopQC}
                   onAssign={handleAssign}
                   onDelete={setDeleteTarget}
                   onOpenRecovery={setRecoveryTarget}
@@ -676,7 +599,6 @@ export default function BatchesPage() {
         batch={recoveryTarget}
         busy={recoveryTarget ? actionLoading.has(recoveryTarget.id) : false}
         onClose={() => setRecoveryTarget(null)}
-        onRetry={batch => void handleProcessQC(batch)}
         onDelete={batch => { setRecoveryTarget(null); setDeleteTarget(batch); }}
         onReupload={() => { setRecoveryTarget(null); setShowUpload(true); }}
       />
