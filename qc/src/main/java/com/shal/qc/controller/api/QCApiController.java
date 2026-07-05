@@ -219,29 +219,6 @@ public class QCApiController {
     }
 
     /**
-     * Best-effort stop for a running QC job.
-     * If Python is already processing a request, Java interrupts the worker and
-     * prevents any late result from being saved when control returns.
-     */
-    @PostMapping("/cancel/{batchId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> cancelBatch(@PathVariable @NonNull Long batchId) {
-        if (!batchRepository.existsById(batchId)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        boolean cancelled = qcProcessingService.cancelBatch(batchId);
-        return ResponseEntity.ok(Map.of(
-            "message", cancelled ? "QC stop requested" : "QC is not running for this batch",
-            "batchId", batchId,
-            "cancelled", cancelled,
-            "status", cancelled ? "UPLOADED" : batchRepository.findById(batchId)
-                    .map(b -> b.getStatus() != null ? b.getStatus().name() : "UNKNOWN")
-                    .orElse("NOT_FOUND")
-        ));
-    }
-
-    /**
      * Get QC results for a batch (ADMIN: any, REVIEWER: own assignments).
      *
      * Returns 404 when the batch itself does not exist.
@@ -305,71 +282,8 @@ public class QCApiController {
     }
 
     /**
-     * Live QC progress for the admin batch table.
-     *
-     * This reflects the backend pipeline stage while QC is running: queueing,
-     * file matching, Python OCR/rules, saving results, and completion.
-     */
-    @GetMapping("/progress/{batchId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> getBatchProgress(@PathVariable @NonNull Long batchId) {
-        long started = System.nanoTime();
-        if (!batchRepository.existsById(batchId)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        var progress = qcProcessingService.getProgress(batchId);
-        if (progress == null) {
-            Map<String, Object> idle = new LinkedHashMap<>();
-            idle.put("stage", "idle");
-            idle.put("message", "QC has not started");
-            idle.put("current", 0);
-            idle.put("total", 1);
-            idle.put("percent", 0);
-            idle.put("smoothedPercent", 0);
-            idle.put("running", false);
-            idle.put("modelProvider", QCModelConfig.defaults().provider());
-            idle.put("modelName", QCModelConfig.defaults().textModel());
-            idle.put("visionModel", QCModelConfig.defaults().visionModel());
-            idle.put("subStage", null);
-            idle.put("subMessage", null);
-            idle.put("subPercent", 0.0);
-            idle.put("subElapsedMs", 0L);
-            return ResponseEntity.ok(idle);
-        }
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("stage", progress.stage());
-        body.put("message", progress.message());
-        body.put("current", progress.current());
-        body.put("total", progress.total());
-        body.put("percent", progress.percent());
-        body.put("smoothedPercent", progress.smoothedPercent());
-        body.put("running", progress.running());
-        body.put("modelProvider", progress.modelProvider());
-        body.put("modelName", progress.modelName());
-        body.put("visionModel", progress.visionModel());
-        body.put("startedAt", progress.startedAt());
-        body.put("updatedAt", progress.updatedAt());
-        body.put("subStage", progress.subStage());
-        body.put("subMessage", progress.subMessage());
-        body.put("subPercent", progress.subPercent());
-        body.put("subElapsedMs", progress.subElapsedMs());
-        log.info(TimelineLog.event("admin_batches", "java_progress_served",
-                "batch_id", batchId,
-                "stage", progress.stage(),
-                "current", progress.current(),
-                "total", progress.total(),
-                "percent", progress.percent(),
-                "running", progress.running(),
-                "elapsed_ms", TimelineLog.elapsedMs(started)));
-        return ResponseEntity.ok(body);
-    }
-
-    /**
-     * Live QC progress for a single Order — the Order-grained analogue of
-     * {@link #getBatchProgress}. Backs the Order view's live progress bar (WebSocket
-     * {@code /topic/qc/order/{id}/progress} is primary; this is the poll fallback).
+     * Live QC progress for a single Order. Backs the Order view's live progress bar
+     * (WebSocket {@code /topic/qc/order/{id}/progress} is primary; this is the poll fallback).
      */
     @GetMapping("/progress/order/{orderId}")
     @PreAuthorize("hasRole('ADMIN')")
@@ -417,7 +331,7 @@ public class QCApiController {
     }
 
     /**
-     * Best-effort stop for a running Order QC job. Order analogue of {@link #cancelBatch}.
+     * Best-effort stop for a running Order QC job.
      */
     @PostMapping("/cancel/order/{orderId}")
     @PreAuthorize("hasRole('ADMIN')")

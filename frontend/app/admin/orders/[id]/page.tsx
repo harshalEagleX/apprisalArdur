@@ -53,7 +53,10 @@ export default function OrderDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setOrder(await getOrderById(id));
+      const o = await getOrderById(id);
+      setOrder(o);
+      // Resume the live bar if the order is already mid-QC when we (re)load it.
+      if (o.documentStatus === "QC_PROCESSING") setQcRunning(true);
     } catch {
       toast.error("Failed to load order");
     } finally {
@@ -98,11 +101,6 @@ export default function OrderDetailPage() {
     }
     return () => { stop = true; window.clearTimeout(timer); };
   }, [qcRunning, id, load]);
-
-  // Resume the live bar if the order is already mid-QC when the page loads.
-  useEffect(() => {
-    if (order?.documentStatus === "QC_PROCESSING") setQcRunning(true);
-  }, [order?.documentStatus]);
 
   async function handleRunQC() {
     setActionRunning(true);

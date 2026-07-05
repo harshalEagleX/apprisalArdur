@@ -91,34 +91,24 @@ public class StuckBatchReconciler {
         MDC.put("correlationId", correlationId);
 
         try {
-            // Find all batches stuck for longer than retryAfterMinutes
             LocalDateTime now = AppTime.now();
             LocalDateTime retryCutoff  = now.minusMinutes(retryAfterMinutes);
             LocalDateTime abandonCutoff = now.minusMinutes(abandonAfterMinutes);
 
-            List<Batch> stuckBatches = batchRepository.findStuckInQcProcessing(retryCutoff);
+            // QC is order-grained (the Batch is upload-only), so we reconcile stuck ORDERS.
+            // Batch review-lock expiry is still handled below — that is the reviewer flow, not QC.
             List<AppraisalTransaction> stuckOrders = orderRepository.findStuckInQcProcessing(retryCutoff);
             releaseExpiredReviewLocks(now);
 
             boolean pythonHealthy = pythonClientService.isHealthy();
 
-            if (!stuckBatches.isEmpty()) {
-                log.warn("Reconciler: found {} stuck batch(es) in QC_PROCESSING", stuckBatches.size());
-                for (Batch batch : stuckBatches) {
-                    reconcileBatch(batch, abandonCutoff, pythonHealthy);
-                }
-            }
-
-            // Order-grained QC is the primary path (Batch is upload-only); reconcile stuck orders too.
             if (!stuckOrders.isEmpty()) {
                 log.warn("Reconciler: found {} stuck order(s) in QC_PROCESSING", stuckOrders.size());
                 for (AppraisalTransaction order : stuckOrders) {
                     reconcileOrder(order, abandonCutoff, pythonHealthy);
                 }
-            }
-
-            if (stuckBatches.isEmpty() && stuckOrders.isEmpty()) {
-                log.debug("Reconciler: no stuck batches or orders found");
+            } else {
+                log.debug("Reconciler: no stuck orders found");
             }
         } finally {
             MDC.remove("correlationId");
@@ -148,47 +138,6 @@ public class StuckBatchReconciler {
         }
     }
 
-    private void reconcileBatch(Batch batch, LocalDateTime abandonCutoff, boolean pythonHealthy) {
-        Long batchId = batch.getId();
-        String batchRef = batch.getParentBatchId();
-        LocalDateTime stuckSince = batch.getUpdatedAt();
-
-        if (qcProcessingService.isBatchActive(batchId)) {
-            log.info("Reconciler: batch {} ({}) is still active on this JVM; skipping stuck check. Last activity: {}",
-                    batchId, batchRef, stuckSince);
-            return;
-        }
-
-        boolean shouldAbandon = stuckSince != null && stuckSince.isBefore(abandonCutoff);
-
-        if (shouldAbandon) {
-            // Stuck too long — give up and let admin decide
-            String msg = String.format(
-                "Processing exceeded %d minute limit. Last activity: %s. Re-upload to retry.",
-                abandonAfterMinutes, stuckSince
-            );
-            log.error("Reconciler: abandoning batch {} ({}): {}", batchId, batchRef, msg);
-            batch.setStatus(BatchStatus.ERROR);
-            batch.setErrorMessage(msg);
-            batchRepository.save(batch);
-
-        } else if (!pythonHealthy) {
-            // Python is down — can't retry now, but don't abandon yet.
-            // The batch stays QC_PROCESSING and will be retried next reconciliation run.
-            log.warn("Reconciler: batch {} ({}) is stuck but Python service is unavailable — will retry next run",
-                    batchId, batchRef);
-
-        } else {
-            // Python is healthy and batch hasn't been stuck too long — re-trigger
-            log.info("Reconciler: re-triggering async QC for stuck batch {} ({}), stuck since {}",
-                    batchId, batchRef, stuckSince);
-
-            // Reset updatedAt so the next reconciler run doesn't immediately re-trigger again
-            // (processBatchAsync sets status to QC_PROCESSING which updates updatedAt via @PreUpdate)
-            qcProcessingService.processBatchAsync(batchId);
-        }
-    }
-
     private void releaseExpiredReviewLocks(LocalDateTime now) {
         List<Batch> expiredReviewBatches = batchRepository.findExpiredInReviewBatches(now);
         for (Batch batch : expiredReviewBatches) {
@@ -210,22 +159,20 @@ public class StuckBatchReconciler {
         LocalDateTime now = AppTime.now();
         LocalDateTime retryCutoff   = now.minusMinutes(retryAfterMinutes);
         LocalDateTime abandonCutoff = now.minusMinutes(abandonAfterMinutes);
-        List<Batch> stuck = batchRepository.findStuckInQcProcessing(retryCutoff);
+        List<AppraisalTransaction> stuck = orderRepository.findStuckInQcProcessing(retryCutoff);
 
         boolean pythonHealthy = pythonClientService.isHealthy();
         int retried = 0, abandoned = 0;
 
-        for (Batch b : stuck) {
-            if (qcProcessingService.isBatchActive(b.getId())) {
+        for (AppraisalTransaction o : stuck) {
+            if (qcProcessingService.isOrderActive(o.getId())) {
                 continue;
             }
-            if (b.getUpdatedAt() != null && b.getUpdatedAt().isBefore(abandonCutoff)) {
-                b.setStatus(BatchStatus.ERROR);
-                b.setErrorMessage("Manually reconciled: exceeded " + abandonAfterMinutes + " minute limit.");
-                batchRepository.save(b);
+            if (o.getUpdatedAt() != null && o.getUpdatedAt().isBefore(abandonCutoff)) {
+                orderStatusService.markError(o);
                 abandoned++;
             } else if (pythonHealthy) {
-                qcProcessingService.processBatchAsync(b.getId());
+                qcProcessingService.processOrderAsync(o.getId(), null);
                 retried++;
             }
         }

@@ -19,16 +19,13 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Regression coverage for batch-status computation and the scope field round-trip.
+ * Regression coverage for the scope field round-trip and the needsVerification contract.
  *
- * (1) recomputeBatchStatusFromActiveResults — all results finalised → COMPLETED
- * (2) errored file (no QCResult) blocks completion → REVIEW_PENDING
- * (3) DISMISSED file does NOT block completion → COMPLETED  [Fix 1 follow-up]
- * (4) scope column persists correctly from syntheticResponse  [Fix 6]
- * (5) PythonRuleResult.needsVerification() contract for all recognized statuses
+ * - scope column persists correctly from syntheticResponse via persistPythonResult  [Fix 6]
+ * - PythonRuleResult.needsVerification() contract for all recognized statuses
  *
+ * (Batch-status determination tests were removed with the batch QC path — QC is order-scoped.)
  * Uses the real Postgres DB (same as RerunGuardIntegrationTests).
- * recomputeBatchStatusFromActiveResults is package-private — test lives in same package.
  */
 @SpringBootTest
 class BatchStatusDeterminationTest {
@@ -51,74 +48,11 @@ class BatchStatusDeterminationTest {
         jdbc.execute("ALTER TABLE batch_file_aud DROP CONSTRAINT IF EXISTS batch_file_aud_status_check");
     }
 
-    // ── (1) All finalised → COMPLETED ────────────────────────────────────────
+    // NOTE: batch-status determination (recomputeBatchStatusFromActiveResults /
+    // determineBatchStatus) was removed when QC became order-scoped — those tests were
+    // dropped with it. Order lifecycle status is now covered via OrderStatusService.
 
-    @Test
-    void recompute_allResultsFinalised_returnsCompleted() {
-        String tag = "STA_ALL_" + uuid();
-        long[] ids = new long[3];
-        seed(tag, ids, QCDecision.TO_VERIFY, FinalDecision.PASS, FileStatus.COMPLETED);
-        try {
-            BatchStatus status = tx.execute(s -> qcProcessingService.recomputeBatchStatusFromActiveResults(ids[0]));
-            assertThat(status).isEqualTo(BatchStatus.COMPLETED);
-        } finally {
-            cleanup(tag, ids);
-        }
-    }
-
-    // ── (2) Errored file blocks completion ───────────────────────────────────
-
-    @Test
-    void recompute_erroredFilePresent_blocksCompletion() {
-        String tag = "STA_ERR_" + uuid();
-        long[] ids = new long[3];
-        seed(tag, ids, QCDecision.TO_VERIFY, FinalDecision.PASS, FileStatus.COMPLETED);
-
-        long[] errId = new long[1];
-        tx.executeWithoutResult(s -> {
-            Batch batch = batchRepository.findById(ids[0]).orElseThrow();
-            errId[0] = batchFileRepository.save(BatchFile.builder()
-                    .batch(batch).fileType(FileType.APPRAISAL)
-                    .filename(tag + "_err.pdf").status(FileStatus.ERROR).build()).getId();
-        });
-        try {
-            BatchStatus status = tx.execute(s -> qcProcessingService.recomputeBatchStatusFromActiveResults(ids[0]));
-            assertThat(status)
-                    .as("errored appraisal file with no QCResult must prevent silent completion")
-                    .isEqualTo(BatchStatus.REVIEW_PENDING);
-        } finally {
-            tx.executeWithoutResult(s -> batchFileRepository.findById(errId[0]).ifPresent(batchFileRepository::delete));
-            cleanup(tag, ids);
-        }
-    }
-
-    // ── (3) DISMISSED file does NOT block completion ──────────────────────────
-
-    @Test
-    void recompute_dismissedFilePresent_doesNotBlockCompletion() {
-        String tag = "STA_DISM_" + uuid();
-        long[] ids = new long[3];
-        seed(tag, ids, QCDecision.TO_VERIFY, FinalDecision.PASS, FileStatus.COMPLETED);
-
-        long[] dismId = new long[1];
-        tx.executeWithoutResult(s -> {
-            Batch batch = batchRepository.findById(ids[0]).orElseThrow();
-            dismId[0] = batchFileRepository.save(BatchFile.builder()
-                    .batch(batch).fileType(FileType.APPRAISAL)
-                    .filename(tag + "_dismissed.pdf").status(FileStatus.DISMISSED).build()).getId();
-        });
-        try {
-            BatchStatus status = tx.execute(s -> qcProcessingService.recomputeBatchStatusFromActiveResults(ids[0]));
-            assertThat(status)
-                    .as("DISMISSED is the terminal accept-failure state — must not block batch completion")
-                    .isEqualTo(BatchStatus.COMPLETED);
-        } finally {
-            tx.executeWithoutResult(s -> batchFileRepository.findById(dismId[0]).ifPresent(batchFileRepository::delete));
-            cleanup(tag, ids);
-        }
-    }
-
-    // ── (4) scope column persists from PythonQCResponse ──────────────────────
+    // ── scope column persists from PythonQCResponse ──────────────────────────
 
     @Test
     void scopeField_persistsCorrectly_throughPersistPythonResult() {

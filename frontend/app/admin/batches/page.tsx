@@ -22,7 +22,6 @@ import { BatchHistoryDrawer } from "@/components/admin/BatchHistoryDrawer";
 import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
 import { toast } from "@/lib/toast";
-import { useBatchPolling } from "@/hooks/useBatchPolling";
 import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 
 const STATUSES = [
@@ -293,11 +292,6 @@ export default function BatchesPage() {
     window.history.replaceState(null, "", params.toString() ? `/admin/batches?${params}` : "/admin/batches");
   }, [debouncedSearch, page, statusFilter]);
 
-  // Progress display for any batch still shown as QC_PROCESSING (e.g. a legacy run being
-  // reconciled). QC can no longer be triggered from the batch view — it is order-scoped.
-  const { progress, startedAt } = useBatchPolling(batches, () => {
-    void load();
-  });
 
   // Poll DB connection-pool health so an admin sees a "system under load" banner
   // before operations start timing out. The backend still degrades gracefully on
@@ -544,8 +538,7 @@ export default function BatchesPage() {
                   key={b.id}
                   batch={b}
                   isLoading={actionLoading.has(b.id) || bulkLoading}
-                  progress={progress[b.id]}
-                  startedMs={startedAt[b.id]}
+                  progress={undefined}
                   reviewers={reviewers}
                   reviewerWorkload={reviewerWorkload}
                   onAssign={handleAssign}

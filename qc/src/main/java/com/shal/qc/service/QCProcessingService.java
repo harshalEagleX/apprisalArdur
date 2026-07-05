@@ -136,134 +136,6 @@ public class QCProcessingService {
     }
 
     /**
-     * Process QC for an entire batch.
-     * PIPELINE: runs synchronously — call from a background thread or Celery task for
-     * large batches to avoid blocking the HTTP thread.
-     *
-     * @param batchId The batch to process
-     * @return Summary of processing results
-     */
-    /**
-     * Fire-and-forget async wrapper — returns 202 immediately so the HTTP thread is free.
-     * Admin polls GET /api/admin/batches/{id}/status to see progress.
-     */
-    @Async("qcTaskExecutor")
-    public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId) {
-        return processBatchAsync(batchId, QCModelConfig.defaults());
-    }
-
-    @Async("qcTaskExecutor")
-    public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId, QCModelConfig modelConfig) {
-        return processBatchAsync(batchId, modelConfig, null);
-    }
-
-    /**
-     * Partial re-run: when {@code onlyFileIds} is non-empty, only those appraisal files are
-     * reprocessed and superseded; all other files keep their results + reviewer state, and the
-     * batch status is recomputed from every active result. Empty/null = full-batch run.
-     */
-    @Async("qcTaskExecutor")
-    public CompletableFuture<QCProcessingSummary> processBatchAsync(@NonNull Long batchId, QCModelConfig modelConfig,
-                                                                    java.util.Set<Long> onlyFileIds) {
-        long asyncStarted = System.nanoTime();
-        QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        if (!activeBatches.contains(batchId) && !activeBatches.add(batchId)) {
-            log.warn("QC already active for batch {} — ignoring duplicate request", batchId);
-            return CompletableFuture.failedFuture(new IllegalStateException("QC is already running for this batch"));
-        }
-        Thread existingWorker = runningThreads.putIfAbsent(batchId, Thread.currentThread());
-        if (existingWorker != null) {
-            log.warn("QC already running for batch {} on thread {}", batchId, existingWorker.getName());
-            return CompletableFuture.failedFuture(new IllegalStateException("QC is already running for this batch"));
-        }
-        try {
-            updateProgress(batchId, "queued", "QC job queued", 0, 1, true, safeModelConfig);
-            QCProcessingSummary result = self.processBatch(batchId, safeModelConfig, onlyFileIds);
-            log.info("QC worker complete for batch {} → {} in {} ms",
-                    batchId, result.batchStatus(), TimelineLog.elapsedMs(asyncStarted));
-            return CompletableFuture.completedFuture(result);
-        } catch (CancellationException e) {
-            log.warn("Async QC processing cancelled for batch {}: {}", batchId, e.getMessage());
-            updateProgress(batchId, "stopped", "QC stopped by admin", 0, 1, false, safeModelConfig);
-            return CompletableFuture.failedFuture(e);
-        } catch (Exception e) {
-            log.error("Async QC processing failed for batch {}: {}", batchId, e.getMessage(), e);
-            log.error(TimelineLog.event("admin_batches", "java_qc_async_worker_failed",
-                    "batch_id", batchId,
-                    "elapsed_ms", TimelineLog.elapsedMs(asyncStarted),
-                    "error", e.getMessage()));
-            updateProgress(batchId, "error", "QC failed: " + e.getMessage(), 0, 1, false, safeModelConfig);
-            try {
-                // FIX: use @Transactional helper so the re-fetch and save share one session,
-                // avoiding the stale-@Version OptimisticLockingFailureException that occurred
-                // when the lambda called findById() (detached) + save() in separate transactions.
-                self.markBatchError(batchId, "Processing failed: " + e.getMessage());
-            } catch (Exception saveEx) {
-                log.error("Failed to persist error status for batch {}: {}", batchId, saveEx.getMessage());
-            }
-            return CompletableFuture.failedFuture(e);
-        } finally {
-            runningThreads.remove(batchId);
-            activeBatches.remove(batchId);
-            batchQcStartedAt.remove(batchId);
-            cancellationRequests.remove(batchId);
-            clusterCoordinator.clearCancel("batch:" + batchId); // drop the cross-node cancel flag
-        }
-    }
-
-    @Transactional
-    public boolean claimBatchForProcessing(@NonNull Long batchId, QCModelConfig modelConfig) {
-        QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        if (!activeBatches.add(batchId)) {
-            log.warn("QC claim rejected for batch {} because another worker is active", batchId);
-            return false;
-        }
-        cancellationRequests.remove(batchId);
-        int updated = batchRepository.markQcProcessingIfTriggerable(batchId, AppTime.now());
-        if (updated > 0) {
-            batchQcStartedAt.put(batchId, Instant.now());
-            updateProgress(batchId, "queued", "QC job queued with " + safeModelConfig.label(), 0, 1, true, safeModelConfig);
-            businessEventService.record("BATCH_QC_QUEUED", null, "java", "QUEUED",
-                    "Batch", batchId, batchId, null, null, null, Map.of("model", safeModelConfig.label()));
-            log.info("Claimed batch {} for QC processing using {}", batchId, safeModelConfig.label());
-            log.info(TimelineLog.event("admin_batches", "java_qc_claimed",
-                    "batch_id", batchId,
-                    "model", safeModelConfig.label(),
-                    "status", "QC_PROCESSING"));
-            return true;
-        }
-        activeBatches.remove(batchId);
-        return false;
-    }
-
-    public boolean isBatchActive(@NonNull Long batchId) {
-        return activeBatches.contains(batchId) || runningThreads.containsKey(batchId);
-    }
-
-    @Transactional
-    public boolean cancelBatch(@NonNull Long batchId) {
-        cancellationRequests.add(batchId);
-        // Broadcast cluster-wide so a worker on another instance also stops (best-effort).
-        clusterCoordinator.signalCancel("batch:" + batchId);
-        Thread worker = runningThreads.get(batchId);
-        if (worker != null) {
-            worker.interrupt();
-        }
-
-        String message = "QC stopped by admin. Click Run QC to start again.";
-        int updated = batchRepository.markUploadedIfQcProcessing(batchId, message, AppTime.now());
-        activeBatches.remove(batchId);
-        updateProgress(batchId, "stopped", message, 0, 1, false, QCModelConfig.defaults());
-        if (updated > 0) {
-            businessEventService.record("BATCH_QC_CANCELLED", null, "java", "CANCELLED",
-                    "Batch", batchId, batchId, null, null, null, Map.of("message", message));
-            log.warn("QC stop requested for batch {}{}", batchId, worker != null ? " and worker interrupted" : "");
-            return true;
-        }
-        return worker != null;
-    }
-
-    /**
      * Atomically re-fetch the batch and set it to ERROR in a single transaction.
      * Using a dedicated @Transactional method (instead of a bare lambda) ensures the
      * findById() and save() share one Hibernate session so the @Version field is
@@ -292,15 +164,6 @@ public class QCProcessingService {
             String existing = b.getIntakeWarnings();
             b.setIntakeWarnings(existing != null && !existing.isBlank()
                     ? existing + "\n" + warning : warning);
-        });
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markBatchError(@NonNull Long batchId, String errorMessage) {
-        batchRepository.findById(batchId).ifPresent(b -> {
-            b.setStatus(BatchStatus.ERROR);
-            b.setErrorMessage(errorMessage);
-            businessEventService.batchEvent("BATCH_QC_FAILED", null, b, "ERROR", Map.of("error_message", errorMessage));
         });
     }
 
@@ -346,14 +209,6 @@ public class QCProcessingService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void saveFinalBatchStatus(@NonNull Long batchId, @NonNull BatchStatus status, String errorMessage) {
-        Batch batch = batchRepository.findById(batchId)
-                .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
-        batch.setStatus(status);
-        batch.setErrorMessage(errorMessage);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void touchBatchActivity(@NonNull Long batchId) {
         batchRepository.touchQcProcessing(batchId, AppTime.now());
     }
@@ -365,291 +220,6 @@ public class QCProcessingService {
         appraisalTransactionRepository.touchUpdatedAt(orderId, AppTime.now());
     }
 
-    /**
-     * Orchestrates the full batch processing pipeline.
-     *
-     * NOT @Transactional at the outer level — each sub-operation manages its own
-     * short transaction (via self.processFilePair REQUIRES_NEW).  This prevents
-     * holding a DB connection open for the full 1-3 min Python processing time.
-     * Individual DB saves (setQcProcessing, processFilePair, saveFinalStatus) are
-     * each handled inside their own proper transaction through the proxy.
-     */
-    public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId) {
-        return processBatch(batchId, QCModelConfig.defaults());
-    }
-
-    public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId, QCModelConfig modelConfig) {
-        return processBatch(batchId, modelConfig, null);
-    }
-
-    /**
-     * Process (or partially re-process) a batch. When {@code onlyFileIds} is non-empty, only those
-     * appraisal files are processed; their prior results are superseded while every other file's
-     * results and reviewer state are untouched, and the final batch status is recomputed from ALL
-     * active results (not just the processed subset).
-     */
-    public @NonNull QCProcessingSummary processBatch(@NonNull Long batchId, QCModelConfig modelConfig,
-                                                     java.util.Set<Long> onlyFileIds) {
-        long batchStarted = System.nanoTime();
-        boolean partial = onlyFileIds != null && !onlyFileIds.isEmpty();
-        QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        batchQcStartedAt.putIfAbsent(batchId, Instant.now());
-        log.info("QC started for batch {} using {}", batchId, safeModelConfig.label());
-        updateProgress(batchId, "starting", "Starting QC processing with " + safeModelConfig.label(), 0, 1, true, safeModelConfig);
-        throwIfCancelled(batchId);
-
-        // findWithFilesById (not findById): computeHoldOuts() below reads batch.getFiles(),
-        // a LAZY collection. This method runs outside a transaction by design (see class
-        // doc), so a plain findById() returns a detached Batch and that access throws
-        // LazyInitializationException — findWithFilesById eagerly fetches files via its
-        // @EntityGraph so the detached entity is safe to read from here.
-        Batch batch = batchRepository.findWithFilesById(batchId)
-                .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
-
-        if (batch.getStatus() != BatchStatus.QC_PROCESSING) {
-            self.saveFinalBatchStatus(batchId, BatchStatus.QC_PROCESSING, null);
-        }
-        businessEventService.batchEvent("BATCH_QC_STARTED", null, batch, "STARTED", Map.of("model", safeModelConfig.label()));
-        updateProgress(batchId, "matching", "Matching appraisal, engagement, and contract files", 0, 1, true, safeModelConfig);
-
-        // Linkage gate (G-A): an appraisal whose engagement/contract is sitting
-        // unresolved elsewhere in this same batch (content sniff found it as a tied
-        // candidate at intake, but couldn't auto-link it) must NOT run QC yet — that
-        // would silently record NOT_PROVIDED for a document that is actually present,
-        // which is exactly the false cross-doc VERIFY flood this gate exists to stop.
-        // An appraisal whose supporting doc is genuinely absent from the batch is not
-        // held out; that is the legitimate NOT_PROVIDED path.
-        java.util.List<com.shal.common.service.LinkageGateService.HeldOutAppraisal> heldOut =
-                linkageGateService.computeHoldOuts(batch);
-        Set<Long> heldOutIds = heldOut.stream()
-                .map(com.shal.common.service.LinkageGateService.HeldOutAppraisal::appraisalFileId)
-                .collect(java.util.stream.Collectors.toSet());
-        if (!heldOut.isEmpty()) {
-            String note = heldOut.size() + " appraisal(s) held out of this QC run — an unresolved candidate "
-                    + "document exists in this batch for them:\n" + heldOut.stream()
-                            .map(h -> "\"" + h.appraisalFilename() + "\" — candidate(s): "
-                                    + String.join(", ", h.candidateFilenames())
-                                    + ". Use the Assign button to link the correct one, then Re-QC.")
-                            .collect(java.util.stream.Collectors.joining("\n"));
-            try {
-                self.appendIntakeWarning(batchId, note);
-            } catch (Exception warnEx) {
-                log.warn("Could not persist linkage-gate warning for batch {}: {}", batchId, warnEx.getMessage());
-            }
-        }
-
-        List<FilePair> pairs = fileMatchingService.getMatchedPairs(batchId);
-        if (!heldOutIds.isEmpty()) {
-            pairs = pairs.stream()
-                    .filter(p -> p.getAppraisal() == null || !heldOutIds.contains(p.getAppraisal().getId()))
-                    .toList();
-        }
-
-        // Hard completeness gate: an order is NEVER QC'd unless it has all three required
-        // documents — appraisal PDF, appraisal XML, and engagement letter. Incomplete pairs
-        // are skipped (never processed) and reported to the admin batch detail. Contract is
-        // optional. This backs the same rule enforced at the order-QC endpoint and in Python.
-        List<String> incompleteNotes = new ArrayList<>();
-        pairs = pairs.stream().filter(p -> {
-            java.util.Set<com.shal.common.entity.FileType> present = new java.util.HashSet<>();
-            if (p.getAppraisal() != null) present.add(com.shal.common.entity.FileType.APPRAISAL);
-            if (p.hasAppraisalXml()) present.add(com.shal.common.entity.FileType.APPRAISAL_XML);
-            if (p.hasEngagement()) present.add(com.shal.common.entity.FileType.ENGAGEMENT);
-            List<String> missing = com.shal.common.service.OrderCompleteness.missingLabels(present);
-            if (missing.isEmpty()) return true;
-            String name = p.getAppraisal() != null ? p.getAppraisal().getFilename() : "unknown appraisal";
-            incompleteNotes.add("\"" + name + "\" was not QC'd — missing " + String.join(", ", missing) + ".");
-            return false;
-        }).toList();
-        if (!incompleteNotes.isEmpty()) {
-            String note = "Skipped " + incompleteNotes.size() + " order(s) missing required documents "
-                    + "(Appraisal PDF, Appraisal XML, and Engagement letter are all required):\n"
-                    + String.join("\n", incompleteNotes);
-            try {
-                self.appendIntakeWarning(batchId, note);
-            } catch (Exception ex) {
-                log.warn("Could not persist completeness warning for batch {}: {}", batchId, ex.getMessage());
-            }
-            log.info("Batch {} — {} pair(s) skipped for missing required documents", batchId, incompleteNotes.size());
-        }
-
-        if (partial) {
-            pairs = pairs.stream()
-                    .filter(p -> p.getAppraisal() != null && onlyFileIds.contains(p.getAppraisal().getId()))
-                    .toList();
-            if (pairs.isEmpty()) {
-                BatchStatus restored = recomputeBatchStatusFromActiveResults(batchId);
-                self.saveFinalBatchStatus(batchId, restored, null);
-                updateProgress(batchId, "complete", "No matching files to re-run", 0, 1, false, safeModelConfig);
-                return new QCProcessingSummary(0, 0, 0, 0, 0, restored);
-            }
-        }
-        log.info("QC batch {} — {} file pair(s) to process", batchId, pairs.size());
-        // Surface any ambiguous pairing warnings to the admin batch detail.
-        // Warnings are appended (not replaced) so they survive a partial re-run.
-        String matchWarnings = fileMatchingService.collectMatchWarnings(batchId);
-        if (!matchWarnings.isBlank()) {
-            try {
-                self.appendIntakeWarning(batchId, matchWarnings);
-            } catch (Exception warnEx) {
-                log.warn("Could not persist match warnings for batch {}: {}", batchId, warnEx.getMessage());
-            }
-        }
-        updateProgress(batchId, "matched", "Found " + pairs.size() + " appraisal file(s) to process", 0, Math.max(pairs.size(), 1), true, safeModelConfig);
-
-        if (pairs.isEmpty()) {
-            if (!heldOutIds.isEmpty()) {
-                // Every appraisal in this batch is held out pending manual linkage —
-                // not a system error, but BatchStatus's forward-only state machine only
-                // allows QC_PROCESSING → {REVIEW_PENDING, COMPLETED, ERROR}, so ERROR is
-                // the legal target; the message (surfaced via intakeWarnings above and
-                // errorMessage here) makes clear this needs the Assign button, not a rerun.
-                log.info("Batch {} — all {} appraisal(s) held out pending linkage resolution", batchId, heldOutIds.size());
-                self.markBatchError(batchId, "Held out pending manual document assignment — see warnings for which files to assign, then Re-QC.");
-                updateProgress(batchId, "complete", "Held out pending manual document assignment", 0, 1, false, safeModelConfig);
-                return new QCProcessingSummary(0, 0, 0, 0, 0, BatchStatus.ERROR);
-            }
-            log.warn("Batch {} has no matched appraisal-engagement pairs — check folder structure", batchId);
-            self.markBatchError(batchId, "No matched appraisal files found");
-            updateProgress(batchId, "error", "No matched appraisal files found", 0, 1, false, safeModelConfig);
-            return new QCProcessingSummary(0, 0, 0, 0, 0, BatchStatus.ERROR);
-        }
-
-        int autoPassCount = 0;
-        int toVerifyCount = 0;
-        int autoFailCount = 0;
-        int errorCount    = 0;
-        List<String> fileErrors = new ArrayList<>();
-
-        for (int index = 0; index < pairs.size(); index++) {
-            FilePair pair = pairs.get(index);
-            long pairStarted = System.nanoTime();
-            try {
-                throwIfCancelled(batchId);
-                // PIPELINE: check if Python service is available before looping
-                if (!pythonClient.isHealthy()) {
-                    log.error("Python OCR service is down — aborting batch {} after {} pairs", batchId, errorCount);
-                    self.markBatchError(batchId, "Python OCR service unavailable — check that ocr-service is running on port 5001");
-                    updateProgress(batchId, "error", "Python OCR service unavailable", index, pairs.size(), false, safeModelConfig);
-                    throw new RuntimeException("Python OCR service unavailable");
-                }
-
-                // Neutral top-level label so it never contradicts the sub-stage (which carries
-                // the precise queued/started/running state). "Running OCR" while the sub-stage
-                // says "queued — waiting for worker" was the confusing 2%+queued+running display.
-                updateProgress(batchId, "python", "Processing " + pair.getAppraisal().getFilename(), index, pairs.size(), true, safeModelConfig);
-                log.debug(TimelineLog.event("admin_batches", "java_qc_file_start",
-                        "batch_id", batchId,
-                        "batch_file_id", pair.getAppraisal().getId(),
-                        "file_index", index + 1,
-                        "file_total", pairs.size(),
-                        "appraisal", pair.getAppraisal().getFilename(),
-                        "engagement", pair.hasEngagement() ? pair.getEngagement().getFilename() : "none",
-                        "contract", pair.hasContract() ? pair.getContract().getFilename() : "none"));
-                // processFilePair intentionally keeps the long Python call outside a DB transaction.
-                QCResult result = self.processFilePair(pair, safeModelConfig);
-                throwIfCancelled(batchId);
-                // Mark engagement letter and contract as COMPLETED now that the pair
-                // has been successfully processed. Best-effort: a failure here must
-                // not undo the already-persisted QCResult (hence the separate tx).
-                try {
-                    self.markSupportingFilesProcessed(pair);
-                } catch (Exception suppEx) {
-                    log.warn("Failed to update supporting-file status for appraisal {}: {}",
-                            pair.getAppraisal().getFilename(), suppEx.getMessage());
-                }
-                switch (result.getQcDecision()) {
-                    case AUTO_PASS -> autoPassCount++;
-                    case TO_VERIFY -> toVerifyCount++;
-                    case AUTO_FAIL -> autoFailCount++;
-                    case BLOCKED   -> toVerifyCount++;   // blocked routes to human review
-                }
-                log.debug(TimelineLog.event("admin_batches", "java_qc_file_complete",
-                        "batch_id", batchId,
-                        "batch_file_id", pair.getAppraisal().getId(),
-                        "qc_result_id", result.getId(),
-                        "decision", result.getQcDecision(),
-                        "elapsed_ms", TimelineLog.elapsedMs(pairStarted)));
-                updateProgress(batchId, "saving", "Saved QC result for " + pair.getAppraisal().getFilename(), index + 1, pairs.size(), true, safeModelConfig);
-            } catch (CancellationException e) {
-                log.warn("Batch {} QC cancelled while processing {}", batchId, pair.getAppraisal().getFilename());
-                throw e;
-            } catch (Exception e) {
-                if (isCancellationRequested(batchId)) {
-                    throw new CancellationException("QC stopped by admin");
-                }
-                log.error("Error processing file pair: appraisal={}, error={}",
-                        pair.getAppraisal().getFilename(), e.getMessage(), e);
-                log.error(TimelineLog.event("admin_batches", "java_qc_file_failed",
-                        "batch_id", batchId,
-                        "batch_file_id", pair.getAppraisal().getId(),
-                        "appraisal", pair.getAppraisal().getFilename(),
-                        "elapsed_ms", TimelineLog.elapsedMs(pairStarted),
-                        "error", e.getMessage()));
-                errorCount++;
-                String fileError = pair.getAppraisal().getFilename() + ": " + e.getMessage();
-                fileErrors.add(fileError);
-                try {
-                    self.markFileError(pair.getAppraisal().getId(), fileError);
-                } catch (Exception saveEx) {
-                    log.warn("Failed to persist file error for {}: {}", pair.getAppraisal().getFilename(), saveEx.getMessage());
-                }
-                updateProgress(batchId, "error", "Error processing " + pair.getAppraisal().getFilename(), index + 1, pairs.size(), true, safeModelConfig);
-            }
-        }
-
-        // Partial re-run: the processed subset is not the whole batch, so the final status must
-        // reflect EVERY file's active result (re-run + untouched), not just the subset counts.
-        BatchStatus newStatus = partial
-                ? recomputeBatchStatusFromActiveResults(batchId)
-                : determineBatchStatus(autoPassCount, toVerifyCount, autoFailCount, errorCount);
-        // R2: if a re-run carried a live reviewer lock onto a new result, the batch must stay
-        // IN_REVIEW rather than fall back to the grabbable REVIEW_PENDING queue under the holder.
-        if (newStatus == BatchStatus.REVIEW_PENDING && anyActiveReviewLock(batchId)) {
-            newStatus = BatchStatus.IN_REVIEW;
-        }
-        String finalError = null;
-        if (newStatus == BatchStatus.ERROR) {
-            finalError = fileErrors.isEmpty()
-                    ? "All appraisal files failed QC processing"
-                    : "All appraisal files failed QC processing. First cause: " + fileErrors.get(0);
-        }
-        self.saveFinalBatchStatus(batchId, newStatus, finalError);
-        businessEventService.record("BATCH_QC_COMPLETED", null, "java", newStatus.name(),
-                "Batch", batchId, batchId, null, null, null,
-                Map.of(
-                        "auto_pass_count", autoPassCount,
-                        "to_verify_count", toVerifyCount,
-                        "auto_fail_count", autoFailCount,
-                        "error_count", errorCount,
-                        "total_files", pairs.size()
-                ));
-
-        log.info("QC batch {} complete in {} ms → {} | pass={} verify={} fail={} errors={}",
-                batchId, TimelineLog.elapsedMs(batchStarted), newStatus,
-                autoPassCount, toVerifyCount, autoFailCount, errorCount);
-        updateProgress(batchId, "complete", "QC complete: " + newStatus.name().replace('_', ' '), pairs.size(), pairs.size(), false, safeModelConfig);
-
-        // Push to the admin notification feed so the bell shows the result
-        try {
-            Map<String, Object> notif = new LinkedHashMap<>();
-            notif.put("type",       "QC_COMPLETED");
-            notif.put("batchId",    batchId);
-            notif.put("parentBatchId", batch.getParentBatchId());
-            notif.put("status",     newStatus.name());
-            notif.put("totalFiles", pairs.size());
-            notif.put("needsReview", toVerifyCount > 0 || autoFailCount > 0);
-            notif.put("occurredAt", java.time.LocalDateTime.now().toString());
-            notif.put("message",    "QC complete for \"" + batch.getParentBatchId() + "\" → " +
-                    newStatus.name().replace('_', ' '));
-            realtimeEventPublisher.publish("/topic/admin/notifications", notif);
-        } catch (Exception e) {
-            log.debug("Failed to publish QC completion notification for batch {}: {}", batchId, e.getMessage());
-        }
-
-        return new QCProcessingSummary(pairs.size(), autoPassCount, toVerifyCount, autoFailCount, errorCount, newStatus);
-    }
-
     // ════════════════════════════════════════════════════════════════════════
     //  Order-keyed QC path — the Order is the QC coordination unit; the Batch
     //  stays upload/logistics only and its BatchStatus is NEVER flipped here.
@@ -658,8 +228,7 @@ public class QCProcessingService {
     // ════════════════════════════════════════════════════════════════════════
 
     /**
-     * Claim an Order for QC. Order-grained analogue of {@link #claimBatchForProcessing}:
-     * dedupes via {@code activeOrders} and flips the Order's documentStatus to QC_PROCESSING
+     * Claim an Order for QC. dedupes via {@code activeOrders} and flips the Order's documentStatus to QC_PROCESSING
      * (never the Batch's status). Returns false if the order is already being processed.
      */
     @Transactional
@@ -687,7 +256,7 @@ public class QCProcessingService {
         return activeOrders.contains(orderId) || runningThreadsByOrder.containsKey(orderId);
     }
 
-    /** Fire-and-forget async QC for one Order. Mirrors {@link #processBatchAsync}. */
+    /** Fire-and-forget async QC for one Order. */
     @Async("qcTaskExecutor")
     public CompletableFuture<QCProcessingSummary> processOrderAsync(@NonNull Long orderId, QCModelConfig modelConfig) {
         long asyncStarted = System.nanoTime();
@@ -895,9 +464,6 @@ public class QCProcessingService {
         }
     }
 
-    public QCProgress getProgress(@NonNull Long batchId) {
-        return progressByBatch.get(batchId);
-    }
 
     // ── Progress / cancel coordination, generalized over the job grain ──────────
     // A QC run is coordinated at ONE grain: the Batch (legacy) or the Order (target).
@@ -1722,63 +1288,6 @@ public class QCProcessingService {
     }
 
     /**
-     * Determine batch status from file-level outcomes.
-     *
-     * ERROR — every file failed (Python was unreachable or all files are corrupt).
-     *         Admin must investigate. Do NOT put this in REVIEW_PENDING because
-     *         there are no QCResults for the reviewer to act on.
-     *
-     * COMPLETED — every file passed all 136 rules automatically.
-     *
-     * REVIEW_PENDING — at least one file has rules needing human verification.
-     *                  This is the normal case for any non-trivial appraisal.
-     */
-    private BatchStatus determineBatchStatus(int autoPass, int toVerify, int autoFail, int errors) {
-        int total = autoPass + toVerify + autoFail + errors;
-
-        // All files errored — Python was down or all files corrupt. Show ERROR so admin
-        // gets a visible failure signal instead of an empty REVIEW_PENDING queue.
-        if (total > 0 && errors == total) {
-            return BatchStatus.ERROR;
-        }
-
-        // Everything passed cleanly — no reviewer needed
-        if (autoPass > 0 && toVerify == 0 && autoFail == 0 && errors == 0) {
-            return BatchStatus.COMPLETED;
-        }
-
-        // Mixed results or partial errors — send to reviewer
-        return BatchStatus.REVIEW_PENDING;
-    }
-
-    /**
-     * Recompute the batch status from EVERY active (non-superseded) result — used after a partial
-     * re-run, where the processed subset is not representative of the whole batch. A batch is
-     * COMPLETED only when no active result still needs reviewer work; any active non-AUTO_PASS
-     * result without a final decision keeps it REVIEW_PENDING (so the untouched files' review work
-     * is preserved). No active results at all → ERROR.
-     */
-    BatchStatus recomputeBatchStatusFromActiveResults(Long batchId) {
-        List<QCResult> active = qcResultRepository.findByBatchId(batchId).stream()
-                .filter(r -> r.getSupersededAt() == null)
-                .toList();
-        if (active.isEmpty()) {
-            return BatchStatus.ERROR;
-        }
-        boolean anyPending = active.stream()
-                .anyMatch(r -> r.getQcDecision() != QCDecision.AUTO_PASS && r.getFinalDecision() == null);
-        if (anyPending) return BatchStatus.REVIEW_PENDING;
-        // Do not mark COMPLETED while any appraisal file is still in ERROR — that file
-        // produced no QCResult and has no finalDecision to check above. The reviewer
-        // cannot act on it, but the admin can retry it (partial re-run) or dismiss it
-        // (FileStatus.DISMISSED) to explicitly accept that the file cannot be processed.
-        // DISMISSED files do not block completion — they are the terminal "accept failure" state.
-        long unreviewedErrors = batchFileRepository.countByBatchIdAndStatus(batchId, FileStatus.ERROR);
-        if (unreviewedErrors > 0) return BatchStatus.REVIEW_PENDING;
-        return BatchStatus.COMPLETED;
-    }
-
-    /**
      * R2: when a re-run supersedes a result that a reviewer is actively holding, carry the lock
      * onto the new result so a <em>different</em> reviewer cannot grab it in the window before the
      * original reviewer reloads. The session token is intentionally NOT carried — the old session
@@ -1801,20 +1310,6 @@ public class QCProcessingService {
         fresh.setReviewStartedAt(previous.getReviewStartedAt());
         fresh.setReviewLastActiveAt(previous.getReviewLastActiveAt());
         return holder;
-    }
-
-    /**
-     * True when any active (non-superseded) result in the batch is held by a live reviewer lock.
-     * Used after a re-run to keep the batch IN_REVIEW (not back in the grabbable REVIEW_PENDING
-     * queue) when a lock was carried onto a new result.
-     */
-    private boolean anyActiveReviewLock(Long batchId) {
-        var now = AppTime.now();
-        return qcResultRepository.findByBatchId(batchId).stream()
-                .filter(r -> r.getSupersededAt() == null)
-                .anyMatch(r -> r.getReviewLockedBy() != null
-                        && r.getReviewLockExpiresAt() != null
-                        && r.getReviewLockExpiresAt().isAfter(now));
     }
 
     private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file, QCModelConfig modelConfig,

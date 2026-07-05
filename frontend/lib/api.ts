@@ -787,26 +787,6 @@ export interface QCModelSelection {
 // Batch-grain QC triggering was removed — QC is initiated per Order only
 // (processOrderQC / processOrdersQC). The Batch is upload-only.
 
-export const getBatchQCProgress = (batchId: number) =>
-  apiFetch<{
-    stage: string;
-    message: string;
-    current: number;
-    total: number;
-    percent: number;
-    smoothedPercent?: number;
-    running: boolean;
-    modelProvider?: string;
-    modelName?: string;
-    visionModel?: string;
-    startedAt?: string;
-    updatedAt?: string;
-    subStage?: string | null;
-    subMessage?: string | null;
-    subPercent?: number;
-    subElapsedMs?: number;
-  }>(`/api/qc/progress/${batchId}`);
-
 export interface QCProgressSnapshot {
   stage: string;
   message: string;

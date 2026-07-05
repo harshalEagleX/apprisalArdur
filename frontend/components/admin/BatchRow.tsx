@@ -6,7 +6,22 @@ import type { Batch, User } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { ReviewerAssignControl } from "./ReviewerAssignControl";
-import type { BatchProgress } from "@/hooks/useBatchPolling";
+// Batch QC progress shape — retained for the inert in-flight display; batch QC is no
+// longer triggerable (order-scoped), so `progress` is effectively always undefined.
+interface BatchProgress {
+  current: number;
+  total: number;
+  message: string;
+  stage: string;
+  percent: number;
+  modelProvider?: string;
+  modelName?: string;
+  visionModel?: string;
+  subStage?: string | null;
+  subMessage?: string | null;
+  subPercent?: number;
+  smoothedPercent?: number;
+}
 
 export interface BatchRowProps {
   batch: Batch;
