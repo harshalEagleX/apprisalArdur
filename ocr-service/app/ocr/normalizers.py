@@ -26,7 +26,6 @@ OCR character confusion table built from errors observed in our Day 4 test set:
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
