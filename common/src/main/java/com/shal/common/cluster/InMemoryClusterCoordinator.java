@@ -17,20 +17,20 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class InMemoryClusterCoordinator implements ClusterCoordinator {
 
-    private final Set<Long> cancels = ConcurrentHashMap.newKeySet();
+    private final Set<String> cancels = ConcurrentHashMap.newKeySet();
 
     @Override
-    public void signalCancel(Long batchId) {
-        if (batchId != null) cancels.add(batchId);
+    public void signalCancel(String key) {
+        if (key != null) cancels.add(key);
     }
 
     @Override
-    public boolean isCancelSignalled(Long batchId) {
-        return batchId != null && cancels.contains(batchId);
+    public boolean isCancelSignalled(String key) {
+        return key != null && cancels.contains(key);
     }
 
     @Override
-    public void clearCancel(Long batchId) {
-        if (batchId != null) cancels.remove(batchId);
+    public void clearCancel(String key) {
+        if (key != null) cancels.remove(key);
     }
 }

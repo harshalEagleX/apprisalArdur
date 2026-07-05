@@ -15,12 +15,19 @@ package com.shal.common.cluster;
  */
 public interface ClusterCoordinator {
 
-    /** Broadcast that a batch should be cancelled, visible to every node. Best-effort. */
-    void signalCancel(Long batchId);
+    /**
+     * Broadcast that a QC job should be cancelled, visible to every node. Best-effort.
+     *
+     * {@code key} is a namespaced job identifier — {@code "batch:" + id} or
+     * {@code "order:" + id}. Batch and Order ids are both {@code Long} counting from 1,
+     * so the namespace prefix is what stops a batch cancel from also cancelling the
+     * same-numbered order (and vice-versa) on the shared Redis keyspace.
+     */
+    void signalCancel(String key);
 
-    /** True if a cancel was broadcast for this batch by ANY node. Returns false on any error. */
-    boolean isCancelSignalled(Long batchId);
+    /** True if a cancel was broadcast for this job key by ANY node. Returns false on any error. */
+    boolean isCancelSignalled(String key);
 
-    /** Clear the cancel signal once the batch run has ended. Best-effort. */
-    void clearCancel(Long batchId);
+    /** Clear the cancel signal once the job has ended. Best-effort. */
+    void clearCancel(String key);
 }

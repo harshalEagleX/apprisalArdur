@@ -106,6 +106,34 @@ public class FileMatchingService {
     }
 
     /**
+     * Order-grained analogue of {@link #getMatchedPairs(Long)}: build one {@link FilePair} per
+     * active appraisal belonging to the given Order, resolving each appraisal's supporting XML /
+     * engagement / contract with the exact same set-aware matching used batch-wide. This is the
+     * pairing entry point for Order-scoped QC (the Order, not the Batch, is the QC unit) so a run
+     * touches only the order's own documents.
+     */
+    @Transactional
+    public List<FilePair> getMatchedPairsForOrder(Long orderId) {
+        List<BatchFile> appraisals = batchFileRepository.findActiveByOrderIdAndFileType(orderId, FileType.APPRAISAL);
+        List<FilePair> pairs = new ArrayList<>();
+        for (BatchFile appraisal : appraisals) {
+            if (appraisal.getFilename() != null && appraisal.getFilename().startsWith("._")) {
+                continue;
+            }
+            if (!appraisal.isActive()) {
+                continue;
+            }
+            Optional<BatchFile> xml        = findSupportingFile(appraisal, FileType.APPRAISAL_XML);
+            Optional<BatchFile> engagement = findSupportingFile(appraisal, FileType.ENGAGEMENT);
+            Optional<BatchFile> contract   = findSupportingFile(appraisal, FileType.CONTRACT);
+            pairs.add(new FilePair(appraisal, xml.orElse(null),
+                                   engagement.orElse(null), contract.orElse(null)));
+        }
+        log.debug("Found {} file pair(s) for order {}", pairs.size(), orderId);
+        return pairs;
+    }
+
+    /**
      * Find a supporting file (engagement or contract) for an appraisal.
      * When the appraisal has a propertySetName, candidates are first restricted to
      * the same set so that a multi-property ZIP never cross-matches documents.

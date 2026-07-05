@@ -1,9 +1,12 @@
 package com.shal.qc.service;
 
+import com.shal.common.entity.AppraisalTransaction;
 import com.shal.common.entity.Batch;
 import com.shal.common.entity.BatchStatus;
+import com.shal.common.repository.AppraisalTransactionRepository;
 import com.shal.common.repository.BatchRepository;
 import com.shal.common.service.BusinessEventService;
+import com.shal.common.service.OrderStatusService;
 import com.shal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +46,8 @@ public class StuckBatchReconciler {
     private static final Logger log = LoggerFactory.getLogger(StuckBatchReconciler.class);
 
     private final BatchRepository batchRepository;
+    private final AppraisalTransactionRepository orderRepository;
+    private final OrderStatusService orderStatusService;
     private final QCProcessingService qcProcessingService;
     private final PythonClientService pythonClientService;
     private final BusinessEventService businessEventService;
@@ -57,10 +62,14 @@ public class StuckBatchReconciler {
     private boolean enabled;
 
     public StuckBatchReconciler(BatchRepository batchRepository,
+                                AppraisalTransactionRepository orderRepository,
+                                OrderStatusService orderStatusService,
                                 QCProcessingService qcProcessingService,
                                 PythonClientService pythonClientService,
                                 BusinessEventService businessEventService) {
         this.batchRepository = batchRepository;
+        this.orderRepository = orderRepository;
+        this.orderStatusService = orderStatusService;
         this.qcProcessingService = qcProcessingService;
         this.pythonClientService = pythonClientService;
         this.businessEventService = businessEventService;
@@ -88,22 +97,54 @@ public class StuckBatchReconciler {
             LocalDateTime abandonCutoff = now.minusMinutes(abandonAfterMinutes);
 
             List<Batch> stuckBatches = batchRepository.findStuckInQcProcessing(retryCutoff);
+            List<AppraisalTransaction> stuckOrders = orderRepository.findStuckInQcProcessing(retryCutoff);
             releaseExpiredReviewLocks(now);
-
-            if (stuckBatches.isEmpty()) {
-                log.debug("Reconciler: no stuck batches found");
-                return;
-            }
-
-            log.warn("Reconciler: found {} stuck batch(es) in QC_PROCESSING", stuckBatches.size());
 
             boolean pythonHealthy = pythonClientService.isHealthy();
 
-            for (Batch batch : stuckBatches) {
-                reconcileBatch(batch, abandonCutoff, pythonHealthy);
+            if (!stuckBatches.isEmpty()) {
+                log.warn("Reconciler: found {} stuck batch(es) in QC_PROCESSING", stuckBatches.size());
+                for (Batch batch : stuckBatches) {
+                    reconcileBatch(batch, abandonCutoff, pythonHealthy);
+                }
+            }
+
+            // Order-grained QC is the primary path (Batch is upload-only); reconcile stuck orders too.
+            if (!stuckOrders.isEmpty()) {
+                log.warn("Reconciler: found {} stuck order(s) in QC_PROCESSING", stuckOrders.size());
+                for (AppraisalTransaction order : stuckOrders) {
+                    reconcileOrder(order, abandonCutoff, pythonHealthy);
+                }
+            }
+
+            if (stuckBatches.isEmpty() && stuckOrders.isEmpty()) {
+                log.debug("Reconciler: no stuck batches or orders found");
             }
         } finally {
             MDC.remove("correlationId");
+        }
+    }
+
+    private void reconcileOrder(AppraisalTransaction order, LocalDateTime abandonCutoff, boolean pythonHealthy) {
+        Long orderId = order.getId();
+        String ref = order.getTransactionRef();
+        LocalDateTime stuckSince = order.getUpdatedAt();
+
+        if (qcProcessingService.isOrderActive(orderId)) {
+            log.info("Reconciler: order {} ({}) is still active on this JVM; skipping. Last activity: {}",
+                    orderId, ref, stuckSince);
+            return;
+        }
+
+        boolean shouldAbandon = stuckSince != null && stuckSince.isBefore(abandonCutoff);
+        if (shouldAbandon) {
+            log.error("Reconciler: abandoning order {} ({}) — stuck since {}", orderId, ref, stuckSince);
+            orderStatusService.markError(order);
+        } else if (!pythonHealthy) {
+            log.warn("Reconciler: order {} ({}) is stuck but Python is unavailable — will retry next run", orderId, ref);
+        } else {
+            log.info("Reconciler: re-triggering QC for stuck order {} ({}), stuck since {}", orderId, ref, stuckSince);
+            qcProcessingService.processOrderAsync(orderId, null);
         }
     }
 

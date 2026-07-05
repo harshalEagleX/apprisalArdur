@@ -134,6 +134,12 @@ public class QcWebSocketHandler extends TextWebSocketHandler {
             }
             return batchRepository.isReviewerAssigned(batchId, actor.getId());
         }
+        // Order QC progress is an admin-facing view (the Order pages live under /admin);
+        // order QC is admin-triggered, so this topic is ADMIN-only.
+        if (topic.startsWith("/topic/qc/order/")) {
+            Long orderId = parseIdAfter(topic, "/topic/qc/order/");
+            return orderId != null && actor.getRole() == Role.ADMIN;
+        }
         if (topic.startsWith("/topic/reviewer/qc/")) {
             Long qcResultId = parseIdAfter(topic, "/topic/reviewer/qc/");
             if (qcResultId == null) {

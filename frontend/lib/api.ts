@@ -440,16 +440,16 @@ export const runOrderBackfill = () =>
     `/api/admin/orders/backfill`, { method: "POST" }
   );
 
-/** Run QC for a single order (resolves to its appraisal file and runs QC on it). */
+/** Run QC for a single order — the order is the QC unit; it runs as its own job. */
 export const processOrderQC = (orderId: number, model?: QCModelSelection) =>
-  apiFetch<{ message: string; ordersResolved: number; startedBatchIds: number[]; alreadyRunningBatchIds: number[] }>(
+  apiFetch<{ message: string; ordersResolved: number; startedOrderIds: number[]; alreadyRunningOrderIds: number[] }>(
     `/api/qc/process/order/${orderId}`,
     { method: "POST", body: JSON.stringify(model ?? {}), headers: { "Content-Type": "application/json" } }
   );
 
-/** Run QC for several selected orders at once (grouped by batch server-side). */
+/** Run QC for several selected orders at once (each order runs as its own job). */
 export const processOrdersQC = (orderIds: number[], model?: QCModelSelection) =>
-  apiFetch<{ message: string; ordersRequested: number; ordersResolved: number; startedBatchIds: number[]; alreadyRunningBatchIds: number[]; ordersWithoutAppraisal: number[] }>(
+  apiFetch<{ message: string; ordersRequested: number; ordersResolved: number; startedOrderIds: number[]; alreadyRunningOrderIds: number[]; ordersWithoutAppraisal: number[] }>(
     `/api/qc/process/orders`,
     { method: "POST", body: JSON.stringify({ orderIds, ...(model ?? {}) }), headers: { "Content-Type": "application/json" } }
   );
@@ -868,6 +868,36 @@ export const getBatchQCProgress = (batchId: number) =>
     subPercent?: number;
     subElapsedMs?: number;
   }>(`/api/qc/progress/${batchId}`);
+
+export interface QCProgressSnapshot {
+  stage: string;
+  message: string;
+  current: number;
+  total: number;
+  percent: number;
+  smoothedPercent?: number;
+  running: boolean;
+  modelProvider?: string;
+  modelName?: string;
+  visionModel?: string;
+  startedAt?: string;
+  updatedAt?: string;
+  subStage?: string | null;
+  subMessage?: string | null;
+  subPercent?: number;
+  subElapsedMs?: number;
+}
+
+/** Live QC progress for one order (poll fallback; WS /topic/qc/order/{id}/progress is primary). */
+export const getOrderQCProgress = (orderId: number) =>
+  apiFetch<QCProgressSnapshot>(`/api/qc/progress/order/${orderId}`);
+
+/** Best-effort stop for a running order QC job. */
+export const cancelOrderQC = (orderId: number) =>
+  apiFetch<{ message: string; orderId: number; cancelled: boolean }>(
+    `/api/qc/cancel/order/${orderId}`,
+    { method: "POST" }
+  );
 
 export const assignReviewer = (batchId: number, reviewerId: number) =>
   apiFetch(`/api/admin/batches/${batchId}/assign`, {

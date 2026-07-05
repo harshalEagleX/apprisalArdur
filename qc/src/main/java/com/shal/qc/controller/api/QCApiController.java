@@ -310,17 +310,16 @@ public class QCApiController {
     }
 
     /**
-     * Shared engine for single- and bulk-order QC. Resolves each order to its active
-     * appraisal file(s), groups by batch, and fires one partial re-run per batch. Never
-     * silently no-ops: orders with no runnable appraisal and batches that were already
-     * processing are reported back so the caller knows exactly what ran.
+     * Shared engine for single- and bulk-order QC. The Order is the QC coordination unit:
+     * each order is claimed and run as its own job via {@link QCProcessingService#processOrderAsync}
+     * — the Batch is never claimed and its BatchStatus never flips. Never silently no-ops:
+     * orders with no runnable appraisal, incomplete orders, and orders already processing are
+     * all reported back so the caller knows exactly what ran.
      */
     private ResponseEntity<Map<String, Object>> runQcForOrders(List<Long> orderIds, QCModelConfig modelConfig) {
-        // Group each order's active appraisal file(s) under their owning batch.
-        Map<Long, java.util.LinkedHashSet<Long>> filesByBatch = new LinkedHashMap<>();
+        List<Long> runnableOrders = new java.util.ArrayList<>();
         List<Long> ordersWithoutAppraisal = new java.util.ArrayList<>();
         List<Map<String, Object>> incompleteOrders = new java.util.ArrayList<>();
-        int resolvedOrders = 0;
         for (Long orderId : orderIds) {
             List<BatchFile> appraisals = batchFileRepository.findActiveByOrderIdAndFileType(
                     orderId, com.shal.common.entity.FileType.APPRAISAL);
@@ -338,15 +337,10 @@ public class QCApiController {
                 incompleteOrders.add(m);
                 continue;
             }
-            resolvedOrders++;
-            for (BatchFile appraisal : appraisals) {
-                if (appraisal.getBatch() == null) continue;
-                filesByBatch.computeIfAbsent(appraisal.getBatch().getId(), k -> new java.util.LinkedHashSet<>())
-                        .add(appraisal.getId());
-            }
+            runnableOrders.add(orderId);
         }
 
-        if (filesByBatch.isEmpty()) {
+        if (runnableOrders.isEmpty()) {
             String message = !incompleteOrders.isEmpty()
                     ? "QC was not started — the selected order(s) are missing required documents. "
                             + "Appraisal PDF, Appraisal XML, and Engagement letter are ALL required before QC can run."
@@ -358,47 +352,40 @@ public class QCApiController {
                 "incompleteOrders", incompleteOrders));
         }
 
-        // Reject up-front if Python is down — do not claim any batch.
+        // Reject up-front if Python is down — do not claim any order.
         if (!pythonClientService.isHealthy()) {
             return ResponseEntity.status(503).body(Map.of(
                 "message", "QC service is unavailable — the OCR/QC engine is not responding. Nothing was started.",
                 "serviceAvailable", false));
         }
 
-        List<Long> startedBatches = new java.util.ArrayList<>();
-        List<Long> alreadyRunningBatches = new java.util.ArrayList<>();
-        for (Map.Entry<Long, java.util.LinkedHashSet<Long>> e : filesByBatch.entrySet()) {
-            Long batchId = e.getKey();
-            var batchOpt = batchRepository.findById(batchId);
-            if (batchOpt.isPresent() && batchOpt.get().getStatus() == BatchStatus.QC_PROCESSING) {
-                alreadyRunningBatches.add(batchId);
+        List<Long> startedOrders = new java.util.ArrayList<>();
+        List<Long> alreadyRunningOrders = new java.util.ArrayList<>();
+        for (Long orderId : runnableOrders) {
+            if (!qcProcessingService.claimOrderForProcessing(orderId, modelConfig)) {
+                alreadyRunningOrders.add(orderId);
                 continue;
             }
-            if (!qcProcessingService.claimBatchForProcessing(batchId, modelConfig)) {
-                alreadyRunningBatches.add(batchId);
-                continue;
-            }
-            qcProcessingService.processBatchAsync(batchId, modelConfig, e.getValue());
-            startedBatches.add(batchId);
+            qcProcessingService.processOrderAsync(orderId, modelConfig);
+            startedOrders.add(orderId);
         }
 
         log.info(TimelineLog.event("admin_orders", "java_qc_order_run",
                 "orders_requested", orderIds.size(),
-                "orders_resolved", resolvedOrders,
-                "batches_started", startedBatches.size(),
-                "batches_already_running", alreadyRunningBatches.size()));
+                "orders_started", startedOrders.size(),
+                "orders_already_running", alreadyRunningOrders.size()));
 
         Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("message", startedBatches.isEmpty()
+        resp.put("message", startedOrders.isEmpty()
                 ? "No QC run was started — the selected order(s) are already being processed."
-                : "QC processing started for " + resolvedOrders + " order(s).");
+                : "QC processing started for " + startedOrders.size() + " order(s).");
         resp.put("ordersRequested", orderIds.size());
-        resp.put("ordersResolved", resolvedOrders);
-        resp.put("startedBatchIds", startedBatches);
-        resp.put("alreadyRunningBatchIds", alreadyRunningBatches);
+        resp.put("ordersResolved", startedOrders.size());
+        resp.put("startedOrderIds", startedOrders);
+        resp.put("alreadyRunningOrderIds", alreadyRunningOrders);
         resp.put("ordersWithoutAppraisal", ordersWithoutAppraisal);
         resp.put("incompleteOrders", incompleteOrders);
-        return startedBatches.isEmpty()
+        return startedOrders.isEmpty()
                 ? ResponseEntity.ok(resp)
                 : ResponseEntity.accepted().body(resp);
     }
@@ -560,6 +547,72 @@ public class QCApiController {
                 "running", progress.running(),
                 "elapsed_ms", TimelineLog.elapsedMs(started)));
         return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Live QC progress for a single Order — the Order-grained analogue of
+     * {@link #getBatchProgress}. Backs the Order view's live progress bar (WebSocket
+     * {@code /topic/qc/order/{id}/progress} is primary; this is the poll fallback).
+     */
+    @GetMapping("/progress/order/{orderId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getOrderProgress(@PathVariable @NonNull Long orderId) {
+        if (!orderRepository.existsById(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        var progress = qcProcessingService.getOrderProgress(orderId);
+        if (progress == null) {
+            Map<String, Object> idle = new LinkedHashMap<>();
+            idle.put("stage", "idle");
+            idle.put("message", "QC has not started");
+            idle.put("current", 0);
+            idle.put("total", 1);
+            idle.put("percent", 0);
+            idle.put("smoothedPercent", 0);
+            idle.put("running", false);
+            idle.put("modelProvider", QCModelConfig.defaults().provider());
+            idle.put("modelName", QCModelConfig.defaults().textModel());
+            idle.put("visionModel", QCModelConfig.defaults().visionModel());
+            idle.put("subStage", null);
+            idle.put("subMessage", null);
+            idle.put("subPercent", 0.0);
+            idle.put("subElapsedMs", 0L);
+            return ResponseEntity.ok(idle);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("stage", progress.stage());
+        body.put("message", progress.message());
+        body.put("current", progress.current());
+        body.put("total", progress.total());
+        body.put("percent", progress.percent());
+        body.put("smoothedPercent", progress.smoothedPercent());
+        body.put("running", progress.running());
+        body.put("modelProvider", progress.modelProvider());
+        body.put("modelName", progress.modelName());
+        body.put("visionModel", progress.visionModel());
+        body.put("startedAt", progress.startedAt());
+        body.put("updatedAt", progress.updatedAt());
+        body.put("subStage", progress.subStage());
+        body.put("subMessage", progress.subMessage());
+        body.put("subPercent", progress.subPercent());
+        body.put("subElapsedMs", progress.subElapsedMs());
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Best-effort stop for a running Order QC job. Order analogue of {@link #cancelBatch}.
+     */
+    @PostMapping("/cancel/order/{orderId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> cancelOrder(@PathVariable @NonNull Long orderId) {
+        if (!orderRepository.existsById(orderId)) {
+            return ResponseEntity.notFound().build();
+        }
+        boolean cancelled = qcProcessingService.cancelOrder(orderId);
+        return ResponseEntity.ok(Map.of(
+            "message", cancelled ? "QC stop requested" : "QC is not running for this order",
+            "orderId", orderId,
+            "cancelled", cancelled));
     }
 
     /**

@@ -4,12 +4,14 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, ChevronRight, ClipboardList, FileText, Package,
-  RefreshCw, History, Play, UserPlus, Trash2, Check, Minus, AlertTriangle,
+  RefreshCw, History, Play, UserPlus, Trash2, Check, Minus, AlertTriangle, Square,
 } from "lucide-react";
 import {
   getOrderById, getAllUsers, processOrderQC, assignOrderReviewer, deleteOrder, getReviewerLoad,
-  type OrderDetail, type User,
+  getOrderQCProgress, cancelOrderQC,
+  type OrderDetail, type User, type QCProgressSnapshot,
 } from "@/lib/api";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { Skeleton, TableSkeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { toast } from "@/lib/toast";
@@ -35,6 +37,8 @@ export default function OrderDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [reviewerLoad, setReviewerLoad] = useState<Record<number, number>>({});
   const [loadAverage, setLoadAverage] = useState(0);
+  const [qcProgress, setQcProgress] = useState<QCProgressSnapshot | null>(null);
+  const [qcRunning, setQcRunning] = useState(false);
   const router = useRouter();
 
   const refreshLoad = useCallback(() => {
@@ -64,17 +68,69 @@ export default function OrderDetailPage() {
     refreshLoad();
   }, [refreshLoad]);
 
+  // Live QC progress: WebSocket push is primary, polling is the fallback. Both feed the
+  // same qcProgress state; qcRunning drives the progress bar + Run/Cancel toggle.
+  useWebSocket(
+    qcRunning ? [`/topic/qc/order/${id}/progress`] : [],
+    (_topic, payload) => {
+      const p = payload as QCProgressSnapshot;
+      setQcProgress(p);
+      if (p.running === false && p.stage !== "queued") { setQcRunning(false); void load(); }
+    },
+  );
+
+  useEffect(() => {
+    if (!qcRunning) return;
+    let stop = false;
+    let timer = window.setTimeout(tick, 1500);
+    async function tick() {
+      try {
+        const p = await getOrderQCProgress(id);
+        if (stop) return;
+        setQcProgress(p);
+        if (p.running === false && p.stage !== "queued" && p.stage !== "idle") {
+          setQcRunning(false);
+          void load();
+          return;
+        }
+      } catch { /* transient — keep polling */ }
+      if (!stop) timer = window.setTimeout(tick, 2000);
+    }
+    return () => { stop = true; window.clearTimeout(timer); };
+  }, [qcRunning, id, load]);
+
+  // Resume the live bar if the order is already mid-QC when the page loads.
+  useEffect(() => {
+    if (order?.documentStatus === "QC_PROCESSING") setQcRunning(true);
+  }, [order?.documentStatus]);
+
   async function handleRunQC() {
     setActionRunning(true);
     try {
       const res = await processOrderQC(id);
-      if ((res.startedBatchIds?.length ?? 0) > 0) toast.success("QC started for this order.");
-      else toast.info("Nothing started", res.message || "Order may already be processing.");
+      if ((res.startedOrderIds?.length ?? 0) > 0) {
+        toast.success("QC started for this order.");
+        setQcProgress({ stage: "queued", message: "QC job queued", current: 0, total: 1, percent: 0, running: true });
+        setQcRunning(true);
+      } else {
+        toast.info("Nothing started", res.message || "Order may already be processing.");
+      }
       void load();
     } catch (e) {
       toast.error("Failed to start QC", String(e));
     } finally {
       setActionRunning(false);
+    }
+  }
+
+  async function handleCancelQC() {
+    try {
+      const res = await cancelOrderQC(id);
+      toast.info(res.cancelled ? "QC stop requested" : "QC is not running", "");
+      setQcRunning(false);
+      void load();
+    } catch (e) {
+      toast.error("Failed to stop QC", String(e));
     }
   }
 
@@ -153,10 +209,17 @@ export default function OrderDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {order?.documentStatus && <StatusBadge status={order.documentStatus} />}
-          <button onClick={handleRunQC} disabled={actionRunning}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs text-indigo-200 transition-colors hover:bg-indigo-500/20 disabled:opacity-40">
-            <Play size={12} /> Run QC
-          </button>
+          {qcRunning ? (
+            <button onClick={handleCancelQC}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-3 text-xs text-red-300 transition-colors hover:bg-red-500/20">
+              <Square size={12} /> Stop QC
+            </button>
+          ) : (
+            <button onClick={handleRunQC} disabled={actionRunning}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs text-indigo-200 transition-colors hover:bg-indigo-500/20 disabled:opacity-40">
+              <Play size={12} /> Run QC
+            </button>
+          )}
           <div className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-[#11161C] px-2"
                title={qcDone ? undefined : "This order can be assigned to a reviewer only after its QC is done."}>
             <UserPlus size={12} className="text-slate-500" />
@@ -187,6 +250,27 @@ export default function OrderDetailPage() {
           </button>
         </div>
       </header>
+
+      {qcRunning && (
+        <div className="mb-6 rounded-xl border border-indigo-500/25 bg-indigo-950/20 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-200">
+              <RefreshCw size={13} className="animate-spin" />
+              {qcProgress?.message || "Running QC…"}
+            </div>
+            <span className="tabular-nums text-[11px] text-indigo-300/80">
+              {Math.round(qcProgress?.smoothedPercent ?? qcProgress?.percent ?? 0)}%
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-indigo-400 transition-all duration-500"
+                 style={{ width: `${Math.max(4, Math.round(qcProgress?.smoothedPercent ?? qcProgress?.percent ?? 0))}%` }} />
+          </div>
+          {qcProgress?.subMessage && (
+            <div className="mt-1.5 truncate text-[11px] text-slate-400">{qcProgress.subMessage}</div>
+          )}
+        </div>
+      )}
 
       {order?.activeQcResult && (
         <div className="mb-6 rounded-xl border border-white/10 bg-[#11161C] p-4">

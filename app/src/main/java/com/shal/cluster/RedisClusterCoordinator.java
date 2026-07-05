@@ -34,55 +34,55 @@ public class RedisClusterCoordinator implements ClusterCoordinator {
 
     private final StringRedisTemplate redis;
     /** Fallback used whenever Redis is unreachable — preserves single-node behaviour. */
-    private final Set<Long> localFallback = ConcurrentHashMap.newKeySet();
+    private final Set<String> localFallback = ConcurrentHashMap.newKeySet();
     private volatile boolean redisHealthy = true;
 
     public RedisClusterCoordinator(StringRedisTemplate redis) {
         this.redis = redis;
     }
 
-    private static String key(Long batchId) {
-        return KEY_PREFIX + batchId;
+    private static String key(String jobKey) {
+        return KEY_PREFIX + jobKey;
     }
 
     @Override
-    public void signalCancel(Long batchId) {
-        if (batchId == null) return;
-        localFallback.add(batchId); // always keep the local node responsive immediately
+    public void signalCancel(String jobKey) {
+        if (jobKey == null) return;
+        localFallback.add(jobKey); // always keep the local node responsive immediately
         if (!redisHealthy) return;
         try {
-            redis.opsForValue().set(key(batchId), "1", TTL);
+            redis.opsForValue().set(key(jobKey), "1", TTL);
         } catch (Exception e) {
-            log.warn("Redis cancel-signal write failed for batch {}: {} — using local fallback",
-                    batchId, e.getMessage());
+            log.warn("Redis cancel-signal write failed for job {}: {} — using local fallback",
+                    jobKey, e.getMessage());
             redisHealthy = false;
         }
     }
 
     @Override
-    public boolean isCancelSignalled(Long batchId) {
-        if (batchId == null) return false;
-        if (localFallback.contains(batchId)) return true; // fast path / fallback
+    public boolean isCancelSignalled(String jobKey) {
+        if (jobKey == null) return false;
+        if (localFallback.contains(jobKey)) return true; // fast path / fallback
         if (!redisHealthy) return false;
         try {
-            return Boolean.TRUE.equals(redis.hasKey(key(batchId)));
+            return Boolean.TRUE.equals(redis.hasKey(key(jobKey)));
         } catch (Exception e) {
-            log.warn("Redis cancel-signal read failed for batch {}: {} — using local fallback",
-                    batchId, e.getMessage());
+            log.warn("Redis cancel-signal read failed for job {}: {} — using local fallback",
+                    jobKey, e.getMessage());
             redisHealthy = false;
             return false;
         }
     }
 
     @Override
-    public void clearCancel(Long batchId) {
-        if (batchId == null) return;
-        localFallback.remove(batchId);
+    public void clearCancel(String jobKey) {
+        if (jobKey == null) return;
+        localFallback.remove(jobKey);
         if (!redisHealthy) return;
         try {
-            redis.delete(key(batchId));
+            redis.delete(key(jobKey));
         } catch (Exception e) {
-            log.warn("Redis cancel-signal clear failed for batch {}: {}", batchId, e.getMessage());
+            log.warn("Redis cancel-signal clear failed for job {}: {}", jobKey, e.getMessage());
             redisHealthy = false;
         }
     }

@@ -68,6 +68,7 @@ public class QCProcessingService {
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final BusinessEventService businessEventService;
     private final com.shal.common.service.OrderStatusService orderStatusService;
+    private final com.shal.common.repository.AppraisalTransactionRepository appraisalTransactionRepository;
     private final com.shal.common.service.LinkageGateService linkageGateService;
     // Cross-node cancellation signal. Backed by Redis in production (so "Stop QC"
     // reaches a worker on another instance) with a graceful in-memory fallback, so
@@ -78,6 +79,17 @@ public class QCProcessingService {
     private final Map<Long, Instant> batchQcStartedAt = new ConcurrentHashMap<>();
     private final Set<Long> activeBatches = ConcurrentHashMap.newKeySet();
     private final Set<Long> cancellationRequests = ConcurrentHashMap.newKeySet();
+
+    // ── Order-keyed QC coordination (the Order is the QC unit; Batch is upload/logistics) ──
+    // Kept in separate maps from the batch-keyed state above: batch and order ids are both
+    // Long counting from 1, so they must never share a raw-Long keyspace. Progress is
+    // published to /topic/qc/order/{orderId}/progress and cluster cancel uses the "order:"
+    // namespace so a batch cancel can't stop a same-numbered order.
+    private final Map<Long, QCProgress> progressByOrder = new ConcurrentHashMap<>();
+    private final Map<Long, Thread> runningThreadsByOrder = new ConcurrentHashMap<>();
+    private final Map<Long, Instant> orderQcStartedAt = new ConcurrentHashMap<>();
+    private final Set<Long> activeOrders = ConcurrentHashMap.newKeySet();
+    private final Set<Long> orderCancellationRequests = ConcurrentHashMap.newKeySet();
 
     /**
      * Self-injection via @Lazy to break the circular proxy dependency.
@@ -104,6 +116,7 @@ public class QCProcessingService {
             BusinessEventService businessEventService,
             com.shal.common.cluster.ClusterCoordinator clusterCoordinator,
             com.shal.common.service.OrderStatusService orderStatusService,
+            com.shal.common.repository.AppraisalTransactionRepository appraisalTransactionRepository,
             com.shal.common.service.LinkageGateService linkageGateService) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
@@ -118,6 +131,7 @@ public class QCProcessingService {
         this.businessEventService = businessEventService;
         this.clusterCoordinator = clusterCoordinator;
         this.orderStatusService = orderStatusService;
+        this.appraisalTransactionRepository = appraisalTransactionRepository;
         this.linkageGateService = linkageGateService;
     }
 
@@ -193,7 +207,7 @@ public class QCProcessingService {
             activeBatches.remove(batchId);
             batchQcStartedAt.remove(batchId);
             cancellationRequests.remove(batchId);
-            clusterCoordinator.clearCancel(batchId); // drop the cross-node cancel flag
+            clusterCoordinator.clearCancel("batch:" + batchId); // drop the cross-node cancel flag
         }
     }
 
@@ -230,7 +244,7 @@ public class QCProcessingService {
     public boolean cancelBatch(@NonNull Long batchId) {
         cancellationRequests.add(batchId);
         // Broadcast cluster-wide so a worker on another instance also stops (best-effort).
-        clusterCoordinator.signalCancel(batchId);
+        clusterCoordinator.signalCancel("batch:" + batchId);
         Thread worker = runningThreads.get(batchId);
         if (worker != null) {
             worker.interrupt();
@@ -344,6 +358,13 @@ public class QCProcessingService {
         batchRepository.touchQcProcessing(batchId, AppTime.now());
     }
 
+    /** Order-grained heartbeat — keeps the Order's updatedAt fresh so the reconciler
+     *  does not consider a long-running QC job stuck. Analogue of touchBatchActivity. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void touchOrderActivity(@NonNull Long orderId) {
+        appraisalTransactionRepository.touchUpdatedAt(orderId, AppTime.now());
+    }
+
     /**
      * Orchestrates the full batch processing pipeline.
      *
@@ -377,7 +398,12 @@ public class QCProcessingService {
         updateProgress(batchId, "starting", "Starting QC processing with " + safeModelConfig.label(), 0, 1, true, safeModelConfig);
         throwIfCancelled(batchId);
 
-        Batch batch = batchRepository.findById(batchId)
+        // findWithFilesById (not findById): computeHoldOuts() below reads batch.getFiles(),
+        // a LAZY collection. This method runs outside a transaction by design (see class
+        // doc), so a plain findById() returns a detached Batch and that access throws
+        // LazyInitializationException — findWithFilesById eagerly fetches files via its
+        // @EntityGraph so the detached entity is safe to read from here.
+        Batch batch = batchRepository.findWithFilesById(batchId)
                 .orElseThrow(() -> new RuntimeException("Batch not found: " + batchId));
 
         if (batch.getStatus() != BatchStatus.QC_PROCESSING) {
@@ -624,32 +650,300 @@ public class QCProcessingService {
         return new QCProcessingSummary(pairs.size(), autoPassCount, toVerifyCount, autoFailCount, errorCount, newStatus);
     }
 
-    public QCProgress getProgress(@NonNull Long batchId) {
-        return progressByBatch.get(batchId);
+    // ════════════════════════════════════════════════════════════════════════
+    //  Order-keyed QC path — the Order is the QC coordination unit; the Batch
+    //  stays upload/logistics only and its BatchStatus is NEVER flipped here.
+    //  Reuses the shared, file-grained processFilePair; only the claim/cancel/
+    //  status grain differs from the batch path.
+    // ════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Claim an Order for QC. Order-grained analogue of {@link #claimBatchForProcessing}:
+     * dedupes via {@code activeOrders} and flips the Order's documentStatus to QC_PROCESSING
+     * (never the Batch's status). Returns false if the order is already being processed.
+     */
+    @Transactional
+    public boolean claimOrderForProcessing(@NonNull Long orderId, QCModelConfig modelConfig) {
+        QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        if (!activeOrders.add(orderId)) {
+            log.warn("QC claim rejected for order {} — another worker is active", orderId);
+            return false;
+        }
+        orderCancellationRequests.remove(orderId);
+        var orderOpt = appraisalTransactionRepository.findById(orderId);
+        if (orderOpt.isEmpty() || !orderStatusService.markProcessing(orderOpt.get())) {
+            activeOrders.remove(orderId);
+            return false;
+        }
+        orderQcStartedAt.put(orderId, Instant.now());
+        updateProgress(JobScope.order(orderId), "queued", "QC job queued with " + cfg.label(), 0, 1, true, cfg);
+        businessEventService.record("ORDER_QC_QUEUED", null, "java", "QUEUED",
+                "Order", orderId, null, null, null, null, Map.of("model", cfg.label()));
+        log.info("Claimed order {} for QC using {}", orderId, cfg.label());
+        return true;
     }
 
-    private void throwIfCancelled(Long batchId) {
-        if (isCancellationRequested(batchId)) {
+    public boolean isOrderActive(@NonNull Long orderId) {
+        return activeOrders.contains(orderId) || runningThreadsByOrder.containsKey(orderId);
+    }
+
+    /** Fire-and-forget async QC for one Order. Mirrors {@link #processBatchAsync}. */
+    @Async("qcTaskExecutor")
+    public CompletableFuture<QCProcessingSummary> processOrderAsync(@NonNull Long orderId, QCModelConfig modelConfig) {
+        long asyncStarted = System.nanoTime();
+        QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        Thread existing = runningThreadsByOrder.putIfAbsent(orderId, Thread.currentThread());
+        if (existing != null) {
+            log.warn("QC already running for order {} on thread {}", orderId, existing.getName());
+            return CompletableFuture.failedFuture(new IllegalStateException("QC is already running for this order"));
+        }
+        try {
+            QCProcessingSummary result = self.processOrder(orderId, cfg);
+            log.info("QC worker complete for order {} in {} ms", orderId, TimelineLog.elapsedMs(asyncStarted));
+            return CompletableFuture.completedFuture(result);
+        } catch (CancellationException e) {
+            log.warn("Async QC cancelled for order {}: {}", orderId, e.getMessage());
+            // Last emit after the worker unwinds, so the progress bar clears to "stopped".
+            updateProgress(JobScope.order(orderId), "stopped", "QC stopped by admin", 0, 1, false, cfg);
+            return CompletableFuture.failedFuture(e);
+        } catch (Exception e) {
+            log.error("Async QC processing failed for order {}: {}", orderId, e.getMessage(), e);
+            try {
+                self.markOrderError(orderId);
+            } catch (Exception saveEx) {
+                log.error("Failed to persist error status for order {}: {}", orderId, saveEx.getMessage());
+            }
+            updateProgress(JobScope.order(orderId), "error", "QC failed: " + e.getMessage(), 0, 1, false, cfg);
+            return CompletableFuture.failedFuture(e);
+        } finally {
+            runningThreadsByOrder.remove(orderId);
+            activeOrders.remove(orderId);
+            orderQcStartedAt.remove(orderId);
+            orderCancellationRequests.remove(orderId);
+            clusterCoordinator.clearCancel("order:" + orderId);
+        }
+    }
+
+    /**
+     * Process one Order end-to-end: resolve its file pairs, apply the linkage + completeness
+     * gates, run each pair through the shared {@link #processFilePair}, then recompute the
+     * Order's lifecycle status from its now-active QCResult(s). Never flips BatchStatus.
+     */
+    public @NonNull QCProcessingSummary processOrder(@NonNull Long orderId, QCModelConfig modelConfig) {
+        long orderStarted = System.nanoTime();
+        QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        JobScope orderScope = JobScope.order(orderId);
+        AppraisalTransaction order = appraisalTransactionRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+        log.info("QC started for order {} ({}) using {}", orderId, order.getTransactionRef(), cfg.label());
+        updateProgress(orderScope, "starting", "Starting QC for order " + order.getTransactionRef(), 0, 1, true, cfg);
+        businessEventService.record("ORDER_QC_STARTED", null, "java", "STARTED",
+                "Order", orderId, null, null, null, null, Map.of("model", cfg.label()));
+        throwIfOrderCancelled(orderId);
+
+        List<FilePair> pairs = fileMatchingService.getMatchedPairsForOrder(orderId);
+
+        // Linkage gate (G-A): never QC an appraisal whose engagement/contract/xml is present
+        // but unresolved (NEEDS_ASSIGNMENT) in its batch — that records a false NOT_PROVIDED.
+        // Reuse the batch-scoped gate on each distinct batch the order's appraisals live in.
+        Set<Long> heldOutIds = new java.util.HashSet<>();
+        Set<Long> gateBatchIds = pairs.stream()
+                .map(p -> p.getAppraisal().getBatch() != null ? p.getAppraisal().getBatch().getId() : null)
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        for (Long bId : gateBatchIds) {
+            batchRepository.findWithFilesById(bId).ifPresent(b ->
+                    linkageGateService.computeHoldOuts(b).forEach(h -> heldOutIds.add(h.appraisalFileId())));
+        }
+        if (!heldOutIds.isEmpty()) {
+            pairs = pairs.stream().filter(p -> !heldOutIds.contains(p.getAppraisal().getId())).toList();
+        }
+
+        // Completeness gate (defense in depth; the QC endpoint already blocks incomplete orders).
+        pairs = pairs.stream().filter(p -> {
+            java.util.Set<FileType> present = new java.util.HashSet<>();
+            if (p.getAppraisal() != null) present.add(FileType.APPRAISAL);
+            if (p.hasAppraisalXml()) present.add(FileType.APPRAISAL_XML);
+            if (p.hasEngagement()) present.add(FileType.ENGAGEMENT);
+            return com.shal.common.service.OrderCompleteness.missingLabels(present).isEmpty();
+        }).toList();
+
+        if (pairs.isEmpty()) {
+            // Nothing runnable — held out pending assignment, or genuinely incomplete.
+            orderStatusService.recompute(order); // reflect the real (UNMATCHED/INCOMPLETE) state
+            updateProgress(orderScope, "complete", "No runnable documents for this order", 0, 1, false, cfg);
+            log.info("Order {} — no runnable pairs (held out or incomplete)", orderId);
+            return new QCProcessingSummary(0, 0, 0, 0, 0, null);
+        }
+
+        int autoPass = 0, toVerify = 0, autoFail = 0, errors = 0;
+        List<String> fileErrors = new ArrayList<>();
+        for (int index = 0; index < pairs.size(); index++) {
+            FilePair pair = pairs.get(index);
+            throwIfOrderCancelled(orderId);
+            if (!pythonClient.isHealthy()) {
+                log.error("Python OCR service is down — aborting order {}", orderId);
+                self.markOrderError(orderId);
+                updateProgress(orderScope, "error", "Python OCR service unavailable", index, pairs.size(), false, cfg);
+                throw new RuntimeException("Python OCR service unavailable");
+            }
+            try {
+                updateProgress(orderScope, "python", "Processing " + pair.getAppraisal().getFilename(), index, pairs.size(), true, cfg);
+                QCResult result = self.processFilePair(pair, cfg, orderScope);
+                throwIfOrderCancelled(orderId);
+                try {
+                    self.markSupportingFilesProcessed(pair);
+                } catch (Exception suppEx) {
+                    log.warn("Failed to update supporting-file status for {}: {}",
+                            pair.getAppraisal().getFilename(), suppEx.getMessage());
+                }
+                switch (result.getQcDecision()) {
+                    case AUTO_PASS -> autoPass++;
+                    case TO_VERIFY -> toVerify++;
+                    case AUTO_FAIL -> autoFail++;
+                    case BLOCKED   -> toVerify++;
+                }
+                updateProgress(orderScope, "saving", "Saved QC result for " + pair.getAppraisal().getFilename(), index + 1, pairs.size(), true, cfg);
+            } catch (CancellationException e) {
+                throw e;
+            } catch (Exception e) {
+                if (isOrderCancellationRequested(orderId)) {
+                    throw new CancellationException("QC stopped by admin");
+                }
+                log.error("Error processing pair for order {}: appraisal={}, error={}",
+                        orderId, pair.getAppraisal().getFilename(), e.getMessage(), e);
+                errors++;
+                String fileError = pair.getAppraisal().getFilename() + ": " + e.getMessage();
+                fileErrors.add(fileError);
+                try {
+                    self.markFileError(pair.getAppraisal().getId(), fileError);
+                } catch (Exception ignore) {
+                    log.warn("Failed to persist file error for {}: {}", pair.getAppraisal().getFilename(), ignore.getMessage());
+                }
+            }
+        }
+
+        // Terminal Order status is computed from the now-active QCResult(s).
+        orderStatusService.recompute(order);
+        AppraisalTransaction fresh = appraisalTransactionRepository.findById(orderId).orElse(order);
+        updateProgress(orderScope, "complete",
+                "QC complete: " + String.valueOf(fresh.getDocumentStatus()).replace('_', ' '),
+                pairs.size(), pairs.size(), false, cfg);
+        log.info("QC order {} complete in {} ms → {} | pass={} verify={} fail={} errors={}",
+                orderId, TimelineLog.elapsedMs(orderStarted), fresh.getDocumentStatus(),
+                autoPass, toVerify, autoFail, errors);
+        businessEventService.record("ORDER_QC_COMPLETED", null, "java", String.valueOf(fresh.getDocumentStatus()),
+                "Order", orderId, null, null, null, null,
+                Map.of("auto_pass_count", autoPass, "to_verify_count", toVerify,
+                        "auto_fail_count", autoFail, "error_count", errors, "total_files", pairs.size()));
+
+        // Admin notification feed
+        try {
+            Map<String, Object> notif = new LinkedHashMap<>();
+            notif.put("type", "ORDER_QC_COMPLETED");
+            notif.put("orderId", orderId);
+            notif.put("transactionRef", fresh.getTransactionRef());
+            notif.put("status", String.valueOf(fresh.getDocumentStatus()));
+            notif.put("totalFiles", pairs.size());
+            notif.put("needsReview", toVerify > 0 || autoFail > 0);
+            notif.put("occurredAt", java.time.LocalDateTime.now().toString());
+            notif.put("message", "QC complete for order \"" + fresh.getTransactionRef() + "\" → " + fresh.getDocumentStatus());
+            realtimeEventPublisher.publish("/topic/admin/notifications", notif);
+        } catch (Exception e) {
+            log.debug("Failed to publish order QC completion notification for order {}: {}", orderId, e.getMessage());
+        }
+
+        return new QCProcessingSummary(pairs.size(), autoPass, toVerify, autoFail, errors, null);
+    }
+
+    /** Best-effort stop for a running Order QC job. Order analogue of {@link #cancelBatch}. */
+    @Transactional
+    public boolean cancelOrder(@NonNull Long orderId) {
+        orderCancellationRequests.add(orderId);
+        clusterCoordinator.signalCancel("order:" + orderId);
+        Thread worker = runningThreadsByOrder.get(orderId);
+        if (worker != null) {
+            worker.interrupt();
+        }
+        activeOrders.remove(orderId);
+        appraisalTransactionRepository.findById(orderId).ifPresent(o -> {
+            if (o.getDocumentStatus() == OrderDocumentStatus.QC_PROCESSING) {
+                orderStatusService.recompute(o); // fall back to the real pre-run state
+            }
+        });
+        log.warn("QC stop requested for order {}{}", orderId, worker != null ? " and worker interrupted" : "");
+        return worker != null;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markOrderError(@NonNull Long orderId) {
+        appraisalTransactionRepository.findById(orderId).ifPresent(orderStatusService::markError);
+    }
+
+    public QCProgress getOrderProgress(@NonNull Long orderId) {
+        return progressByOrder.get(orderId);
+    }
+
+    private boolean isOrderCancellationRequested(Long orderId) {
+        return orderCancellationRequests.contains(orderId)
+                || Thread.currentThread().isInterrupted()
+                || clusterCoordinator.isCancelSignalled("order:" + orderId);
+    }
+
+    private void throwIfOrderCancelled(Long orderId) {
+        if (isOrderCancellationRequested(orderId)) {
             throw new CancellationException("QC stopped by admin");
         }
     }
 
-    private boolean isCancellationRequested(Long batchId) {
-        return cancellationRequests.contains(batchId)
+    public QCProgress getProgress(@NonNull Long batchId) {
+        return progressByBatch.get(batchId);
+    }
+
+    // ── Progress / cancel coordination, generalized over the job grain ──────────
+    // A QC run is coordinated at ONE grain: the Batch (legacy) or the Order (target).
+    // Both ids are Long, so JobScope carries which grain — it selects the right progress
+    // map + cancel set, publishes to the matching /topic, and namespaces the cluster
+    // cancel key. The batch-id overloads below keep every existing batch call site
+    // (processBatch, processFilePair) working unchanged.
+    private enum JobKind { BATCH, ORDER }
+    private record JobScope(JobKind kind, Long id) {
+        static JobScope batch(Long id) { return new JobScope(JobKind.BATCH, id); }
+        static JobScope order(Long id) { return new JobScope(JobKind.ORDER, id); }
+        String topic()     { return "/topic/qc/" + (kind == JobKind.ORDER ? "order" : "batch") + "/" + id + "/progress"; }
+        String cancelKey() { return (kind == JobKind.ORDER ? "order:" : "batch:") + id; }
+        String idKey()     { return kind == JobKind.ORDER ? "orderId" : "batchId"; }
+    }
+    private Map<Long, QCProgress> progressMapFor(JobScope s) { return s.kind() == JobKind.ORDER ? progressByOrder : progressByBatch; }
+    private Set<Long> cancelSetFor(JobScope s) { return s.kind() == JobKind.ORDER ? orderCancellationRequests : cancellationRequests; }
+    private Map<Long, Instant> startedAtMapFor(JobScope s) { return s.kind() == JobKind.ORDER ? orderQcStartedAt : batchQcStartedAt; }
+
+    private void throwIfCancelled(JobScope scope) {
+        if (isCancellationRequested(scope)) {
+            throw new CancellationException("QC stopped by admin");
+        }
+    }
+    private void throwIfCancelled(Long batchId) { throwIfCancelled(JobScope.batch(batchId)); }
+
+    private boolean isCancellationRequested(JobScope scope) {
+        return cancelSetFor(scope).contains(scope.id())
                 || Thread.currentThread().isInterrupted()
                 // Cross-node: an admin may have pressed Stop on a different instance.
-                || clusterCoordinator.isCancelSignalled(batchId);
+                || clusterCoordinator.isCancelSignalled(scope.cancelKey());
     }
+    private boolean isCancellationRequested(Long batchId) { return isCancellationRequested(JobScope.batch(batchId)); }
 
     private void updateProgress(Long batchId, String stage, String message, int current, int total, boolean running) {
-        updateProgress(batchId, stage, message, current, total, running, QCModelConfig.defaults());
+        updateProgress(JobScope.batch(batchId), stage, message, current, total, running, QCModelConfig.defaults());
+    }
+    private void updateProgress(Long batchId, String stage, String message, int current, int total, boolean running, QCModelConfig modelConfig) {
+        updateProgress(JobScope.batch(batchId), stage, message, current, total, running, modelConfig);
     }
 
-    private void updateProgress(Long batchId, String stage, String message, int current, int total, boolean running, QCModelConfig modelConfig) {
+    private void updateProgress(JobScope scope, String stage, String message, int current, int total, boolean running, QCModelConfig modelConfig) {
         int safeTotal = Math.max(total, 1);
         int safeCurrent = Math.max(0, Math.min(current, safeTotal));
         QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        QCProgress progress = progressByBatch.compute(batchId, (id, existing) -> new QCProgress(
+        QCProgress progress = progressMapFor(scope).compute(scope.id(), (id, existing) -> new QCProgress(
                 stage,
                 message,
                 safeCurrent,
@@ -667,22 +961,25 @@ public class QCProcessingService {
         ));
         if (running || "saving".equals(stage) || "complete".equals(stage) || "error".equals(stage)) {
             try {
-                self.touchBatchActivity(batchId);
+                touchActivity(scope);
             } catch (Exception e) {
-                log.debug("Could not update QC heartbeat for batch {}: {}", batchId, e.getMessage());
+                log.debug("Could not update QC heartbeat for {} {}: {}", scope.kind(), scope.id(), e.getMessage());
             }
         }
-        realtimeEventPublisher.publish("/topic/qc/batch/" + batchId + "/progress", progressPayload(batchId, progress));
+        realtimeEventPublisher.publish(scope.topic(), progressPayload(scope, progress));
     }
 
     /**
-     * Merge a Python sub-stage update into the existing QCProgress for this
-     * batch. Top-level stage / current / total are preserved; only the sub_*
-     * fields and updated_at change. Skipped silently if no parent progress
-     * exists yet (the worker has not entered the python stage).
+     * Merge a Python sub-stage update into the existing QCProgress for this job.
+     * Top-level stage / current / total are preserved; only the sub_* fields and
+     * updated_at change. Skipped silently if no parent progress exists yet (the
+     * worker has not entered the python stage).
      */
     private void updateSubProgress(Long batchId, String subStage, String subMessage, double subPercent, long subElapsedMs) {
-        QCProgress merged = progressByBatch.computeIfPresent(batchId, (id, existing) -> new QCProgress(
+        updateSubProgress(JobScope.batch(batchId), subStage, subMessage, subPercent, subElapsedMs);
+    }
+    private void updateSubProgress(JobScope scope, String subStage, String subMessage, double subPercent, long subElapsedMs) {
+        QCProgress merged = progressMapFor(scope).computeIfPresent(scope.id(), (id, existing) -> new QCProgress(
                 existing.stage(),
                 existing.message(),
                 existing.current(),
@@ -702,13 +999,19 @@ public class QCProcessingService {
                 subElapsedMs
         ));
         if (merged != null) {
-            realtimeEventPublisher.publish("/topic/qc/batch/" + batchId + "/progress", progressPayload(batchId, merged));
+            realtimeEventPublisher.publish(scope.topic(), progressPayload(scope, merged));
         }
     }
 
-    private Map<String, Object> progressPayload(Long batchId, QCProgress progress) {
+    /** Heartbeat the job's row so the stuck-job reconciler sees it as alive. */
+    private void touchActivity(JobScope scope) {
+        if (scope.kind() == JobKind.ORDER) self.touchOrderActivity(scope.id());
+        else self.touchBatchActivity(scope.id());
+    }
+
+    private Map<String, Object> progressPayload(JobScope scope, QCProgress progress) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("batchId", batchId);
+        payload.put(scope.idKey(), scope.id());
         payload.put("stage", progress.stage());
         payload.put("message", progress.message());
         payload.put("current", progress.current());
@@ -745,6 +1048,18 @@ public class QCProcessingService {
 
     @SuppressWarnings("null")
     public @NonNull QCResult processFilePair(FilePair pair, QCModelConfig modelConfig) {
+        return processFilePair(pair, modelConfig, null);
+    }
+
+    /**
+     * {@code scope} decides where live progress publishes and which cancel flag is checked —
+     * the Batch (legacy) or the Order (target). When null it defaults to the file's Batch, so
+     * the batch path behaves exactly as before. {@code progressBatchId} (the file's real batch)
+     * is still what's sent to Python and stamped on business events regardless of scope — only
+     * the progress/cancel grain changes.
+     */
+    @SuppressWarnings("null")
+    public @NonNull QCResult processFilePair(FilePair pair, QCModelConfig modelConfig, JobScope scopeOrNull) {
         // Keep the long Python/OCR call outside any Java DB transaction. Neon
         // terminates idle transactions during multi-minute OCR jobs, and that
         // rollback can mask the real Python result.
@@ -773,10 +1088,12 @@ public class QCProcessingService {
         }
 
         Long progressBatchId = appraisal.getBatch().getId();
+        // Progress/cancel grain: the Order when this run was order-triggered, else the Batch.
+        JobScope scope = scopeOrNull != null ? scopeOrNull : JobScope.batch(progressBatchId);
         String clientId = (appraisal.getBatch().getClient() != null)
                 ? String.valueOf(appraisal.getBatch().getClient().getId()) : null;
         Instant pythonStartedAt = Instant.now();
-        long queueWaitMs = queueWaitMs(progressBatchId, pythonStartedAt);
+        long queueWaitMs = queueWaitMs(scope, pythonStartedAt);
         int retryCount = 0;
 
         // Order (AppraisalTransaction) traceability: threaded to Python via MDC — same
@@ -792,11 +1109,11 @@ public class QCProcessingService {
         if (!pythonClient.isCeleryWorkerRunning()) {
             log.warn("Celery worker is not connected; using synchronous Python QC for batch {} file {}",
                     progressBatchId, appraisal.getFilename());
-            updateSubProgress(progressBatchId, "python_sync",
+            updateSubProgress(scope,"python_sync",
                     "Celery worker unavailable — running OCR directly for " + appraisal.getFilename(), 0.05, 0);
-            pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal, clientId);
+            pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, scope, appraisal, clientId);
             retryCount = pythonClient.getLastRetryCount();
-            throwIfCancelled(progressBatchId);
+            throwIfCancelled(scope);
         } else {
             // --- Async queue path (Celery worker) ---
             PythonClientService.JobSubmitResponse job;
@@ -814,7 +1131,7 @@ public class QCProcessingService {
                         engagementStatusFor(pair),
                         clientId);
 
-                updateSubProgress(progressBatchId, "queued",
+                updateSubProgress(scope,"queued",
                         "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
 
             } catch (CancellationException ce) {
@@ -822,7 +1139,7 @@ public class QCProcessingService {
             } catch (Exception submitEx) {
                 log.warn("Async submit unavailable for batch {} file {} ({}), falling back to sync call",
                         progressBatchId, appraisal.getFilename(), submitEx.getMessage());
-                updateSubProgress(progressBatchId, "python_sync",
+                updateSubProgress(scope,"python_sync",
                         "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
                 pythonResponse = pythonClient.processQC(
                         pair.getAppraisalPath(),
@@ -834,20 +1151,21 @@ public class QCProcessingService {
                             String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
                             String subMessage = snapshot.message() != null ? snapshot.message()
                                     : "Processing " + appraisal.getFilename();
-                            updateSubProgress(progressBatchId, subStage, subMessage,
+                            updateSubProgress(scope,subStage, subMessage,
                                     snapshot.subPercent(), snapshot.elapsedMs());
                         },
-                        progressBatchId,
+                        progressBatchId, // Python still gets the real batch id for correlation
                         appraisal.getId(),
                         null,
                         appraisal.getContentHash(),
                         engagementStatusFor(pair),
                         clientId);
                 retryCount = pythonClient.getLastRetryCount();
-                throwIfCancelled(progressBatchId);
+                throwIfCancelled(scope);
 
                 QCResult syncFallbackResult = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
-                self.recordQcEventsAsync(syncFallbackResult, pythonResponse, syncFallbackResult.getQcDecision(), modelConfig);
+                self.recordQcEventsAsync(syncFallbackResult, pythonResponse, syncFallbackResult.getQcDecision(), modelConfig,
+                        progressBatchId, appraisal.getId());
                 return syncFallbackResult;
             }
 
@@ -856,24 +1174,24 @@ public class QCProcessingService {
                 pythonResponse = pythonClient.waitForJobResult(
                         job.jobId(),
                         timeout,
-                        () -> isCancellationRequested(progressBatchId),
+                        () -> isCancellationRequested(scope),
                         snapshot -> {
                             String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
                             String subMessage = snapshot.message() != null ? snapshot.message()
                                     : "Processing " + appraisal.getFilename();
-                            updateSubProgress(progressBatchId, subStage, subMessage,
+                            updateSubProgress(scope,subStage, subMessage,
                                     snapshot.subPercent(), snapshot.elapsedMs());
                         });
             } catch (PythonClientService.CeleryWorkerUnavailableException workerEx) {
                 log.warn("Queued Python job {} was not picked up by Celery; taking it over synchronously",
                         workerEx.jobId());
-                updateSubProgress(progressBatchId, "python_sync",
+                updateSubProgress(scope,"python_sync",
                         "Celery worker did not pick up queued job — running OCR directly for " + appraisal.getFilename(),
                         0.05, 0);
-                pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal, clientId);
+                pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, scope, appraisal, clientId);
             }
             retryCount = pythonClient.getLastRetryCount();
-            throwIfCancelled(progressBatchId);
+            throwIfCancelled(scope);
         }
 
         QCResult result = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
@@ -882,7 +1200,8 @@ public class QCProcessingService {
 
         // Fire QC rule events in the background — user sees REVIEW_PENDING immediately,
         // 137 event inserts happen after the batch status is already unlocked.
-        self.recordQcEventsAsync(result, pythonResponse, result.getQcDecision(), modelConfig);
+        self.recordQcEventsAsync(result, pythonResponse, result.getQcDecision(), modelConfig,
+                progressBatchId, appraisal.getId());
         return result;
         } finally {
             org.slf4j.MDC.remove("orderRef");
@@ -909,14 +1228,16 @@ public class QCProcessingService {
             FilePair pair,
             QCModelConfig modelConfig,
             Long progressBatchId,
+            JobScope scope,
             BatchFile appraisal) {
-        return runSyncPythonQc(pair, modelConfig, progressBatchId, appraisal, null);
+        return runSyncPythonQc(pair, modelConfig, progressBatchId, scope, appraisal, null);
     }
 
     private PythonQCResponse runSyncPythonQc(
             FilePair pair,
             QCModelConfig modelConfig,
             Long progressBatchId,
+            JobScope scope,
             BatchFile appraisal,
             String clientId) {
         return pythonClient.processQC(
@@ -929,7 +1250,7 @@ public class QCProcessingService {
                     String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
                     String subMessage = snapshot.message() != null ? snapshot.message()
                             : "Processing " + appraisal.getFilename();
-                    updateSubProgress(progressBatchId, subStage, subMessage,
+                    updateSubProgress(scope, subStage, subMessage,
                             snapshot.subPercent(), snapshot.elapsedMs());
                 },
                 progressBatchId,
@@ -1269,14 +1590,21 @@ public class QCProcessingService {
      * Runs @Async so the caller (processFilePair) is unblocked immediately after saving
      * the QCResult. The batch status transitions to REVIEW_PENDING before these events land.
      * Previously this fired 137 individual REQUIRES_NEW transactions (≈112s on remote Neon).
+     *
+     * batchId/fileId are passed in rather than derived from qcResult.getBatchFile().getBatch():
+     * qcResult is re-fetched outside a transaction in processFilePair (detached), so touching
+     * its lazy BatchFile/Batch proxies here — on a separate @Async thread with no session —
+     * throws LazyInitializationException. The caller already has both ids from its own
+     * eagerly-fetched `appraisal` (findWithBatchAndReviewerById), so just forward them.
      */
     @Async("qcTaskExecutor")
-    public void recordQcEventsAsync(QCResult qcResult, PythonQCResponse pythonResponse, QCDecision decision, QCModelConfig modelConfig) {
+    public void recordQcEventsAsync(QCResult qcResult, PythonQCResponse pythonResponse, QCDecision decision,
+                                     QCModelConfig modelConfig, Long batchId, Long fileId) {
         try {
-            BatchFile file = qcResult.getBatchFile();
-            Batch batch = file != null ? file.getBatch() : null;
-            Long batchId = batch != null ? batch.getId() : null;
-            Long fileId = file != null ? file.getId() : null;
+            // Re-fetch with ruleResults eagerly joined: qcResult was loaded outside this
+            // method's transaction (see class-level note above), so its ruleResults LAZY
+            // collection is not safe to iterate on this @Async thread otherwise.
+            qcResult = qcResultRepository.findWithRuleResultsById(qcResult.getId()).orElse(qcResult);
 
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("decision", decision.name());
@@ -1544,12 +1872,15 @@ public class QCProcessingService {
         }
     }
 
-    private long queueWaitMs(Long batchId, Instant pythonStartedAt) {
-        Instant startedAt = batchQcStartedAt.get(batchId);
+    private long queueWaitMs(JobScope scope, Instant pythonStartedAt) {
+        Instant startedAt = startedAtMapFor(scope).get(scope.id());
         if (startedAt == null || pythonStartedAt == null || pythonStartedAt.isBefore(startedAt)) {
             return 0L;
         }
         return Duration.between(startedAt, pythonStartedAt).toMillis();
+    }
+    private long queueWaitMs(Long batchId, Instant pythonStartedAt) {
+        return queueWaitMs(JobScope.batch(batchId), pythonStartedAt);
     }
 
     private String toJson(Object obj) {

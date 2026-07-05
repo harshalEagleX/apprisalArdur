@@ -62,6 +62,19 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     Optional<QCResult> findWithBatchFileAndBatchById(@Param("qcResultId") Long qcResultId);
 
     /**
+     * Eagerly load ruleResults (LAZY @OneToMany) alongside the QCResult.
+     * Needed anywhere a QCResult is read outside the transaction that saved it
+     * (e.g. the @Async event-recording path) — without this, iterating
+     * qcResult.getRuleResults() there throws LazyInitializationException.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        LEFT JOIN FETCH qr.ruleResults
+        WHERE qr.id = :qcResultId
+        """)
+    Optional<QCResult> findWithRuleResultsById(@Param("qcResultId") Long qcResultId);
+
+    /**
      * Find all QC results for a batch (active + superseded).
      * Used by the audit graph and audit log endpoints that need the full history.
      * For the batch-detail API use {@link #findActiveByBatchIdWithBatchFile} instead.

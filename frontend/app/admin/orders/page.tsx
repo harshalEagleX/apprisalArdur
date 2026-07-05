@@ -113,9 +113,9 @@ export default function OrdersPage() {
     setActionRunning(true);
     try {
       const res = await processOrdersQC(selectedIds);
-      const started = res.startedBatchIds?.length ?? 0;
+      const started = res.startedOrderIds?.length ?? 0;
       if (started > 0) {
-        toast.success("QC started", `${res.ordersResolved} order(s) queued across ${started} batch(es).`);
+        toast.success("QC started", `${started} order(s) queued.`);
       } else {
         toast.info("Nothing started", res.message || "Selected order(s) may already be processing.");
       }

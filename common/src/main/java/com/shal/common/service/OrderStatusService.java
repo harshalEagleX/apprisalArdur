@@ -53,6 +53,39 @@ public class OrderStatusService {
         appraisalTransactionRepository.save(order);
     }
 
+    /**
+     * Claim-time transition to {@link OrderDocumentStatus#QC_PROCESSING}. This is the
+     * Order-grained analogue of {@code BatchRepository.markQcProcessingIfTriggerable} — the
+     * Order (not the Batch) is now the QC coordination unit, so its lifecycle status is what
+     * flips when a run starts.
+     *
+     * <p>Guarded against a double-run only: an order already {@code QC_PROCESSING} is rejected
+     * (mirrors {@code markQcProcessingIfTriggerable}'s conditional update). Document
+     * <em>completeness</em> is NOT re-checked here — the QC trigger endpoint is the completeness
+     * authority (it blocks incomplete/unmatched orders via {@code OrderCompleteness} before
+     * claiming), and the stored {@code documentStatus} may lag actual file state. Returns
+     * {@code true} only if the claim was taken.
+     */
+    @Transactional
+    public boolean markProcessing(AppraisalTransaction order) {
+        if (order == null || order.getId() == null) return false;
+        if (order.getDocumentStatus() == OrderDocumentStatus.QC_PROCESSING) {
+            log.debug("Order {} already QC_PROCESSING — rejecting duplicate claim", order.getTransactionRef());
+            return false;
+        }
+        order.setDocumentStatus(OrderDocumentStatus.QC_PROCESSING);
+        appraisalTransactionRepository.save(order);
+        return true;
+    }
+
+    /** Force an order to {@link OrderDocumentStatus#ERROR} (worker crash / abandon paths). */
+    @Transactional
+    public void markError(AppraisalTransaction order) {
+        if (order == null || order.getId() == null) return;
+        order.setDocumentStatus(OrderDocumentStatus.ERROR);
+        appraisalTransactionRepository.save(order);
+    }
+
     private OrderDocumentStatus compute(AppraisalTransaction order) {
         List<BatchFile> activeDocs = batchFileRepository.findActiveByOrderId(order.getId());
 

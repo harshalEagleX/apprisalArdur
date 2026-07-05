@@ -7,10 +7,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +20,22 @@ import java.util.Optional;
 public interface AppraisalTransactionRepository extends JpaRepository<AppraisalTransaction, Long> {
 
     Optional<AppraisalTransaction> findByTransactionRef(String transactionRef);
+
+    /** Heartbeat an order's updatedAt during a long QC run (order-grained analogue of
+     *  {@code BatchRepository.touchQcProcessing}) so the reconciler doesn't flag it stuck. */
+    @Modifying
+    @Query("UPDATE AppraisalTransaction t SET t.updatedAt = :now WHERE t.id = :id")
+    int touchUpdatedAt(@Param("id") Long id, @Param("now") LocalDateTime now);
+
+    /** Orders stranded in QC_PROCESSING (worker crash / JVM kill / timeout) past the cutoff.
+     *  Order-grained analogue of {@code BatchRepository.findStuckInQcProcessing}. */
+    @Query("""
+        SELECT t FROM AppraisalTransaction t
+        WHERE t.documentStatus = com.shal.common.entity.OrderDocumentStatus.QC_PROCESSING
+          AND t.updatedAt < :cutoff
+        ORDER BY t.updatedAt ASC
+        """)
+    List<AppraisalTransaction> findStuckInQcProcessing(@Param("cutoff") LocalDateTime cutoff);
 
     List<AppraisalTransaction> findByStatus(TransactionStatus status);
 
