@@ -367,29 +367,7 @@ public class AdminApiController {
         }
     }
 
-    // ── Batch assignment (delegated to BatchApiController for upload,
-    //    kept here for the assign action used in the admin dashboard) ──────────
-
-    @PostMapping("/batches/{id}/assign")
-    public ResponseEntity<?> assignBatch(@PathVariable @NonNull Long id,
-            @RequestBody Map<String, Long> request,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        try {
-            Long reviewerId = request.get("reviewerId");
-            if (reviewerId == null) throw new IllegalArgumentException("reviewerId is required");
-
-            User reviewer = userService.findById(reviewerId)
-                    .orElseThrow(() -> new IllegalArgumentException("Reviewer not found: " + reviewerId));
-
-            if (reviewer.getRole() != Role.REVIEWER) {
-                throw new IllegalArgumentException("User " + reviewerId + " is not a REVIEWER");
-            }
-
-            batchService.assignReviewer(id, reviewer);
-            auditLogService.logEntity(principal.getUser(), "BATCH_ASSIGNED", "Batch", id);
-            return ResponseEntity.ok(Map.of("success", true, "reviewerId", reviewerId));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
+    // Reviewer assignment is order-wise (POST /api/admin/orders/{id}/assign). The batch-level
+    // assign action was removed — the reviewer queue routes by the Order's assigned reviewer,
+    // so assigning a reviewer to a Batch no longer had any effect.
 }

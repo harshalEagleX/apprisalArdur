@@ -1,11 +1,10 @@
 "use client";
 import React, { memo } from "react";
 import Link from "next/link";
-import { Trash2, AlertTriangle, AlertCircle, UserPlus, History } from "lucide-react";
-import type { Batch, User } from "@/lib/api";
+import { Trash2, AlertTriangle, AlertCircle, History } from "lucide-react";
+import type { Batch } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
 import StatusBadge from "@/components/shared/StatusBadge";
-import { ReviewerAssignControl } from "./ReviewerAssignControl";
 // Batch QC progress shape — retained for the inert in-flight display; batch QC is no
 // longer triggerable (order-scoped), so `progress` is effectively always undefined.
 interface BatchProgress {
@@ -29,9 +28,6 @@ export interface BatchRowProps {
   progress: BatchProgress | undefined;
   /** Client-tracked epoch ms when QC polling began for this batch (for elapsed + ETA). */
   startedMs?: number;
-  reviewers: User[];
-  reviewerWorkload: Record<string, number>;
-  onAssign: (batchId: number, reviewerId: number) => void;
   onDelete: (batch: Batch) => void;
   onOpenRecovery: (batch: Batch) => void;
   onOpenHistory: (batch: Batch) => void;
@@ -45,9 +41,6 @@ export const BatchRow = memo(function BatchRow({
   isLoading,
   progress,
   startedMs,
-  reviewers,
-  reviewerWorkload,
-  onAssign,
   onDelete,
   onOpenRecovery,
   onOpenHistory,
@@ -252,27 +245,8 @@ export const BatchRow = memo(function BatchRow({
             </span>
           )}
 
-          {/* Assign reviewer */}
-          {b.status === "QC_PROCESSING" && (
-            <span className="flex h-7 items-center rounded-md border border-white/10 px-2 text-[11px] text-slate-500">
-              Assign after QC
-            </span>
-          )}
-          {b.status === "REVIEW_PENDING" &&
-            (reviewers.length > 0 ? (
-              <ReviewerAssignControl
-                batch={b}
-                reviewers={reviewers}
-                workload={reviewerWorkload}
-                disabled={isLoading}
-                onAssign={reviewerId => onAssign(b.id, reviewerId)}
-              />
-            ) : (
-              <span className="h-7 px-2 rounded-md border border-amber-900/60 text-[11px] text-amber-300 flex items-center">
-                <UserPlus size={11} className="mr-1" />
-                No reviewers
-              </span>
-            ))}
+          {/* Reviewer assignment is order-wise now — assign reviewers from the Order view,
+              not per batch. (Batch is upload-only.) */}
 
           {/* QC history + version diff — shown for every non-processing status.
               A stopped (UPLOADED) or partial batch may still have prior QC results;

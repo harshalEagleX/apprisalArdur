@@ -6,13 +6,12 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import {
-  getAdminBatches, assignReviewer, deleteBatch,
-  reconcileStuckBatches, getAdminDashboard, getAllUsers,
-  bulkDeleteBatches, bulkAssignReviewer, getSystemHealth,
+  getAdminBatches, deleteBatch,
+  reconcileStuckBatches,
+  bulkDeleteBatches, getSystemHealth,
   getBatchStatuses,
-  type Batch, type User,
+  type Batch,
 } from "@/lib/api";
-import { displayName } from "@/lib/displayName";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import UploadModal from "@/components/admin/UploadModal";
 import BatchOrderViewToggle from "@/components/shared/BatchOrderViewToggle";
@@ -115,7 +114,6 @@ function ReconcileSummary({ result, onDismiss }: { result: ReconcileResult; onDi
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function BatchesPage() {
   const [batches, setBatches]         = useState<Batch[]>([]);
-  const [reviewers, setReviewers]     = useState<User[]>([]);
   const [page, setPage]               = useState(() => {
     if (typeof window === "undefined") return 0;
     const parsed = Number(new URLSearchParams(window.location.search).get("page") ?? 0);
@@ -146,7 +144,6 @@ export default function BatchesPage() {
   const [actionLoading, setActionLoading] = useState<Set<number>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
-  const [reviewerWorkload, setReviewerWorkload] = useState<Record<string, number>>({});
   const searchMountedRef              = useRef(false);
 
   // ── Bulk selection state ─────────────────────────────────────────────────
@@ -192,22 +189,6 @@ export default function BatchesPage() {
     }
   }, [selectedIds, clearSelection]);
 
-  const handleBulkAssign = useCallback(async (reviewerId: number) => {
-    if (selectedIds.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const ids = Array.from(selectedIds);
-      const { succeeded, failed } = await bulkAssignReviewer(ids, reviewerId);
-      if (succeeded.length > 0) toast.success(`Reviewer assigned to ${succeeded.length} batch${succeeded.length > 1 ? "es" : ""}`);
-      if (failed.length > 0) toast.error(`Assignment failed for ${failed.length} batch${failed.length > 1 ? "es" : ""}`);
-      clearSelection();
-    } catch {
-      toast.error("Bulk assign failed");
-    } finally {
-      setBulkLoading(false);
-    }
-  }, [selectedIds, clearSelection]);
-
   const setActionBusy = useCallback((id: number, on: boolean) => {
     setActionLoading(prev => {
       const n = new Set(prev);
@@ -237,16 +218,10 @@ export default function BatchesPage() {
     });
     setLoading(true);
     try {
-      const [bRes, uRes, dash] = await Promise.all([
-        getAdminBatches(page, statusFilter || undefined, debouncedSearch || undefined),
-        getAllUsers(),
-        getAdminDashboard(),
-      ]);
+      const bRes = await getAdminBatches(page, statusFilter || undefined, debouncedSearch || undefined);
       setBatches(bRes.content);
       setTotalPages(bRes.totalPages);
       setTotalElements(Number(bRes.totalElements ?? bRes.content.length));
-      setReviewers(uRes.filter(u => u.role === "REVIEWER"));
-      setReviewerWorkload((dash.reviewerWorkload as Record<string, number> | undefined) ?? {});
       batchLog("load:success", { count: bRes.content.length });
       adminBatchTimeline("frontend_page_load_complete", {
         page,
@@ -318,19 +293,6 @@ export default function BatchesPage() {
       batch_ids: batches.map(b => b.id),
     });
   }, [batches, loading, page, totalElements]);
-
-  async function handleAssign(batchId: number, reviewerId: number) {
-    setActionBusy(batchId, true);
-    try {
-      await assignReviewer(batchId, reviewerId);
-      toast.success("Reviewer assigned");
-      await load();
-    } catch (e) {
-      toast.error("Assignment failed", String(e));
-    } finally {
-      setActionBusy(batchId, false);
-    }
-  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -459,20 +421,6 @@ export default function BatchesPage() {
             {selectedIds.size} batch{selectedIds.size > 1 ? "es" : ""} selected
           </span>
           <span className="mx-1 h-4 w-px bg-white/10" />
-          {reviewers.length > 0 && (
-            <select
-              disabled={bulkLoading}
-              defaultValue=""
-              onChange={e => { if (e.target.value) { handleBulkAssign(Number(e.target.value)); e.target.value = ""; } }}
-              className="h-8 rounded-md border border-white/10 bg-[#11161C] px-2 text-xs text-slate-300 focus:outline-none disabled:opacity-40"
-              aria-label="Bulk assign reviewer"
-            >
-              <option value="" disabled>Assign reviewer…</option>
-              {reviewers.map(r => (
-                <option key={r.id} value={r.id}>{r.fullName ?? displayName(r.username)}</option>
-              ))}
-            </select>
-          )}
           <button
             onClick={handleBulkDelete}
             disabled={bulkLoading}
@@ -539,9 +487,6 @@ export default function BatchesPage() {
                   batch={b}
                   isLoading={actionLoading.has(b.id) || bulkLoading}
                   progress={undefined}
-                  reviewers={reviewers}
-                  reviewerWorkload={reviewerWorkload}
-                  onAssign={handleAssign}
                   onDelete={setDeleteTarget}
                   onOpenRecovery={setRecoveryTarget}
                   onOpenHistory={setHistoryTarget}

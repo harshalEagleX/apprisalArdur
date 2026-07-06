@@ -753,25 +753,6 @@ export async function bulkDeleteBatches(
   return { succeeded, failed };
 }
 
-/**
- * Bulk-assign a reviewer to multiple batches in parallel.
- */
-export async function bulkAssignReviewer(
-  batchIds: number[],
-  reviewerId: number,
-): Promise<{ succeeded: number[]; failed: number[] }> {
-  const results = await Promise.allSettled(
-    batchIds.map(id => assignReviewer(id, reviewerId))
-  );
-  const succeeded: number[] = [];
-  const failed:    number[] = [];
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled") succeeded.push(batchIds[i]);
-    else failed.push(batchIds[i]);
-  });
-  return { succeeded, failed };
-}
-
 export const reconcileStuckBatches = () =>
   apiFetch<{ stuckFound: number; retried: number; abandoned: number; pythonHealthy: boolean; message: string }>(
     "/api/qc/reconcile",
@@ -816,12 +797,6 @@ export const cancelOrderQC = (orderId: number) =>
     `/api/qc/cancel/order/${orderId}`,
     { method: "POST" }
   );
-
-export const assignReviewer = (batchId: number, reviewerId: number) =>
-  apiFetch(`/api/admin/batches/${batchId}/assign`, {
-    method: "POST",
-    body: JSON.stringify({ reviewerId }),
-  });
 
 // Soft-delete by default (data + audit trail preserved). Pass hard=true for an
 // irreversible purge — the UI gates that behind a second confirmation.

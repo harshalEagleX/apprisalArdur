@@ -14,15 +14,16 @@ import java.util.concurrent.ThreadPoolExecutor;
 /**
  * Async configuration for background QC processing.
  *
- * Sizing rationale (memory-bound, not CPU-bound):
- *  - Each in-flight document peaks around 400-500MB during OCR (PaddleOCR holds
- *    its model in memory for the duration of extraction).
- *  - On an 8GB box, 2 concurrent documents (~0.8-1GB OCR) fits alongside Spring
- *    Boot (~0.5GB), Postgres connections, and the Next.js process; 3+ risks OOM.
- *    So the pool is a HARD cap of 2 (core == max), not a bursting pool.
- *  - Queue=100 absorbs upload bursts: excess batches wait rather than run
- *    concurrently; AbortPolicy returns HTTP 503 only on extreme overload.
- *  - Configurable (P-4): bump qc.executor.* on a 16GB box (e.g. 4) without code.
+ * Sizing rationale (I/O-bound — OCR/QC runs off-process in the Python service):
+ *  - This pool's workers only submit each order's file pairs to Python and poll for
+ *    results; the heavy OCR/LLM work happens in the OCR service, not this JVM. So the
+ *    pool is sized for concurrency, not JVM memory.
+ *  - Effective sizing comes from application.yml (qc.executor.*): core=4, max=8,
+ *    queue=200 by default — i.e. up to 8 orders processed concurrently, the rest
+ *    queued. The @Value fallbacks below (2/2/100) apply only if application.yml is
+ *    absent. The real throughput ceiling is the shared Groq TPM budget, not this pool.
+ *  - AbortPolicy returns HTTP 503 only on extreme overload (queue full).
+ *  - Configurable (P-4): tune qc.executor.* per environment without code changes.
  */
 @Configuration
 @EnableAsync

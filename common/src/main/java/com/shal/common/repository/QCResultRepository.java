@@ -153,13 +153,15 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
             org.springframework.data.domain.Pageable pageable);
 
     /**
-     * Paginated pending queue — REVIEWER view (only their assigned batches).
+     * Paginated pending queue — REVIEWER view. Reviewer assignment is order-wise: a result is
+     * routed to the reviewer assigned to its Order ({@code batchFile.order.assignedReviewer}).
      */
     @Query(value = """
         SELECT DISTINCT qr FROM QCResult qr
         JOIN FETCH qr.batchFile bf
         JOIN FETCH bf.batch b
-        JOIN FETCH b.assignedReviewer reviewer
+        JOIN FETCH bf.order o
+        JOIN FETCH o.assignedReviewer reviewer
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
           AND qr.supersededAt IS NULL
@@ -171,7 +173,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
           AND qr.supersededAt IS NULL
-          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+          AND qr.batchFile.order.assignedReviewer.id = :reviewerId
         """)
     org.springframework.data.domain.Page<QCResult> findPendingVerificationForReviewerPaged(
             @Param("reviewerId") Long reviewerId,
@@ -200,7 +202,8 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         SELECT DISTINCT qr FROM QCResult qr
         JOIN FETCH qr.batchFile bf
         JOIN FETCH bf.batch b
-        JOIN FETCH b.assignedReviewer reviewer
+        JOIN FETCH bf.order o
+        JOIN FETCH o.assignedReviewer reviewer
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
           AND qr.supersededAt IS NULL
@@ -222,7 +225,7 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
           AND qr.supersededAt IS NULL
-          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+          AND qr.batchFile.order.assignedReviewer.id = :reviewerId
         """)
     long countPendingReviewerWorkForReviewer(@Param("reviewerId") Long reviewerId);
 
@@ -232,13 +235,13 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
      * to avoid N+1 when the admin dashboard loads reviewer workload cards.
      */
     @Query("""
-        SELECT qr.batchFile.batch.assignedReviewer.id, COUNT(qr)
+        SELECT qr.batchFile.order.assignedReviewer.id, COUNT(qr)
         FROM QCResult qr
         WHERE qr.qcDecision <> 'AUTO_PASS'
           AND qr.finalDecision IS NULL
           AND qr.supersededAt IS NULL
-          AND qr.batchFile.batch.assignedReviewer IS NOT NULL
-        GROUP BY qr.batchFile.batch.assignedReviewer.id
+          AND qr.batchFile.order.assignedReviewer IS NOT NULL
+        GROUP BY qr.batchFile.order.assignedReviewer.id
         """)
     List<Object[]> countPendingWorkGroupedByReviewer();
 
@@ -268,13 +271,14 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     List<QCResult> findRecentlyReviewedForReviewer(@Param("reviewerId") Long reviewerId);
 
     /**
-     * Check if a reviewer is assigned to the batch containing this QC result.
+     * Check if a reviewer is assigned to the Order containing this QC result (order-wise
+     * assignment). Used to authorize a reviewer's access to a specific result.
      */
     @Query("""
         SELECT CASE WHEN COUNT(qr) > 0 THEN TRUE ELSE FALSE END
         FROM QCResult qr
         WHERE qr.id = :qcResultId
-          AND qr.batchFile.batch.assignedReviewer.id = :reviewerId
+          AND qr.batchFile.order.assignedReviewer.id = :reviewerId
         """)
     boolean isReviewerAssigned(@Param("qcResultId") Long qcResultId, @Param("reviewerId") Long reviewerId);
 
