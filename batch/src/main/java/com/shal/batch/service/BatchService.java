@@ -437,6 +437,16 @@ public class BatchService {
         batch = Objects.requireNonNull(batchRepository.save(batch));
         log.info("Batch '{}' created (id={}) — {} files, {} ms",
                 batch.getParentBatchId(), batch.getId(), batch.getFileCount(), TimelineLog.elapsedMs(flowStarted));
+
+        // Recompute each resolved order's documentStatus now that the batch + files (with their
+        // order links) are persisted. Resolution runs on a transient graph, so it cannot compute
+        // status itself; doing it here makes a complete upload show READY_FOR_QC immediately
+        // instead of a stale INCOMPLETE until its first QC run.
+        batch.getFiles().stream()
+                .map(com.shal.common.entity.BatchFile::getOrder)
+                .filter(Objects::nonNull)
+                .distinct()
+                .forEach(orderStatusService::recompute);
         auditLogService.logEntity(creator, "BATCH_UPLOAD", "Batch", batch.getId());
         Map<String, Object> eventPayload = new HashMap<>();
         eventPayload.put("parent_batch_id", batch.getParentBatchId());

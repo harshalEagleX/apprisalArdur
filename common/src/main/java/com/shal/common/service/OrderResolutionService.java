@@ -111,11 +111,11 @@ public class OrderResolutionService {
             }
         }
 
-        batch.getFiles().stream()
-                .map(BatchFile::getOrder)
-                .filter(Objects::nonNull)
-                .distinct()
-                .forEach(orderStatusService::recompute);
+        // NOTE: order documentStatus is NOT recomputed here. During intake the Batch + BatchFiles
+        // are still a transient graph (persisted by the caller AFTER this method returns), so a
+        // findActiveByOrderId read here sees zero documents and would mis-mark complete orders as
+        // INCOMPLETE. The caller (BatchService.extractAndValidateZip) recomputes each resolved
+        // order once the batch + files are persisted — see recomputeResolvedOrderStatuses().
     }
 
     /** The XML-sniffed order number for a file's order group, or null when none was sniffed. */
