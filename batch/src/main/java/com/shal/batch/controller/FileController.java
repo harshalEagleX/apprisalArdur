@@ -24,7 +24,8 @@ import org.springframework.lang.NonNull;
  *
  * Ownership rules (two-role model):
  *   ADMIN    — can view any file in the system
- *   REVIEWER — can only view files belonging to batches assigned to them
+ *   REVIEWER — can only view files belonging to Orders assigned to them (assignment is
+ *              order-wise; the Batch is upload-only and carries no reviewer).
  */
 @Controller
 public class FileController {
@@ -47,10 +48,12 @@ public class FileController {
             return ResponseEntity.notFound().build();
         }
 
-        // SECURITY: ownership check for REVIEWERs
+        // SECURITY: ownership check for REVIEWERs — reviewer assignment is order-wise, so a
+        // reviewer may view a file only when they are assigned to its Order (lazy access is
+        // safe: this method is @Transactional so the session is open).
         if (principal != null && principal.getUser().getRole() == Role.REVIEWER) {
-            var batch = batchFile.getBatch();
-            var assignedReviewer = batch != null ? batch.getAssignedReviewer() : null;
+            var order = batchFile.getOrder();
+            var assignedReviewer = order != null ? order.getAssignedReviewer() : null;
             if (assignedReviewer == null || !assignedReviewer.getId().equals(principal.getUser().getId())) {
                 return ResponseEntity.status(403).build();
             }

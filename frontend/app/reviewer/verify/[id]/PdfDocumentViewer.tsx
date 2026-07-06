@@ -95,7 +95,7 @@ function DocumentError() {
     <div className="flex min-h-80 flex-col items-center justify-center gap-2 rounded-lg border border-amber-500/25 bg-amber-950/10 px-6 text-center text-slate-400">
       <AlertTriangle size={18} className="text-amber-500" />
       <div className="text-sm">Document could not be loaded</div>
-      <div className="max-w-md text-xs text-slate-500">Check that the reviewer is assigned to this batch and that the PDF file exists.</div>
+      <div className="max-w-md text-xs text-slate-500">Check that the reviewer is assigned to this order and that the PDF file exists.</div>
     </div>
   );
 }
