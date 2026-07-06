@@ -50,6 +50,7 @@ class CorrectionsProxyTest {
     @Autowired private BatchFileRepository batchFileRepository;
     @Autowired private QCResultRepository qcResultRepository;
     @Autowired private AuditLogRepository auditLogRepository;
+    @Autowired private AppraisalTransactionRepository orderRepository;
     @Autowired private TransactionTemplate tx;
 
     private MockMvc mvc;
@@ -91,14 +92,23 @@ class CorrectionsProxyTest {
             Batch b = batchRepository.save(Batch.builder()
                     .parentBatchId(tag).client(c)
                     .status(BatchStatus.IN_REVIEW)
-                    .assignedReviewer(assigned)
                     .createdBy(admin).build());
             ids[4] = b.getId();
 
-            BatchFile f = batchFileRepository.save(BatchFile.builder()
+            // Reviewer assignment is order-wise: the Order (not the Batch) carries the
+            // assigned reviewer, and result ownership is checked via batchFile.order.
+            AppraisalTransaction order = new AppraisalTransaction();
+            order.setTransactionRef(tag + "-ORD");
+            order.setClient(c);
+            order.setAssignedReviewer(assigned);
+            order = orderRepository.save(order);
+
+            BatchFile f = BatchFile.builder()
                     .batch(b).fileType(FileType.APPRAISAL).filename(tag + ".pdf")
                     .storagePath("/test/" + tag + "/appraisal.pdf")
-                    .status(FileStatus.COMPLETED).build());
+                    .status(FileStatus.COMPLETED).build();
+            f.setOrder(order);
+            f = batchFileRepository.save(f);
 
             QCResult r = QCResult.builder()
                     .batchFile(f).qcDecision(QCDecision.TO_VERIFY)
@@ -122,6 +132,9 @@ class CorrectionsProxyTest {
             qcResultRepository.findById(qcResultId).ifPresent(qcResultRepository::delete);
             batchFileRepository.findByBatchId(batchId).forEach(batchFileRepository::delete);
             batchRepository.findById(batchId).ifPresent(batchRepository::delete);
+            // Order references the reviewer + client, and files referenced it — delete after
+            // the files/batch, before the users/client.
+            orderRepository.findByTransactionRef(tag + "-ORD").ifPresent(orderRepository::delete);
             // Delete audit log entries before users (FK: audit_log.user_id → _user.id)
             for (String name : new String[]{tag + "_assigned", tag + "_unassigned", tag + "_admin"}) {
                 userRepository.findByUsername(name).ifPresent(u -> {
