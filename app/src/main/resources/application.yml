@@ -130,11 +130,20 @@ qc:
   enabled: true
   auto-process-on-upload: false
   executor:
-    # Scaling Phase 2 (readme/SCALABILITY_PLAN.md §4.1): with Celery doing the heavy
-    # OCR off-process, this pool only enqueues + polls (I/O-bound) and fires async
-    # event saves — so it can exceed the old memory-bound cap of 2. Tune per host (P-4).
-    core-pool-size: ${QC_EXECUTOR_CORE:4}
-    max-pool-size: ${QC_EXECUTOR_MAX:8}
+    # How many ORDERS run QC concurrently. The real ceiling is NOT this JVM — it's the
+    # Python OCR/QC service's parallelism. When Celery is running (multiple worker
+    # processes) the heavy OCR/LLM work is genuinely parallel and this can be raised.
+    # But on the default single-uvicorn local run (no Celery), every concurrent order
+    # lands on ONE GIL-bound Python process: their CPU phases (PDF parse, OCR post-
+    # process, rule engine) serialize on the GIL and their Groq calls share one TPM
+    # budget, so N-way concurrency makes each order ~N× SLOWER instead of parallel
+    # (measured: 3 orders at once ≈ 3× the solo time). Default is therefore 2 — enough
+    # to overlap one order's Groq I/O wait with another's CPU work, without thrashing.
+    # Raise QC_EXECUTOR_MAX only after adding Python workers (Celery, or uvicorn
+    # --workers N). NOTE: with a non-empty queue the pool only ever runs `core` threads
+    # until the queue fills, so core and max are kept equal to pin true concurrency (P-4).
+    core-pool-size: ${QC_EXECUTOR_CORE:2}
+    max-pool-size: ${QC_EXECUTOR_MAX:2}
     queue-capacity: ${QC_EXECUTOR_QUEUE:200}
   reconciler:
     enabled: ${QC_RECONCILER_ENABLED:true}

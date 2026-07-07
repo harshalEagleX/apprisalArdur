@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight, ClipboardList,
@@ -8,12 +8,15 @@ import {
 import {
   getOrders, getOrderStatuses, runOrderBackfill, getAllUsers,
   processOrdersQC, bulkAssignOrderReviewer, autoAssignOrders,
+  getOrderQCProgress,
   type OrderSummary, type User,
 } from "@/lib/api";
 import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
 import StatusBadge from "@/components/shared/StatusBadge";
 import BatchOrderViewToggle from "@/components/shared/BatchOrderViewToggle";
+import ActivityMonitor from "@/components/shared/ActivityMonitor";
+import { trackJob, updateJob, removeJob } from "@/lib/jobs";
 import { toast } from "@/lib/toast";
 
 const STATUSES = ["", "INCOMPLETE", "UNMATCHED", "READY_FOR_QC", "QC_PROCESSING", "NEEDS_REVIEW", "COMPLETED", "ERROR"];
@@ -55,23 +58,27 @@ export default function OrdersPage() {
   const [reviewers, setReviewers] = useState<User[]>([]);
   const [assignReviewerId, setAssignReviewerId] = useState<string>("");
   const [actionRunning, setActionRunning] = useState(false);
+  // Job ids currently shown in the background-activity dock (one per running order).
+  const jobIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 350);
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `silent` reloads (used by the QC auto-poll) refresh the rows without flashing
+  // the skeleton or firing a toast on a transient failure.
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await getOrders(page, statusFilter || undefined, debouncedSearch || undefined);
       setOrders(res.content);
       setTotalPages(res.totalPages);
       setTotalElements(Number(res.totalElements ?? res.content.length));
     } catch {
-      toast.error("Failed to load orders");
+      if (!opts?.silent) toast.error("Failed to load orders");
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [page, statusFilter, debouncedSearch]);
 
@@ -83,6 +90,72 @@ export default function OrdersPage() {
 
   useEffect(() => {
     getAllUsers().then(list => setReviewers(list.filter(u => u.role === "REVIEWER"))).catch(() => undefined);
+  }, []);
+
+  // Stable key of the orders currently in QC. Drives the auto-poll below: while
+  // it is non-empty we keep refreshing so "QC Running" flips to "Needs Review"
+  // on its own, instead of stranding a stale snapshot until a manual Refresh.
+  const runningKey = orders
+    .filter(o => o.documentStatus === "QC_PROCESSING")
+    .map(o => o.id)
+    .sort((a, b) => a - b)
+    .join(",");
+
+  // Reconcile the bottom-right activity dock with the set of running orders:
+  // seed a job when an order starts QC, drop it the moment QC finishes.
+  useEffect(() => {
+    const wanted = new Map<string, OrderSummary>(
+      orders
+        .filter(o => o.documentStatus === "QC_PROCESSING")
+        .map(o => [`order-qc-${o.id}`, o] as [string, OrderSummary]),
+    );
+    jobIdsRef.current.forEach(jid => { if (!wanted.has(jid)) removeJob(jid); });
+    wanted.forEach((o, jid) => {
+      if (!jobIdsRef.current.has(jid)) {
+        trackJob({
+          id: jid,
+          batchId: 0,
+          startedAt: Date.now(),
+          label: `QC · ${o.transactionRef}`,
+          current: 0,
+          total: o.activeDocumentCount || 1,
+          unitLabel: "docs",
+          message: "Processing…",
+        });
+      }
+    });
+    jobIdsRef.current = new Set(wanted.keys());
+  }, [orders]);
+
+  // Poll per-order QC progress + silently refresh the list while anything runs.
+  useEffect(() => {
+    if (!runningKey) return;
+    const ids = runningKey.split(",").map(Number);
+    let stop = false;
+    async function tick() {
+      await Promise.all(ids.map(async oid => {
+        try {
+          const p = await getOrderQCProgress(oid);
+          if (stop) return;
+          updateJob(`order-qc-${oid}`, p.current ?? 0, p.total, {
+            smoothedPercent: p.smoothedPercent ?? p.percent,
+            subStage: p.subStage ?? null,
+            subMessage: p.subMessage ?? null,
+            message: p.message,
+          });
+        } catch { /* transient — keep polling */ }
+      }));
+      if (stop) return;
+      await load({ silent: true });
+    }
+    const timer = window.setInterval(tick, 2000);
+    return () => { stop = true; window.clearInterval(timer); };
+  }, [runningKey, load]);
+
+  // Leaving the page clears any dock jobs this page put up.
+  useEffect(() => () => {
+    jobIdsRef.current.forEach(jid => removeJob(jid));
+    jobIdsRef.current = new Set();
   }, []);
 
   // Drop selections for rows no longer on the page (filter/page change).
@@ -361,6 +434,9 @@ export default function OrdersPage() {
           </button>
         </div>
       )}
+
+      {/* Background-activity dock — shows live order-QC progress bottom-right. */}
+      <ActivityMonitor />
     </div>
   );
 }

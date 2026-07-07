@@ -227,17 +227,27 @@ public class OrderResolutionService {
             }
         }
 
-        // 2. orderId exact match, scoped to client. The key is the file's own orderId,
-        //    or — when it has none — the order number sniffed from its group's MISMO XML,
-        //    so a re-upload under a differently-named folder still links by that number.
+        // 2. orderId exact match, scoped to client. The key is the file's own orderId
+        //    (FileMatchingService.extractOrderId — falls back to the bare filename stem
+        //    when the name has no underscore-suffixed ID), or — when it has none — the
+        //    order number sniffed from its group's MISMO XML.
+        //    Within the CURRENT batch (in-memory index) a shared orderId always means the
+        //    same order — that's how supporting docs sharing an explicit ID link to their
+        //    appraisal. ACROSS batches (DB lookup) we only trust an orderId that is a
+        //    stable, distinctive identifier (a real order number or address). A bare
+        //    filename stem — "EngagementLetter (2)" is exactly as generic as a folder
+        //    named "appraisal" — must NOT merge two unrelated orders whose supporting
+        //    docs simply happen to share a duplicate-style filename.
         String orderIdKey = effectiveOrderId(file, sniffedOrderNumber);
         if (orderIdKey != null && !orderIdKey.isBlank()) {
             AppraisalTransaction local = ctx.orderIdIndex.get(orderIdKey);
             if (local != null) return new ResolutionResult(local, false);
 
-            List<BatchFile> orderIdMatches = batchFileRepository.findByOrderIdStringAndClientId(orderIdKey, client.getId());
-            if (!orderIdMatches.isEmpty()) {
-                return new ResolutionResult(orderIdMatches.get(0).getOrder(), false);
+            if (isDistinctiveIdentity(orderIdKey)) {
+                List<BatchFile> orderIdMatches = batchFileRepository.findByOrderIdStringAndClientId(orderIdKey, client.getId());
+                if (!orderIdMatches.isEmpty()) {
+                    return new ResolutionResult(orderIdMatches.get(0).getOrder(), false);
+                }
             }
         }
 
@@ -253,7 +263,7 @@ public class OrderResolutionService {
             AppraisalTransaction local = ctx.propertySetIndex.get(file.getPropertySetName());
             if (local != null) return new ResolutionResult(local, false);
 
-            if (isDistinctivePropertySet(file.getPropertySetName())) {
+            if (isDistinctiveIdentity(file.getPropertySetName())) {
                 List<BatchFile> setMatches = batchFileRepository.findByPropertySetNameAndClientId(file.getPropertySetName(), client.getId());
                 if (!setMatches.isEmpty()) {
                     return new ResolutionResult(setMatches.get(0).getOrder(), false);
@@ -275,20 +285,37 @@ public class OrderResolutionService {
     }
 
     /**
-     * True when a propertySetName is a stable, distinctive property identifier safe to
-     * dedup Orders on ACROSS batches (contains letters, e.g. an address or ESCA number).
-     * A purely-numeric or ordinal folder label ("1", "02") is batch-local and rejected —
-     * two different batches both using folder "1" must not collapse into one Order.
+     * True when a raw identity string — a propertySetName folder label, or a filename-
+     * derived orderId — is a stable, distinctive identifier safe to dedup Orders on
+     * ACROSS batches (an address like "364 S Vine St" or an AMC order number like
+     * "ESCA-0019573"). A bare document-type word or filename — "appraisal" (or a typo/
+     * variant like "apprisal"), "EngagementLetter (2)" (the generic OS duplicate-file
+     * name Windows/Mac give a second upload of the same template), a purely-numeric/
+     * ordinal label ("1", "02") — is batch-local and must NEVER be treated as a
+     * cross-batch identity: two unrelated batches (or two unrelated documents within
+     * one batch) reusing the same generic label/filename must not collapse into one
+     * Order, and a supporting document from one order must not silently attach to a
+     * different order that happens to reuse the same generic filename.
+     *
+     * A blocklist of exact spellings is not enough here (a typo of "appraisal" silently
+     * bypasses it) — instead this requires the same shape a real address or order number
+     * always has: either an ID-shaped token (an AMC/lender order number), or a house/
+     * street number carrying at least two digits alongside other words. Two digits is
+     * the deliberate floor — it accepts real street numbers ("364", "9512") while
+     * rejecting the single digit inside an OS duplicate-file suffix like "(2)"/"(3)",
+     * which is exactly what let "EngagementLetter (2).pdf" from one order silently
+     * attach to a same-named engagement letter on an unrelated order.
      */
-    static boolean isDistinctivePropertySet(String name) {
+    public static boolean isDistinctiveIdentity(String name) {
         if (name == null) return false;
         String s = name.trim();
         if (s.length() < 3) return false;
+        if (!DocumentContentSniffer.orderNumberTokens(s).isEmpty()) return true;
         if (!s.chars().anyMatch(Character::isLetter)) return false;
-        // A bare document-type word is not a property identity either.
-        String lower = s.toLowerCase();
-        return !(lower.equals("appraisal") || lower.equals("engagement")
-                || lower.equals("contract") || lower.equals("order"));
+        String[] tokens = s.split("\\s+");
+        boolean hasMultiDigitToken = java.util.Arrays.stream(tokens)
+                .anyMatch(t -> t.replaceAll("[^0-9]", "").length() >= 2);
+        return tokens.length >= 2 && hasMultiDigitToken;
     }
 
     private AppraisalTransaction createNewOrder(BatchFile file, Client client, String orderIdKey) {

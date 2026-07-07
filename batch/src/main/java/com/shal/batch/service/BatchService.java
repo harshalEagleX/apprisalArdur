@@ -746,10 +746,19 @@ public class BatchService {
             String folderLabel = group.get(0).setLabel;
 
             if (appraisals.size() <= 1) {
-                // One (or zero) appraisal → the whole folder is a single order.
-                String label = (folderLabel != null && !folderLabel.isBlank())
+                // One (or zero) appraisal → the whole folder is a single order. Prefer the
+                // folder label as the order's identity ONLY when it's actually a distinctive
+                // property/order identifier (an address or order number). A generic label —
+                // "appraisal", a typo like "apprisal", "docs", a bare "1" — is useless as an
+                // order name AND unsafe as a cross-batch identity, so fall back to the
+                // appraisal's own filename (e.g. "364 S Vine St"), which is the real property.
+                boolean labelIsDistinctive = folderLabel != null
+                        && OrderResolutionService.isDistinctiveIdentity(folderLabel);
+                String label = labelIsDistinctive
                         ? folderLabel
-                        : (appraisals.isEmpty() ? null : baseName(appraisals.get(0).filenameOnly));
+                        : (appraisals.isEmpty()
+                                ? (folderLabel != null && !folderLabel.isBlank() ? folderLabel : null)
+                                : baseName(appraisals.get(0).filenameOnly));
                 for (StagedDoc d : group) d.propertySetName = label;
             } else {
                 // Several appraisals under one folder → split into one order per appraisal,

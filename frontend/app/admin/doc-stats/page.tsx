@@ -44,6 +44,9 @@ export default function DocStatsPage() {
             <p className="text-xs text-slate-500">
               Real measured time per pipeline stage and QC rule. Groq calls are split into model
               inference vs throttle wait, so a frequency problem looks different from a size problem.
+              <span className="text-slate-600"> &ldquo;Other&rdquo; is everything not in the rule engine or
+              AI — OCR, extraction and, when several orders run at once, the time each spends contending
+              for the single Python process and shared Groq budget.</span>
             </p>
           </div>
         </div>
@@ -134,6 +137,7 @@ function AppraisalsPanel() {
                 <th className="px-4 py-2.5 font-medium text-right">Total</th>
                 <th className="px-4 py-2.5 font-medium text-right">Rule engine</th>
                 <th className="px-4 py-2.5 font-medium">AI (analysis / wait)</th>
+                <th className="px-4 py-2.5 font-medium text-right" title="Total minus rule engine, AI inference and throttle wait — OCR, extraction, transport, and cross-order contention when running in bulk">Other</th>
                 <th className="px-4 py-2.5 font-medium">Slowest rule</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
@@ -170,6 +174,9 @@ function AppraisalsPanel() {
                         )}
                       </div>
                     ) : <span className="text-slate-600 text-xs">none</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-400" title="Time not attributed to the rule engine or AI: OCR, extraction, transport, and — in bulk — contention for the single Python process and shared Groq budget">
+                    {fmtMs(Math.max(0, (d.totalMs ?? 0) - (d.ruleEngineMs ?? 0) - (d.llmInferenceMs ?? 0) - (d.llmThrottleWaitMs ?? 0)))}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5 text-slate-300">

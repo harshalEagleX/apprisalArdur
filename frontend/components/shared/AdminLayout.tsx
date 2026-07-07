@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
-import ActivityMonitor from "./ActivityMonitor";
 import DeviceGate from "./DeviceGate";
 import { CommandPalette } from "./CommandPalette";
 import { GuideButton, type TooltipStep } from "@/components/ui/guide/GuideTooltip";
@@ -440,9 +439,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </main>
 
-      {/* Global notifications + command palette */}
+      {/* Global notifications + command palette. The background-activity dock
+          (ActivityMonitor) now lives on the Orders list only — it tracks
+          order-level QC, which is the sole QC unit. */}
       <ToastContainer />
-      <ActivityMonitor />
       <CommandPalette open={paletteOpen} onClose={() => setPalette(false)} />
     </div>
     </DeviceGate>

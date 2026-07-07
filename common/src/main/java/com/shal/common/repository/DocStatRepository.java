@@ -19,6 +19,12 @@ public interface DocStatRepository extends JpaRepository<DocStat, Long> {
      * Searchable, paginated list for the admin docStats view. A blank search
      * returns everything (most recent first); otherwise it matches the appraisal
      * filename or client name case-insensitively, and an exact batch id.
+     *
+     * When {@code latestOnly} is true (the default for the admin list) only the most
+     * recent run per file is returned, so a file that was re-QC'd doesn't show up as
+     * several confusing rows with wildly different timings. Older runs remain reachable
+     * via the per-file trend/compare endpoints. "Latest per file" = the max DocStat id
+     * per batchFileId; rows with no batchFileId (legacy) are always kept.
      */
     @Query("""
         SELECT d FROM DocStat d
@@ -27,9 +33,14 @@ public interface DocStatRepository extends JpaRepository<DocStat, Long> {
                OR LOWER(d.clientName) LIKE LOWER(CONCAT('%', :q, '%'))
                OR CAST(d.batchId AS string) = :q)
           AND (:batchId IS NULL OR d.batchId = :batchId)
+          AND (:latestOnly = FALSE
+               OR d.batchFileId IS NULL
+               OR d.id IN (SELECT MAX(d2.id) FROM DocStat d2
+                           WHERE d2.batchFileId IS NOT NULL GROUP BY d2.batchFileId))
         """)
     Page<DocStat> search(@Param("q") String q,
                          @Param("batchId") Long batchId,
+                         @Param("latestOnly") boolean latestOnly,
                          Pageable pageable);
 
     /**

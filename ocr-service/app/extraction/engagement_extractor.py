@@ -157,8 +157,30 @@ def _collect_block(lines: List[str], start: int) -> Tuple[List[str], int]:
     return out, j - 1
 
 
+# Secondary-address unit components ("Ste 212", "Suite 100", "Unit 4", "#212",
+# "Apt 3B", "Bldg 2", "Floor 3"). In a comma-separated mailing address these sit
+# between the street and the city — they belong to the STREET, never the city.
+_UNIT_RE = re.compile(
+    r"^(?:#\s*\w+"
+    r"|(?:ste|suite|unit|apt|apartment|bldg|building|floor|fl|rm|room|dept|department)\b"
+    r"\.?\s*#?\s*\w*)$",
+    re.I,
+)
+
+
+def _looks_like_unit(token: str) -> bool:
+    """True when a token is a secondary-address unit (suite/apt/floor/#…), not a city."""
+    t = (token or "").strip()
+    return bool(t) and _UNIT_RE.match(t) is not None
+
+
 def parse_address(raw: str) -> Dict[str, str]:
-    """Parse '<street>, <city>, <state>, <zip>' or '<street>, <city> ST zip'."""
+    """Parse '<street>, <city>, <state>, <zip>' or '<street>, <city> ST zip'.
+
+    Secondary-unit components (e.g. "Ste 212") are folded into the street, never
+    read as the city — a mis-read suite is exactly what caused S-1 to compare the
+    subject city against a suite number ("Ste 212") and false-FAIL.
+    """
     out: Dict[str, str] = {}
     s = re.sub(r"\bMap Link\b", "", raw, flags=re.I)
     s = re.sub(r"\(.*?\)", "", s)                       # drop "( Additional Resources )"
@@ -170,11 +192,20 @@ def parse_address(raw: str) -> Dict[str, str]:
         out["zip_code"] = zips[-1]                      # LAST 5-digit group = real zip
     parts = [p.strip() for p in s.split(",") if p.strip()]
     if len(parts) >= 4:
-        # Format A: street, city, state, zip
-        out["property_address"] = parts[0]
-        out["city"] = parts[1]
-        st = parts[2].lower()
-        out["state"] = _STATE_ABBR.get(st, parts[2].upper() if parts[2].upper() in _ABBRS else "")
+        # Format A: street[, unit], city, state[, zip]. Skip past any secondary-unit
+        # component so the city is read from the right position, not the suite.
+        street_bits = [parts[0]]
+        idx = 1
+        while idx < len(parts) - 1 and _looks_like_unit(parts[idx]):
+            street_bits.append(parts[idx])
+            idx += 1
+        out["property_address"] = ", ".join(street_bits)
+        if idx < len(parts):
+            out["city"] = parts[idx]
+        st_tokens = parts[idx + 1].split() if idx + 1 < len(parts) else []
+        st_raw = st_tokens[0] if st_tokens else ""
+        st = st_raw.lower()
+        out["state"] = _STATE_ABBR.get(st, st_raw.upper() if st_raw.upper() in _ABBRS else "")
     else:
         # Tail "... city ST zip" / "... city Statename zip"
         m = re.search(r"(.+?)\s+([A-Za-z]{2,})\s+\d{5}", s)
@@ -182,12 +213,13 @@ def parse_address(raw: str) -> Dict[str, str]:
             stok = m.group(2).lower()
             out["state"] = (_STATE_ABBR.get(stok)
                             or (m.group(2).upper() if m.group(2).upper() in _ABBRS else ""))
-            head = m.group(1).strip()
+            head = m.group(1).strip().strip(",").strip()
             if "," in head:
                 # "street, city" → split on last comma
                 street, city = head.rsplit(",", 1)
                 out["property_address"] = street.strip()
-                out["city"] = city.strip()
+                if city.strip():
+                    out["city"] = city.strip()
             else:
                 # no comma — can't reliably split street/city; keep combined,
                 # leave city unset so a wrong city never causes a false FAIL.
@@ -196,6 +228,11 @@ def parse_address(raw: str) -> Dict[str, str]:
             out["property_address"] = parts[0]
     if out.get("state") and out["state"] not in _ABBRS:
         out["state"] = ""
+    # Final guard: a real U.S. city name has no digits and is not a unit token. If we
+    # somehow still landed on a suite/number, drop it — leaving city unset (VERIFY) is
+    # always safer than a wrong city driving a false cross-doc FAIL (P-6).
+    if out.get("city") and (_looks_like_unit(out["city"]) or any(ch.isdigit() for ch in out["city"])):
+        out.pop("city", None)
     return {k: v for k, v in out.items() if v}
 
 

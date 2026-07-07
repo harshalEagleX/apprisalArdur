@@ -196,6 +196,74 @@ class BatchOrderIngestionTest {
                 .isFalse();
     }
 
+    // ── (13) Two unrelated batches that happen to use the same generic, non-address
+    //        folder label ("apprisal" — a typo of "appraisal") must NOT merge into one
+    //        Order. Regression for a real incident: isDistinctivePropertySet used to
+    //        blocklist only the exact spelling "appraisal", so this typo slipped through
+    //        as a "distinctive" cross-batch identity and silently superseded one client's
+    //        appraisal with a different client's unrelated one. ───────────────────────
+    @Test
+    void twoBatchesSameGenericFolderLabel_doNotMergeIntoOneOrder() {
+        MockMultipartFile zipA = makeZip(tag + "_genericA.zip", Map.of(
+                "apprisal/364 S Vine St.pdf", pdf(),
+                "apprisal/364 S Vine St.xml", mismoXml(),
+                "apprisal/EngagementLetter.pdf", pdf()));
+        MockMultipartFile zipB = makeZip(tag + "_genericB.zip", Map.of(
+                "apprisal/9512 N Brooks St.pdf", pdf(),
+                "apprisal/9512 N Brooks St.xml", mismoXml(),
+                "apprisal/EngagementLetter 2.pdf", pdf()));
+
+        Long batchA = upload(zipA);
+        Long batchB = upload(zipB);
+
+        List<DocView> docsA = docsOf(batchA);
+        List<DocView> docsB = docsOf(batchB);
+        Long orderA = distinctOrders(docsA).get(0);
+        Long orderB = distinctOrders(docsB).get(0);
+
+        assertThat(orderA).as("two unrelated uploads must not resolve to the same order").isNotEqualTo(orderB);
+
+        boolean anySupersededInA = Boolean.TRUE.equals(tx.execute(s -> batchFileRepository.findAll().stream()
+                .filter(f -> orderA.equals(f.getOrder() != null ? f.getOrder().getId() : null))
+                .anyMatch(f -> !f.isActive())));
+        assertThat(anySupersededInA).as("batch A's own documents must not have been superseded").isFalse();
+    }
+
+    // ── (14) Two unrelated batches whose supporting documents share an identical,
+    //        generic filename ("EngagementLetter (2).pdf" — the name Windows/Mac give a
+    //        second upload of the same template) must NOT cross-link. Regression for a
+    //        real incident: FileMatchingService.extractOrderId falls back to the bare
+    //        filename stem when there's no underscore-suffixed ID, and that generic stem
+    //        was trusted as a stable cross-batch identity — so batch B's engagement
+    //        letter silently attached to batch A's unrelated order instead of its own. ──
+    @Test
+    void twoBatchesSameGenericSupportingFilename_doNotCrossLink() {
+        MockMultipartFile zipA = makeZip(tag + "_dupNameA.zip", Map.of(
+                "apprisal/364 S Vine St.pdf", pdf(),
+                "apprisal/364 S Vine St.xml", mismoXml(),
+                "apprisal/EngagementLetter (2).pdf", pdf()));
+        MockMultipartFile zipB = makeZip(tag + "_dupNameB.zip", Map.of(
+                "apprisal/9512 N Brooks St.pdf", pdf(),
+                "apprisal/9512 N Brooks St.xml", mismoXml(),
+                "apprisal/EngagementLetter (2).pdf", pdf()));
+
+        Long batchA = upload(zipA);
+        Long batchB = upload(zipB);
+
+        List<DocView> docsA = docsOf(batchA);
+        List<DocView> docsB = docsOf(batchB);
+        Long orderA = distinctOrders(docsA).get(0);
+        Long orderB = distinctOrders(docsB).get(0);
+        assertThat(orderA).as("two unrelated uploads must not resolve to the same order").isNotEqualTo(orderB);
+
+        Long engagementOrderInB = docsB.stream()
+                .filter(d -> d.fileType == FileType.ENGAGEMENT)
+                .map(DocView::orderId).findFirst().orElseThrow();
+        assertThat(engagementOrderInB)
+                .as("batch B's engagement letter must link to batch B's own order, not batch A's")
+                .isEqualTo(orderB);
+    }
+
     // ── Structural gate — malformed uploads are rejected at intake ────────────────
 
     // (6) A stray non-PDF/non-XML file rejects the whole ZIP with a fixable issue.

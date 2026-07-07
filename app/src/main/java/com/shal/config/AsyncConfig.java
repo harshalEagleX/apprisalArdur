@@ -18,10 +18,12 @@ import java.util.concurrent.ThreadPoolExecutor;
  *  - This pool's workers only submit each order's file pairs to Python and poll for
  *    results; the heavy OCR/LLM work happens in the OCR service, not this JVM. So the
  *    pool is sized for concurrency, not JVM memory.
- *  - Effective sizing comes from application.yml (qc.executor.*): core=4, max=8,
- *    queue=200 by default — i.e. up to 8 orders processed concurrently, the rest
- *    queued. The @Value fallbacks below (2/2/100) apply only if application.yml is
- *    absent. The real throughput ceiling is the shared Groq TPM budget, not this pool.
+ *  - Effective sizing comes from application.yml (qc.executor.*): core=2, max=2,
+ *    queue=200 by default — i.e. 2 orders processed concurrently, the rest queued.
+ *    The real throughput ceiling is the Python OCR service's parallelism (one
+ *    GIL-bound uvicorn process locally) and the shared Groq TPM budget — NOT this
+ *    pool. Fanning more orders than Python can parallelise makes each one slower,
+ *    not the batch faster; see application.yml (qc.executor) for the full rationale.
  *  - AbortPolicy returns HTTP 503 only on extreme overload (queue full).
  *  - Configurable (P-4): tune qc.executor.* per environment without code changes.
  */

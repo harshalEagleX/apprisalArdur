@@ -38,12 +38,13 @@ public class DocStatsApiController {
     public ResponseEntity<Map<String, Object>> list(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Long batchId,
+            @RequestParam(defaultValue = "true") boolean latestOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
         String query = (q == null || q.isBlank()) ? null : q.trim();
-        Page<DocStat> result = docStatRepository.search(query, batchId, pageable);
+        Page<DocStat> result = docStatRepository.search(query, batchId, latestOnly, pageable);
 
         List<Map<String, Object>> rows = result.getContent().stream()
                 .map(DocStatsApiController::toSummary).toList();

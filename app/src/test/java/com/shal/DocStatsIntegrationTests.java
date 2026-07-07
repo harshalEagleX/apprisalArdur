@@ -61,8 +61,8 @@ class DocStatsIntegrationTests {
     void allQueriesAndEndpointsExecuteOnRealPostgres() {
         var page = PageRequest.of(0, 20);
         // repository JPQL (CAST AS string, CASE WHEN, cross-join rerun, projections)
-        docStatRepository.search(null, null, page);
-        docStatRepository.search("anything", 1L, page);
+        docStatRepository.search(null, null, true, page);
+        docStatRepository.search("anything", 1L, false, page);
         docStatRepository.batchTimingRows(page);
         docStatRepository.ruleRanking(page);
         docStatRepository.recentTrend(null, page);
@@ -71,7 +71,7 @@ class DocStatsIntegrationTests {
         docStatRepository.findByQcResultId(-1L);
 
         // controller endpoints (read paths are @Transactional for lazy mapping)
-        assertThat(controller.list(null, null, 0, 20).getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(controller.list(null, null, true, 0, 20).getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(controller.batches(500).getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(controller.ruleRanking(100).getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(controller.trend(null, 30).getStatusCode().is2xxSuccessful()).isTrue();
