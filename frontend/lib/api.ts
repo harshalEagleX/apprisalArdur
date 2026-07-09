@@ -413,6 +413,10 @@ export interface OrderDetail extends OrderSummary {
     failedCount: number;
     verifyCount: number;
     processedAt?: string;
+    reviewStartedAt?: string | null;
+    reviewedAt?: string | null;
+    reviewDurationSeconds?: number | null;
+    reviewedBy?: string | null;
   } | null;
   batchHistory: OrderBatchHistoryEntry[];
 }
@@ -812,7 +816,7 @@ export const getQCRules = (qcResultId: number) =>
 
 /** Review policy flags the UI mirrors so its messaging matches the backend. */
 export const getReviewConfig = () =>
-  apiFetch<{ requireSecondApprovalForOverride: boolean }>("/api/reviewer/config");
+  apiFetch<Record<string, unknown>>("/api/reviewer/config");
 
 export const getQCProgress = (qcResultId: number) =>
   apiFetch<{ totalRules: number; totalToVerify: number; pending: number; canSubmit: boolean }>(
@@ -854,38 +858,6 @@ export const recordRuleFocus = (ruleResultId: number, sessionToken: string) =>
   });
 
 export const getPdfUrl = (batchFileId: number) => `${JAVA}/files/${batchFileId}`;
-
-// ── Override / escalation workflow ───────────────────────────────────────────
-
-export interface PendingOverride {
-  ruleResultId: number;
-  ruleId: string;
-  ruleName: string;
-  status: string;
-  message: string;
-  severity: string;
-  overridePending: boolean;
-  overrideRequestedAt: string | null;
-  overrideRequestedBy: string | null;
-  reviewerComment: string | null;
-  qcResultId?: number;
-  filename?: string;
-  batchId?: number;
-  parentBatchId?: string;
-}
-
-export const getPendingOverrides = () =>
-  apiFetch<PendingOverride[]>("/api/reviewer/admin/overrides/pending");
-
-export const decideOverride = (
-  ruleResultId: number,
-  approve: boolean,
-  comment?: string,
-) =>
-  apiFetch<{ success: boolean; ruleResultId: number; approved: boolean; approvedBy: string }>(
-    `/api/reviewer/admin/overrides/${ruleResultId}/decide`,
-    { method: "POST", body: JSON.stringify({ approve, comment: comment ?? "" }) },
-  );
 
 export const getQCHistory = (batchFileId: number) =>
   apiFetch<QCHistoryRun[]>(`/api/qc/history/file/${batchFileId}`);
@@ -1202,9 +1174,6 @@ export interface QCRuleResult {
   firstPresentedAt?: string | null;
   decisionLatencyMs?: number | null;
   acknowledgedReferences?: boolean;
-  overridePending?: boolean;
-  overrideRequestedBy?: string | null;
-  overrideRequestedAt?: string | null;
   verifiedAt?: string | null;
   severity?: string;
   // Slim finding contract — backend-owned, generated at QC eval time. The collapsed
@@ -1260,7 +1229,6 @@ export interface DecisionSaveResponse {
   savedAt: string;
   status: string;
   reviewerVerified?: boolean | null;
-  overridePending?: boolean;
   reviewerComment?: string;
 }
 

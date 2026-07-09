@@ -33,7 +33,6 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
     /**
      * Find all rule results for a QC result.
      */
-    @EntityGraph(attributePaths = {"overrideRequestedBy", "overrideApprovedBy"})
     List<QCRuleResult> findByQcResultId(Long qcResultId);
 
     /**
@@ -63,27 +62,6 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
           AND LOWER(rr.status) NOT IN ('pass', 'not_applicable')
         """)
     List<Long> findQcResultIdsWithAddressMismatch(@Param("qcResultIds") List<Long> qcResultIds);
-
-    /**
-     * All rule results awaiting admin override approval (across all batches).
-     * Used by the admin override queue.
-     */
-    @Query("""
-        SELECT rr FROM QCRuleResult rr
-        JOIN FETCH rr.qcResult qr
-        JOIN FETCH qr.batchFile bf
-        JOIN FETCH bf.batch b
-        LEFT JOIN FETCH rr.overrideRequestedBy
-        WHERE rr.overridePending = true
-        ORDER BY rr.overrideRequestedAt ASC
-        """)
-    List<QCRuleResult> findAllPendingOverrides();
-
-    /**
-     * Count pending overrides globally — used by admin dashboard badge.
-     */
-    @Query("SELECT COUNT(rr) FROM QCRuleResult rr WHERE rr.overridePending = true")
-    long countPendingOverrides();
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -117,7 +95,7 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
         SELECT rr FROM QCRuleResult rr
         WHERE rr.qcResult.id = :qcResultId
           AND rr.needsVerification = true
-          AND (rr.reviewerVerified IS NULL OR rr.overridePending = true)
+          AND rr.reviewerVerified IS NULL
         ORDER BY rr.id ASC
         """)
     List<QCRuleResult> findPendingVerificationForQcResult(@Param("qcResultId") Long qcResultId);
@@ -136,7 +114,7 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
         SELECT COUNT(rr),
                SUM(CASE WHEN rr.needsVerification = true THEN 1 ELSE 0 END),
                SUM(CASE WHEN rr.needsVerification = true
-                         AND (rr.reviewerVerified IS NULL OR rr.overridePending = true)
+                         AND rr.reviewerVerified IS NULL
                         THEN 1 ELSE 0 END)
         FROM QCRuleResult rr
         WHERE rr.qcResult.id = :qcResultId
@@ -202,16 +180,6 @@ public interface QCRuleResultRepository extends JpaRepository<QCRuleResult, Long
         """)
     long countActiveReviewPresenceForBatch(@Param("batchId") Long batchId,
                                            @Param("cutoff") LocalDateTime cutoff);
-
-    @Query("""
-        SELECT rr.overrideRequestedBy.id, COUNT(rr)
-        FROM QCRuleResult rr
-        WHERE rr.overrideRequestedBy IS NOT NULL
-          AND rr.overrideRequestedAt >= :from
-        GROUP BY rr.overrideRequestedBy.id
-        ORDER BY COUNT(rr) DESC
-        """)
-    List<Object[]> countFailOverridesByReviewerSince(@Param("from") LocalDateTime from);
 
     @Query("""
         SELECT rr.qcResult.reviewedBy.id, AVG(rr.decisionLatencyMs), COUNT(rr)

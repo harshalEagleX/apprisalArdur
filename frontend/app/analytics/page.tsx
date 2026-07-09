@@ -112,7 +112,6 @@ export default function AnalyticsPage() {
   const exMethods         = (ocr.extractionMethods as Array<{method:string;count:number}>) ?? [];
   const overdueRows       = (sla.items as Array<{ruleResultId:number;qcResultId:number|string;ruleId:string;ruleName:string;firstPresentedAt:string;filename:string}>) ?? [];
   const fastRows          = (anomalies.fastDecisionReviewers as Array<{userId:number;name:string;avgDecisionSeconds:number;decisionCount:number;flag:string}>) ?? [];
-  const overrideRows      = (anomalies.failOverrideReviewers as Array<{userId:number;name:string;overrideCount:number;flag:string}>) ?? [];
 
   return (
     <div className="foundation-grid min-h-screen bg-slate-950 text-white">
@@ -318,11 +317,11 @@ export default function AnalyticsPage() {
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="rounded-lg border border-amber-500/25 bg-amber-950/20 p-3">
                   <div className="text-2xl font-semibold text-orange-300">{Number(sla.over4Hours ?? 0)}</div>
-                  <div className="text-xs text-orange-200/80">VERIFY items over 4 hours</div>
+                  <div className="text-xs text-orange-200/80">VERIFY items over SLA ({Number(sla.slaHours ?? 48)}h)</div>
                 </div>
                 <div className="rounded-lg border border-red-500/25 bg-red-950/20 p-3">
                   <div className="text-2xl font-semibold text-red-300">{Number(sla.over8Hours ?? 0)}</div>
-                  <div className="text-xs text-red-200/80">VERIFY items over 8 hours</div>
+                  <div className="text-xs text-red-200/80">VERIFY items critically over SLA ({Number(sla.slaHours ?? 48) + 24}h)</div>
                 </div>
               </div>
               {overdueRows.length === 0 ? (
@@ -353,20 +352,14 @@ export default function AnalyticsPage() {
 
             {/* Anomaly Report */}
             <Section title="Compliance Flags" Icon={ShieldAlert}>
-              {fastRows.length === 0 && overrideRows.length === 0 ? (
-                <p className="text-sm text-slate-500">No weekly decision-speed or override flags.</p>
+              {fastRows.length === 0 ? (
+                <p className="text-sm text-slate-500">No weekly decision-speed flags.</p>
               ) : (
                 <div className="space-y-3">
                   {fastRows.map(row => (
                     <div key={`fast-${row.userId}`} className="rounded-lg border border-amber-500/25 bg-amber-950/20 p-3 text-xs">
                       <div className="text-amber-200 font-medium">{row.name}</div>
                       <div className="text-amber-100/70 mt-1">{row.flag}: {row.avgDecisionSeconds}s average across {row.decisionCount} decisions.</div>
-                    </div>
-                  ))}
-                  {overrideRows.map(row => (
-                    <div key={`override-${row.userId}`} className="rounded-lg border border-red-500/25 bg-red-950/20 p-3 text-xs">
-                      <div className="text-red-200 font-medium">{row.name}</div>
-                      <div className="text-red-100/70 mt-1">{row.flag}: {row.overrideCount} override requests.</div>
                     </div>
                   ))}
                 </div>

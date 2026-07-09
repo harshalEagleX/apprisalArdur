@@ -1416,9 +1416,7 @@ public class QCProcessingService {
             if (prev == null) {
                 continue; // new/unmatched finding → stays pending (re-queued)
             }
-            boolean hadDecision = prev.getReviewerVerified() != null
-                    || Boolean.TRUE.equals(prev.getOverridePending())
-                    || prev.getOverrideApprovedBy() != null;
+            boolean hadDecision = prev.getReviewerVerified() != null;
             if (!hadDecision) {
                 continue;
             }
@@ -1431,11 +1429,6 @@ public class QCProcessingService {
             cur.setVerifiedAt(prev.getVerifiedAt());
             cur.setDecisionLatencyMs(prev.getDecisionLatencyMs());
             cur.setAcknowledgedReferences(prev.getAcknowledgedReferences());
-            cur.setOverridePending(prev.getOverridePending());
-            cur.setOverrideRequestedBy(prev.getOverrideRequestedBy());
-            cur.setOverrideRequestedAt(prev.getOverrideRequestedAt());
-            cur.setOverrideApprovedBy(prev.getOverrideApprovedBy());
-            cur.setOverrideApprovedAt(prev.getOverrideApprovedAt());
             carried++;
         }
         return carried;

@@ -1035,7 +1035,6 @@ public class BatchService {
 
             long appraisals = files.stream().filter(f -> f.getFileType() == FileType.APPRAISAL).count();
             long engagements = files.stream().filter(f -> f.getFileType() == FileType.ENGAGEMENT).count();
-            long contracts   = files.stream().filter(f -> f.getFileType() == FileType.CONTRACT).count();
 
             // A group with no appraisal is a pool of unlinked documents, not one
             // order — "3 engagement letters found, confirm which applies" would be
@@ -1053,10 +1052,8 @@ public class BatchService {
                 warnings.add("Set " + setLabel + ": " + engagements
                         + " engagement letters found — confirm which one applies before running QC.");
             }
-            if (contracts > 1) {
-                warnings.add("Set " + setLabel + ": " + contracts
-                        + " contracts found — confirm which one applies before running QC.");
-            }
+            // Contracts are intentionally never read (policy), so a contract count is
+            // not a QC concern and is not warned about.
         }
 
         if (!warnings.isEmpty()) {

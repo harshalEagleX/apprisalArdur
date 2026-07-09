@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Users, Building2,
-  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, ShieldCheck, Search, UserCircle,
+  BarChart2, LogOut, ChevronLeft, BrainCircuit, Network, Timer, Search, UserCircle,
 } from "lucide-react";
 import { logout } from "@/lib/api";
 import ToastContainer from "./Toast";
@@ -16,7 +16,6 @@ import { NotificationBell } from "./NotificationBell";
 const NAV = [
   { href: "/admin",          label: "Overview",   Icon: LayoutDashboard, slug: "overview" },
   { href: "/admin/batches",  label: "Batches / Orders", Icon: Package, slug: "batches" },
-  { href: "/admin/overrides", label: "Overrides",  Icon: ShieldCheck, slug: "overrides" },
   { href: "/admin/users",    label: "Users",      Icon: Users },
   { href: "/admin/clients",  label: "Clients",    Icon: Building2 },
   { href: "/analytics",      label: "Analytics",  Icon: BarChart2 },

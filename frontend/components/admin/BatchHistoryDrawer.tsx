@@ -453,7 +453,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
         {/* Findings export — the artifact the admin sends to the AMC manually. */}
         <div className="border-t border-white/10 p-4">
           <div className="mb-2 text-[11px] text-slate-500">
-            Download structured findings (overrides reflected, waived rules marked):
+            Download structured findings (reviewer decisions reflected):
           </div>
           <div className="flex justify-end gap-2">
             <button

@@ -6,6 +6,7 @@ import com.shal.common.repository.BatchRepository;
 import com.shal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,10 @@ import java.util.Optional;
 public class TransactionService {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionService.class);
+
+    /** Default turnaround SLA (hours) applied when the manifest omits sla_due_at. */
+    @Value("${shal.sla.default-hours:48}")
+    private long defaultSlaHours;
 
     private final AppraisalTransactionRepository transactionRepository;
     private final BatchRepository batchRepository;
@@ -73,7 +78,9 @@ public class TransactionService {
         tx.setPropertyAddress(address);
         tx.setClient(client);
         tx.setStatus(TransactionStatus.RECEIVED);
-        tx.setSlaDueAt(slaDueAt);
+        // Manifest SLA wins; otherwise default the turnaround deadline to
+        // received-time + 48h (configurable via shal.sla.default-hours).
+        tx.setSlaDueAt(slaDueAt != null ? slaDueAt : AppTime.now().plusHours(defaultSlaHours));
 
         if (revisedFromRef != null && !revisedFromRef.isBlank()) {
             transactionRepository.findByTransactionRef(revisedFromRef).ifPresent(original -> {

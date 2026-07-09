@@ -44,7 +44,6 @@ interface OperatorInsights {
 
 interface AnomalyReport {
   fastDecisionReviewers: { name: string; avgDecisionSeconds: number; decisionCount: number; flag: string }[];
-  failOverrideReviewers: { name: string; overrideCount: number; flag: string }[];
 }
 
 // ── Compact stat card ─────────────────────────────────────────────────────────
@@ -298,13 +297,13 @@ export default function AuditChartsPanel() {
               <div className="space-y-2">
                 {sla.over8Hours > 0 && (
                   <div className="flex items-center justify-between rounded-md bg-red-950/40 border border-red-500/20 px-2 py-1.5">
-                    <span className="text-[10px] text-red-300">Over 8h</span>
+                    <span className="text-[10px] text-red-300">Critically over SLA</span>
                     <span className="text-xs font-bold text-red-400">{sla.over8Hours}</span>
                   </div>
                 )}
                 {sla.over4Hours > 0 && (
                   <div className="flex items-center justify-between rounded-md bg-amber-950/30 border border-amber-500/20 px-2 py-1.5">
-                    <span className="text-[10px] text-amber-300">Over 4h</span>
+                    <span className="text-[10px] text-amber-300">Over SLA</span>
                     <span className="text-xs font-bold text-amber-400">{sla.over4Hours}</span>
                   </div>
                 )}
@@ -323,9 +322,7 @@ export default function AuditChartsPanel() {
           )}
 
           {/* ── Compliance anomalies ──────────────────────────────────── */}
-          {anomalies && (
-            (anomalies.fastDecisionReviewers?.length > 0 || anomalies.failOverrideReviewers?.length > 0)
-          ) && (
+          {anomalies && anomalies.fastDecisionReviewers?.length > 0 && (
             <Section title="Compliance Flags" icon={AlertTriangle} defaultOpen={false}>
               <div className="space-y-2">
                 {anomalies.fastDecisionReviewers.map(r => (
@@ -333,14 +330,6 @@ export default function AuditChartsPanel() {
                     <p className="text-[10px] font-medium text-amber-300">{r.name}</p>
                     <p className="text-[10px] text-slate-500 mt-0.5">
                       Avg {r.avgDecisionSeconds}s · {r.decisionCount} decisions
-                    </p>
-                  </div>
-                ))}
-                {anomalies.failOverrideReviewers.map(r => (
-                  <div key={r.name} className="rounded border border-red-500/15 bg-red-950/20 px-2 py-1.5">
-                    <p className="text-[10px] font-medium text-red-300">{r.name}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      {r.overrideCount} FAIL overrides
                     </p>
                   </div>
                 ))}

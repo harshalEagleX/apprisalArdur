@@ -253,7 +253,6 @@ export default function ReviewerProfilePage() {
             <div className="space-y-3">
               {[
                 { key: "assigned",  label: "Batch assigned to me",    sub: "When admin assigns a batch for your review" },
-                { key: "override",  label: "Override decisions",       sub: "When admin approves or rejects your override request" },
                 { key: "reassign",  label: "Re-review notifications",  sub: "When a batch is re-assigned or updated" },
               ].map(item => (
                 <label key={item.key} className="flex cursor-pointer items-center gap-4 rounded-lg border border-white/[0.06] bg-[#0B0F14]/50 px-4 py-3.5 transition hover:border-white/10">

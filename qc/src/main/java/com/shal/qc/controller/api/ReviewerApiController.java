@@ -126,9 +126,7 @@ public class ReviewerApiController {
     /** Policy flags the reviewer UI mirrors so its messaging/affordances match the backend. */
     @GetMapping("/config")
     public ResponseEntity<Map<String, Object>> getReviewConfig() {
-        return ResponseEntity.ok(Map.of(
-            "requireSecondApprovalForOverride", verificationService.isSecondApprovalRequiredForOverride()
-        ));
+        return ResponseEntity.ok(Map.of());
     }
 
     // ── Submitted queue (recently completed by this reviewer) ─────────────────
@@ -340,7 +338,6 @@ public class ReviewerApiController {
             response.put("savedAt", result.getVerifiedAt().toString());
             response.put("status", normalizeStatus(result.getStatus()));
             response.put("reviewerVerified", result.getReviewerVerified());
-            response.put("overridePending", Boolean.TRUE.equals(result.getOverridePending()));
             response.put("reviewerComment", result.getReviewerComment());
 
             Long qcResultId = result.getQcResult().getId();
@@ -497,9 +494,6 @@ public class ReviewerApiController {
                 ruleMap.put("firstPresentedAt", rule.getFirstPresentedAt() != null ? rule.getFirstPresentedAt().toString() : null);
                 ruleMap.put("decisionLatencyMs", rule.getDecisionLatencyMs());
                 ruleMap.put("acknowledgedReferences", rule.getAcknowledgedReferences());
-                ruleMap.put("overridePending", Boolean.TRUE.equals(rule.getOverridePending()));
-                ruleMap.put("overrideRequestedBy", rule.getOverrideRequestedBy() != null ? displayName(rule.getOverrideRequestedBy()) : null);
-                ruleMap.put("overrideRequestedAt", rule.getOverrideRequestedAt() != null ? rule.getOverrideRequestedAt().toString() : null);
                 ruleMap.put("severity",        rule.getSeverity() != null ? rule.getSeverity() : "STANDARD");
                 ruleMap.put("verifiedAt",      rule.getVerifiedAt() != null ? rule.getVerifiedAt().toString() : null);
                 ruleMap.put("pdfPage",         rule.getPdfPage());
@@ -507,9 +501,6 @@ public class ReviewerApiController {
                 ruleMap.put("bboxY",           rule.getBboxY());
                 ruleMap.put("bboxW",           rule.getBboxW());
                 ruleMap.put("bboxH",           rule.getBboxH());
-                // override approval actor — present on entity, missing from prior response
-                ruleMap.put("overrideApprovedBy", rule.getOverrideApprovedBy() != null ? displayName(rule.getOverrideApprovedBy()) : null);
-                ruleMap.put("overrideApprovedAt", rule.getOverrideApprovedAt() != null ? rule.getOverrideApprovedAt().toString() : null);
                 // Fields declared in the TypeScript QCRuleResult interface but not yet
                 // stored on the entity — send null so the frontend receives defined keys.
                 ruleMap.put("sourceDocuments",  null);
@@ -912,131 +903,6 @@ public class ReviewerApiController {
                     "example", "A useful comment explains why the data supports the conclusion, not just that the appraiser reviewed it.");
             default -> null;
         };
-    }
-
-    // ── Override / escalation workflow (ADMIN-only) ────────────────────────────
-
-    /**
-     * Returns all rule results awaiting admin override approval, across all batches.
-     * Displayed in the admin "Override Queue" panel.
-     */
-    @GetMapping("/admin/overrides/pending")
-    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Map<String, Object>>> getPendingOverrides() {
-        List<com.shal.common.entity.QCRuleResult> pending = qcRuleResultRepository.findAllPendingOverrides();
-        List<Map<String, Object>> body = pending.stream().map(rr -> {
-            Map<String, Object> m = new HashMap<>();
-            m.put("ruleResultId",       rr.getId());
-            m.put("ruleId",             rr.getRuleId());
-            m.put("ruleName",           rr.getRuleName());
-            m.put("status",             rr.getStatus());
-            m.put("message",            rr.getMessage());
-            m.put("severity",           rr.getSeverity());
-            m.put("overridePending",    rr.getOverridePending());
-            m.put("overrideRequestedAt", rr.getOverrideRequestedAt() != null ? rr.getOverrideRequestedAt().toString() : null);
-            m.put("overrideRequestedBy", rr.getOverrideRequestedBy() != null ? displayName(rr.getOverrideRequestedBy()) : null);
-            m.put("reviewerComment",    rr.getReviewerComment());
-            if (rr.getQcResult() != null) {
-                m.put("qcResultId", rr.getQcResult().getId());
-                if (rr.getQcResult().getBatchFile() != null) {
-                    m.put("filename", rr.getQcResult().getBatchFile().getFilename());
-                    if (rr.getQcResult().getBatchFile().getBatch() != null) {
-                        m.put("batchId",       rr.getQcResult().getBatchFile().getBatch().getId());
-                        m.put("parentBatchId", rr.getQcResult().getBatchFile().getBatch().getParentBatchId());
-                    }
-                }
-            }
-            return m;
-        }).toList();
-        return ResponseEntity.ok(body);
-    }
-
-    /**
-     * Admin approves or rejects a pending FAIL override.
-     *
-     * approve=true  → final decision PASS, override cleared, reviewer informed.
-     * approve=false → override rejected, reviewer must re-decide or escalate.
-     */
-    @PostMapping("/admin/overrides/{ruleResultId}/decide")
-    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
-    @Transactional
-    public ResponseEntity<Map<String, Object>> decideOverride(
-            @PathVariable Long ruleResultId,
-            @RequestBody Map<String, Object> body,
-            @AuthenticationPrincipal UserPrincipal principal,
-            HttpServletRequest httpRequest) {
-        try {
-            boolean approve = Boolean.TRUE.equals(body.get("approve"));
-            String adminComment = body.containsKey("comment") ? String.valueOf(body.get("comment")) : "";
-
-            // findByIdForUpdate JOIN FETCHes qcResult (and batchFile) so the WebSocket
-            // topic path at the bottom of this method doesn't hit a LAZY proxy with no session.
-            com.shal.common.entity.QCRuleResult rr = qcRuleResultRepository.findByIdForUpdate(ruleResultId)
-                    .orElseThrow(() -> new IllegalArgumentException("Rule result not found: " + ruleResultId));
-
-            if (!Boolean.TRUE.equals(rr.getOverridePending())) {
-                return ResponseEntity.badRequest().body(Map.of("success", false,
-                        "error", "Rule result " + ruleResultId + " is not awaiting override approval."));
-            }
-
-            rr.setOverridePending(false);
-            rr.setOverrideApprovedBy(principal.getUser());
-            rr.setOverrideApprovedAt(java.time.LocalDateTime.now());
-
-            if (approve) {
-                rr.setReviewerVerified(true);
-                rr.setReviewerComment(adminComment.isBlank() ? rr.getReviewerComment() : adminComment);
-            } else {
-                // Rejection: reset the decision so the reviewer can reconsider.
-                rr.setReviewerVerified(null);
-                rr.setReviewerComment("Override rejected by admin" + (adminComment.isBlank() ? "." : ": " + adminComment));
-            }
-
-            qcRuleResultRepository.save(rr);
-
-            auditLogService.log(principal.getUser(),
-                    approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED",
-                    "QCRuleResult", ruleResultId,
-                    "comment=" + adminComment, clientIp(httpRequest), httpRequest.getHeader("User-Agent"));
-
-            // Notify the reviewer via real-time event (session channel)
-            if (rr.getQcResult() != null) {
-                Map<String, Object> event = new HashMap<>();
-                event.put("type",         approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED");
-                event.put("ruleResultId", ruleResultId);
-                event.put("ruleId",       rr.getRuleId());
-                event.put("approvedBy",   displayName(principal.getUser()));
-                event.put("comment",      adminComment);
-                realtimeEventPublisher.publish("/topic/reviewer/qc/" + rr.getQcResult().getId() + "/override", event);
-
-                // Also push to the reviewer notifications feed so it appears in their bell
-                try {
-                    Map<String, Object> notif = new java.util.LinkedHashMap<>();
-                    notif.put("type",        approve ? "OVERRIDE_APPROVED" : "OVERRIDE_REJECTED");
-                    notif.put("ruleId",      rr.getRuleId());
-                    notif.put("approvedBy",  displayName(principal.getUser()));
-                    notif.put("message",     approve
-                            ? "Override approved by " + displayName(principal.getUser()) + " for rule " + rr.getRuleId() + "."
-                            : "Override rejected by " + displayName(principal.getUser()) + " for rule " + rr.getRuleId() + ". Please reconsider.");
-                    notif.put("occurredAt",  java.time.LocalDateTime.now().toString());
-                    realtimeEventPublisher.publish("/topic/reviewer/notifications", notif);
-                } catch (Exception pubEx) {
-                    log.debug("Failed to push override notification: {}", pubEx.getMessage());
-                }
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "ruleResultId", ruleResultId,
-                    "approved", approve,
-                    "approvedBy", displayName(principal.getUser())
-            ));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
-        } catch (Exception e) {
-            log.error("Override decision failed: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body(Map.of("success", false, "error", "Override decision failed"));
-        }
     }
 
     // ── Field corrections proxy (VF-6) ────────────────────────────────────────

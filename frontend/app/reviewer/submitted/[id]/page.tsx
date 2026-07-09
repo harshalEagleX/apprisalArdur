@@ -76,7 +76,7 @@ export default function SubmittedReviewPage() {
   const passCount = rules.filter(r =>
     r.status === "pass" || r.status === "manual_pass"
   ).length;
-  const overrideCount = rules.filter(r => r.status === "manual_pass").length;
+  const manualPassCount = rules.filter(r => r.status === "manual_pass").length;
   const failCount = failRules.length;
   const reviewedRules = rules.filter(r =>
     r.verifyQuestion?.trim()
@@ -162,8 +162,8 @@ export default function SubmittedReviewPage() {
           <div className="mt-1 text-lg font-semibold tabular-nums text-red-300">{failCount}</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-[#11161C] p-3">
-          <div className="text-[11px] uppercase tracking-wide text-slate-500">Overrides applied</div>
-          <div className="mt-1 text-lg font-semibold tabular-nums text-amber-300">{overrideCount}</div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-500">Manual passes</div>
+          <div className="mt-1 text-lg font-semibold tabular-nums text-amber-300">{manualPassCount}</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-[#11161C] p-3">
           <div className="text-[11px] uppercase tracking-wide text-slate-500">Passed</div>

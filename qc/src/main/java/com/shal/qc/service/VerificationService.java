@@ -34,7 +34,6 @@ public class VerificationService {
     private static final Logger log = LoggerFactory.getLogger(VerificationService.class);
     private static final Duration REVIEW_LOCK_TTL = Duration.ofMinutes(30);
     private static final long MIN_VERIFY_DECISION_MS = 8_000L;
-    private static final int MIN_FAIL_OVERRIDE_REASON_CHARS = 20;
 
     private final QCResultRepository qcResultRepository;
     private final QCRuleResultRepository qcRuleResultRepository;
@@ -45,21 +44,6 @@ public class VerificationService {
     private final BusinessEventService businessEventService;
     private final PythonClientService pythonClientService;
     private final OrderStatusService orderStatusService;
-
-    /**
-     * Whether a FAIL→Pass override must be approved by a SECOND reviewer (two-person rule).
-     * Defaults true (compliance-safe for prod). Set false for single-reviewer deployments,
-     * where the requester may approve their own override — otherwise a solo reviewer is
-     * permanently deadlocked ("N left" never clears because no second reviewer exists).
-     * The frontend reads this via the review config so its messaging matches the backend.
-     */
-    @org.springframework.beans.factory.annotation.Value("${qc.override.require-second-approval:true}")
-    private boolean requireSecondApprovalForOverride;
-
-    /** Whether a FAIL→Pass override needs a second reviewer's approval (frontend reads this so its messaging matches). */
-    public boolean isSecondApprovalRequiredForOverride() {
-        return requireSecondApprovalForOverride;
-    }
 
     public VerificationService(QCResultRepository qcResultRepository,
             QCRuleResultRepository qcRuleResultRepository,
@@ -114,6 +98,12 @@ public class VerificationService {
             qcResult.setReviewSessionToken(UUID.randomUUID().toString());
         }
 
+        // Stamp the very first review-open time once, so the admin sees the true
+        // start of the reviewer's time on this order regardless of later re-opens.
+        if (qcResult.getReviewFirstStartedAt() == null) {
+            qcResult.setReviewFirstStartedAt(now);
+        }
+
         qcResult.setReviewLockedBy(reviewer);
         qcResult.setReviewLastActiveAt(now);
         qcResult.setReviewLockExpiresAt(now.plus(REVIEW_LOCK_TTL));
@@ -139,7 +129,7 @@ public class VerificationService {
     @Transactional(readOnly = true)
     public int priorActionCount(@NonNull Long qcResultId) {
         return (int) qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId).stream()
-                .filter(item -> item.getReviewerVerified() != null || Boolean.TRUE.equals(item.getOverridePending()))
+                .filter(item -> item.getReviewerVerified() != null)
                 .count();
     }
 
@@ -270,22 +260,13 @@ public class VerificationService {
 
         boolean passed = isPassDecision(decision);
         String originalStatus = normalizedStatus(ruleResult.getStatus());
-        boolean wasOverridePending = Boolean.TRUE.equals(ruleResult.getOverridePending());
 
-        if (passed && "fail".equals(originalStatus)) {
-            handleFailOverride(ruleResult, comment, reviewer, sessionToken);
-        } else {
-            ruleResult.setReviewerVerified(passed);
-            ruleResult.setReviewerComment(comment);
-            ruleResult.setVerifiedAt(LocalDateTime.now());
-            ruleResult.setOverridePending(false);
-
-            if (passed) {
-                ruleResult.setStatus("MANUAL_PASS");
-            } else {
-                ruleResult.setStatus("FAIL");
-            }
-        }
+        // A reviewer PASS is applied directly (MANUAL_PASS) — including on a rule that
+        // originally failed. There is no override/second-approval step (removed).
+        ruleResult.setReviewerVerified(passed);
+        ruleResult.setReviewerComment(comment);
+        ruleResult.setVerifiedAt(LocalDateTime.now());
+        ruleResult.setStatus(passed ? "MANUAL_PASS" : "FAIL");
 
         ruleResult.setReviewSessionToken(sessionToken);
         ruleResult.setDecisionLatencyMs(decisionLatencyMs);
@@ -299,10 +280,9 @@ public class VerificationService {
                 "ruleId=" + ruleResult.getRuleId()
                         + ", decision=" + decision
                         + ", status=" + ruleResult.getStatus()
-                        + ", overridePending=" + Boolean.TRUE.equals(ruleResult.getOverridePending())
                         + ", latencyMs=" + decisionLatencyMs,
                 ipAddress, userAgent);
-        recordRuleDecisionEvent(ruleResult, reviewer, decision, decisionLatencyMs, acknowledged, originalStatus, wasOverridePending);
+        recordRuleDecisionEvent(ruleResult, reviewer, decision, decisionLatencyMs, acknowledged, originalStatus);
 
         log.info("Decision saved: ruleResultId={}, decision={}, newStatus={}",
                 ruleResultId, decision, ruleResult.getStatus());
@@ -442,9 +422,9 @@ public class VerificationService {
         List<QCRuleResult> verificationItems = qcRuleResultRepository.findVerificationItemsForQcResult(qcResultId);
 
         boolean hasPending = verificationItems.stream()
-                .anyMatch(item -> item.getReviewerVerified() == null || Boolean.TRUE.equals(item.getOverridePending()));
+                .anyMatch(item -> item.getReviewerVerified() == null);
         if (hasPending) {
-            throw new IllegalStateException("All review items must be marked Pass or Fail, and FAIL overrides must be second-approved, before submitting.");
+            throw new IllegalStateException("All review items must be marked Pass or Fail before submitting.");
         }
 
         boolean anyFailed = verificationItems.stream()
@@ -549,7 +529,7 @@ public class VerificationService {
     }
 
     private void recordRuleDecisionEvent(QCRuleResult ruleResult, User reviewer, String decision,
-            Long decisionLatencyMs, Boolean acknowledged, String originalStatus, boolean wasOverridePending) {
+            Long decisionLatencyMs, Boolean acknowledged, String originalStatus) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("rule_id", ruleResult.getRuleId());
         payload.put("decision", decision);
@@ -557,7 +537,6 @@ public class VerificationService {
         payload.put("new_status", ruleResult.getStatus());
         payload.put("latency_ms", decisionLatencyMs);
         payload.put("acknowledged", Boolean.TRUE.equals(acknowledged));
-        payload.put("override_pending", Boolean.TRUE.equals(ruleResult.getOverridePending()));
         QCResult qcResult = ruleResult.getQcResult();
         Long batchId = qcResult != null && qcResult.getBatchFile() != null && qcResult.getBatchFile().getBatch() != null
                 ? qcResult.getBatchFile().getBatch().getId()
@@ -567,18 +546,6 @@ public class VerificationService {
                 "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
                 qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
         recordReviewerDecisionActivity(reviewer, originalStatus, ruleResult.getStatus());
-
-        if ("fail".equals(originalStatus) && "PASS".equalsIgnoreCase(decision)) {
-            String eventType = wasOverridePending ? "OVERRIDE_APPROVED" : "OVERRIDE_REQUESTED";
-            String outcome = wasOverridePending ? "APPROVED" : "PENDING";
-            businessEventService.record(eventType, reviewer, "java", outcome,
-                    "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
-                    qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
-        } else if (wasOverridePending && "FAIL".equalsIgnoreCase(decision)) {
-            businessEventService.record("OVERRIDE_REJECTED", reviewer, "java", "REJECTED",
-                    "QCRuleResult", ruleResult.getId(), batchId, batchFileId,
-                    qcResult != null ? qcResult.getId() : null, ruleResult.getId(), payload);
-        }
     }
 
     private void recordReviewSubmitted(QCResult qcResult, User reviewer, String source) {
@@ -687,8 +654,7 @@ public class VerificationService {
     private void validateFreshDecision(QCRuleResult ruleResult, String sessionToken) {
         if (ruleResult.getReviewerVerified() != null
                 && ruleResult.getReviewSessionToken() != null
-                && !sessionToken.equals(ruleResult.getReviewSessionToken())
-                && !Boolean.TRUE.equals(ruleResult.getOverridePending())) {
+                && !sessionToken.equals(ruleResult.getReviewSessionToken())) {
             throw new IllegalStateException("This review item was already decided in another session. Refresh the page to see the latest saved decision.");
         }
     }
@@ -708,40 +674,6 @@ public class VerificationService {
                 throw new IllegalStateException("High-severity VERIFY items require acknowledgement before decision.");
             }
         }
-    }
-
-    private void handleFailOverride(QCRuleResult ruleResult, String comment, User reviewer, String sessionToken) {
-        String reason = comment == null ? "" : comment.trim();
-        if (reason.length() < MIN_FAIL_OVERRIDE_REASON_CHARS) {
-            throw new IllegalStateException("FAIL override requires a specific reason of at least 20 characters.");
-        }
-
-        if (Boolean.TRUE.equals(ruleResult.getOverridePending())) {
-            User requestedBy = ruleResult.getOverrideRequestedBy();
-            // Two-person rule: the requester cannot approve their own override — UNLESS the
-            // deployment runs with the second-approval policy disabled (single-reviewer setup),
-            // in which case a solo reviewer would otherwise be permanently blocked.
-            if (requireSecondApprovalForOverride
-                    && requestedBy != null && Objects.equals(requestedBy.getId(), reviewer.getId())) {
-                throw new IllegalStateException("FAIL override requires approval from a second reviewer.");
-            }
-            ruleResult.setReviewerVerified(true);
-            ruleResult.setStatus("MANUAL_PASS");
-            ruleResult.setOverridePending(false);
-            ruleResult.setOverrideApprovedBy(reviewer);
-            ruleResult.setOverrideApprovedAt(LocalDateTime.now());
-            ruleResult.setVerifiedAt(LocalDateTime.now());
-            ruleResult.setReviewerComment(reason);
-            return;
-        }
-
-        ruleResult.setReviewerVerified(null);
-        ruleResult.setReviewerComment(reason);
-        ruleResult.setReviewSessionToken(sessionToken);
-        ruleResult.setOverridePending(true);
-        ruleResult.setOverrideRequestedBy(reviewer);
-        ruleResult.setOverrideRequestedAt(LocalDateTime.now());
-        ruleResult.setVerifiedAt(LocalDateTime.now());
     }
 
     private boolean isHighSeverity(QCRuleResult ruleResult) {
@@ -766,12 +698,6 @@ public class VerificationService {
         String normalizedComment = comment == null ? "" : comment.trim();
         String currentStatus = normalizedStatus(ruleResult.getStatus());
         String currentComment = ruleResult.getReviewerComment() == null ? "" : ruleResult.getReviewerComment().trim();
-
-        if ("PASS".equals(normalizedDecision)
-                && Boolean.TRUE.equals(ruleResult.getOverridePending())
-                && normalizedComment.equals(currentComment)) {
-            return true;
-        }
 
         if ("PASS".equals(normalizedDecision)
                 && Boolean.TRUE.equals(ruleResult.getReviewerVerified())

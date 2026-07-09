@@ -2,6 +2,7 @@ package com.shal.service;
 
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,10 @@ public class AnalyticsService {
     private final QCResultRepository          qcResultRepo;
     private final QCRuleResultRepository      qcRuleResultRepo;
     private final UserRepository              userRepo;
+
+    /** Review turnaround SLA in hours (breach threshold); critical tier is +24h. */
+    @Value("${shal.sla.default-hours:48}")
+    private long slaHours;
 
     public AnalyticsService(ProcessingMetricsRepository metricsRepo,
                             OperatorSessionRepository   sessionRepo,
@@ -181,12 +186,13 @@ public class AnalyticsService {
     @Cacheable(cacheNames = "analytics", key = "'sla'")
     public Map<String, Object> getReviewSlaDashboard() {
         LocalDateTime now = LocalDateTime.now();
-        // QL-5: COUNT the 4h/8h totals; fetch only the 50 rows actually shown — not
-        // two full entity lists materialised just to call size().
-        long over4 = qcRuleResultRepo.countOverdueReviewItems(now.minusHours(4));
-        long over8 = qcRuleResultRepo.countOverdueReviewItems(now.minusHours(8));
+        // SLA breach threshold (default 48h) and a critical escalation tier (SLA + 24h).
+        // Both configurable via shal.sla.default-hours. QL-5: COUNT the totals; fetch
+        // only the 50 rows actually shown — not two full entity lists just for size().
+        long breach = qcRuleResultRepo.countOverdueReviewItems(now.minusHours(slaHours));
+        long critical = qcRuleResultRepo.countOverdueReviewItems(now.minusHours(slaHours + 24));
         List<QCRuleResult> top = qcRuleResultRepo.findOverdueReviewItems(
-                now.minusHours(4), PageRequest.of(0, 50));
+                now.minusHours(slaHours), PageRequest.of(0, 50));
 
         List<Map<String, Object>> overdue = top.stream().map(rule -> {
             QCResult qc = rule.getQcResult();
@@ -201,9 +207,12 @@ public class AnalyticsService {
             return item;
         }).toList();
 
+        // Response keys kept as over4Hours/over8Hours for frontend compatibility;
+        // they now carry the SLA-breach (48h) and critical (72h) counts.
         return Map.of(
-                "over4Hours", over4,
-                "over8Hours", over8,
+                "slaHours", slaHours,
+                "over4Hours", breach,
+                "over8Hours", critical,
                 "items", overdue
         );
     }
@@ -212,12 +221,10 @@ public class AnalyticsService {
     public Map<String, Object> getWeeklyAnomalyReport(int days) {
         LocalDateTime from = LocalDateTime.now().minusDays(days);
         List<Object[]> latencyRows  = qcRuleResultRepo.averageDecisionLatencyByReviewerSince(from);
-        List<Object[]> overrideRows = qcRuleResultRepo.countFailOverridesByReviewerSince(from);
 
-        // QL-4: one user fetch covering both reports instead of findById per row.
+        // QL-4: one user fetch instead of findById per row.
         List<Long> ids = new ArrayList<>();
         latencyRows.forEach(r -> ids.add(toLong(r[0])));
-        overrideRows.forEach(r -> ids.add(toLong(r[0])));
         Map<Long, User> users = usersByIds(ids);
 
         List<Map<String, Object>> fastReviewers = new ArrayList<>();
@@ -236,24 +243,9 @@ public class AnalyticsService {
             ));
         }
 
-        List<Map<String, Object>> overrideReviewers = new ArrayList<>();
-        for (Object[] row : overrideRows) {
-            Long userId = toLong(row[0]);
-            Long count = toLong(row[1]);
-            User user = userId != null ? users.get(userId) : null;
-            if (user == null || count == null || count < 3) continue;
-            overrideReviewers.add(Map.of(
-                    "userId", userId,
-                    "name", user.getFullName() != null ? user.getFullName() : user.getUsername(),
-                    "overrideCount", count,
-                    "flag", "FAIL override requests above review threshold"
-            ));
-        }
-
         return Map.of(
                 "periodDays", days,
-                "fastDecisionReviewers", fastReviewers,
-                "failOverrideReviewers", overrideReviewers
+                "fastDecisionReviewers", fastReviewers
         );
     }
 

@@ -7,7 +7,7 @@ import {
   Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search, Maximize2, Minimize2, RefreshCw,
 } from "lucide-react";
 import {
-  getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus, getReviewConfig,
+  getQCRules, getQCProgress, saveDecision, getPdfUrl, getQCFileInfo, recordRuleFocus,
   submitReview,
   type BatchFile, type DocumentMatch, type QCRuleResult,
 } from "@/lib/api";
@@ -56,7 +56,6 @@ export default function VerifyFilePage() {
   const returnTo = safeReviewerQueuePath(searchParams.get("returnTo"));
 
   const [rules, setRules]               = useState<QCRuleResult[]>([]);
-  const [requireSecondApproval, setRequireSecondApproval] = useState(true);
   const [loading, setLoading]           = useState(true);
   const [filter, setFilter]             = useState<Filter>("attention");
   const [ruleQuery, setRuleQuery]       = useState("");
@@ -113,7 +112,6 @@ export default function VerifyFilePage() {
       ...item, status: ruleStatus(savedDecision.status),
       reviewerVerified: savedDecision.reviewerVerified ?? undefined,
       reviewerComment: savedDecision.reviewerComment ?? fallbackComment ?? item.reviewerComment,
-      overridePending: Boolean(savedDecision.overridePending),
       verifiedAt: savedDecision.savedAt,
     } : item));
   }, []);
@@ -174,12 +172,6 @@ export default function VerifyFilePage() {
     return () => window.clearTimeout(timer);
   }, [loadRules]);
 
-  useEffect(() => {
-    // Mirror the backend override policy so the override messaging matches (single- vs two-reviewer).
-    getReviewConfig()
-      .then(c => setRequireSecondApproval(c.requireSecondApprovalForOverride))
-      .catch(() => { /* keep the safe default (true) */ });
-  }, []);
 
   useEffect(() => {
     getQCFileInfo(qcResultId)
@@ -384,7 +376,6 @@ export default function VerifyFilePage() {
     if (!sessionToken) return "Review session is not ready yet.";
     if (offline) return "You're offline. Decisions cannot be saved until your connection is restored.";
     if (saving === rule.id) return "This decision is already saving.";
-    if (s === "fail" && decision === "PASS" && (comments[rule.id] ?? "").trim().length < 20) return "Add a specific override reason of at least 20 characters before saving Override to Pass.";
     if (!isReviewLikeStatus(s) && s !== "fail" && decision === "FAIL") return "Only Needs Review and Fail rules can be decided.";
     if (isReviewLikeStatus(s) && rule.severity === "BLOCKING" && !acknowledged[rule.id]) return "Acknowledge the referenced document sections before saving this blocking rule.";
     return null;
@@ -625,7 +616,6 @@ export default function VerifyFilePage() {
       onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
       onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
       commentRef={node => { commentRefs.current[rule.id] = node; }}
-      requireSecondApproval={requireSecondApproval}
     />
   );
 

@@ -86,23 +86,6 @@ public class QCRuleResult {
     @Column(name = "acknowledged_references")
     private Boolean acknowledgedReferences = false;
 
-    @Column(name = "override_pending")
-    private Boolean overridePending = false;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "override_requested_by")
-    private User overrideRequestedBy;
-
-    @Column(name = "override_requested_at")
-    private LocalDateTime overrideRequestedAt;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "override_approved_by")
-    private User overrideApprovedBy;
-
-    @Column(name = "override_approved_at")
-    private LocalDateTime overrideApprovedAt;
-
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -383,46 +366,6 @@ public class QCRuleResult {
 
     public void setAcknowledgedReferences(Boolean acknowledgedReferences) {
         this.acknowledgedReferences = acknowledgedReferences;
-    }
-
-    public Boolean getOverridePending() {
-        return overridePending;
-    }
-
-    public void setOverridePending(Boolean overridePending) {
-        this.overridePending = overridePending;
-    }
-
-    public User getOverrideRequestedBy() {
-        return overrideRequestedBy;
-    }
-
-    public void setOverrideRequestedBy(User overrideRequestedBy) {
-        this.overrideRequestedBy = overrideRequestedBy;
-    }
-
-    public LocalDateTime getOverrideRequestedAt() {
-        return overrideRequestedAt;
-    }
-
-    public void setOverrideRequestedAt(LocalDateTime overrideRequestedAt) {
-        this.overrideRequestedAt = overrideRequestedAt;
-    }
-
-    public User getOverrideApprovedBy() {
-        return overrideApprovedBy;
-    }
-
-    public void setOverrideApprovedBy(User overrideApprovedBy) {
-        this.overrideApprovedBy = overrideApprovedBy;
-    }
-
-    public LocalDateTime getOverrideApprovedAt() {
-        return overrideApprovedAt;
-    }
-
-    public void setOverrideApprovedAt(LocalDateTime overrideApprovedAt) {
-        this.overrideApprovedAt = overrideApprovedAt;
     }
 
     public LocalDateTime getCreatedAt() {

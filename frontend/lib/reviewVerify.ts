@@ -31,7 +31,7 @@ export type RuleFocus = {
 export type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: number };
 export type DecisionEvent = {
   ruleResultId: number; decision: Decision; savedAt: string; status: string;
-  reviewerVerified?: boolean | null; overridePending?: boolean; reviewerComment?: string;
+  reviewerVerified?: boolean | null; reviewerComment?: string;
 };
 
 // Reviewer rule groups, in report order, with a friendly label.

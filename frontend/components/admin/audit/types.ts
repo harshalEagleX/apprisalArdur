@@ -97,8 +97,9 @@ export interface SlaItem {
 }
 
 export interface SlaDashboard {
-  over4Hours: number;
-  over8Hours: number;
+  slaHours: number;   // SLA breach threshold in hours (default 48)
+  over4Hours: number; // items over SLA (legacy key name)
+  over8Hours: number; // items critically over SLA (SLA + 24h)
   items: SlaItem[];
 }
 

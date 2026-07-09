@@ -40,7 +40,6 @@ export interface FindingRowProps {
   onAcknowledge: (checked: boolean) => void;
   onComment: (c: string) => void;
   commentRef: (node: HTMLTextAreaElement | null) => void;
-  requireSecondApproval?: boolean;
 }
 
 // Severity intent drives the dot, its glow ring, the card tint, and the confidence
@@ -123,7 +122,6 @@ export const FindingRow = memo(function FindingRow({
   onAcknowledge,
   onComment,
   commentRef,
-  requireSecondApproval = true,
 }: FindingRowProps) {
   const status = ruleStatus(rule.status);
   const isVerify = isReviewLikeStatus(status);
@@ -176,10 +174,9 @@ export const FindingRow = memo(function FindingRow({
         ? "Needs supervisor attention"
         : `${Math.floor(slaMs / 3_600_000)}h ${Math.floor((slaMs % 3_600_000) / 60_000)}m remaining`;
 
-  const overrideReasonOk = !isFail || comment.trim().length >= 20;
   const canAct =
     sessionReady && !offline && !saving && waitMs === 0 && (!isBlockingVerify || acknowledged);
-  const canPass = canAct && overrideReasonOk;
+  const canPass = canAct;
   const canFail = canAct && (isVerify || isFail);
 
   useEffect(() => {
@@ -319,20 +316,8 @@ export const FindingRow = memo(function FindingRow({
               )}
               {isFail && (
                 <div className="text-[11px] text-red-200 bg-red-950/18 border border-red-500/25 rounded-lg px-2.5 py-2">
-                  Press <strong>Confirm issue</strong> to keep this in the report. Think it&apos;s
-                  actually fine? Write a short reason why (at least 20 characters)
-                  {requireSecondApproval ? " — we'll ask a second reviewer to confirm." : "."}
-                </div>
-              )}
-              {rule.overridePending && (
-                <div className="text-[11px] text-slate-200 bg-slate-950/18 border border-slate-500/25 rounded-lg px-2.5 py-2">
-                  {requireSecondApproval ? (
-                    <>Override requested by {rule.overrideRequestedBy ?? "another reviewer"}. A
-                    different reviewer must approve the no-issue override.</>
-                  ) : (
-                    <>Override requested by {rule.overrideRequestedBy ?? "a reviewer"}. Press
-                    Override — no issue to approve it (single-reviewer mode).</>
-                  )}
+                  Press <strong>Confirm issue</strong> to keep this in the report, or
+                  <strong> No issue</strong> to pass it. A comment is optional but recommended.
                 </div>
               )}
 
@@ -352,14 +337,14 @@ export const FindingRow = memo(function FindingRow({
                   <button
                     onClick={() => onDecision("PASS")}
                     disabled={!canPass}
-                    title={!overrideReasonOk ? "Add a specific override reason (min 20 chars) to enable" : "High-risk: override this finding to No-issue"}
+                    title="Pass this finding (No issue)"
                     className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-[11px] font-medium transition-colors disabled:opacity-40 ${
                       decision === "PASS"
                         ? "bg-green-600 text-white font-semibold"
                         : "bg-transparent hover:bg-green-950/30 hover:text-green-200 text-slate-500 border border-white/10"
                     }`}
                   >
-                    {saving ? spinnerSvg : <Check size={12} />} Override — no issue
+                    {saving ? spinnerSvg : <Check size={12} />} No issue
                   </button>
                 </div>
               )}
@@ -397,7 +382,7 @@ export const FindingRow = memo(function FindingRow({
                 onChange={e => onComment(e.target.value)}
                 placeholder={
                   isFail
-                    ? "Why is this fine? Be specific (min 20 characters). Leave blank to keep the issue."
+                    ? "Why is this fine? (optional) Leave blank to keep the issue."
                     : "Add a comment (optional)…"
                 }
                 rows={2}
@@ -405,7 +390,7 @@ export const FindingRow = memo(function FindingRow({
               />
               {decision && (
                 <div className="text-[10px] text-slate-600">
-                  {isFail ? "Decision stored — Confirm issue or Override — no issue." : "Comments are stored when you press No issue or Issue found."}
+                  {isFail ? "Decision stored — Confirm issue or No issue." : "Comments are stored when you press No issue or Issue found."}
                 </div>
               )}
             </div>

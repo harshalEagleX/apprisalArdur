@@ -645,9 +645,8 @@ public class QCApiController {
      * for a flat row-per-finding sheet. This is the artifact an admin downloads and
      * sends to the AMC manually (there is no email path). Per finding it emits:
      * <ul>
-     *   <li>the effective status, reflecting any admin override — an approved
-     *       override surfaces as WAIVED with the approver and reason, not the
-     *       original FAIL;</li>
+     *   <li>the effective status — the reviewer's PASS/FAIL decision where one was
+     *       made, otherwise the engine status;</li>
      *   <li>a revision message with a generic fallback, so a finding is never
      *       dropped just because its template produced no text;</li>
      *   <li>the reviewer's final decision where one was made.</li>
@@ -670,16 +669,14 @@ public class QCApiController {
         List<QCResult> results = qcResultRepository.findActiveByBatchIdWithBatchFile(batchId);
 
         List<Map<String, Object>> documents = new java.util.ArrayList<>();
-        int totalFindings = 0, totalFail = 0, totalWaived = 0;
+        int totalFindings = 0, totalFail = 0;
         for (QCResult r : results) {
             List<Map<String, Object>> findings = new java.util.ArrayList<>();
             for (QCRuleResult rr : qcRuleResultRepository.findByQcResultId(r.getId())) {
                 Map<String, Object> f = findingExport(rr);
                 findings.add(f);
                 totalFindings++;
-                if (Boolean.TRUE.equals(f.get("waived"))) {
-                    totalWaived++;
-                } else if ("FAIL".equals(f.get("finalStatus"))) {
+                if ("FAIL".equals(f.get("finalStatus"))) {
                     totalFail++;
                 }
             }
@@ -711,19 +708,15 @@ public class QCApiController {
         body.put("summary", Map.of(
                 "documents", documents.size(),
                 "findings", totalFindings,
-                "fail", totalFail,
-                "waived", totalWaived));
+                "fail", totalFail));
         body.put("documents", documents);
         return ResponseEntity.ok(body);
     }
 
-    /** Build the per-finding export map, reflecting overrides and message fallback. */
+    /** Build the per-finding export map: reviewer decision (if any) over engine status. */
     private Map<String, Object> findingExport(QCRuleResult rr) {
-        boolean waived = rr.getOverrideApprovedBy() != null;
         String finalStatus;
-        if (waived) {
-            finalStatus = "WAIVED";
-        } else if (rr.getReviewerVerified() != null) {
+        if (rr.getReviewerVerified() != null) {
             finalStatus = rr.getReviewerVerified() ? "PASS" : "FAIL";
         } else {
             finalStatus = outStatus(rr.getStatus());
@@ -739,16 +732,10 @@ public class QCApiController {
         f.put("severity", rr.getSeverity());
         f.put("engineStatus", outStatus(rr.getStatus()));
         f.put("finalStatus", finalStatus);
-        f.put("waived", waived);
         f.put("active", "FAIL".equals(finalStatus)); // a finding the AMC must address
         f.put("revisionMessage", revision);
         f.put("appraisalValue", cleanValue(rr.getAppraisalValue()));
         f.put("engagementValue", cleanValue(rr.getEngagementValue()));
-        if (waived) {
-            f.put("overrideBy", userName(rr.getOverrideApprovedBy()));
-            f.put("overrideAt", rr.getOverrideApprovedAt() != null ? rr.getOverrideApprovedAt().toString() : null);
-            f.put("overrideReason", emptyToNull(rr.getReviewerComment()));
-        }
         return f;
     }
 
@@ -756,8 +743,8 @@ public class QCApiController {
         String client = batch.getClient() != null ? batch.getClient().getName() : "";
         StringBuilder sb = new StringBuilder();
         sb.append("parentBatchId,client,qcResultId,filename,ruleId,ruleName,section,targetField,")
-          .append("severity,engineStatus,finalStatus,waived,active,revisionMessage,")
-          .append("appraisalValue,engagementValue,overrideBy,overrideReason\n");
+          .append("severity,engineStatus,finalStatus,active,revisionMessage,")
+          .append("appraisalValue,engagementValue\n");
         for (Map<String, Object> doc : documents) {
             Object qcResultId = doc.get("qcResultId");
             Object filename = doc.get("filename");
@@ -775,13 +762,10 @@ public class QCApiController {
                   .append(csv(f.get("severity"))).append(',')
                   .append(csv(f.get("engineStatus"))).append(',')
                   .append(csv(f.get("finalStatus"))).append(',')
-                  .append(csv(f.get("waived"))).append(',')
                   .append(csv(f.get("active"))).append(',')
                   .append(csv(f.get("revisionMessage"))).append(',')
                   .append(csv(f.get("appraisalValue"))).append(',')
-                  .append(csv(f.get("engagementValue"))).append(',')
-                  .append(csv(f.get("overrideBy"))).append(',')
-                  .append(csv(f.get("overrideReason"))).append('\n');
+                  .append(csv(f.get("engagementValue"))).append('\n');
             }
         }
         return sb.toString();
