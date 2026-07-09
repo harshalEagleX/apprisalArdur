@@ -21,6 +21,7 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
+import re
 from time import perf_counter
 from typing import List, Optional
 
@@ -155,6 +156,7 @@ def run_qc(ctx: QCContext, only_phase: Optional[int] = None,
     _dedup_findings(report)
     _coerce_hold_to_fail(report)
     _classify_findings(report)
+    _guard_absence_claims(report)
     return report
 
 
@@ -195,6 +197,121 @@ def _classify_findings(report: QCReport) -> None:
             r.finding_type = "hard_fail"
         else:
             r.finding_type = "manual_verify"
+
+
+# ---------------------------------------------------------------------------
+# Absence-claim safety guard (QC-audit hardening)
+# ---------------------------------------------------------------------------
+# Phrases a rule uses to assert that required content is MISSING from the report.
+# Per the QC audit: an "X is absent" finding is structurally riskier than an
+# "X is present but wrong" finding, because absence-detection is only as reliable
+# as extraction's search coverage. A field the extractor read wrong, truncated, or
+# missed makes the rule assert an omission that is not real. This guard never lets
+# such a finding stand as a hard FAIL and splits out the two failure modes the
+# audit identified so the reviewer queue can see them for what they are.
+_ABSENCE_MARKERS = (
+    "not stated", "not found", "not present", "not identified", "not provided",
+    "not included", "not disclosed", "no mention", "was not found",
+    "were not found", "could not be found", "could not be located",
+    "does not appear", "is missing", "are missing", "missing an opinion",
+    "wasn't found", "no reference to", "not addressed anywhere",
+)
+
+# The other common absence shape is "No <thing> was found / present / stated" —
+# a leading negation the flat substring markers above can't catch. These patterns
+# require an explicit absence verb (found/present/stated/…) so soft phrasings like
+# "no adjustment was applied" or "no adjustment is needed" don't false-trigger.
+_ABSENCE_PATTERNS = (
+    re.compile(r"\bno\b[^.]{0,50}?\b(?:found|present|stated|provided|disclosed|"
+               r"mentioned|located|identified)\b", re.I),
+    re.compile(r"\bcould not (?:be )?(?:found|located|identified)\b", re.I),
+)
+
+# An evidence value must be at least a short phrase to count as "the content is
+# actually present". Short codes (Q4, AsIs, Y, True) and lone tokens don't rebut
+# an absence claim, so they must not trip the self-contradiction branch.
+_MIN_REBUTTAL_LEN = 12
+
+# Below this read confidence, an absence claim's supporting field is "thin" — the
+# value was probably mis-read or missed, so the asserted omission is suspect.
+# Mirrors DEFAULT_STRUCTURED_CONF; a rule that already downgrades on low confidence
+# will have emitted VERIFY, this only re-tags it as an extraction gap.
+_ABSENCE_CONF_FLOOR = 0.75
+
+
+def _looks_like_content(value: Optional[str]) -> bool:
+    """True when an evidence value is a real phrase (so it rebuts an 'is absent'
+    claim), not a short code, a lone token, or an extraction-failure sentinel."""
+    v = (value or "").strip()
+    if len(v) < _MIN_REBUTTAL_LEN or " " not in v:
+        return False
+    low = v.lower()
+    return not any(k in low for k in _EXTRACTION_FAIL_MARKERS)
+
+
+def _guard_absence_claims(report: QCReport) -> None:
+    """Reclassify unsafe 'required content is missing' findings (runs last).
+
+    Two failure modes from the QC audit, both fixed here without touching any
+    individual rule (the fix lives once, at the engine seam — P-3):
+
+      1. Self-contradiction — the finding's own cited evidence contains the very
+         content it declares missing (e.g. C-4 says concessions are "not stated"
+         while quoting the concession text). A hard FAIL is downgraded to VERIFY
+         and tagged `rule_self_conflict` so the rule bug is visible, not silent.
+
+      2. Thin evidence — the absence claim rests only on a low-confidence /
+         garbled read (e.g. an exposure-time field that captured boilerplate).
+         That is an extraction gap, not an appraiser omission: downgrade any FAIL
+         to VERIFY and tag `extraction_failed` so it routes to re-extraction, not
+         the reviewer's defect queue.
+
+    HOLD is already collapsed to FAIL by the time this runs, so only FAIL/VERIFY
+    are considered. Confidence is lowered so these never rank as high-certainty
+    defects. Never upgrades severity; only downgrades and re-tags.
+    """
+    reclassified = 0
+    for r in report.results:
+        if r.status not in (RuleStatus.FAIL, RuleStatus.VERIFY):
+            continue
+        raw_msg = r.message or ""
+        msg = raw_msg.lower()
+        if not (any(m in msg for m in _ABSENCE_MARKERS)
+                or any(p.search(raw_msg) for p in _ABSENCE_PATTERNS)):
+            continue
+        # Self-contradiction requires a *confident* contradicting read: the rule had
+        # a solid value for the content and still declared it missing (a rule bug).
+        # A low-confidence content-looking read is handled as an extraction gap below.
+        rebuttal = next((e for e in r.evidence
+                         if _looks_like_content(e.value)
+                         and (e.confidence or 0.0) >= _ABSENCE_CONF_FLOOR), None)
+        if rebuttal is not None:
+            if r.status == RuleStatus.FAIL:
+                r.status = RuleStatus.VERIFY
+            r.confidence = min(r.confidence or 0.5, 0.4)
+            note = (f"[auto-guard] This finding reports content as missing but cites "
+                    f"evidence that appears present ({str(rebuttal.value)[:60]!r}). "
+                    f"Routed to manual review — verify the rule is not misreading an "
+                    f"extracted field.")
+            r.reasoning = (r.reasoning + " " if r.reasoning else "") + note
+            r.finding_type = "rule_self_conflict"
+            reclassified += 1
+            continue
+        supporting = [e for e in r.evidence if (e.value or "").strip()]
+        if supporting and max((e.confidence or 0.0) for e in supporting) < _ABSENCE_CONF_FLOOR:
+            if r.status == RuleStatus.FAIL:
+                r.status = RuleStatus.VERIFY
+            r.confidence = min(r.confidence or 0.5, 0.5)
+            note = ("[auto-guard] The field(s) this check relies on were read with low "
+                    "confidence; likely an extraction gap rather than a genuine omission "
+                    "— manual review required.")
+            r.reasoning = (r.reasoning + " " if r.reasoning else "") + note
+            r.finding_type = "extraction_failed"
+            reclassified += 1
+    if reclassified:
+        logger.info(
+            "QC absence-claim guard: reclassified %d finding(s) "
+            "(self-conflict or thin-evidence absence claims)", reclassified)
 
 
 def _coerce_hold_to_fail(report: QCReport) -> None:

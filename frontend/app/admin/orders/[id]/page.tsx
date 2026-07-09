@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, ChevronRight, ClipboardList, FileText, Package,
-  RefreshCw, History, Play, UserPlus, Trash2, Check, Minus, AlertTriangle, Square,
+  RefreshCw, History, Play, UserPlus, Trash2, Check, Minus, AlertTriangle, Square, Clock,
 } from "lucide-react";
 import {
   getOrderById, getAllUsers, processOrderQC, assignOrderReviewer, deleteOrder, getReviewerLoad,
@@ -15,6 +15,22 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { Skeleton, TableSkeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { toast } from "@/lib/toast";
+
+function formatDuration(seconds?: number | null): string | null {
+  if (seconds == null || seconds < 0) return null;
+  if (seconds < 60) return `${seconds}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+}
 
 function fileTypeLabel(t: string): string {
   switch (t) {
@@ -284,6 +300,36 @@ export default function OrderDetailPage() {
               {order.activeQcResult.passedCount} pass · {order.activeQcResult.failedCount} fail · {order.activeQcResult.verifyCount} review ·
               {" "}{order.activeQcResult.totalRules} rules
             </span>
+          </div>
+
+          {/* Reviewer time on this order — start, stop, and total, from the first
+              review-open to when the sign-off/rejection output was generated. */}
+          <div className="mt-3 border-t border-white/5 pt-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <Clock size={12} /> Reviewer time
+            </div>
+            {order.activeQcResult.reviewStartedAt ? (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-4">
+                <div>
+                  <div className="text-slate-600">Reviewer</div>
+                  <div className="text-slate-300">{order.activeQcResult.reviewedBy ?? order.assignedReviewer?.fullName ?? order.assignedReviewer?.username ?? "—"}</div>
+                </div>
+                <div>
+                  <div className="text-slate-600">Started</div>
+                  <div className="tabular-nums text-slate-300">{formatDateTime(order.activeQcResult.reviewStartedAt)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-600">Finished</div>
+                  <div className="tabular-nums text-slate-300">{order.activeQcResult.reviewedAt ? formatDateTime(order.activeQcResult.reviewedAt) : "In progress"}</div>
+                </div>
+                <div>
+                  <div className="text-slate-600">Total time</div>
+                  <div className="tabular-nums font-semibold text-slate-200">{formatDuration(order.activeQcResult.reviewDurationSeconds) ?? "—"}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-[12px] text-slate-500">Not started yet — the reviewer hasn&apos;t opened this order.</div>
+            )}
           </div>
         </div>
       )}

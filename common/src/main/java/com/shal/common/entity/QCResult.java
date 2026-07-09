@@ -153,6 +153,13 @@ public class QCResult {
     @Column(name = "review_started_at")
     private LocalDateTime reviewStartedAt;
 
+    // Set once, the first time a reviewer opens this order for review, and never
+    // reset on re-open (unlike reviewStartedAt, which resets per session). Paired
+    // with reviewedAt, this gives the admin the reviewer's start→finish time on
+    // the order, up to when the system generated the sign-off/rejection output.
+    @Column(name = "review_first_started_at")
+    private LocalDateTime reviewFirstStartedAt;
+
     @Column(name = "review_last_active_at")
     private LocalDateTime reviewLastActiveAt;
 
@@ -393,6 +400,14 @@ public class QCResult {
 
     public void setReviewStartedAt(LocalDateTime reviewStartedAt) {
         this.reviewStartedAt = reviewStartedAt;
+    }
+
+    public LocalDateTime getReviewFirstStartedAt() {
+        return reviewFirstStartedAt;
+    }
+
+    public void setReviewFirstStartedAt(LocalDateTime reviewFirstStartedAt) {
+        this.reviewFirstStartedAt = reviewFirstStartedAt;
     }
 
     public LocalDateTime getReviewLastActiveAt() {

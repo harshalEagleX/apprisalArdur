@@ -121,6 +121,43 @@ def _label_of(line: str) -> Optional[str]:
     return re.sub(r"\s+", " ", m.group(1).strip().lower())
 
 
+# Parties whose address on the order form is NOT the subject property — the
+# AMC/vendor, the appraiser, the lender/client, the borrower. A generic
+# "Address:"/"Property:" label that belongs to one of these must never fill the
+# subject property block. AMC forms routinely wrap a long label across two lines
+# ("Vendor Mailing" \n "Address:"), so the disqualifying word sits on the line
+# ABOVE the "Address:" label — that is why we look back one line.
+_NON_SUBJECT_OWNER_RE = re.compile(
+    r"\b(vendor|appraiser|client|lender|mortgagee|company|mailing|"
+    r"borrower|applicant|contact|amc|escrow|title|billing|remit)\b",
+    re.I,
+)
+
+
+def _prev_nonblank(lines: List[str], idx: int) -> str:
+    """The nearest non-blank line above idx (for detecting wrapped labels)."""
+    j = idx - 1
+    while j >= 0:
+        if lines[j].strip():
+            return lines[j].strip()
+        j -= 1
+    return ""
+
+
+def _is_non_subject_address(lines: List[str], idx: int) -> bool:
+    """True when the 'Address:'/'Property:' label at idx belongs to a non-subject
+    party (vendor/client/appraiser/…) rather than the subject property — either
+    because that party word is on the label line itself or on the wrapped line
+    directly above it (e.g. 'Vendor Mailing' \\n 'Address:')."""
+    here = lines[idx]
+    if _NON_SUBJECT_OWNER_RE.search(here):
+        return True
+    prev = _prev_nonblank(lines, idx)
+    # Only a bare continuation prefix (no colon of its own) counts as part of this
+    # label; a preceding 'Something: value' line is the previous field, not a prefix.
+    return bool(prev) and ":" not in prev and _NON_SUBJECT_OWNER_RE.search(prev) is not None
+
+
 def _line_is_label(line: str) -> Optional[str]:
     """Return the label only if it is one we extract (used for canonical mapping)."""
     lbl = _label_of(line)
@@ -262,6 +299,13 @@ def extract_engagement_fields(pdf_path) -> Dict[str, str]:
         # which canonical field does this label map to?
         canon = next((c for c, variants in _LABELS.items() if lbl in variants), None)
         if canon is None:
+            i += 1
+            continue
+        # Guard: a generic address/property label that actually belongs to the
+        # vendor/client/appraiser block must not fill the SUBJECT property block.
+        # (e.g. "Vendor Mailing" \n "Address: 12950 Race Track Rd, Ste 212, Tampa"
+        #  was leaking "Tampa" into the subject city and false-failing S-1.)
+        if canon == "_property_block" and _is_non_subject_address(lines, i):
             i += 1
             continue
         block, end = _collect_block(lines, i)

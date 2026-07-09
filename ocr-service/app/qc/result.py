@@ -72,6 +72,9 @@ class RuleResult:
     #   manual_verify     — needs a human judgment call on real extracted data
     #   extraction_failed — the field couldn't be read; a data gap, not an appraiser
     #                       defect — route to a re-extract/QA queue, not the reviewer
+    #   rule_self_conflict— the finding declares content missing while its own
+    #                       evidence shows that content present; a rule/extraction
+    #                       misread, flagged by the engine's absence-claim guard
     # None for PASS / NOT_APPLICABLE / SKIPPED. This splits the single "needs
     # attention" bucket without changing the 5-state RuleStatus (DB/UI stay stable).
     finding_type: Optional[str] = None

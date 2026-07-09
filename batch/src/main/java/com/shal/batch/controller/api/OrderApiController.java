@@ -482,7 +482,7 @@ public class OrderApiController {
                 .filter(BatchFile::isActive)
                 .filter(f -> f.getFileType() == com.shal.common.entity.FileType.APPRAISAL)
                 .findFirst()
-                .flatMap(appraisal -> qcResultRepository.findActiveByBatchFileId(appraisal.getId()))
+                .flatMap(appraisal -> qcResultRepository.findActiveWithReviewerByBatchFileId(appraisal.getId()))
                 .ifPresent(qc -> m.put("activeQcResult", toQcSummary(qc)));
 
         // Batch-membership rollup: every batch (upload event) that touched this order.
@@ -513,6 +513,24 @@ public class OrderApiController {
         qm.put("failedCount", qc.getFailedCount());
         qm.put("verifyCount", qc.getVerifyCount());
         qm.put("processedAt", qc.getCreatedAt() != null ? qc.getCreatedAt().toString() : null);
+
+        // Reviewer time on this order: from the first review-open to when the
+        // review was finalized (sign-off / rejection output generated). Simple
+        // per-order start / stop / total — no averaging.
+        java.time.LocalDateTime reviewStart = qc.getReviewFirstStartedAt();
+        java.time.LocalDateTime reviewEnd = qc.getReviewedAt();
+        qm.put("reviewStartedAt", reviewStart != null ? reviewStart.toString() : null);
+        qm.put("reviewedAt", reviewEnd != null ? reviewEnd.toString() : null);
+        qm.put("reviewDurationSeconds",
+                (reviewStart != null && reviewEnd != null && !reviewEnd.isBefore(reviewStart))
+                        ? java.time.Duration.between(reviewStart, reviewEnd).getSeconds() : null);
+        if (qc.getReviewedBy() != null) {
+            User rb = qc.getReviewedBy();
+            qm.put("reviewedBy", rb.getFullName() != null && !rb.getFullName().isBlank()
+                    ? rb.getFullName() : rb.getUsername());
+        } else {
+            qm.put("reviewedBy", null);
+        }
         return qm;
     }
 }

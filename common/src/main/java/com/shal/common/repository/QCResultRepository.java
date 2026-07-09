@@ -312,6 +312,21 @@ public interface QCResultRepository extends JpaRepository<QCResult, Long> {
     Optional<QCResult> findActiveByBatchFileId(@Param("batchFileId") Long batchFileId);
 
     /**
+     * Same as {@link #findActiveByBatchFileId} but eagerly initializes the
+     * {@code reviewedBy} reviewer so callers can read the reviewer's name after
+     * the session closes (e.g. the admin Order-detail DTO, which reports the
+     * reviewer's start/finish/total time on the order). Without the fetch join
+     * the lazy User proxy throws LazyInitializationException during DTO assembly.
+     */
+    @Query("""
+        SELECT qr FROM QCResult qr
+        LEFT JOIN FETCH qr.reviewedBy
+        WHERE qr.batchFile.id = :batchFileId
+          AND qr.supersededAt IS NULL
+        """)
+    Optional<QCResult> findActiveWithReviewerByBatchFileId(@Param("batchFileId") Long batchFileId);
+
+    /**
      * Bulk-load the single active (non-superseded) QC result per file for many batches.
      * JOIN FETCH batchFile so callers can access batchFile.id without LAZY loads.
      * Replaces the N per-batch findByBatchId() calls in AuditGraphController, reducing

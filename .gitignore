@@ -239,3 +239,7 @@ Understand-Anything-main/
 
 loadtest/
 uploads/
+
+# Real appraisal sample corpus — contains borrower PII (names, addresses, loan #s).
+# Keep locally only; never commit/push to the remote.
+ocr-service/exttestfile/
