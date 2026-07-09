@@ -321,13 +321,36 @@ def s6_census(ctx):
                           r"\d{3,4}\.\d{2}", "S-6-census", label="Census Tract")
 
 
+# Real map-grid designators are short alphanumeric codes ("31-4", "470-J7",
+# "34B7") — the book/grid letter component is one or two characters. A longer
+# alphabetic run mixed in with the digits (e.g. "822 B-1 Aero") is not a grid
+# code; it reads like text that bled in from a neighboring field, so it should
+# be confirmed by a reviewer rather than auto-passed on the mere presence of a
+# digit somewhere in the string.
+_MAPREF_LONG_WORD = re.compile(r"[A-Za-z]{4,}")
+
+
 @rule(id="S-6b", num="7", section="subject", phase=1, name="Map reference numeric")
 def s6_mapref(ctx):
-    # numeric with common separators ("31-4", "470-J7", a bare number); letters
-    # mixed with digits are typical of map grids, so only a fully non-numeric
-    # value fails the UAD numeric expectation
-    return H.format_regex(ctx, "S-6b", "7", "subject", "map_reference",
-                          r"\d", "S-6-mapref", label="Map Reference")
+    val = ctx.appraisal.value("map_reference")
+    ev = [ctx.appraisal.evidence("map_reference")]
+    if not val:
+        return _res("S-6b", "7", RuleStatus.VERIFY,
+                    message="Map Reference could not be extracted from the document; manual review required.",
+                    fields=["map_reference"], evidence=ev, confidence=0.5)
+    s = str(val).strip()
+    if not re.search(r"\d", s):
+        status = H._gate(ctx, "appraisal", "map_reference", RuleStatus.FAIL, RuleStatus.FAIL)
+        msg = "" if status == RuleStatus.PASS else qc_config.template(
+            "S-6-mapref", field="Map Reference", value=s)
+        return _res("S-6b", "7", status, message=msg, fields=["map_reference"],
+                    evidence=ev, template_id=None if status == RuleStatus.PASS else "S-6-mapref")
+    if _MAPREF_LONG_WORD.search(s):
+        return _res("S-6b", "7", RuleStatus.VERIFY,
+                    message=f"Map Reference '{s}' mixes digits with a longer word that doesn't "
+                            "look like a map-grid code; please confirm this is the correct value.",
+                    fields=["map_reference"], evidence=ev, confidence=0.6)
+    return _res("S-6b", "7", RuleStatus.PASS, fields=["map_reference"], evidence=ev)
 
 
 # ---- S-7 Occupancy status + conditional completeness ------------------------

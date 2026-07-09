@@ -11,7 +11,6 @@ from app.qc.rules import (  # noqa: F401
     improvements,
     neighborhood,
     order_rules,
-    photos,
     reconciliation,
     sales_comparison,
     signature,

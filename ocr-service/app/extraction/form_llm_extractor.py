@@ -116,9 +116,12 @@ _NEIGHBORHOOD_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
 # Narrative fields the deterministic layer reads confidently-wrong (it returns a
 # printed label, not blank), so a blank/low-confidence trigger never re-fills
 # them. These are always sent to the LLM; the longer/more-complete answer wins.
+# final_reconciliation_comment joins this set because the deterministic reader
+# sometimes captures the fixed URAR boilerplate sentence around the reconciliation
+# checkbox instead of the appraiser's own weighting narrative (R-1b false FAIL).
 ALWAYS_REFILL = frozenset({
     "neighborhood_boundaries", "neighborhood_description",
-    "market_conditions_commentary",
+    "market_conditions_commentary", "final_reconciliation_comment",
 })
 
 _RECON_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
@@ -366,6 +369,16 @@ _LANDUSE_LABEL = re.compile(
     r"(commercial|one[\- ]?unit|multi[\- ]?family|2[\- ]?4 ?unit|other|vacant)\s*%?\s*$",
     re.I)
 
+# A real legal description names a lot/block/tract/unit/subdivision/section or
+# carries a plat/parcel-style token with digits. Verbatim page-substring
+# validation alone lets short common words through (e.g. "aware", which trivially
+# appears elsewhere on almost any page) — it is on the page, just not the legal
+# description. Reject anything that doesn't look like an actual legal description.
+_LEGAL_DESC_MARKER = re.compile(
+    r"\b(lot|block|tract|unit|section|township|range|subdivision|sub\.?div|"
+    r"plat|phase|addition|condominium|parcel|pb\b|page\b)\b|\d",
+    re.I)
+
 
 def _field_sane(field: str, value: str) -> bool:
     """Field-specific guard beyond verbatim validation: rejects a value the LLM
@@ -373,6 +386,9 @@ def _field_sane(field: str, value: str) -> bool:
     neighborhood boundaries, or an age value returned as a price field)."""
     if field == "neighborhood_boundaries":
         if "%" in value or _LANDUSE_LABEL.match(value):
+            return False
+    if field == "legal_description":
+        if len(value.split()) < 2 or not _LEGAL_DESC_MARKER.search(value):
             return False
     # N-3 price/age disambiguation.
     # Prices are in $(000)s — realistic range 10..5000 (= $10K..$5M).

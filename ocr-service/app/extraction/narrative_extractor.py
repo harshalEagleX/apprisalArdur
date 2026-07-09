@@ -134,6 +134,63 @@ def resolve_addendum_reference(
     return content, f"resolved from addendum page {best_page + 1}"
 
 
+# Pages carrying the USPAP scope-of-work / intended-use / intended-user /
+# certification language, plus the improvements section's smoke/CO detector
+# statement — this content only reaches the QC rules that read it (ST-SCOPE,
+# ST-INTENDED, I-SMCO, FHA-3, FHA-4) via `addendum_text`, which the deterministic
+# form readers never populate for a PDF-only report (only the MISMO XML path
+# sets it, from AppraisalAddendumText). Scanning for these markers directly is a
+# Tier-1 deterministic read — no LLM needed for text this well-anchored.
+_CERT_PAGE_MARKERS = re.compile(
+    r"scope\s+of\s+(?:the\s+|this\s+)?(?:work|appraisal|assignment|analysis)|"
+    r"intended\s+use|intended\s+user|"
+    r"smoke\s*det(?:ector)?|carbon\s*monoxide|co\s*det(?:ector)?|"
+    r"hud[/-]fha|minimum\s+property\s+(?:standards|requirements)|"
+    r"exposure\s+time",
+    re.I,
+)
+
+
+def extract_certification_addendum(pdf_path) -> Dict[str, str]:
+    """Return {addendum_text} concatenating prose from every page that carries
+    scope-of-work / intended-use-or-user / smoke-CO-detector / HUD-FHA
+    certification language. {} when no such page is found (P-6)."""
+    try:
+        import fitz  # PyMuPDF
+    except Exception as exc:
+        logger.warning("Certification-addendum extractor needs PyMuPDF: %s", exc)
+        return {}
+
+    name = getattr(pdf_path, "name", str(pdf_path))
+    try:
+        doc = fitz.open(str(Path(pdf_path)))
+    except Exception as exc:
+        logger.warning("Certification-addendum extractor could not open %s: %s", name, exc)
+        return {}
+    try:
+        parts = []
+        for i in range(doc.page_count):
+            page_text = doc[i].get_text() or ""
+            if not _CERT_PAGE_MARKERS.search(page_text):
+                continue
+            blocks = sorted(doc[i].get_text("blocks"), key=lambda b: (round(b[1]), b[0]))
+            prose = [b[4].replace("\n", " ").strip() for b in blocks if _is_prose(b[4])]
+            if prose:
+                parts.append(re.sub(r"\s{2,}", " ", " ".join(prose)).strip())
+    except Exception as exc:
+        logger.warning("Certification-addendum read failed for %s: %s", name, exc)
+        return {}
+    finally:
+        doc.close()
+
+    text = "\n\n".join(p for p in parts if p).strip()
+    if not text:
+        return {}
+    logger.info("Certification addendum text for %s: %d chars across %d page(s)",
+                name, len(text), len(parts))
+    return {"addendum_text": text}
+
+
 def extract_sca_narrative(pdf_path) -> Dict[str, str]:
     """Return {sales_comparison_summary, _narrative_page} or {} (P-6)."""
     try:

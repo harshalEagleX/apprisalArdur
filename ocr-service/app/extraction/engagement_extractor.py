@@ -327,11 +327,21 @@ def extract_engagement_fields(pdf_path) -> Dict[str, str]:
                 addr = parse_address(value)
                 found.update({k: v for k, v in addr.items() if k not in found})
             elif canon == "lender_name":
-                # first line = name; any extra lines = address (Format A client block)
+                # Format A client block: name, then address. Company names routinely
+                # WRAP across lines ("...DBA Lendz" / "Financial" on the next line) —
+                # treating every line after the first as the address truncated the
+                # name and produced a garbage "corrected" address (e.g. the single
+                # word "Financial") for S-10a/S-10b. The address is identified by
+                # its first line looking like a street start (leads with a number);
+                # every line before that is part of the (possibly wrapped) name.
+                addr_start = next(
+                    (k for k, ln in enumerate(block) if k > 0 and re.match(r"^\d", ln)),
+                    len(block),
+                )
                 if "lender_name" not in found:
-                    found["lender_name"] = block[0].strip()
-                if len(block) > 1 and "lender_address" not in found:
-                    found["lender_address"] = " ".join(block[1:]).strip()
+                    found["lender_name"] = " ".join(block[:addr_start]).strip()
+                if addr_start < len(block) and "lender_address" not in found:
+                    found["lender_address"] = " ".join(block[addr_start:]).strip()
             elif canon not in found:
                 found[canon] = value
         i = end + 1

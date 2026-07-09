@@ -110,7 +110,6 @@ class OrderMetadata:
         cls,
         engagement_fields: dict,          # raw dict from extract_engagement_fields()
         xml_result_set,                   # ExtractionResultSet or None
-        contract_fields: Optional[dict] = None,
         engagement_raw_text: str = "",
     ) -> "OrderMetadata":
         """
@@ -118,7 +117,6 @@ class OrderMetadata:
 
         engagement_fields: {canonical: value} from engagement_extractor.
         xml_result_set: ExtractionResultSet from xml_extractor (or None).
-        contract_fields: optional raw dict from contract_extractor (buyer names).
         engagement_raw_text: full text of engagement letter for hash + overlay.
         """
         order = cls()
@@ -145,7 +143,7 @@ class OrderMetadata:
                 return None
 
         def _resolve(field_name: str, eng_key: str, xml_key: Optional[str] = None,
-                     normalizer=None) -> Optional[str]:
+                     normalizer=None, name_tokens: bool = False) -> Optional[str]:
             """Take engagement primary; XML fallback; record conflict if both present."""
             ev = _eng(eng_key)
             xv = _xml(xml_key or eng_key)
@@ -155,7 +153,7 @@ class OrderMetadata:
 
             if ev and xv:
                 # Both present — check for conflict
-                if not _values_agree(ev, xv):
+                if not _values_agree(ev, xv, name_tokens=name_tokens):
                     order.conflicts.append(OrderConflict(
                         field_name=field_name,
                         engagement_value=ev,
@@ -172,8 +170,8 @@ class OrderMetadata:
             return None
 
         # ── Identity ────────────────────────────────────────────────────────
-        order.borrower_name       = _resolve("borrower_name", "borrower_name")
-        order.co_borrower_name    = _resolve("co_borrower_name", "co_borrower_name")
+        order.borrower_name       = _resolve("borrower_name", "borrower_name", name_tokens=True)
+        order.co_borrower_name    = _resolve("co_borrower_name", "co_borrower_name", name_tokens=True)
         order.property_address    = _resolve("property_address", "property_address")
         order.city                = _resolve("city", "city")
         order.state               = _resolve("state", "state", normalizer=lambda v: v.upper()[:2] if v else v)
@@ -206,12 +204,6 @@ class OrderMetadata:
         # ── Dates ───────────────────────────────────────────────────────────
         order.engagement_date = _parse_eng_date(engagement_raw_text)
 
-        # ── Contract cross-ref (buyer names) ────────────────────────────────
-        if contract_fields and order.borrower_name is None:
-            bn = contract_fields.get("buyer_names") or contract_fields.get("borrower_name")
-            if bn:
-                order.borrower_name = str(bn).strip()
-
         if order.conflicts:
             logger.info(
                 "OrderMetadata: %d cross-document conflict(s) detected: %s",
@@ -229,7 +221,7 @@ class OrderMetadata:
 
 # ── Private helpers ──────────────────────────────────────────────────────────
 
-def _values_agree(a: str, b: str) -> bool:
+def _values_agree(a: str, b: str, *, name_tokens: bool = False) -> bool:
     """Fuzzy compare — strips punctuation, lowercase, first 5 zip chars."""
     def _norm(v: str) -> str:
         v = v.lower().strip()
@@ -237,7 +229,18 @@ def _values_agree(a: str, b: str) -> bool:
         return v
     na, nb = _norm(a), _norm(b)
     # substring match covers "Garden Grove" vs "Garden Grove CA 92845"
-    return na == nb or na in nb or nb in na
+    if na == nb or na in nb or nb in na:
+        return True
+    if name_tokens:
+        # Personal names: "perry wickerd" vs "wickerd perry" (order form vs
+        # report formatting) or "john jenkins" vs "john brandon jenkins" (a
+        # middle name added) are the same person, not a genuine conflict — the
+        # token substring check above only catches contiguous reorderings, not
+        # a reordered OR superset token set.
+        ta, tb = set(na.split()), set(nb.split())
+        if ta and tb and (ta == tb or ta <= tb or tb <= ta):
+            return True
+    return False
 
 
 def _normalize_assignment(v: Optional[str]) -> Optional[str]:
@@ -264,7 +267,7 @@ def _normalize_loan_type(v: Optional[str]) -> Optional[str]:
     return v.strip().lower()
 
 
-_FORM_RE = re.compile(r"\b(1004mc|1004d|1004|1073|1025|1007|216|2055)\b", re.I)
+_FORM_RE = re.compile(r"\b(1004mc|1004d|1004c|1004|1073|1025|1007|216|2055)\b", re.I)
 
 
 def _normalize_form_type(v: Optional[str]) -> Optional[str]:

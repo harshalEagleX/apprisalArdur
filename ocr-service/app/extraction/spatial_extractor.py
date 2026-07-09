@@ -232,6 +232,9 @@ class SpatialExtractor:
             hit = self._spatial_validated(fd, page_maps, document_type, r"^([A-Z]{2})$", 1,
                                           valid=_US_STATES)
             return hit or self._data_pattern_state(fd, full_map, document_type)
+        if name == "fha_case_number":
+            hit = self._spatial_validated(fd, page_maps, document_type, r"^(\d{3}-\d{7})$", 1)
+            return hit or self._data_pattern_fha_case(fd, full_map, document_type)
         if name == "appraised_value":
             return self._structural_appraised_value(fd, page_maps, document_type)
         if name in ("effective_date", "date_of_signature"):
@@ -532,6 +535,23 @@ class SpatialExtractor:
         if m:
             return self._found(fd, dt, m.group(1).upper(), m.group(0), ExtractionMethod.DATA_PATTERN_ONLY, 0.78, 1)
         return self._not_found(fd, dt)
+
+    _FHA_CASE_RE = re.compile(r"\b(\d{3}-\d{7})\b")
+
+    def _data_pattern_fha_case(self, fd, full_map, dt):
+        """FHA case numbers are printed in the strict NNN-NNNNNNN format in the
+        running header/footer of every page of an FHA appraisal — label-proximity
+        matching can miss it there, but a full-document regex scan of this
+        distinctive, repeated format is reliable. Takes the modal (most frequent)
+        match so one stray digit-dash pattern elsewhere can't win."""
+        all_text = full_map.all_words_as_text()
+        matches = self._FHA_CASE_RE.findall(all_text)
+        if not matches:
+            return self._not_found(fd, dt)
+        from collections import Counter
+        val, count = Counter(matches).most_common(1)[0]
+        conf = 0.85 if count >= 2 else 0.7
+        return self._found(fd, dt, val, val, ExtractionMethod.DATA_PATTERN_ONLY, conf, 1)
 
     # VAL-1 Tier-1: positive reconciliation-label anchors. The final opinion of
     # value is the amount printed against one of these labels — never the contract

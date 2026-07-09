@@ -181,8 +181,11 @@ def sig3_license_state(ctx: QCContext):
       applies_when=lambda ctx: ctx.has_engagement and bool(ctx.engagement.value("appraiser_name")),
       name="Appraiser name matches engagement")
 def sig2_appraiser_name(ctx: QCContext):
+    # name_containment: the order form's appraiser name is the required identity;
+    # the report may add a middle name the order form omitted (e.g. "John Jenkins"
+    # vs "John Brandon Jenkins") without that being a genuine mismatch.
     return H.cross_doc_match(ctx, "SIG-2", "G", "signature", "appraiser_name", "SIG-2-field",
-                             authority="engagement", kind="name", label="Appraiser name")
+                             authority="engagement", kind="name_containment", label="Appraiser name")
 
 
 # ---- SIG-4 appraiser email present -----------------------------------------

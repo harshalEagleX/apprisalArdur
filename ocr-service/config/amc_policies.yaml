@@ -143,32 +143,6 @@ equity_solutions_usa:
   require_sketch_exterior_features: true
 
 
-  # ── PHOTO REQUIREMENTS ────────────────────────────────────────────────────────
-  # EL: "PHOTOGRAPHS, MAPS" section
-
-  # "At minimum — assignments requiring interior inspections require color photographs of:
-  #  front, rear, street view, kitchen (with photos showing all cooking facilities),
-  #  all bathrooms, all bedrooms, all living areas including foyer and laundry room,
-  #  full basement including mechanicals/finished areas, and all garage interiors."
-  require_photo_front: true
-  require_photo_rear: true
-  require_photo_street: true
-  require_photo_kitchen: true
-  require_photo_all_bathrooms: true
-  require_photo_all_bedrooms: true
-  require_photo_living_areas: true
-  require_photo_basement_if_present: true
-  require_photo_garage_interior_if_present: true
-  # "Subject photos to include all external beneficial/adverse influences,
-  #  any recent renovations, any deterioration, and any health and safety issues."
-  require_photo_adverse_influences: true
-  # "For assignments where guides require appraiser to drive to the comparables,
-  #  include color photos of the front of each comp sale, listing, pending."
-  require_comp_photos: true
-  # "Photos must be in focus."
-  require_photos_in_focus: true
-
-
   # ── PROPERTY-TYPE-SPECIFIC RULES ─────────────────────────────────────────────
   # EL body sections on special property types
 

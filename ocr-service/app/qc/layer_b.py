@@ -36,11 +36,17 @@ from app.qc.result import RuleStatus
 logger = logging.getLogger(__name__)
 
 # Commentary fields any judgment explanation could live in (document-level).
+# addendum_text is included because appraisers routinely put the adjustment/
+# scope/intended-use justification in the supplemental addendum rather than
+# repeating it in the field-specific comment box the rule happens to read —
+# omitting it caused rules to VERIFY on explanations that were on the page,
+# just under a different field name (audit 2026-07-09).
 _NARRATIVE_FIELDS = (
     "sales_comparison_summary", "final_reconciliation_comment",
     "market_conditions_commentary", "mca_neighborhood_analysis_comment",
     "neighborhood_description", "contract_analysis_comment",
     "prior_sale_analysis_comment", "special_assessments_comment",
+    "addendum_text",
 )
 
 # Per-concern keyword patterns (Layer-B determination). Deterministic by design.

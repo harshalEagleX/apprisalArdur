@@ -89,7 +89,6 @@ class QCContext:
         engagement_status: Optional[str] = None,
         policy: Optional["PolicyProfile"] = None,
         artifact_inventory: Optional["ArtifactInventory"] = None,
-        contract_package: Optional[object] = None,
         order_metadata: Optional["OrderMetadata"] = None,
         contract_provided: bool = False,
     ):
@@ -120,10 +119,6 @@ class QCContext:
         # This is distinct from whether contract extraction results exist, because
         # the QC pipeline intentionally avoids OCR-ing contract documents.
         self.contract_provided = contract_provided
-        # Raw contract package object forwarded from the extraction pipeline
-        # (may carry execution-status metadata such as resolved_execution_status).
-        # None when no contract was provided.
-        self.contract_package: Optional[object] = contract_package
         # OrderMetadata: extracted from the engagement letter (primary) + XML cross-ref.
         # The engagement letter IS the order in this system — no external LOS/AMS.
         # None when engagement letter was absent; rules that need order facts must
@@ -193,22 +188,3 @@ class QCContext:
         normal 1004 with a comp-extraction failure still runs SCA and flags it."""
         return not self.is_update_report
 
-    @property
-    def has_unexecuted_contract(self) -> bool:
-        """True when a contract package is present but its execution status indicates
-        the contract has NOT been fully signed by all parties.
-
-        Rules that implement the stop-on-unsigned-contract policy (e.g. C-EXEC) read
-        this property so the check is expressed once and stays consistent (P-3).
-
-        Returns False (safe/pass-through) when:
-          - No contract package is attached (contract_package is None)
-          - The package has no resolved_execution_status attribute
-          - The status is truthy (contract IS executed)
-        """
-        if self.contract_package is None:
-            return False
-        status = getattr(self.contract_package, "resolved_execution_status", None)
-        # A falsy status (None, False, empty string, 0) means not executed.
-        # A truthy status ("executed", True, "YES", etc.) means it is executed.
-        return not bool(status)

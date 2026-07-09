@@ -87,12 +87,6 @@ SCA-PSH-Q-quality: "The prior sale/listing analysis only lists dates and amounts
 SCA-FLIP-comp: "Comp {comp} resold within {months} month(s). Please confirm this was an arm's-length transaction and add a comment on the quick turnaround."
 SCA-25-newconst: "The subject appears to be new construction. Please confirm at least one comparable is from a competing development, or explain why that wasn't possible."
 SCA-26-gla: "The subject's living area ({subj} sf) falls outside the range of comparable living areas ({lo}–{hi} sf). Please confirm the comparables adequately support the subject's size, or add a comment."
-SCA-27-missing: "Comparable photos were not found. Please confirm a photo page is included for each comparable sale."
-SCA-27-defer: "Comparable photos are present ({pages} page(s)). Please confirm these are the appraiser's own drive-by photos, not MLS listing photos (required for this loan type)."
-SCA-27-nobuilding: "The comparable photos don't clearly show residential buildings. Please verify the correct photos are included."
-SCA-27-mls: "MLS watermarks were detected on the comparable photos. FHA requires the appraiser's own drive-by photos — please confirm these are originals and replace them if not."
-SCA-16V-distress: "The comparable photos may show signs of property distress that don't match the reported condition ratings. Please confirm the ratings are accurate."
-SCA-16V-cond: "The comparable photos suggest condition {vis}, but the grid shows {rated}. Please confirm the condition rating matches what the photos show."
 SCA-zadj-same: "Comp {comp}'s {field} ({v}) matches the subject, but a ${a} adjustment was still applied. Please confirm this adjustment is warranted."
 SCA-zadj-diff: "Comp {comp}'s {field} ({cv}) differs from the subject ({sv}), but no adjustment was made. Please apply an adjustment or add a comment explaining why none is needed."
 SCA-23-listing: "Comp {comp} is an active listing with no adjustment applied. Listings are priced at asking price and usually need a downward adjustment to reflect what they'd actually sell for. Please review or add a comment."
@@ -214,11 +208,6 @@ N-7-blank:    "The market conditions section is blank. Please complete it with a
 N-7-generic:  "The market conditions commentary only restates the checkbox answers in paragraph form. Please add real numbers — like average days on market, months of supply, or price trend data — to back up the conclusions."
 ADD-1-canned: "The {field} commentary appears to be boilerplate language ({hits}). Please rewrite it to describe this specific property and market — generic language doesn't meet QC standards."
 RECON-terms:  "The reconciliation uses terms like 'equal weight' or 'weighted average' ({hits}), which should be avoided. Please rewrite this to explain specifically how the comparables were used to arrive at the value."
-
-# ---- Photographs ----
-PH-1-missing: "Required photos are missing: {which}. At minimum, please include a front photo, a rear photo, and a street scene."
-PH-2-interior: "Interior photos are incomplete — missing: {which}. Please include photos of the kitchen, living room, all bedrooms, and all bathrooms."
-FHA-9-sides:  "FHA requires photos of all four sides of the property (front, rear, left, right). The {which} side photo appears to be missing."
 
 # ---- Docs ----
 DOC-1-expired: "The appraiser's license in the report is expired. Please provide an updated copy."

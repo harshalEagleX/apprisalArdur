@@ -268,8 +268,19 @@ def _is_detached(ctx: QCContext) -> bool:
     return ctx.form_type not in ("1073",)
 
 
+def _ca_developed(ctx: QCContext) -> bool:
+    """The cost approach is treated as developed when its indicated value or
+    cost-new figure was extracted; otherwise the CA-1/CA-3 checks are N/A."""
+    return bool(normalize_currency(ctx.appraisal.value("indicated_value_cost_approach"))
+                or normalize_currency(ctx.appraisal.value("cost_new_improvements")))
+
+
+def _ca1_applies(ctx: QCContext) -> bool:
+    return _is_detached(ctx) and _ca_developed(ctx)
+
+
 @rule(id="CA-1", num="92", section="cost_approach", phase=1,
-      applies_when=_is_detached, name="Opinion of site value present")
+      applies_when=_ca1_applies, name="Opinion of site value present")
 def ca1_site_value(ctx: QCContext):
     val = ctx.appraisal.value("site_value_estimate")
     ev = [ctx.appraisal.evidence("site_value_estimate")]
@@ -289,12 +300,6 @@ def ca1_site_value(ctx: QCContext):
 
 
 # ---- CA-3 cost approach arithmetic + depreciation reasonableness ------------
-
-def _ca_developed(ctx: QCContext) -> bool:
-    """The cost approach is treated as developed when its indicated value or
-    cost-new figure was extracted; otherwise the CA-3 checks are N/A."""
-    return bool(normalize_currency(ctx.appraisal.value("indicated_value_cost_approach"))
-                or normalize_currency(ctx.appraisal.value("cost_new_improvements")))
 
 
 @rule(id="CA-3", num="92b", section="cost_approach", phase=3, applies_when=_ca_developed,
@@ -674,6 +679,17 @@ _EXPOSURE_RE = re.compile(
 @rule(id="R-EXPOSURE", num="R-exposure", section="reconciliation", phase=1,
       name="Exposure time stated as a specific period")
 def r_exposure_time(ctx: QCContext):
+    # The dedicated `reasonable_exposure_time` field (USPAP-addendum gap-fill,
+    # verbatim page-validated) is the direct evidence for this rule — check it
+    # first. The narrative-regex fallback below only covers cases where that
+    # field wasn't captured (e.g. the exposure-time sentence sits on a page the
+    # addendum/reconciliation narrative fields never reached).
+    direct = (ctx.appraisal.value("reasonable_exposure_time") or "").strip()
+    if direct and re.search(r"\d", direct):
+        return _res("R-EXPOSURE", "R-exposure", "reconciliation", RuleStatus.PASS,
+                    fields=["reasonable_exposure_time"],
+                    evidence=[ctx.appraisal.evidence("reasonable_exposure_time")])
+
     addendum = (ctx.appraisal.value("addendum_text") or "").strip()
     sca_comment = (ctx.appraisal.value("sca_comment") or "").strip()
     reconciliation = (ctx.appraisal.value("final_reconciliation_comment") or "").strip()

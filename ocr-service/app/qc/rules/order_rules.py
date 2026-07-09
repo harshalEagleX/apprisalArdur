@@ -88,7 +88,7 @@ def ord_form_match(ctx: QCContext):
         for phrase, num in _PLAIN_TO_NUM.items():
             if phrase in s:
                 return num
-        m = re.search(r"(1004mc|1004d|1004|1073|1025|1007|2055|216)", s)
+        m = re.search(r"(1004mc|1004d|1004c|1004|1073|1025|1007|2055|216)", s)
         return m.group(1) if m else s
 
     ord_base = _base(ordered)

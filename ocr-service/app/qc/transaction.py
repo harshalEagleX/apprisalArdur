@@ -82,8 +82,6 @@ def extract_documents(folder: Path) -> Dict[str, object]:
                 rs = _overlay_comp_grid(rs, pdf, dtype)
                 rs = _overlay_sca_llm(rs, pdf, dtype)
                 rs = _overlay_subject_llm(rs, pdf, dtype)
-                rs = _overlay_photos(rs, pdf, dtype)
-                rs = _overlay_comp_photos(rs, pdf, dtype)
             rs = _overlay_locate(rs, pdf)
             sets[role] = rs
         except Exception as exc:
@@ -494,78 +492,33 @@ def _overlay_narrative(rs, pdf, dtype):
     return _rebuild(rs, dtype, existing)
 
 
-def _overlay_photos(rs, pdf, dtype):
-    """Add photo-presence pseudo-fields (photo_front/_rear/_street/_left/_right
-    and photo_interior_rooms) from caption detection, so the PH rules can read
-    them without the rule engine touching the PDF (P-3)."""
-    from app.core.result import ExtractionResult, ExtractionResultSet
-    from app.extraction.photo_detector import detect_photos
-    try:
-        p = detect_photos(pdf)
-    except Exception as exc:
-        logger.warning("Photo detection failed for %s: %s", pdf.name, exc)
-        return rs
-    fields = {
-        "photo_front": str(p.has_front), "photo_rear": str(p.has_rear),
-        "photo_street": str(p.has_street), "photo_left": str(p.has_left),
-        "photo_right": str(p.has_right),
-        "photo_interior_rooms": ",".join(sorted(p.interior_rooms)),
-    }
+def _overlay_certification_addendum(rs, pdf, dtype):
+    """Fill `addendum_text` from the appraisal PDF's own scope-of-work /
+    intended-use-or-user / smoke-CO-detector / HUD-FHA certification pages when
+    it is still blank (only the MISMO XML path sets it otherwise). Several rules
+    (ST-SCOPE, ST-INTENDED, I-SMCO, FHA-3, FHA-4) read `addendum_text` and false-
+    flag on any PDF-only report where this content was never populated. Never
+    overwrites an existing (XML-sourced) value — XML remains authoritative."""
     existing = {name: r for name, r in rs}
-    for name, value in fields.items():
-        existing[name] = ExtractionResult(
-            canonical_name=name, document_type=dtype, value=value,
-            raw_source_text=value, extraction_method="photo_caption",
-            confidence=0.8, source_page=0, normalization_applied=["photo_caption"],
-        )
+    prior = existing.get("addendum_text")
+    if prior is not None and prior.found and str(prior.value or "").strip():
+        return rs
+    from app.core.result import ExtractionResult
+    from app.extraction.narrative_extractor import extract_certification_addendum
+    try:
+        fields = extract_certification_addendum(pdf)
+    except Exception as exc:
+        logger.warning("Certification-addendum overlay failed for %s: %s", pdf.name, exc)
+        return rs
+    text = fields.get("addendum_text")
+    if not text:
+        return rs
+    existing["addendum_text"] = ExtractionResult(
+        canonical_name="addendum_text", document_type=dtype, value=text,
+        raw_source_text=text, extraction_method="positional_narrative",
+        confidence=0.85, source_page=0, normalization_applied=["positional_narrative"],
+    )
     return _rebuild(rs, dtype, existing)
-
-
-def _overlay_comp_photos(rs, pdf, dtype):
-    """Add comparable-photo pseudo-fields (page count + Cloud Vision signals when
-    configured) so SCA-27 / SCA-16V read them without touching the PDF (P-3)."""
-    from app.core.result import ExtractionResult, ExtractionResultSet
-    from app.extraction.comp_photo_extractor import extract_comp_photo_signals
-    try:
-        fields = extract_comp_photo_signals(pdf)
-    except Exception as exc:
-        logger.warning("Comp-photo signals failed for %s: %s", pdf.name, exc)
-        return rs
-    if not fields:
-        return rs
-    existing = {name: r for name, r in rs}
-    for name, value in fields.items():
-        existing[name] = ExtractionResult(
-            canonical_name=name, document_type=dtype, value=str(value),
-            raw_source_text=str(value), extraction_method="comp_photo_vision",
-            confidence=0.8, source_page=0, normalization_applied=["comp_photo_vision"],
-        )
-    return _rebuild(rs, dtype, existing)
-
-
-def _overlay_contract(rs, pdf, dtype):
-    """Overlay best-effort contract price/date/concessions (Tesseract OCR for
-    scanned contracts). Only sets a field when confidently found, so an
-    unreadable contract leaves C-2/C-4 at VERIFY rather than a false mismatch."""
-    from app.core.result import ExtractionResult, ExtractionResultSet
-    from app.extraction.contract_extractor import extract_contract_fields
-    try:
-        fields = extract_contract_fields(pdf)
-    except Exception as exc:
-        logger.warning("Contract extraction failed for %s: %s", pdf.name, exc)
-        return rs
-    if not fields:
-        return rs
-    existing = {name: r for name, r in rs}
-    for name, value in fields.items():
-        if not value:
-            continue
-        existing[name] = ExtractionResult(
-            canonical_name=name, document_type=dtype, value=str(value),
-            raw_source_text=str(value), extraction_method="contract_ocr",
-            confidence=0.82, source_page=1, normalization_applied=["contract_ocr"],
-        )
-    return _rebuild(rs, dtype, existing, ocr_method="contract_ocr+layered")
 
 
 def _overlay_engagement(rs, pdf, dtype):
@@ -842,9 +795,7 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     _emit("sketch", "Measuring floor plan & living area", 40.0)
     rs = _overlay_sketch(rs, Path(appraisal_path), "appraisal_report")
     rs = _overlay_narrative(rs, Path(appraisal_path), "appraisal_report")
-    _emit("photos", "Reviewing property photographs", 42.0)
-    rs = _overlay_photos(rs, Path(appraisal_path), "appraisal_report")
-    rs = _overlay_comp_photos(rs, Path(appraisal_path), "appraisal_report")
+    rs = _overlay_certification_addendum(rs, Path(appraisal_path), "appraisal_report")
     _emit("locate", "Preparing review highlights", 44.0)
     rs = _overlay_locate(rs, Path(appraisal_path))
     sets["appraisal"] = rs
@@ -877,7 +828,6 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     # rule is flagged for manual verification against the contract. This avoids
     # the slow, error-prone scanned-contract OCR entirely.
     # ═══════════════════════════════════════════════════════════════════════
-    contract_pkg = None
     contract_provided = bool(contract_path)
     if contract_provided:
         _emit("contract_skip", "Contract provided — flagged for manual review", 70.0)
@@ -898,7 +848,6 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
         engagement_status=eng_status,
         policy=policy,
         artifact_inventory=inventory,
-        contract_package=contract_pkg,
         order_metadata=order,
     )
     report = run_qc(ctx)

@@ -153,6 +153,14 @@ def cross_doc_match(ctx, rule_id, num, section, field, template_id,
         mr = matching.match_currency(sv, av, tolerance=qc_config.semantic("currency_tolerance", 0.0))
     elif kind == "date":
         mr = matching.match_date(sv, av)
+    elif kind == "name_containment":
+        # The authority (order/engagement) name is the required identity; the
+        # subject document may carry extra tokens (a middle name the appraiser
+        # added) without that being a real mismatch — every required token must
+        # just be present in the subject's name (match_name_containment).
+        mr = matching.match_name_containment(av, sv,
+                                             match_th=qc_config.match_threshold,
+                                             review_th=qc_config.review_threshold)
     else:
         mr = matching.match_text(sv, av, kind=kind,
                                  match_th=qc_config.match_threshold,

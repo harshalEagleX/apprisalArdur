@@ -1,7 +1,6 @@
 """
 Improvement section rules (I-1 .. I-12 / checklist 40-52).
-Presence/format/consistency (Phase 1/3); the photo cross-checks (I-9 vision,
-I-13 security bars) stay in the vision layer.
+Presence/format/consistency (Phase 1/3).
 """
 
 from __future__ import annotations
@@ -320,14 +319,24 @@ _APPLIANCE_FIELDS = [
 def i6_appliances(ctx: QCContext):
     if not ctx.appraisal.present:
         return []
-    present_any = any(str(ctx.appraisal.value(f) or "").strip() for f in _APPLIANCE_FIELDS)
     ev = [ctx.appraisal.evidence(f) for f in _APPLIANCE_FIELDS]
-    if present_any:
-        return [_res("I-6", "45", RuleStatus.PASS, fields=_APPLIANCE_FIELDS, evidence=ev)]
+    # Name which appliances were actually detected in the PASS message — checkbox
+    # fields are read from pixel-fill/vector-mark evidence (not visible in a plain
+    # OCR text dump), so without naming them here a downstream audit of the QC
+    # output alone has no way to confirm what evidence backed this PASS (P-10).
+    found = [f for f in _APPLIANCE_FIELDS if str(ctx.appraisal.value(f) or "").strip()]
+    if found:
+        labels = ", ".join(f.replace("appliance_", "").replace("_", "/") for f in found)
+        return [_res("I-6", "45", RuleStatus.PASS,
+                     message=f"Appliances detected: {labels}.",
+                     fields=_APPLIANCE_FIELDS, evidence=ev)]
     # confidence gate @ 0.85
     conf = min(ctx.appraisal.confidence(f) for f in _APPLIANCE_FIELDS)
     if conf >= ctx.checkbox_conf:
-        return [_res("I-6", "45", RuleStatus.PASS, fields=_APPLIANCE_FIELDS, evidence=ev)]
+        return [_res("I-6", "45", RuleStatus.PASS,
+                     message="No appliance checkboxes detected, confirmed at high confidence "
+                             "(read directly from the form's checkbox marks).",
+                     fields=_APPLIANCE_FIELDS, evidence=ev)]
     # No appliance captured at all → likely an extraction gap; flag for confirmation.
     return [_res("I-6", "45", RuleStatus.VERIFY,
                  message=qc_config.template("I-6-appliances"),
