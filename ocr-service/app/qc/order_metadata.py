@@ -269,10 +269,35 @@ def _normalize_loan_type(v: Optional[str]) -> Optional[str]:
 
 _FORM_RE = re.compile(r"\b(1004mc|1004d|1004c|1004|1073|1025|1007|216|2055)\b", re.I)
 
+# Engagement letters routinely describe the ordered form in plain English rather
+# than by number ("Residential Appraisal" instead of "1004") — order_rules.py's
+# ORD-FORM-MATCH used to carry this same mapping to compare the two sides, but
+# never applied it here where required_form_type is actually SET, so a plain-
+# English order description always normalized to None and the rule fell back to
+# "cannot compare" even though the engagement letter was read correctly. Shared
+# here as the single source of truth; order_rules.py reuses it.
+PLAIN_FORM_TO_NUM = {
+    "residential appraisal": "1004",
+    "residential report": "1004",
+    "urar": "1004",
+    "uniform residential appraisal report": "1004",
+    "condominium appraisal": "1073",
+    "individual condominium": "1073",
+    "small residential income property": "1025",
+    "multi family": "1025",
+    "multifamily": "1025",
+    "exterior only": "2055",
+    "drive by": "2055",
+}
+
 
 def _normalize_form_type(v: Optional[str]) -> Optional[str]:
     if not v:
         return None
+    low = v.lower().strip()
+    for phrase, num in PLAIN_FORM_TO_NUM.items():
+        if phrase in low:
+            return num
     m = _FORM_RE.search(v)
     return m.group(1).lower() if m else None
 

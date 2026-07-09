@@ -376,15 +376,19 @@ def i8_features(ctx: QCContext):
 # Advisory level (VERIFY, never FAIL) because the commentary may appear in a
 # section the extractor didn't capture — the reviewer confirms.
 
+# "det(ector)?\b" only ever matched the singular "detector" — the trailing \b
+# sits right after "detector", so the far more common plural "detectors" (as in
+# "Smoke detectors were present") never matched at all. "det(?:ectors?)?" makes
+# the plural "s" part of the same optional group so the boundary lands correctly.
 _DETECTOR_RE = re.compile(
-    r"\b(smoke\s*det(ector)?|carbon\s*monoxide|co\s*det(ector)?|"
+    r"\b(smoke\s*det(?:ectors?)?|carbon\s*monoxide|co\s*det(?:ectors?)?|"
     r"detector\s*code|per\s+(local\s+)?code)\b",
     re.I)
 
 _NARRATIVE_SOURCES = (
     "sales_comparison_summary", "final_reconciliation_comment",
     "market_conditions_commentary", "contract_analysis_comment",
-    "neighborhood_description",
+    "neighborhood_description", "addendum_text",
 )
 
 

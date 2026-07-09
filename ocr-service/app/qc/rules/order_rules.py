@@ -69,19 +69,9 @@ def ord_form_match(ctx: QCContext):
     # "Residential Appraisal" / "Residential Report" / "URAR" all map to "1004"
     # because engagement letters often describe the form in plain English rather
     # than by number; the appraisal XML always uses the MISMO form number.
-    _PLAIN_TO_NUM = {
-        "residential appraisal": "1004",
-        "residential report": "1004",
-        "urar": "1004",
-        "uniform residential appraisal report": "1004",
-        "condominium appraisal": "1073",
-        "individual condominium": "1073",
-        "small residential income property": "1025",
-        "multi family": "1025",
-        "multifamily": "1025",
-        "exterior only": "2055",
-        "drive by": "2055",
-    }
+    # Shared with order_metadata._normalize_form_type (single source of truth —
+    # that copy is what actually sets ctx.order.required_form_type).
+    from app.qc.order_metadata import PLAIN_FORM_TO_NUM as _PLAIN_TO_NUM
 
     def _base(v: str) -> str:
         s = v.lower().strip()

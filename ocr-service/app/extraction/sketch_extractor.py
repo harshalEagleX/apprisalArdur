@@ -57,21 +57,35 @@ def _plausible(n: Optional[int]) -> Optional[int]:
     return n if (n is not None and 200 <= n <= 20000) else None
 
 
+# Matched against only the page's LEADING text (its own heading), not anywhere
+# on the page — an addendum page can mention "the building sketch" in a prose
+# sentence (e.g. an ANSI-measurement disclosure) without being the sketch page
+# itself. Matching that stray mention picked the wrong page entirely, so OCR/
+# vision then read an unrelated text page's imagery instead of the real
+# floor-plan image (observed: read "2646" off the wrong page vs the true 1394
+# printed on the actual sketch). Different AMC software vendors label this page
+# differently — TOTAL uses "Building Sketch", ACI uses "Floorplan Sketch".
+_SKETCH_HEADER_RE = re.compile(r"^\s*(building\s+sketch|floor\s*plan\s+sketch)\b", re.I)
+
+
+def _is_sketch_page(text: str) -> bool:
+    return bool(_SKETCH_HEADER_RE.search((text or "")[:40]))
+
+
 def _find_sketch_page(doc) -> Optional[int]:
     for i in range(doc.page_count):
-        if "building sketch" in (doc[i].get_text() or "").lower():
+        if _is_sketch_page(doc[i].get_text() or ""):
             return i
     return None
 
 
 def _sketch_pages_text(doc) -> str:
-    """Concatenated text of every 'Building Sketch' page (TOTAL splits multi-floor
-    sketches across 'Building Sketch (Page - N)' pages, so a single page misses
-    floors)."""
+    """Concatenated text of every sketch page (TOTAL/ACI split multi-floor
+    sketches across several sketch pages, so a single page misses floors)."""
     parts = []
     for i in range(doc.page_count):
         t = doc[i].get_text() or ""
-        if "building sketch" in t.lower():
+        if _is_sketch_page(t):
             parts.append(t)
     return "\n".join(parts)
 

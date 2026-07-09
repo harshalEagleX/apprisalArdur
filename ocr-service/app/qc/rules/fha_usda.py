@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 from app.qc import helpers as H
+from app.qc import layer_b
 from app.qc.config import qc_config
 from app.qc.context import QCContext
 from app.qc.matching import match_text, normalize_currency
@@ -78,6 +79,17 @@ def fha3_intended(ctx: QCContext):
         return RuleResult(rule_id="FHA-3", checklist_num="FHA", section="fha",
                           status=RuleStatus.PASS,
                           fields_involved=["intended_use_statement", "intended_user_statement"], evidence=ev)
+    # Fallback: the two dedicated fields are single-line label-proximity reads
+    # that often mis-capture a fragment out of a run-on certification sentence
+    # (e.g. "of") instead of the real statement. The full addendum/certification
+    # text is a more reliable source for the same USPAP-required statement.
+    combined = str(ctx.appraisal.value("addendum_text") or "") + " " + layer_b.narrative_text(ctx)
+    if (re.search(r"intended\s+user.{0,150}(hud|fha)", combined, re.I)
+            and re.search(r"intended\s+use.{0,250}fha", combined, re.I)):
+        return RuleResult(rule_id="FHA-3", checklist_num="FHA", section="fha",
+                          status=RuleStatus.PASS,
+                          fields_involved=["addendum_text"],
+                          evidence=[ctx.appraisal.evidence("addendum_text")])
     # confidence gate @ 0.85
     conf = min(ctx.appraisal.confidence("intended_use_statement"),
                ctx.appraisal.confidence("intended_user_statement"))

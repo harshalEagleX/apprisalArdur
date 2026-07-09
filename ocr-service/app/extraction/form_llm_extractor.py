@@ -119,9 +119,14 @@ _NEIGHBORHOOD_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
 # final_reconciliation_comment joins this set because the deterministic reader
 # sometimes captures the fixed URAR boilerplate sentence around the reconciliation
 # checkbox instead of the appraiser's own weighting narrative (R-1b false FAIL).
+# legal_description joins it because the generic label-proximity reader can grab
+# a single stray word out of a run-on sentence near the "Legal Description"
+# label (observed: "aware") instead of the real value — confidently wrong, not
+# blank, so a blank/low-confidence trigger alone would never re-fill it (S-4a).
 ALWAYS_REFILL = frozenset({
     "neighborhood_boundaries", "neighborhood_description",
     "market_conditions_commentary", "final_reconciliation_comment",
+    "legal_description",
 })
 
 _RECON_FIELDS: Dict[str, Tuple[str, Optional[tuple]]] = {
