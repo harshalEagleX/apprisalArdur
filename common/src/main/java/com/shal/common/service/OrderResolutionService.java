@@ -111,6 +111,15 @@ public class OrderResolutionService {
             }
         }
 
+        // Pass 3 (fallback): a supporting file still unresolved in a batch that
+        // anchored exactly ONE order belongs to that order. A single-order ZIP whose
+        // engagement letter states a different order number than the appraisal file
+        // naming (real AMC behaviour — e.g. the appraisal is "660006860" while the
+        // letter cites the lender loan number) must not leave the order INCOMPLETE
+        // with an orphaned engagement. Guarded by the single-appraisal condition so
+        // it can never merge documents across orders in a multi-order ZIP.
+        attachOrphansToSoleOrder(batch.getFiles(), ctx, actor, batch.getId());
+
         // NOTE: order documentStatus is NOT recomputed here. During intake the Batch + BatchFiles
         // are still a transient graph (persisted by the caller AFTER this method returns), so a
         // findActiveByOrderId read here sees zero documents and would mis-mark complete orders as
@@ -160,6 +169,21 @@ public class OrderResolutionService {
             if (wasDuplicate) duplicatesFound++;
         }
 
+        // Same single-appraisal-batch fallback as intake: attach any still-orphaned
+        // supporting file to its batch's sole order. We reload the FULL file set of
+        // each affected batch (not just the unresolved rows) so the anchoring appraisal
+        // is seen even when it was already linked in an earlier run and only the
+        // engagement/contract is orphaned — the exact "order stuck INCOMPLETE" case.
+        Set<Long> orphanBatchIds = new HashSet<>();
+        for (BatchFile f : unresolved) {
+            if (f.getOrder() == null && f.getFileType() != FileType.APPRAISAL && f.getBatch() != null) {
+                orphanBatchIds.add(f.getBatch().getId());
+            }
+        }
+        for (Long bId : orphanBatchIds) {
+            attachOrphansToSoleOrder(batchFileRepository.findByBatchId(bId), ctx, actor, bId);
+        }
+
         Set<AppraisalTransaction> touchedOrders = new HashSet<>();
         for (BatchFile file : unresolved) {
             if (file.getOrder() != null) touchedOrders.add(file.getOrder());
@@ -176,6 +200,38 @@ public class OrderResolutionService {
                        "ordersCreated", summary.ordersCreated(),
                        "duplicatesFound", summary.duplicatesFound()));
         return summary;
+    }
+
+    /**
+     * Fallback linkage for a single-order batch. When exactly one Order was anchored
+     * (one appraisal) in the given file set, every supporting file (engagement /
+     * contract / XML) still unresolved after identity matching is attached to that
+     * Order. This is the structural truth of a one-appraisal ZIP: its documents
+     * belong together even when their filenames/stated identifiers disagree. It never
+     * fires for a multi-appraisal (multi-order) batch, so it cannot mis-merge orders.
+     */
+    private void attachOrphansToSoleOrder(java.util.Collection<BatchFile> batchFiles,
+                                          ResolutionContext ctx, User actor, Long batchId) {
+        AppraisalTransaction sole = null;
+        for (BatchFile f : batchFiles) {
+            if (f.getFileType() == FileType.APPRAISAL && f.getOrder() != null) {
+                if (sole == null) {
+                    sole = f.getOrder();
+                } else if (!Objects.equals(sole.getId(), f.getOrder().getId())) {
+                    return; // more than one order anchored in this batch — not safe to fan out
+                }
+            }
+        }
+        if (sole == null) return; // no anchoring appraisal → nothing to attach to
+
+        for (BatchFile file : batchFiles) {
+            if (file.getFileType() == FileType.APPRAISAL || file.getOrder() != null) continue;
+            file.setOrder(sole);
+            supersedeSlotCollision(sole, file, ctx.slotIndex, actor, batchId);
+            if (file.getContentHash() != null) ctx.contentHashIndex.putIfAbsent(file.getContentHash(), sole);
+            log.info("Batch {} — linked orphan {} '{}' to sole order {} (single-appraisal batch fallback)",
+                    batchId, file.getFileType(), file.getFilename(), sole.getTransactionRef());
+        }
     }
 
     /** Resolves and links one file to its Order. Returns true if it was a pure content-hash duplicate. */
