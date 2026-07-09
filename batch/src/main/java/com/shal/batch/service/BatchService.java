@@ -713,6 +713,18 @@ public class BatchService {
             Path stagedPath = uniqueFilePath(stagingDir, filenameOnly);
             Files.write(stagedPath, bytes);
 
+            // Content-based type correction: an "Offer to Purchase" / sales contract
+            // dropped into the AMC's engagement folder must not be counted as an
+            // engagement letter (that produced the false "2 engagement letters found"
+            // warning). Contracts are never QC-read, so reclassifying to CONTRACT
+            // simply drops it from QC. Only ENGAGEMENT-typed PDFs are checked (cheap),
+            // and the heuristic is conservative (see looksLikeSalesContract).
+            if (!isXml && fileType == FileType.ENGAGEMENT
+                    && contentSniffer.looksLikeSalesContract(contentSniffer.extractPdfText(stagedPath))) {
+                log.info("Reclassified '{}' ENGAGEMENT -> CONTRACT by content (contract markers)", filenameOnly);
+                fileType = FileType.CONTRACT;
+            }
+
             StagedDoc d = new StagedDoc();
             d.entryPath = entryName;
             d.filenameOnly = filenameOnly;
@@ -912,8 +924,12 @@ public class BatchService {
     private static String typeFolderKeyword(String segment) {
         if (segment == null) return null;
         String s = segment.trim().toLowerCase();
-        if (s.startsWith("appraisal")) return "appraisal"; // covers appraisal_xml too
-        if (s.startsWith("engagement") || s.startsWith("eagagement")
+        // Tolerate the common AMC folder misspellings ("apprisal", "apprasial") so a
+        // real type folder isn't missed — otherwise the doc falls to filename inference
+        // and produces a spurious "type inferred from filename" review warning.
+        if (s.startsWith("apprai") || s.startsWith("apprisal") || s.startsWith("apprasial")
+                || s.startsWith("appriasal")) return "appraisal"; // covers appraisal_xml too
+        if (s.startsWith("engagement") || s.startsWith("eagagement") || s.startsWith("engagment")
                 || s.equals("order") || s.equals("orders")) return "engagement";
         if (s.startsWith("contract") || s.startsWith("purchase") || s.startsWith("agreement")) return "contract";
         return null;

@@ -91,6 +91,56 @@ public class DocumentContentSniffer {
         }
     }
 
+    // ── Document-type content heuristic ─────────────────────────────────────
+
+    /** Weighted contract markers (cover the "Offer Summary", "Purchase Agreement",
+     *  and REPC formats seen in the corpus). */
+    private static final List<Map.Entry<String, Double>> CONTRACT_MARKERS = List.of(
+            Map.entry("offer to purchase", 3.0), Map.entry("offer summary", 3.0),
+            Map.entry("purchase agreement", 3.0), Map.entry("purchase and sale", 3.0),
+            Map.entry("real estate purchase", 3.0), Map.entry("sales price", 2.5),
+            Map.entry("purchase price", 2.5), Map.entry("earnest money", 2.5),
+            Map.entry("emd amount", 2.5), Map.entry("seller's concession", 2.0),
+            Map.entry("close by date", 2.0), Map.entry("closing date", 2.0),
+            Map.entry("financing contingency", 2.0), Map.entry("listing agent", 1.5),
+            Map.entry("buyer's agent", 1.5), Map.entry("title company", 1.5),
+            Map.entry("escrow", 1.5));
+
+    /** Engagement-letter counter-markers — presence pulls a document back toward
+     *  "engagement" so a real order form is never mistaken for a contract. */
+    private static final List<Map.Entry<String, Double>> ENGAGEMENT_MARKERS = List.of(
+            Map.entry("service fee", 3.0), Map.entry("intended use", 2.0),
+            Map.entry("file id", 3.0), Map.entry("order number", 2.0),
+            Map.entry("appraiser:", 2.0), Map.entry("due date", 2.0),
+            Map.entry("assigned:", 2.0));
+
+    /** Minimum contract score (also must exceed the engagement score) to reclassify. */
+    public static final double CONTRACT_MARKER_THRESHOLD = 6.0;
+
+    /**
+     * Heuristic: does this document body read like a purchase/sales contract rather
+     * than an engagement letter? Used to correct a mis-filed document — e.g. an
+     * "Offer to Purchase" dropped into the AMC's engagement folder — so it is not
+     * counted as a second engagement letter. Requires several strong contract
+     * markers AND a clear margin over engagement markers; validated on the corpus
+     * (real contract scored 14.5, real engagement letters 0–4.5) so a real order
+     * form is never reclassified. Contracts are never QC-read, so the only effect
+     * of a match is dropping the document from QC — deliberately conservative.
+     */
+    public boolean looksLikeSalesContract(String text) {
+        if (text == null || text.isBlank()) return false;
+        String t = text.toLowerCase();
+        double contract = 0.0;
+        for (Map.Entry<String, Double> m : CONTRACT_MARKERS) {
+            if (t.contains(m.getKey())) contract += m.getValue();
+        }
+        double engagement = 0.0;
+        for (Map.Entry<String, Double> m : ENGAGEMENT_MARKERS) {
+            if (t.contains(m.getKey())) engagement += m.getValue();
+        }
+        return contract >= CONTRACT_MARKER_THRESHOLD && contract > engagement;
+    }
+
     // ── MISMO XML identity ──────────────────────────────────────────────────
 
     private static final Pattern XML_ORDER_ID = Pattern.compile(
