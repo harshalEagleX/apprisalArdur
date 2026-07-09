@@ -55,6 +55,18 @@ class DocumentContentSnifferTest {
     }
 
     @Test
+    void weakMarkersWithoutAContractHeadingAreNotAContract() {
+        // Accumulated weak markers (score well over threshold) but NO contract heading —
+        // an engagement letter must never be reclassified as a contract on these alone,
+        // which is exactly the misfire that hid an engagement and blocked its order.
+        String weakButNoHeading =
+                "Sales Price $500,000. Closing date to be set. Funds held in escrow by the "
+                + "title company. Buyer's Agent and Listing Agent to coordinate. Financing "
+                + "contingency applies.";
+        assertThat(sniffer.looksLikeSalesContract(weakButNoHeading)).isFalse();
+    }
+
+    @Test
     void emptyOrNullIsNotAContract() {
         assertThat(sniffer.looksLikeSalesContract(null)).isFalse();
         assertThat(sniffer.looksLikeSalesContract("   ")).isFalse();

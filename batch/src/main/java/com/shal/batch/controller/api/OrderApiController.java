@@ -52,6 +52,7 @@ public class OrderApiController {
     private final BatchRepository batchRepository;
     private final QCResultRepository qcResultRepository;
     private final OrderResolutionService orderResolutionService;
+    private final com.shal.common.service.OrderStatusService orderStatusService;
     private final com.shal.common.repository.UserRepository userRepository;
     private final com.shal.common.service.BusinessEventService businessEventService;
     private final com.shal.common.service.OrderDeletionService orderDeletionService;
@@ -62,6 +63,7 @@ public class OrderApiController {
                               BatchRepository batchRepository,
                               QCResultRepository qcResultRepository,
                               OrderResolutionService orderResolutionService,
+                              com.shal.common.service.OrderStatusService orderStatusService,
                               com.shal.common.repository.UserRepository userRepository,
                               com.shal.common.service.BusinessEventService businessEventService,
                               com.shal.common.service.OrderDeletionService orderDeletionService,
@@ -71,6 +73,7 @@ public class OrderApiController {
         this.batchRepository = batchRepository;
         this.qcResultRepository = qcResultRepository;
         this.orderResolutionService = orderResolutionService;
+        this.orderStatusService = orderStatusService;
         this.userRepository = userRepository;
         this.businessEventService = businessEventService;
         this.orderDeletionService = orderDeletionService;
@@ -124,6 +127,20 @@ public class OrderApiController {
         if (adminClient != null && (order.getClient() == null || !adminClient.getId().equals(order.getClient().getId()))) {
             return ResponseEntity.status(403).body(Map.of("error", "ACCESS_DENIED",
                     "message", "You do not have access to this order."));
+        }
+
+        // Self-heal a stale badge: if the order is still shown INCOMPLETE/UNMATCHED but
+        // its documents now satisfy completeness (e.g. a file was reclassified before the
+        // recompute fix shipped), recompute so the viewer sees the true status. Bounded
+        // to stale-prone statuses so terminal/processing orders are never re-derived on
+        // read; never breaks the view if recompute fails (P-6).
+        OrderDocumentStatus current = order.getDocumentStatus();
+        if (current == OrderDocumentStatus.INCOMPLETE || current == OrderDocumentStatus.UNMATCHED) {
+            try {
+                orderStatusService.recompute(order);
+            } catch (Exception e) {
+                log.warn("Order {} status self-heal recompute failed: {}", order.getId(), e.getMessage());
+            }
         }
 
         return ResponseEntity.ok(toDetail(order));

@@ -1368,6 +1368,15 @@ public class BatchService {
             file.setStatus(FileStatus.PENDING);
         }
         batchFileRepository.save(file);
+
+        // Recompute the owning order's completeness — changing a file's type can flip an
+        // order between INCOMPLETE and READY_FOR_QC (e.g. a contract corrected back to
+        // the engagement it always was). Without this the order badge stays stale and
+        // reads INCOMPLETE even though every required document is now present.
+        if (file.getOrder() != null) {
+            orderStatusService.recompute(file.getOrder());
+        }
+
         auditLogService.logEntity(admin, "FILE_RECLASSIFIED", "BatchFile", fileId);
         log.info("Admin {} reclassified '{}' from {} → {} in batch {}",
                 admin.getUsername(), file.getFilename(), oldType, newType, batchId);

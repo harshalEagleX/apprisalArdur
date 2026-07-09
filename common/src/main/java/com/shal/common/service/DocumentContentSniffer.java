@@ -118,18 +118,40 @@ public class DocumentContentSniffer {
     public static final double CONTRACT_MARKER_THRESHOLD = 6.0;
 
     /**
+     * A document is only treated as a contract when it carries one of these
+     * unambiguous contract HEADINGS. Weak markers (escrow, title company, sales
+     * price) accumulate on engagement letters too and must NOT, on their own,
+     * reclassify one — requiring a strong heading is what stops a real engagement
+     * letter being mistaken for a contract (the misfire that hid an engagement).
+     */
+    private static final List<String> STRONG_CONTRACT_MARKERS = List.of(
+            "offer to purchase", "offer summary", "purchase agreement",
+            "purchase and sale", "real estate purchase", "purchase contract",
+            "purchase and sales agreement");
+
+    /**
      * Heuristic: does this document body read like a purchase/sales contract rather
      * than an engagement letter? Used to correct a mis-filed document — e.g. an
      * "Offer to Purchase" dropped into the AMC's engagement folder — so it is not
-     * counted as a second engagement letter. Requires several strong contract
-     * markers AND a clear margin over engagement markers; validated on the corpus
-     * (real contract scored 14.5, real engagement letters 0–4.5) so a real order
-     * form is never reclassified. Contracts are never QC-read, so the only effect
-     * of a match is dropping the document from QC — deliberately conservative.
+     * counted as a second engagement letter.
+     *
+     * Conservative on purpose (a false positive HIDES a real engagement letter and
+     * blocks the order): it fires only when the text carries an unambiguous contract
+     * heading AND the weighted contract score clears the threshold AND beats the
+     * engagement score. Validated on the corpus — the real "Offer Summary" contract
+     * matches (heading + 14.5); every real engagement letter (0–4.5, no heading)
+     * does not.
      */
     public boolean looksLikeSalesContract(String text) {
         if (text == null || text.isBlank()) return false;
         String t = text.toLowerCase();
+
+        boolean hasStrongHeading = false;
+        for (String strong : STRONG_CONTRACT_MARKERS) {
+            if (t.contains(strong)) { hasStrongHeading = true; break; }
+        }
+        if (!hasStrongHeading) return false;   // no contract heading → never reclassify
+
         double contract = 0.0;
         for (Map.Entry<String, Double> m : CONTRACT_MARKERS) {
             if (t.contains(m.getKey())) contract += m.getValue();
