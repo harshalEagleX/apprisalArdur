@@ -644,6 +644,15 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     _set(f"{pfx}_garage",            "CarStorage",         "_Description")
     _set(f"{pfx}_garage_carport",    "CarStorage",         "_Description")  # SCA-21 uses garage_carport
     _set(f"{pfx}_concessions",       "SalesConcessions",   "_Description")
+    # These comp grid rows are in every MISMO SALE_PRICE_ADJUSTMENT but were not
+    # mapped, so the per-comp SCA rules false-VERIFYd on any comp the compact-grid
+    # PDF reader missed (the XML has them for ALL comps — P-14a: XML is the reliable
+    # grid source). Feeds SCA-20 / SCA-19 / SCA-22 / SCA-18 and the energy line.
+    _set(f"{pfx}_heating_cooling",   "HeatingCooling",     "_Description")  # SCA-20
+    _set(f"{pfx}_functional_utility","FunctionalUtility",  "_Description")  # SCA-19
+    _set(f"{pfx}_porch_patio_deck",  "PorchDeck",          "_Description")  # SCA-22
+    _set(f"{pfx}_basement",          "BasementArea",       "_Description")  # SCA-18
+    _set(f"{pfx}_energy_efficient",  "EnergyEfficient",    "_Description")  # checklist 73
 
 
 def _extract_forms(root: ET.Element, f: dict) -> None:
