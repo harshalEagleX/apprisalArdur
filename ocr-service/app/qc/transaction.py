@@ -214,6 +214,23 @@ def _sca_values_agree(a, b) -> bool:
     return abs(na - nb) <= max(1.0, 0.005 * max(abs(na), abs(nb)))
 
 
+def _values_conflict(a, b) -> bool:
+    """True when two extraction sources materially DISAGREE on a field's value —
+    used at overlay seams (e.g. XML vs PDF) to decide whether a losing value is
+    worth preserving as a conflict for the reviewer, vs. just formatting noise.
+    Numeric fields tolerate 1%/±$1; text fields tolerate case/punctuation/
+    whitespace differences only — anything else is a real disagreement."""
+    sa, sb = str(a or "").strip(), str(b or "").strip()
+    if not sa or not sb:
+        return False
+    na, nb = _sca_num(sa), _sca_num(sb)
+    if na is not None and nb is not None:
+        return abs(na - nb) > max(1.0, 0.01 * max(abs(na), abs(nb)))
+    import re as _re2
+    norm = lambda s: _re2.sub(r"[^a-z0-9]", "", s.lower())
+    return norm(sa) != norm(sb)
+
+
 def _sca_double_verify(existing, llm, dtype) -> int:
     """PROTOTYPE (config.SCA_DOUBLE_VERIFY, UNVERIFIED — default OFF).
 
@@ -575,9 +592,16 @@ def _overlay_xml(rs, xml_path, dtype):
 
     XML is the primary structured source — every field it produces carries
     confidence 0.97 (vs the PDF extractors' 0.82–0.92), so in DocView the XML
-    value wins whenever both sources disagree.  Fields the XML does not cover
+    value wins whenever both sources disagree. Fields the XML does not cover
     (e.g. narrative text from addendum body) are left untouched.
-    No-op when xml_path is None or XML parsing fails (P-6)."""
+
+    When XML overrides a PDF value that MATERIALLY DISAGREES (not just a
+    formatting difference), the losing PDF value is preserved on the winning
+    result as conflicting_value/conflicting_source instead of being discarded —
+    app.qc.engine._flag_source_conflicts surfaces any such disagreement that no
+    rule already caught, so a genuine two-source conflict can never sit silently
+    behind a clean high-confidence PASS. No-op when xml_path is None or XML
+    parsing fails (P-6)."""
     if xml_path is None:
         return rs
     try:
@@ -591,10 +615,25 @@ def _overlay_xml(rs, xml_path, dtype):
     existing = {name: r for name, r in rs}
     # Merge: XML result wins on confidence, PDF result kept when XML has no value
     from dataclasses import replace as _replace
+    conflicts = 0
     for name, xml_r in xml_rs:
         prev = existing.get(name)
-        if prev is None or xml_r.effective_confidence > prev.effective_confidence:
+        if prev is None or not prev.found:
             existing[name] = _replace(xml_r, document_type=dtype)
+            continue
+        if xml_r.effective_confidence <= prev.effective_confidence:
+            continue
+        winner = xml_r
+        if _values_conflict(xml_r.value, prev.value):
+            winner = _replace(xml_r, conflicting_value=prev.value,
+                              conflicting_source=prev.extraction_method)
+            conflicts += 1
+        existing[name] = _replace(winner, document_type=dtype)
+    if conflicts:
+        logger.info(
+            "XML overlay: %d field(s) where XML and PDF disagreed for %s "
+            "(kept XML value, flagged for reviewer)", conflicts, Path(xml_path).name,
+        )
     return _rebuild(rs, dtype, existing, ocr_method="xml_parser+layered")
 
 
@@ -798,6 +837,30 @@ def run_transaction_qc_paths(appraisal_path, engagement_path=None, contract_path
     rs = _overlay_certification_addendum(rs, Path(appraisal_path), "appraisal_report")
     _emit("locate", "Preparing review highlights", 44.0)
     rs = _overlay_locate(rs, Path(appraisal_path))
+    # Final plausibility gate — field_validators.validate_results only ran once,
+    # inside run_full_extraction, BEFORE the XML/comp-grid/LLM/sketch overlays
+    # above landed on top of it. Re-run here on the fully merged set so an
+    # implausible value introduced (or left standing) by any overlay — most
+    # importantly a mis-mapped XML field, which otherwise wins every merge
+    # outright at its flat 0.97 confidence — gets caught too, not just the raw
+    # 7-layer PDF read.
+    from app.extraction.field_validators import validate_results
+    _final_existing = {name: r for name, r in rs}
+    _suppressed_final = validate_results(_final_existing)
+    if _suppressed_final:
+        logger.info(
+            "Final plausibility gate: suppressed %d implausible value(s) after "
+            "overlays for %s", _suppressed_final, Path(appraisal_path).name,
+        )
+        rs = _rebuild(rs, "appraisal_report", _final_existing, ocr_method=rs.ocr_method)
+
+    # Stage-2 LLM comprehension: read narrative prose into grounded `llm_*` FACT
+    # fields (never verdicts) the rules can consult — e.g. property-value vs
+    # financing-rate trend, or paraphrased updates. Strict no-op when disabled or
+    # no provider is configured, so the deterministic keyword path is unchanged
+    # unless LLM_COMPREHENSION_ENABLED is turned on (CLAUDE.md §17, P-6).
+    from app.qc.llm_comprehension import comprehend
+    rs = comprehend(rs, "appraisal_report")
     sets["appraisal"] = rs
 
     # ═══════════════════════════════════════════════════════════════════════

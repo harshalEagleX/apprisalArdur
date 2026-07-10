@@ -60,6 +60,15 @@ LLM_EXTRACTION_ENABLED: bool = os.getenv("LLM_EXTRACTION_ENABLED", "true").lower
 # rule's pass/fail (that stays deterministic, CLAUDE.md §17). Opt-in (off by default)
 # so the rule engine and the baseline harness stay deterministic unless turned on.
 LAYER_B_LLM_ENABLED: bool = os.getenv("LAYER_B_LLM_ENABLED", "false").lower() in ("1", "true", "yes")
+# Stage-2 comprehension pass: when enabled, the LLM reads narrative prose into
+# STRUCTURED FACTS (never verdicts) — e.g. the property-value trend vs the
+# financing-rate trend, or whether updates were described — written as new
+# `llm_*` fields the rules read. Every fact must cite a source quote that
+# literally appears in the narrative (grounding), matches a strict JSON schema,
+# and is dropped otherwise so the rule falls back to its keyword path. The pass
+# NEVER emits PASS/FAIL/VERIFY (CLAUDE.md §17). Opt-in / off by default so the
+# rule engine and baseline harness stay deterministic unless turned on.
+LLM_COMPREHENSION_ENABLED: bool = os.getenv("LLM_COMPREHENSION_ENABLED", "false").lower() in ("1", "true", "yes")
 
 # Together AI (primary LLM) — two API keys used in round-robin for async batching so
 # two requests can run simultaneously. Keys are independent accounts; each has its own

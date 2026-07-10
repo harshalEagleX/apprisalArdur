@@ -6,6 +6,7 @@ from app.qc.rules import (  # noqa: F401
     comp_grid,
     commentary,
     contract,
+    cross_field,
     fha_usda,
     global_rules,
     improvements,

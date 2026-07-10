@@ -47,6 +47,12 @@ _NARRATIVE_FIELDS = (
     "neighborhood_description", "contract_analysis_comment",
     "prior_sale_analysis_comment", "special_assessments_comment",
     "addendum_text",
+    # Extracted narrative that other rules read under their own names but which
+    # never reached Layer-B: the SCA comment box, and the UAD condition/updates
+    # blocks (PROPERTY_ANALYSIS). Feeding them here lets is_explained() see the
+    # appraiser's real explanations instead of manufacturing "unexplained →
+    # VERIFY" findings (audit 2026-07-10).
+    "sca_comment", "condition_comments", "improvements_comments",
 )
 
 # Per-concern keyword patterns (Layer-B determination). Deterministic by design.

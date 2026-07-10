@@ -54,24 +54,47 @@ def n1_characteristics(ctx: QCContext):
     # residential area cannot be "Under 25%" built-up
     built = str(ctx.appraisal.value("built_up") or "").lower()
     one_unit = normalize_currency(ctx.appraisal.value("land_use_one_unit"))
+    # A detected contradiction is always surfaced to the reviewer (never a
+    # silent PASS) — extraction confidence only scales how sure we are that
+    # the contradiction is real, matching the pattern used everywhere else
+    # in this module (N-2's 1004MC consistency check, etc.). A high-confidence
+    # read makes a contradictory value MORE suspicious, not less.
     if built and one_unit is not None:
         residential_floor = qc_config.subject("builtup_residential_pct", 75)
         if one_unit >= residential_floor and "under" in built:
             _n1_conf = min(ctx.appraisal.confidence("built_up"),
                            ctx.appraisal.confidence("land_use_one_unit"))
-            if _n1_conf >= ctx.checkbox_conf:
-                out.append(_res("N-1", "19", RuleStatus.PASS,
-                                fields=["built_up", "land_use_one_unit"],
-                                evidence=[ctx.appraisal.evidence("built_up"),
-                                          ctx.appraisal.evidence("land_use_one_unit")]))
-            else:
+            out.append(_res("N-1", "19", RuleStatus.VERIFY,
+                            message=qc_config.template("N-1-landuse-x", a=built,
+                                                       b=int(one_unit)),
+                            fields=["built_up", "land_use_one_unit"],
+                            template_id="N-1-landuse-x",
+                            confidence=0.75 if _n1_conf >= ctx.checkbox_conf else 0.5,
+                            evidence=[ctx.appraisal.evidence("built_up"),
+                                      ctx.appraisal.evidence("land_use_one_unit")]))
+    # mirror check: an "Over 75%" built-up marking implies most of the
+    # neighborhood's land use is actually developed (one-unit + 2-4-unit +
+    # multi-family + commercial) — a large "Other" share (typically vacant /
+    # agricultural) directly contradicts a claim that the area is mostly built up.
+    if built and "over" in built:
+        developed_fields = ["land_use_one_unit", "land_use_2_4_unit",
+                            "land_use_multi_family", "land_use_commercial"]
+        developed_vals = {f: normalize_currency(ctx.appraisal.value(f)) for f in developed_fields}
+        present = {f: v for f, v in developed_vals.items() if v is not None}
+        if present:
+            developed_total = sum(present.values())
+            developed_floor = qc_config.subject("builtup_developed_pct", 75)
+            if developed_total < developed_floor:
+                fields = ["built_up"] + list(present)
+                ev = [ctx.appraisal.evidence(f) for f in fields]
+                _n1b_conf = min([ctx.appraisal.confidence("built_up")] +
+                                [ctx.appraisal.confidence(f) for f in present])
                 out.append(_res("N-1", "19", RuleStatus.VERIFY,
-                                message=qc_config.template("N-1-landuse-x", a=built,
-                                                           b=int(one_unit)),
-                                fields=["built_up", "land_use_one_unit"],
-                                template_id="N-1-landuse-x", confidence=0.6,
-                                evidence=[ctx.appraisal.evidence("built_up"),
-                                          ctx.appraisal.evidence("land_use_one_unit")]))
+                                message=qc_config.template("N-1-landuse-over", a=built,
+                                                           b=int(developed_total)),
+                                fields=fields, template_id="N-1-landuse-over",
+                                confidence=0.75 if _n1b_conf >= ctx.checkbox_conf else 0.5,
+                                evidence=ev))
     return out
 
 
@@ -99,6 +122,15 @@ def n2_trends(ctx: QCContext):
     mca = _trend_direction(ctx.appraisal.value("mca_trend_median_sale_price")
                            or ctx.appraisal.value("mca_trend_total_sales"))
     if pv and mca and pv != mca:
+        # Stage-2 comprehension false-positive guard: read the narrative's grounded
+        # property-VALUE trend (distinct from the financing-RATE trend the keyword
+        # path conflates). If it corroborates the page-1 checkbox, the disagreement
+        # with the 1004MC cell is a data/rate-vs-value artifact, not an appraiser
+        # inconsistency — stand down. Absent (LLM off) → unchanged behaviour.
+        _llm_pv = {"increasing": "up", "stable": "flat", "declining": "down"}.get(
+            (ctx.appraisal.value("llm_trend_property_values") or "").lower())
+        if _llm_pv and _llm_pv == pv:
+            return out
         from app.qc import layer_b
         _v = layer_b.assess(
             ctx, concern="market_trend",
