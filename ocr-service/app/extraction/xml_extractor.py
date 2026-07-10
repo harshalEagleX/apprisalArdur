@@ -48,6 +48,8 @@ Canonical field names produced (partial list):
     comp_N_site_area, comp_N_view, comp_N_design_style, comp_N_quality_rating,
     comp_N_age, comp_N_condition_rating, comp_N_condition_adj, comp_N_gla,
     comp_N_gla_adj, comp_N_garage
+    (plus comp_N_gla_adj_blank / comp_N_condition_adj_blank = "True" when the
+     adjustment row exists but its amount cell is empty — see _set_amount)
   Subject grid column (seq=0):
     subject_grid_location_rating, subject_grid_site_area, subject_grid_view,
     subject_grid_design_style, subject_grid_quality_rating, subject_grid_age,
@@ -161,6 +163,17 @@ def _a(el: Optional[ET.Element], attr: str, default: str = "") -> str:
     return el.get(attr, default) or default
 
 
+# MISMO KITCHEN_EQUIPMENT _Type → the canonical appliance field I-6 reads.
+_APPLIANCE_FIELD = {
+    "Refrigerator": "appliance_refrigerator",
+    "RangeOven":    "appliance_range_oven",
+    "Disposal":     "appliance_disposal",
+    "Dishwasher":   "appliance_dishwasher",
+    "Microwave":    "appliance_microwave",
+    "WasherDryer":  "appliance_washer_dryer",
+}
+
+
 def _extract_report(root: ET.Element, f: dict) -> None:
     report = root.find("REPORT")
     if report is None:
@@ -181,6 +194,30 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
     if appraiser is not None:
         f["appraiser_name"] = _a(appraiser, "_Name")
         f["appraiser_company_name"] = _a(appraiser, "_CompanyName")
+        # The appraiser's company address lives on the APPRAISER party attributes
+        # (same shape as the subject property address). Compose it so SIG-CO (97/98)
+        # can confirm the signature block identifies the company by address — the PDF
+        # spatial reader only catches it on some layouts, leaving a false VERIFY.
+        _astreet = _a(appraiser, "_StreetAddress")
+        if _astreet:
+            _acity, _astate, _azip = (_a(appraiser, "_City"), _a(appraiser, "_State"),
+                                      _a(appraiser, "_PostalCode"))
+            _tail = " ".join(p for p in (_astate, _azip) if p)
+            f["appraiser_company_address"] = ", ".join(
+                p for p in (_astreet, _acity, _tail) if p)
+        # Appraiser phone/email live in CONTACT_DETAIL/CONTACT_POINT — needed for
+        # the signature-block completeness check (99) and as an XML-authoritative
+        # source for the email SIG-4 already reads from the PDF.
+        _cd = appraiser.find("CONTACT_DETAIL")
+        if _cd is not None:
+            for _cp in _cd.findall("CONTACT_POINT"):
+                _ct, _cv = (_cp.get("_Type") or "").lower(), _cp.get("_Value")
+                if not _cv:
+                    continue
+                if _ct == "phone":
+                    f["appraiser_phone"] = _cv
+                elif _ct == "email":
+                    f.setdefault("appraiser_email", _cv)
         lic = appraiser.find("APPRAISER_LICENSE")
         if lic is not None:
             f["appraiser_license_number"] = _a(lic, "_Identifier")
@@ -219,6 +256,12 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     f["occupancy_type"]   = _a(prop, "_CurrentOccupancyType")
     f["occupant_status"]  = f["occupancy_type"]               # S-7 uses occupant_status
     f["property_rights"]  = _a(prop, "_RightsType")
+    # PROPERTY carries the project class (PUD / Condominium / …). Map PUD to the
+    # is_pud checkbox I-HOA-PUD reads — without it a genuine PUD (with HOA dues)
+    # false-VERIFYs "PUD box not checked" (ESTX-0007568, ProjectClassificationType=PUD).
+    _proj = _a(prop, "ProjectClassificationType")
+    if _proj:
+        f["is_pud"] = "Yes" if _proj.strip().lower() == "pud" else "No"
 
     ident = prop.find("_IDENTIFICATION")
     if ident is not None:
@@ -249,9 +292,30 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                 if _a(found, "_ExistsIndicator").upper() == "Y":
                     f["foundation_type"] = _a(found, "_Type")
                     break
+        # Built-in appliances are itemized as KITCHEN_EQUIPMENT rows; without this
+        # map I-6 sees no appliances and false-VERIFYs "no appliances listed" even
+        # though the report lists them (ESTX-0007568). Feeds I-6 / FHA-13.
+        for keq in struct.findall("KITCHEN_EQUIPMENT"):
+            _fld = _APPLIANCE_FIELD.get(_a(keq, "_Type"))
+            if _fld and _a(keq, "_ExistsIndicator").upper() == "Y":
+                f[_fld] = "Yes"
         sa = struct.find("STRUCTURE_ANALYSIS")
         if sa is not None:
             f["effective_age"] = _a(sa, "EffectiveAgeYearsCount")
+
+    # PROPERTY_ANALYSIS narrative blocks (direct children of PROPERTY). The UAD
+    # condition/updates narrative ("C3;Kitchen-updated…;Updates include…") lives
+    # under _Type="QualityAndAppearance"; a second condition narrative under
+    # _Type="PropertyCondition". The grid Condition cell carries only the bare
+    # "C3" code, so without these two fields XF-AGE-UPDATES cannot see described
+    # updates and false-VERIFYs a justified effective-age gap (ESMI-0048528/541).
+    _ANALYSIS_FIELD = {"QualityAndAppearance": "condition_comments",
+                       "PropertyCondition":    "improvements_comments"}
+    for pa in prop.findall("PROPERTY_ANALYSIS"):
+        key = _ANALYSIS_FIELD.get(_a(pa, "_Type"))
+        comment = _a(pa, "_Comment")
+        if key and comment:
+            f[key] = comment
 
     site = prop.find("SITE")
     if site is not None:
@@ -350,7 +414,11 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         f["contract_analyzed"]   = _a(sc, "_ReviewedIndicator")
         f["concessions_indicator"] = _a(sc, "SalesConcessionIndicator")
         f["concessions_amount"]  = _a(sc, "SalesConcessionAmount")
-        f["contract_comment"]    = _a(sc, "_ReviewComment")
+        # Contract-analysis narrative (CONTRACT-2, Layer-B). Written under the
+        # canonical name the rules/schema read — the prior `contract_comment`
+        # write was dead (no reader), so the contract analysis never reached the
+        # narrative reader and CONTRACT-2 false-VERIFYd (audit 2026-07-10).
+        f["contract_analysis_comment"] = _a(sc, "_ReviewComment")
 
     lh = prop.find("LISTING_HISTORY")
     if lh is not None:
@@ -408,6 +476,14 @@ def _extract_conditions(root: ET.Element, f: dict) -> None:
 
 
 def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
+    # Final-reconciliation narrative (Layer-B / commentary). _RECONCILIATION lives
+    # under VALUATION (a sibling of VALUATION_METHODS), so read it from root before
+    # the VALUATION_METHODS guard — otherwise reports without a cost/income block
+    # lose the reconciliation comment entirely (audit 2026-07-10).
+    recon = root.find(".//_RECONCILIATION")
+    if recon is not None and _a(recon, "_SummaryComment"):
+        f["final_reconciliation_comment"] = _a(recon, "_SummaryComment")
+
     vm = root.find("VALUATION_METHODS")
     if vm is None:
         return
@@ -416,7 +492,9 @@ def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
     if sca is not None:
         f["final_value_sca"]      = _a(sca, "ValueIndicatedBySalesComparisonApproachAmount")
         f["sca_comment"]          = _a(sca, "_Comment")
-        f["prior_sale_analysis"]  = _a(sca, "_CurrentSalesAgreementAnalysisComment")
+        # Canonical name the schema/Layer-B read is prior_sale_analysis_comment;
+        # the bare `prior_sale_analysis` write had no reader (audit 2026-07-10).
+        f["prior_sale_analysis_comment"] = _a(sca, "_CurrentSalesAgreementAnalysisComment")
 
     ca = vm.find("COST_ANALYSIS")
     if ca is not None:
@@ -519,6 +597,29 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
         if v:
             f[key] = v
 
+    def _set_amount(amt_key: str, blank_key: str, t: str) -> None:
+        """Adjustment-amount cell — preserve the three states a grid QC rule must
+        tell apart, which a plain `_set` collapses into one NOT_FOUND:
+
+          • row absent          → write nothing (field reads NOT_FOUND)
+          • row present, cell "" → write nothing to `amt_key` BUT flag `blank_key`
+                                    "True" (adjustment genuinely absent — a defect
+                                    when the comp differs on this line)
+          • row present, "0"/val → write the value to `amt_key` ($0 is an explicit
+                                    "no adjustment", not a blank)
+
+        Keeping the flag on a *parallel* field (not overloading `amt_key`) leaves
+        every existing consumer of `amt_key` unchanged (it still reads NOT_FOUND
+        for a blank cell); only cross_field.XF-GRID-BLANK-ADJ reads `blank_key`.
+        """
+        if t not in adj:                      # adjustment row not present at all
+            return
+        v = adj[t].get("_Amount", "")
+        if v and v.strip():
+            f[amt_key] = v
+        else:
+            f[blank_key] = "True"
+
     _set(f"{pfx}_sale_date",         "DateOfSale",         "_Description")
     # UAD Date-of-Sale token → settlement date (s-token). "Active"/"Listing" has no
     # s-token, so no settlement date is set — SCA-2 then classifies it as a listing
@@ -537,9 +638,9 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     _set(f"{pfx}_quality_rating",    "Quality",            "_Description")
     _set(f"{pfx}_age",               "Age",                "_Description")
     _set(f"{pfx}_condition_rating",  "Condition",          "_Description")
-    _set(f"{pfx}_condition_adj",     "Condition",          "_Amount")
+    _set_amount(f"{pfx}_condition_adj", f"{pfx}_condition_adj_blank", "Condition")
     _set(f"{pfx}_gla",               "GrossLivingArea",    "_Description")
-    _set(f"{pfx}_gla_adj",           "GrossLivingArea",    "_Amount")
+    _set_amount(f"{pfx}_gla_adj",    f"{pfx}_gla_adj_blank", "GrossLivingArea")
     _set(f"{pfx}_garage",            "CarStorage",         "_Description")
     _set(f"{pfx}_garage_carport",    "CarStorage",         "_Description")  # SCA-21 uses garage_carport
     _set(f"{pfx}_concessions",       "SalesConcessions",   "_Description")

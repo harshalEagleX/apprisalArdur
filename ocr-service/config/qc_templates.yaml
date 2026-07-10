@@ -32,6 +32,7 @@ S-5-generic:  "'{value}' is too generic for a neighborhood name. Please use the 
 S-7-tenant:   "Occupancy is marked Tenant. Please add the lease terms (start/end dates and monthly rent amount) to the report."
 S-7-vacant:   "Occupancy is marked Vacant. Please add a comment on whether the utilities were on or off at the time of inspection."
 S-12-listing: "The property was listed for sale in the past 12 months. Please add the listing details ({value}) to the subject section."
+S-12-implausible: "The data source shown ('{value}') doesn't look like a real MLS name, county record, or listing citation. Please verify."
 S-2-contract-buyer: "The purchase contract lists additional buyer(s) {value} who are not on the order form. Please confirm whether a co-borrower should be added."
 
 # ---- Contract ----
@@ -61,6 +62,7 @@ N-5-delineation: "The Neighborhood Boundaries section is missing direction descr
 N-5-abbrev: "The neighborhood boundaries use single-letter direction codes (N, S, E, W). Please spell them out: North, South, East, West."
 N-5-maponly: "The boundary section just says 'See map.' The boundaries must be written out in the report — a map reference alone is not enough. Please describe them."
 N-1-landuse-x: "Built-Up is marked as '{a}' but the land-use section shows {b}% residential — these seem inconsistent. Please verify."
+N-1-landuse-over: "Built-Up is marked as '{a}' but the present land-use percentages only show {b}% developed (one-unit + 2-4-unit + multi-family + commercial) — these seem inconsistent. Please verify."
 N-2-mca: "The trend checkbox ({a}) on page 1 doesn't match the trend in the market conditions addendum ({b}). Please make them consistent or add a comment explaining the difference."
 N-3-predominant: "The predominant {field} ({value}) falls outside the Low–High range given. Please correct either the range or the predominant value."
 N-3-valuepred: "The appraised value (${a}) is more than {pct}% away from the typical neighborhood price (${b}). Please add a comment addressing whether the property is over- or under-improved for the area."
@@ -251,3 +253,13 @@ ORD-ASSIGN-MATCH: "The order form says this is a '{ordered}' assignment, but the
 # ---- ST-INTENDED / ST-SCOPE ----
 ST-INTENDED: "The report must state what the appraisal is for (mortgage lending) and who it is for (the lender/client). Please confirm both of these statements are present."
 ST-SCOPE: "The scope of work description could not be found. Please verify the report describes what type of inspection was performed and what the appraiser did and did not do."
+
+# ---- XF-* cross-field contradiction rules ----
+XF-age-updates: "The effective age ({eff} years) is {gap} years below the actual age ({actual} years), which normally implies significant updates — but the report narrative describes none. Please describe what was updated to justify the lower effective age, or revise it."
+XF-trend-narrative: "The page-1 property-values trend is marked '{checkbox}', but the report narrative describes the market as '{narrative}'. Please make the trend checkbox and the narrative consistent, or explain the difference."
+XF-grid-blank-adj: "Comp {comp}'s gross living area ({comp_gla} sq ft) differs from the subject ({subject_gla} sq ft) by {diff} sq ft, but the GLA adjustment cell is blank. Please apply a GLA adjustment or confirm none is warranted."
+
+# ---- SIG-CO appraiser company identity (checklist 97, 98) ----
+SIG-CO-name: "The appraiser's company name is missing from the signature page. Please provide it."
+SIG-CO-addr: "The appraiser's company address is missing from the signature page. Please provide it."
+SIG-CO-phone: "The appraiser's telephone number is missing from the signature page. Please provide it."

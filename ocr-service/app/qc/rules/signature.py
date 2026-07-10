@@ -276,3 +276,34 @@ def sig_trainee(ctx: QCContext):
         message=qc_config.template("SIG-TRAINEE", type=lic_type),
         fields_involved=fields, template_id="SIG-TRAINEE", evidence=ev,
     )
+
+
+# ---- SIG-CO Appraiser company name/address/phone present (checklist 97-99) --
+#
+# The signature block must identify the appraiser's company by name, address AND
+# phone (checklist items 97, 98, 99). All three come from the MISMO APPRAISER
+# party (company name + address attributes; phone from CONTACT_DETAIL). None had
+# a rule before. Absence is surfaced as VERIFY — not FAIL — because these are also
+# read positionally from the PDF on some layouts and can be missed, so we ask a
+# human rather than hard-rejecting a value we may simply have failed to read.
+@rule(id="SIG-CO", num="97,98,99", section="signature", phase=2,
+      name="Appraiser company name, address and phone present")
+def sig_company(ctx: QCContext):
+    out = []
+    for field, num, tmpl in (
+        ("appraiser_company_name", "97", "SIG-CO-name"),
+        ("appraiser_company_address", "98", "SIG-CO-addr"),
+        ("appraiser_phone", "99", "SIG-CO-phone"),
+    ):
+        val = str(ctx.appraisal.value(field) or "").strip()
+        ev = [ctx.appraisal.evidence(field)]
+        if len(val) >= 3:
+            out.append(RuleResult(
+                rule_id="SIG-CO", checklist_num=num, section="signature",
+                status=RuleStatus.PASS, fields_involved=[field], evidence=ev))
+        else:
+            out.append(RuleResult(
+                rule_id="SIG-CO", checklist_num=num, section="signature",
+                status=RuleStatus.VERIFY, message=qc_config.template(tmpl),
+                fields_involved=[field], template_id=tmpl, evidence=ev, confidence=0.6))
+    return out
