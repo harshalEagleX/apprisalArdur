@@ -1,0 +1,1237 @@
+meta:
+  amc_code: EQUITYSOLUTIONS
+  checklist_hash: 3f9eafa82a7849f2
+  note: 'Human review: fix a binding (edit a label id) or confirm unbound. Never write
+    logic here.'
+  count: 51
+items:
+- item_id: EQ-6
+  check_text: 'Neighborhood Name — The subdivision name must be provided or if none,
+    use the most common name for the area. Cannot be blank or state None, N/A or Unknown.
+    | Triggers: If Neighborhood name mentioned none or n/a'
+  reject_text: The neighborhood name in subject section is mentioned as N/A. per the
+    UAD requirements; the appraiser should enter a neighborhood name. It may be a
+    name recognized by the municipality in which the property is sited, such as a
+    subdivision name. If there is no neighborhood name recognized by the municipality,
+    enter the common name by which residents refer to the location. Please revise.
+  section: subject
+  bound_labels:
+  - neighborhood_name
+  scope: cross_section
+  expects: neighborhood_name not blank and not one of ['None','N/A','Unknown']
+  judgeable: text
+  conditional:
+    condition_labels:
+    - neighborhood_name
+    - appraiser_company_name
+    - appraiser_name
+    - borrower_name
+    consequence_labels:
+    - did_analyze_contract
+    - is_pud_checked
+    - neighborhood_name
+    - occupant_status
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-8
+  check_text: 'Census Tract — Four digit then 2 Digit after decimal | Triggers: IF
+    Census Tract missing or blank'
+  reject_text: null
+  section: subject
+  bound_labels:
+  - census_tract
+  scope: cross_section
+  expects: format == ^\d{4}\.\d{2}$
+  judgeable: text
+  conditional:
+    condition_labels:
+    - census_tract
+    - property_address
+    - state
+    - zip_code
+    consequence_labels:
+    - census_tract
+    - property_address
+    - state
+    - zip_code
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-10
+  check_text: 'Special Assessments — Must comment if there are Special Assessments
+    provided, how much and what they are for. If no special assessment it must contain
+    "0". | Triggers: If special assessment mentioned'
+  reject_text: In the subject section, please specify what is the special assessment
+    of $*** for?
+  section: subject
+  bound_labels:
+  - special_assessments
+  - special_assessments_comment
+  scope: cross_section
+  expects: if special_assessments > 0 then special_assessments_comment non-empty else
+    comment contains "0"
+  judgeable: text
+  conditional:
+    condition_labels:
+    - special_assessments
+    - special_assessments_comment
+    - comp_N_hoa_monthly_assessment
+    - hoa_monthly_assessment
+    consequence_labels:
+    - special_assessments_comment
+    - special_assessments
+    - comp_N_hoa_monthly_assessment
+    - contract_analysis_comment
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-11
+  check_text: 'PUD and HOA — Per FNMA if HOA dues are mandatory, it''s a PUD, proper
+    information should filled out in PUD section. Make sure per year or per month
+    is marked. | Triggers: If HOA is given and PUD is not marked Verify with Client
+    Engagement letter if Refinance or Purchase. If "Other" is marked, the transaction
+    type must be filled in, in the space provided.'
+  reject_text: HOA dues are noted as “$660” per year in the subject section however
+    PUD box is not marked, please revise.
+  section: subject
+  bound_labels:
+  - hoa_dues
+  - hoa_period
+  - is_pud_checked
+  - assignment_type
+  scope: cross_section
+  expects: if hoa_dues present then is_pud_checked=True and hoa_period not empty
+  judgeable: text
+  conditional:
+    condition_labels:
+    - census_tract
+    - fha_case_number
+    - hoa_dues
+    - hoa_monthly_assessment
+    consequence_labels:
+    - fha_case_number
+    - air_conditioning_type
+    - appraisal_report_type
+    - assignment_type
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-E
+  check_text: 'Lender/Client Name — This must match lender/client name listed on the
+    Client Engagement Letter (Client Displayed on Report) | Triggers: If lender/client
+    name is different than order form'
+  reject_text: 'Please correct the lender''s name so it reflects as: (name as per
+    order form)'
+  section: subject
+  bound_labels:
+  - lender_name
+  scope: cross_section
+  expects: lender_name == order_form_lender_name
+  judgeable: needs_engagement
+  conditional:
+    condition_labels:
+    - lender_name
+    - appraiser_company_name
+    - appraiser_name
+    - borrower_name
+    consequence_labels:
+    - lender_name
+    - appraisal_report_type
+    - appraiser_company_name
+    - appraiser_name
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-F
+  check_text: 'Lender/client Address — Must match lender/client address listed on
+    the Client Engagement Letter | Triggers: If lender/client address is different
+    than order form'
+  reject_text: 'Please correct the lender''s address so it reflects as: (name as per
+    order form)'
+  section: subject
+  bound_labels:
+  - lender_address
+  scope: cross_section
+  expects: lender_address == order_form_lender_address
+  judgeable: needs_engagement
+  conditional:
+    condition_labels:
+    - lender_address
+    - appraiser_company_address
+    - comp_N_address
+    - lender_name
+    consequence_labels:
+    - lender_address
+    - rent_comp_N_address
+    - appraiser_company_address
+    - comp_N_address
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-13
+  check_text: 'Subject Listed/Sold within 12 Months If there are no prior listings
+    or current sale, this should be marked no and the appraiser MUST include the data
+    source. Must state the MLS abreviated name for the area. IE. MXLMLS | Trigger:
+    If there are no prior listings or current sale No should be mark and include data
+    source. If the subject IS listed or has a current sale, the field must be in this
+    format: DOM #; Abbreviated MLS name and MLS #. Current list/sale price, current
+    list/sale date. (THIS MUST BE ON PAGE 1) Any additional data can be included in
+    the report addendum. If the subject has been listed but NOT a purchase, a comment
+    must be provided if the opinion of market value varies by the most recent listing
+    price by more than 3% | Trigger: If currently listed marked as Yes'
+  reject_text: Please provide Data sources in subject section for the question “Is
+    the subject property currently offered for sale or has it been offered for sale
+    in the twelve months prior to the effective date of this appraisal?” as per UAD
+    requirement.
+  section: subject
+  bound_labels:
+  - data_source
+  - days_on_market
+  - list_price
+  - list_date
+  - mls_number
+  scope: cross_section
+  expects: if offerred_for_sale_12mo == false then data_source present; if true then
+    days_on_market, list_price, list_date, mls_number present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - mca_median_sale_list_ratio_prior_7_12
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+    - prior_sale_effective_date_subject
+    consequence_labels:
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+    - prior_sale_effective_date_subject
+    - prior_sale_price_subject
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-18
+  check_text: 'Is there any financial assistance (loan charges, sale concessions,
+    gift or downpayment assistance, etc.) to be paid by any party on behalf of the
+    borrower? — Is there any financial assistance (loan charges, sale concessions,
+    gift or downpayment assistance, etc.) to be paid by any party on behalf of the
+    borrower? check yes or no checkbox. | Triggers: If Yes, report the total dollar
+    amount and describe the items to be paid. ( check from Purchase Agreement); If
+    no, then report the total dollar amount and describe the items to be paid shoule
+    apply "0" check from Purchase agreement. | Trigger: if concession is given but
+    different from purchase agreement'
+  reject_text: null
+  section: contract
+  bound_labels:
+  - has_financial_assistance
+  - financial_assistance_amount
+  - financial_assistance_description
+  scope: cross_section
+  expects: if has_financial_assistance then financial_assistance_amount > 0 and financial_assistance_description
+    non-empty
+  judgeable: text
+  conditional:
+    condition_labels:
+    - financial_assistance_amount
+    - concessions_amount
+    - financial_assistance_description
+    - has_financial_assistance
+    consequence_labels:
+    - stories_in_building
+    - appraisal_report_type
+    - comp_N_room_count_total
+    - concessions_amount
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-19
+  check_text: 'Characteristcis & Housing Trends — Neighborhood Characteristics and
+    One-Unit Housing Trends At least 1 box should be checked | Triggers: if checkbox
+    is missing : reject as In the neighborhood section checbox is missing for _____,
+    please revise.'
+  reject_text: null
+  section: neighborhood
+  bound_labels: []
+  scope: cross_section
+  expects: count(comp_* present) >= 1
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_unit_number
+    - conforms_to_neighborhood
+    - floor_location
+    - land_use_2_4_unit
+    consequence_labels:
+    - is_pud_checked
+    - conforms_to_neighborhood
+    - did_analyze_contract
+    - lease_dates
+  bound_by: llm
+  binder_confidence: 0.3
+- item_id: EQ-21
+  check_text: Unit Housing Price and Age — Appraiser to provide and be aware of the
+    high and low prices given. The unadjusted sales prices of the comparables used
+    in the report must fall within the ranges unless comps are not located within
+    the neighborhood (comment required). Comment required if the Market value differs
+    from Predominant by more than 10%, over or under improved and does it affect marketability?
+    Trend should match MC form or specific commentary is required.
+  reject_text: null
+  section: neighborhood
+  bound_labels:
+  - price_high
+  - price_low
+  - predominant_price
+  - market_value_opinion
+  scope: cross_section
+  expects: price_high and price_low present; abs(market_value_opinion - predominant_price)
+    <= 0.10 * predominant_price
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraised_value
+    - comp_N_adjusted_sale_price
+    - comp_N_sale_price
+    - comp_count_present
+    - year_built
+    - effective_age
+    consequence_labels:
+    - market_conditions_commentary
+    - appraised_value
+    - is_seller_owner_of_record
+    - market_value_opinion
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-23
+  check_text: 'Boundaries — Neighborhood Boundaries : all boundaries should be described
+    | Triggers: If missing : reject as ____ boundary is missing under Neighborhood
+    Boundries , please revise.'
+  reject_text: null
+  section: neighborhood
+  bound_labels:
+  - neighborhood_boundaries
+  scope: cross_section
+  expects: neighborhood_boundaries present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - neighborhood_boundaries
+    - conforms_to_neighborhood
+    - mca_neighborhood_analysis_comment
+    - neighborhood_description
+    consequence_labels:
+    - conforms_to_neighborhood
+    - lease_dates
+    - mca_neighborhood_analysis_comment
+    - neighborhood_boundaries
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-30
+  check_text: 'Zoning Classification, Description and Compliance — Zoning Compliance
+    atleast one box should be checked. (legal, legal non-conferming and No zoning)
+    | Triggers: If legal checked no comment needed; if legal non-conferming or No
+    zoning then add rejection:1. Zoning Compliance is marked on ’No Zoning’, please
+    comment if the subject can be rebuilt if destroyed. | Trigger: If illigal is marked
+    Specific Zoning Classification and Zoning Description : should be fill up | Trigger:
+    if blank then add rejection'
+  reject_text: null
+  section: site
+  bound_labels:
+  - zoning_compliance
+  - zoning_classification
+  scope: cross_section
+  expects: if zoning_compliance != 'legal' then zoning_classification non-empty
+  judgeable: text
+  conditional:
+    condition_labels:
+    - zoning_classification
+    - zoning_compliance
+    - appraised_value
+    - common_elements_description
+    consequence_labels:
+    - legal_description
+    - zoning_classification
+    - zoning_compliance
+    - appraisal_subject_to
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-32
+  check_text: 'Utilities/Off‐Site Improvement Type — Utilities and Off-site Improvements
+    - Type (Gas and Electricity checbok should be marked) | Triggers: if street is
+    marked as private then add rejection'
+  reject_text: null
+  section: site
+  bound_labels:
+  - utilities_gas
+  - utilities_electricity
+  scope: cross_section
+  expects: utilities_gas == True && utilities_electricity == True
+  judgeable: text
+  conditional:
+    condition_labels:
+    - utilities_electricity
+    - adverse_site_conditions
+    - air_conditioning_type
+    - appraisal_report_type
+    consequence_labels:
+    - photo_street
+    - property_address
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-34
+  check_text: Utilities and Off‐site Improvements Typical — Are the utilities and
+    off-site improvements typical for the market area? Yes or No checkbox should be
+    marked
+  reject_text: null
+  section: site
+  bound_labels: []
+  scope: unbound
+  expects: ''
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-44
+  check_text: 'Foundation — FOUNDATION checkbox is compulsory | Triggers: If Full
+    basement or Partial Basement checbox is marked than basement area and Basement
+    finished must be mentioned | Trigger: if basement is marked as full or partial
+    basement with Outside Entry/exit Evidence of Infestation, Dampness and Settlement
+    | Trigger: if checkbox is marked check commentary for adversity'
+  reject_text: null
+  section: improvements
+  bound_labels:
+  - foundation_type
+  - adverse_conditions
+  scope: cross_section
+  expects: foundation_type present && adverse_conditions present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraised_value
+    - comp_N_basement_gla
+    - comp_count_present
+    - did_analyze_contract
+    consequence_labels:
+    - comp_N_basement_gla
+    - contract_analysis_comment
+    - did_analyze_contract
+    - fha_case_number
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-45
+  check_text: 'Exterior and Interior Description should be completed with Material
+    and Condition. Amenities checkbox should be marked | Trigger: If improvement section
+    shows Fireplace(s), Patio/Deck, Pool, Woodstove(s), Fence or porch than sales
+    grid should reflect the same. Car Storage | Trigger: if Car storage checkbox is
+    for None then all area should be blank | Trigger: If Garage or carport is marked
+    then number of cars should be mentioned | Trigger: If Garage or carport marked
+    then attach detach or built in should be checked (atleast 1 checkbox )'
+  reject_text: null
+  section: improvements
+  bound_labels:
+  - exterior_walls
+  - floor_material
+  - condition_rating
+  - fireplace_count
+  - porch_patio_deck
+  - number_of_cars
+  - parking_space_number
+  scope: cross_section
+  expects: exterior_walls, floor_material, condition_rating non-empty; fireplace_count
+    matches improvement list; porch_patio_deck matches improvement list; if garage/carport
+    then number_of_cars present; if car storage None then parking_space_number blank
+  judgeable: text
+  conditional:
+    condition_labels:
+    - common_elements_description
+    - exterior_walls
+    - financial_assistance_description
+    - floor_location
+    consequence_labels:
+    - comp_count_present
+    - is_pud_checked
+    - porch_patio_deck
+    - appraised_value
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-49
+  check_text: Additional Features — Should list Energy efficient items if any. If
+    none, state NONE.
+  reject_text: null
+  section: improvements
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels: []
+    consequence_labels:
+    - did_analyze_contract
+    - is_pud_checked
+    - occupant_status
+    - personal_property_items
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-57
+  check_text: 'Data Sources — must have Specific MLS,the #, the MLS number/letters
+    that apply. (i.e.. MISMLS#3546935;DOM12). DOM must be provided or Unk listed (commentary
+    needed if unknown). | Triggers: If missing : reject as Please have data source
+    for ___ comp # under sales grid section.'
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - comp_N_data_source
+  scope: cross_section
+  expects: comp_N_data_source present for each comparable
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_data_source
+    - data_source
+    - is_seller_owner_of_record
+    - owner_record_data_source
+    consequence_labels:
+    - comp_count_present
+    - is_seller_owner_of_record
+    - prior_sale_data_source_subject
+    - appraised_value
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-58
+  check_text: 'Verification Sources — At least 1 must be provided and the specific
+    verification source must be reported in full | Triggers: If missing : reject as
+    Please have verification source for ___ comp # under sales grid section.'
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - comp_N_verification_source
+  scope: cross_section
+  expects: count(comp_* present) >= 1
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_verification_source
+    - comp_N_data_source
+    - data_source
+    - is_seller_owner_of_record
+    consequence_labels:
+    - comp_count_present
+    - appraised_value
+    - comp_N_verification_source
+    - prior_sale_data_source_subject
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-59
+  check_text: 'Sale or Financing Concessions — IF concession is given in amount and
+    didn''t given an adjustment or applied 0 :'
+  reject_text: Please provide "Sales or Financing Concessions" for comp 1, or comment
+    why adjustment is not warranted.
+  section: sales_comparison
+  bound_labels: []
+  scope: unbound
+  expects: ''
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-61
+  check_text: 'Location — location must be one of N, B or A (refer site section) |
+    Triggers: IF subject mentioned as (A - Adverse) then if any of the comps with
+    (N - Neutral) than value must be reflect in negative (-)'
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - comp_N_location_rating
+  scope: cross_section
+  expects: comp_N_location_rating in ['N','B','A']
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_floor_location
+    - comp_N_location_rating
+    - floor_location
+    - location
+    consequence_labels:
+    - adverse_site_conditions
+    - appraised_value
+    - fha_case_number
+    - site_value_estimate
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-62
+  check_text: 'Leasehold/Fee Simple — Must be provided, if Leasehold, similar comps
+    must be provided. | Triggers: If subject section shows Property Rights Appraised
+    as fee simple then sales grid should be the reflect same; If subject section is
+    leasehold and any of the comp shows fee simple then adjustment should be reflected.'
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - property_rights
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - lease_dates
+    consequence_labels:
+    - appraised_value
+    - comp_count_present
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-65
+  check_text: 'Design (Style) — must be provided Attachment type, # of stories and
+    Design (style). | Triggers: If Design (style) is missing under improvement section
+    or sales grid'
+  reject_text: Please provide Design (style) under improvement and sales grid.
+  section: sales_comparison
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - design_style
+    consequence_labels:
+    - comp_count_present
+    - design_style
+    - sale_type
+    - air_conditioning_type
+  bound_by: llm
+  binder_confidence: 0.3
+- item_id: EQ-70
+  check_text: Basement & Finish/Rooms Below Grade — If Full basement or Partial Basement
+    checbox is marked in the improvement section then basement area and Basement finished
+    must be mentioned in two separate line in the sales grid (ex. Basement & Finished
+    Rooms Below Grade)
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - comp_N_basement_gla
+  scope: cross_section
+  expects: comp_N_basement_gla present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_basement_gla
+    - comp_N_room_count_total
+    - total_rooms
+    - trim_finish_material
+    consequence_labels:
+    - comp_count_present
+    - appraised_value
+    - comp_N_adjusted_sale_price
+    - comp_N_basement_gla
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-72
+  check_text: 'Heating/Cooling — Both must be provided and match with improvement
+    section. If heating source is FWBB or FWA or Radiant at least 1 comp should be
+    the same feature. | Triggers: If cooling source marked as "Other" reject as: Subject
+    property has no permanent heat source, please provide comment any impact on marketability.'
+  reject_text: null
+  section: sales_comparison
+  bound_labels: []
+  scope: cross_section
+  expects: count(comp_* present) >= 1
+  judgeable: text
+  conditional:
+    condition_labels:
+    - cooling
+    - heating
+    consequence_labels:
+    - prior_sale_data_source_subject
+    - appraisal_subject_to
+    - appraised_value
+    - comp_N_data_source
+  bound_by: llm
+  binder_confidence: 0.25
+- item_id: EQ-74
+  check_text: 'Garage/Carport — If in the improvement section Garage is marked then
+    sales grid reflect the garage with driveway (ex. 1ga2dw) | Triggers: If any of
+    this is differnt with subject the adjustment or 0 is required.'
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - comp_N_garage_carport
+  scope: cross_section
+  expects: if subject garage marked then comp_N_garage_carport includes garage with
+    driveway (e.g., contains 'ga' and 'dw')
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_garage_carport
+    consequence_labels:
+    - comp_count_present
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+    - prior_sale_effective_date_subject
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-75
+  check_text: 'Porch/Patio/Deck — In the improvement section if porch, patio or deck
+    marked then same must be reflected in the sales grid. | Triggers: If any of the
+    amenities are differnt with subject the adjustment or 0 is required.'
+  reject_text: null
+  section: sales_comparison
+  bound_labels:
+  - porch_patio_deck
+  scope: cross_section
+  expects: if porch_patio_deck present then sales grid reflects same amenity
+  judgeable: text
+  conditional:
+    condition_labels:
+    - porch_patio_deck
+    consequence_labels:
+    - comp_count_present
+    - fha_case_number
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-76
+  check_text: Additional Fields for use — Does not have to be provided but if used,
+    the appraiser must place a label in the proper section.
+  reject_text: null
+  section: sales_comparison
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraiser_cert_expiration_date
+    - appraiser_cert_state
+    - appraiser_company_address
+    - appraiser_company_name
+    consequence_labels:
+    - condition_rating
+    - property_address
+    - state
+    - zip_code
+  bound_by: llm
+  binder_confidence: 0.25
+- item_id: EQ-80
+  check_text: 'Subject Property 3 year sales or transfer history — If subject sold/transferred
+    in 36 months than "My research did reveal any prior sales or transfers of the
+    subject property" box must be marked | Triggers: If subject sold/transferred in
+    36 months but did nox box marked than reject as: Prior Sales: Please check “Did”
+    box for subject prior sales or transfers because your data revealed subject has
+    been transferred within three years.; If sold in 36 months prior "Date of Prior
+    Sale/Transfer and Price of Prior Sale/Transfer" must be included in the report.'
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - prior_sale_date_subject
+  - prior_sale_price_subject
+  scope: cross_section
+  expects: if prior_sale_date_subject within 36 months then prior_sale_price_subject
+    must be present and prior sales box marked
+  judgeable: text
+  conditional:
+    condition_labels:
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+    - prior_sale_effective_date_subject
+    - prior_sale_price_subject
+    consequence_labels:
+    - prior_sale_data_source_subject
+    - prior_sale_date_subject
+    - prior_sale_effective_date_subject
+    - prior_sale_price_subject
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-81
+  check_text: Comparables 12 month sales or transfer history — If comparable sold/transferred
+    in 12 months than "My research did reveal any prior sales or transfers of the
+    comparable sales for the year prior to the date of sale of the comparable sale"
+    box must be marked
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - prior_comp_N_sale_date
+  scope: cross_section
+  expects: if(comp_N_sale_date within 12mo) then prior_comp_N_sale_date is null
+  judgeable: text
+  conditional:
+    condition_labels:
+    - prior_comp_N_sale_date
+    - comp_N_sale_date
+    - comp_count_present
+    - prior_comp_N_sale_price
+    consequence_labels: []
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-82
+  check_text: Sales History Table — Date of prior Sale/Transfer in mm/dd/yyyy format
+    and if none, leave blank. Only most recent should be reported here, if there is
+    more than 1, commentary must be provided.
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - prior_sale_date_subject
+  scope: cross_section
+  expects: date format mm/dd/yyyy, only most recent
+  judgeable: text
+  conditional:
+    condition_labels:
+    - prior_comp_N_sale_date
+    - prior_sale_date_subject
+    - prior_sale_effective_date_subject
+    - comp_N_sale_date
+    consequence_labels:
+    - appraisal_report_type
+    - contract_analysis_comment
+    - contract_date
+    - date_report_signed
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-83
+  check_text: Price of Prior Sale/Transfer — Figure of last sale or transfer must
+    be provided here. Only the most recent figure should be reported here, if there
+    is more than 1, commentary must be provided.
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - prior_sale_price_subject
+  scope: cross_section
+  expects: value_present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - mca_median_sale_price_prior_4_6
+    - mca_median_sale_price_prior_7_12
+    - prior_comp_N_sale_price
+    - prior_sale_price_subject
+    consequence_labels:
+    - market_conditions_commentary
+    - appraisal_report_type
+    - contract_analysis_comment
+    - contract_date
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-84
+  check_text: 'Data Source(s) — Must be provided. If last sale is report in Public
+    Record, Doc # must be provided. If MLS sale, MLS name must be provided along with
+    MLS #. Must be provided even if no sale or transfer is reported. Example: MFRMLS
+    #T2321256'
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - prior_sale_data_source_subject
+  scope: cross_section
+  expects: len(prior_sale_data_source_subject) > 0
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_data_source
+    - data_source
+    - is_seller_owner_of_record
+    - owner_record_data_source
+    consequence_labels:
+    - contract_date
+    - fha_case_number
+    - owner_of_public_record
+    - appraisal_report_type
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-85
+  check_text: Effective Date of Data Source (s) — Should be the date of findings.
+    Must be provided even if no sale or transfer is reported.
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - prior_sale_effective_date_subject
+  scope: cross_section
+  expects: date present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_data_source
+    - data_source
+    - effective_date
+    - is_seller_owner_of_record
+    consequence_labels:
+    - comp_N_sale_date
+    - contract_date
+    - date_report_signed
+    - prior_comp_N_sale_date
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-87
+  check_text: Summary of Sales Comparison Approach — Appraiser must discuss the comparables
+    provided specifically. Address distant comparables, adjustments given or the lack
+    of. Your opinion of value should be bracketed by the unadjusted and adjusted sales
+    prices. If unable to bracket, sufficient commentary must be provided.
+  reject_text: null
+  section: prior_sales
+  bound_labels:
+  - comp_N_sale_price
+  - comp_N_adjusted_sale_price
+  - sales_comparison_summary
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - sales_comparison_summary
+    - appraised_value
+    - comp_count_present
+    - appraiser_cert_expiration_date
+    consequence_labels:
+    - appraised_value
+    - comp_N_adjusted_sale_price
+    - comp_N_sale_price
+    - comp_count_present
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-89
+  check_text: 'Indicated Value by Sales Comparison Approach value and as is value
+    must be same | Triggers: If values are different reject as: In reconciliation
+    section, Indicated Market Value does not match with indicated value by Sales Comparison
+    Approach. Please revise.'
+  reject_text: null
+  section: reconciliation
+  bound_labels:
+  - indicated_value_sca
+  - market_value_opinion
+  scope: cross_section
+  expects: indicated_value_sca == market_value_opinion
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraised_value
+    - indicated_value_cost_approach
+    - indicated_value_income_approach
+    - comp_count_present
+    consequence_labels:
+    - appraised_value
+    - indicated_monthly_market_rent
+    - indicated_value_cost_approach
+    - indicated_value_income_approach
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-92
+  check_text: 'Support for the Opinion of Site value — Opinion Of Site Value is required
+    in every report. | Triggers: If missing reject as : Please provide an Opinion
+    of site value in the report.'
+  reject_text: null
+  section: cost
+  bound_labels:
+  - site_value_estimate
+  scope: cross_section
+  expects: site_value_estimate present
+  judgeable: text
+  conditional:
+    condition_labels:
+    - market_value_opinion
+    - site_value_estimate
+    - adverse_site_conditions
+    - appraised_value
+    consequence_labels:
+    - market_value_opinion
+    - site_value_estimate
+    - adverse_site_conditions
+    - appraisal_report_type
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-94
+  check_text: INCOME APPROACH TO VALUE — If this section is blank than no need to
+    add revision.
+  reject_text: null
+  section: cost
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - indicated_value_income_approach
+    - income_approach_monthly_rent
+    - indicated_value_cost_approach
+    - is_income_approach_used
+    consequence_labels: []
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-95
+  check_text: 'Is Developer/builder in control? — Should be completed for All PUD
+    reports, check yes or no and Attached/Detached. | Triggers: If attached and yes
+    checkbox is marked then all pud information should be fill up'
+  reject_text: null
+  section: pud
+  bound_labels:
+  - is_developer_controls_hoa
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - is_developer_controls_hoa
+    consequence_labels:
+    - appraisal_report_type
+    - appraised_value
+    - are_facilities_complete
+    - census_tract
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-96
+  check_text: 'Appraiser — All reports must be signed by certified Appraiser. | Triggers:
+    If signature is missing reject as: 1. The Appraiser Signatures are missing throughout
+    the report, please sign in all the designated spaces.'
+  reject_text: null
+  section: signature
+  bound_labels:
+  - date_report_signed
+  scope: cross_section
+  expects: presence(date_report_signed) == true
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraisal_report_type
+    - appraiser_cert_expiration_date
+    - appraiser_cert_state
+    - appraiser_company_address
+    consequence_labels:
+    - appraiser_cert_expiration_date
+    - appraiser_cert_state
+    - appraiser_state_cert_number
+    - date_report_signed
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-104
+  check_text: 'State License # — Used if appraiser is State Licensed, verify product
+    type can be completed by State Licensed appraiser. Must read as it does on ASC.gov.'
+  reject_text: null
+  section: signature
+  bound_labels:
+  - appraiser_state_cert_number
+  scope: cross_section
+  expects: presence(appraiser_state_cert_number)
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraiser_cert_state
+    - appraiser_state_cert_number
+    - did_analyze_contract
+    - is_pud_checked
+    consequence_labels: []
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-113
+  check_text: Inventory Analysis — All lightly shaded areas are required to be completed
+    or a specific comment as to why they cannot be. Required blank spaces should be
+    completed with a "0" if there are none or N/A.
+  reject_text: null
+  section: mc_1004
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - contract_analysis_comment
+    - mca_neighborhood_analysis_comment
+    - prior_sale_analysis_comment
+    - site_area
+    consequence_labels:
+    - appraised_value
+    - are_facilities_complete
+    - commercial_space_pct
+    - comp_count_present
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-115
+  check_text: 'Total # of Comparable Active Listings — If completed, all fields should
+    match the information provided at the top of the sales grid for Comparable properties
+    currently offered for sale. If all fields not complete, the Current‐3 months must
+    match the data given at the top of the sales grid.'
+  reject_text: null
+  section: mc_1004
+  bound_labels:
+  - mca_active_listings_current_3
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - comp_N_is_listing
+    - comp_N_room_count_total
+    - comp_count_present
+    - land_use_total
+    consequence_labels:
+    - comp_count_present
+    - appraised_value
+    - comp_N_adjusted_sale_price
+    - comp_N_data_source
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-116
+  check_text: Median Sale & List Price, DOM, Sale/List % — All lightly shaded areas
+    are required to be completed or a specific comment as to why they cannot be. Required
+    blank spaces should be completed with a "0" if there are none or N/A. If dark
+    shaded areas cannot be provided, N/A should be provided.
+  reject_text: null
+  section: mc_1004
+  bound_labels:
+  - mca_median_sale_price_current_3
+  - mca_median_list_price_prior_7_12
+  - mca_median_sale_dom_prior_7_12
+  - mca_median_sale_list_ratio_prior_7_12
+  scope: cross_section
+  expects: each bound field must be non‑empty (or "0"/"N/A" as appropriate)
+  judgeable: text
+  conditional:
+    condition_labels:
+    - mca_median_list_price_prior_7_12
+    - mca_median_sale_list_ratio_prior_7_12
+    - mca_median_sale_price_current_3
+    - mca_median_sale_price_prior_4_6
+    consequence_labels:
+    - appraised_value
+    - are_facilities_complete
+    - commercial_space_pct
+    - comp_count_present
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-117
+  check_text: Overall Trend — All lightly shaded trends should be marked where there
+    are at least 2 points of data provided in the Inventory analysis and Median sale
+    & list price fields. If the median sale price trend is declining or increasing,
+    apply the appropriate market conditions adjustment to the sales based upon contract
+    dates or explain why this is not applicable.
+  reject_text: null
+  section: mc_1004
+  bound_labels:
+  - mca_trend_median_sale_price
+  scope: cross_section
+  expects: count(comp_* present) >= 2
+  judgeable: text
+  conditional:
+    condition_labels:
+    - mca_trend_median_sale_price
+    - mca_trend_total_sales
+    consequence_labels:
+    - mca_trend_median_sale_price
+    - appraised_value
+    - mca_median_list_price_prior_7_12
+    - mca_median_sale_list_ratio_prior_7_12
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-119
+  check_text: Condo/Co‐Op Projects — All lightly shaded areas must be completed if
+    the subject is a Condo Co‐ Op and deal specifically with the subject's project.
+  reject_text: null
+  section: mc_1004
+  bound_labels:
+  - project_name
+  - project_phase
+  - unit_number
+  scope: cross_section
+  expects: project_name && project_phase && unit_number
+  judgeable: text
+  conditional:
+    condition_labels:
+    - unit_number
+    - comp_N_project_name
+    - is_project_from_conversion
+    - mca_project_months_supply_current_3
+    consequence_labels:
+    - unit_number
+    - appraisal_subject_to
+    - appraised_value
+    - are_facilities_complete
+  bound_by: llm
+  binder_confidence: 0.6
+- item_id: EQ-123
+  check_text: Additional Certifications — Must be provided, if the "I HAVE performed
+    services" is checked, additional commentary is Required to state what those prior
+    services are.
+  reject_text: null
+  section: uspap
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraiser_state_cert_number
+    - appraiser_cert_expiration_date
+    - appraiser_cert_state
+    - supervisory_appraiser_cert_number
+    consequence_labels:
+    - prior_services_performed
+    - is_pud_checked
+    - is_seller_owner_of_record
+    - prior_sale_analysis_comment
+  bound_by: llm
+  binder_confidence: 0.3
+- item_id: EQ-126
+  check_text: Additional Subject photos — Photos of all outbuildings and special features
+    (pools, etc.) are required. All outbuildings must have interior photos as well
+    as photos of any deferred maintenance for the subject. Photos of any exterior
+    obsolescence should be provided. Photos containing people or interior personal
+    pictures should be avoided if possible.
+  reject_text: null
+  section: exhibits
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - photo_front
+    - photo_rear
+    - appraisal_subject_to
+    - is_subject_to_ground_rent
+    consequence_labels:
+    - photo_front
+    - photo_rear
+    - appraisal_subject_to
+    - contract_date
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-127
+  check_text: Comparable Photos — For Convential loans, MLS photos are acceptable,
+    however, there should be commentary in the report that states that they did in
+    fact drive by them.
+  reject_text: null
+  section: exhibits
+  bound_labels: []
+  scope: unbound
+  expects: ''
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-134
+  check_text: 'Appraisers License — Appraiser''s License copy must be included in
+    the report. And must match information with signature page. | Triggers: If license
+    is provided before the signature date reject as: 1. Please provide an updated
+    copy of your License, as the copy provided in the report has expired.'
+  reject_text: null
+  section: exhibits
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels:
+    - appraiser_cert_expiration_date
+    - appraiser_cert_state
+    - appraiser_company_address
+    - appraiser_company_name
+    consequence_labels:
+    - contract_date
+    - fha_case_number
+    - date_of_signature
+    - date_report_signed
+  bound_by: llm
+  binder_confidence: 0.2
+- item_id: EQ-135
+  check_text: E & O Insurance — Is not required for every report, if not included,
+    this is ok and will not need a revision.
+  reject_text: null
+  section: exhibits
+  bound_labels: []
+  scope: cross_section
+  expects: ''
+  judgeable: text
+  conditional:
+    condition_labels: []
+    consequence_labels:
+    - appraisal_report_type
+    - date_report_signed
+    - remaining_economic_life
+  bound_by: llm
+  binder_confidence: 0.2
