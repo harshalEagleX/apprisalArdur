@@ -1,0 +1,80 @@
+# field_semantics (sem-1.0.0) — the UAD 2.6 SIGNIFICANCE map.
+#
+# Deterministic form-knowledge the value alone can't carry: WHY a blank is blank.
+# The resolver (app/rules/semantics.py) reads this when a rule-needed field is
+# MISSING and decides: EXPECTED_BLANK (correctly empty) | INFO_MISSING (don't
+# care) | VERIFY_MISSING (human must check) | EXTRACTION_GAP (our parser failed —
+# engine health, never the reviewer).
+#
+# Per field (all optional; sensible defaults apply):
+#   materiality:     critical | material | informational   (default: material)
+#   required_when:   "always" | a condition over other extracted fields
+#   expected_source: xml | pdf   (default: the schema's primary_source, §1)
+# Condition grammar (tiny, safe): "<field> <op> <value>" joined by AND, where
+# <op> ∈ ==, !=, contains, in[a,b,c]. Unevaluable condition ⇒ VERIFY_MISSING
+# (hard safety rule: never EXPECTED_BLANK on a condition we couldn't check).
+
+version: "sem-1.0.0"
+
+# defaults applied by section when a field has no explicit entry.
+section_defaults:
+  subject:         {materiality: critical}
+  neighborhood:    {materiality: material}
+  site:            {materiality: material}
+  improvements:    {materiality: critical}
+  sales_comparison: {materiality: critical}
+  reconciliation:  {materiality: critical}
+  signature:       {materiality: critical}
+  contract:        {materiality: critical, required_when: "assignment_type == purchase"}
+  cost:            {materiality: informational}
+  order:           {materiality: material}
+
+# informational fields — a blank is fine, never a reviewer finding.
+informational:
+  - amc_email
+  - appraiser_phone
+  - appraiser_company_address
+  - eo_insurance
+  - income_approach_value
+  - uad_dataset
+  - report_type_identification
+  - additional_features
+  - appraiser_signature
+  - license_copy
+  - psh_data_source_date
+
+# explicit per-field semantics (override section defaults).
+fields:
+  # --- contract section: valid on a refinance ---
+  contract_price:        {materiality: critical, required_when: "assignment_type == purchase"}
+  contract_date:         {materiality: critical, required_when: "assignment_type == purchase"}
+  concessions_amount:    {materiality: material,  required_when: "assignment_type == purchase"}
+  did_analyze_contract:  {materiality: material,  required_when: "assignment_type == purchase"}
+  seller_is_owner_flag:  {materiality: material,  required_when: "assignment_type == purchase"}
+
+  # --- basement fields: valid on a slab foundation ---
+  basement_area:         {materiality: material, required_when: "foundation_type contains Basement"}
+  basement_finish:       {materiality: material, required_when: "foundation_type contains Basement"}
+  subject_basement:      {materiality: material, required_when: "foundation_type contains Basement"}
+  subject_basement_finish: {materiality: material, required_when: "foundation_type contains Basement"}
+
+  # --- PUD block: valid unless it's a developer-controlled PUD ---
+  pud_attached:          {materiality: material, required_when: "is_pud == Yes"}
+  pud_developer_control: {materiality: material, required_when: "is_pud == Yes"}
+  pud_info_complete:     {materiality: material, required_when: "is_pud == Yes"}
+
+  # --- FHA/VA-only fields ---
+  remaining_economic_life: {materiality: material, required_when: "loan_type in [fha,va]"}
+
+  # --- prior-services detail: only when the appraiser marked "have performed" ---
+  prior_services_comment: {materiality: material, required_when: "prior_services_flag == Yes"}
+
+  # --- flood map: only when the subject is in a flood zone ---
+  flood_map_present:     {materiality: material, required_when: "flood_zone_id != X"}
+
+  # --- narratives / exhibits are PDF-primary → a blank is a reviewer VERIFY,
+  #     not an engine gap (we may have genuinely missed it or it is absent) ---
+  neighborhood_characteristics: {materiality: material, expected_source: pdf}
+  site_comments:         {materiality: material, expected_source: pdf}
+  subject_comments:      {materiality: material, expected_source: pdf}
+  zoning_comments:       {materiality: material, expected_source: pdf}

@@ -1,0 +1,28 @@
+# The current AMC — "hardcoded" per SHALqc.md §6 only in that it is the ONE
+# profile file today. Deep-merged OVER _base.yaml by app/profiles/loader.py.
+
+meta:
+  amc_code: AMC001
+  name: "AMC001 (placeholder — replace with the real AMC name at onboarding)"
+  version: prof-AMC001-1.0.0
+
+rules:
+  default: on
+  off: []
+  on: []
+  # This AMC treats a blank/placeholder neighborhood NAME as soft: the canonical
+  # engine FAIL is remapped to VERIFY for S-5 (demonstrates §6.2 severity remap;
+  # flip this one line and the output changes with no restart — §12 DoD #3).
+  severity_overrides:
+    S-5:
+      FAIL: VERIFY
+  thresholds:
+    SCA-NET.net_adjustment_pct: 15
+    S-1.name_match_jw: 0.90
+  custom_rules: []
+
+wording_file: AMC001.wording.yaml
+routing_overrides: {}
+output:
+  group_by: root_cause
+  tone: reviewer_plain

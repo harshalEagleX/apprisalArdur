@@ -1,0 +1,28 @@
+# SHALqc — local ignores (the repo-root .gitignore already covers .env, but
+# this makes the secret-exclusion explicit for anyone copying just this folder).
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+*.log
+
+# Runtime artifacts + caches — regenerable, never source.
+llm_cache/
+extraction_dumps/
+judge_runs/
+tools/out/
+# Fixture value cache written by the compile gate — derived from PII fixtures.
+compiled/_fixtures/
+
+# Raw appraisal docs carry borrower PII (§17). Keep the golden JSON in
+# tests/fixtures/ tracked; keep the raw PDFs/XML out of git history.
+testfiles/
+
+# Fixture PDFs/XML carry borrower PII — keep the golden JSON, not the raw docs,
+# out of any push if this ever goes to a shared remote. (Left tracked locally
+# for the test suite; uncomment to exclude.)
+# tests/fixtures/

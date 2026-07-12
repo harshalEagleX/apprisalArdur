@@ -1,0 +1,27 @@
+# confidence_router (crt-1.0.0) — SHALqc.md §7. Editable via PUT /routing/config
+# with no deploy. app/routing/router.py loads this and enforces P4 mechanically:
+# a field read below its `review` threshold is unusable → suppressed to MISSING
+# before rules run, so a rule literally CANNOT FAIL on a below-threshold field
+# (SHALqc.md §12 DoD #4).
+#
+# Threshold meaning:
+#   auto_accept — at/above this the value is trusted without review routing
+#   review      — at/above this (but below auto_accept) the value is usable but
+#                 flagged for optional review; BELOW this it is unusable (MISSING)
+
+meta:
+  version: "crt-1.0.0"
+
+defaults:
+  auto_accept: 0.90
+  review: 0.70          # < 0.70 ⇒ field unusable ⇒ MISSING
+
+# Per-field overrides. Keys may be exact ("appraiser_email") or a shell-style
+# wildcard ("comp_*_sale_price"); the most specific (longest non-wildcard) match
+# wins. Money is stricter (SHALqc.md §7 example).
+fields:
+  "comp_*_sale_price":        {auto_accept: 0.95}
+  "comp_*_adjusted_sale_price": {auto_accept: 0.95}
+  "contract_price":           {auto_accept: 0.95}
+  "appraised_value":          {auto_accept: 0.95}
+  "appraiser_email":          {auto_accept: 0.85}

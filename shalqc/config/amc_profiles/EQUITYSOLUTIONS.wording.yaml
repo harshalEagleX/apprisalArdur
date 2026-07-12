@@ -1,0 +1,45 @@
+# Equity Solutions — verbatim reviewer "Reject as:" wording, keyed by the
+# message_key the engine emits. Sourced from readme/exampleAMC/
+# qc_rejection_catalog.yaml (their real checklist). SHALqc.md §6.3: the engine
+# produces message_key + values; report/wording.py renders THIS text.
+#
+# Where a catalog line's wording matches the engine rule's actual check, it is
+# used verbatim. Where the engine rule checks something narrower/different than
+# a catalog line, the wording is written to describe what the rule ACTUALLY
+# found — never borrowed verbatim in a way that would misstate the finding.
+
+meta:
+  amc_code: EQUITYSOLUTIONS
+  version: prof-EQUITYSOLUTIONS-1.0.0
+
+templates:
+  # ── order-level ──
+  ORD-FORM-MATCH.form_mismatch: "The report form type does not match the form type ordered. Please revise."
+
+  # ── subject address (catalog item C — verbatim) ──
+  S-1.address_mismatch: "Property address does not match with order form."
+  S-1.city_mismatch: "Property City name does not match with order form."
+  S-1.state_mismatch: "Property state does not match with order form."
+  S-1.zip_mismatch: "Property Zip code does not match with order form. (first 5 digits only)"
+  S-1.county_mismatch: "Property county does not match with order form."
+
+  # ── borrower (catalog item D) ──
+  S-2.borrower_mismatch: "The borrower name does not match the order form. Please revise (check for a missed co-borrower, middle name, or suffix JR/SR)."
+
+  # ── lender (catalog items E/F — verbatim, {value} = order-form value) ──
+  S-10.lender_mismatch: "Please correct the lender's name to: {value}"
+  S-10.lender_addr_mismatch: "Please correct the lender's address to: {value}"
+
+  # ── neighborhood name (catalog item 6 — verbatim) ──
+  S-5.neighborhood_invalid: "The neighborhood name is listed as N/A. Please enter a real neighborhood name (subdivision, municipality, or the name residents commonly use). Please revise."
+
+  # ── contract (catalog item 14 — verbatim for refi) ──
+  C-1.refi_not_blank: "This is a refinance — the contract section should be left blank per UAD. Please revise."
+  C-1.not_analyzed: "This is a purchase — the appraiser must analyze the contract for sale. Please mark the contract-analysis box and revise."
+
+  # ── FEMA flood (engine ST-8 checks the zone CODE validity, not marketability,
+  #    so the wording describes exactly that — not the catalog's marketability line) ──
+  ST-8.flood_zone_invalid: "The FEMA flood zone code is not recognized. Please verify the flood zone."
+
+  # ── narrative (tier-2) ──
+  N-CANNED.canned_commentary: "The neighborhood commentary reads as generic/canned. Please confirm it is specific to the subject market."

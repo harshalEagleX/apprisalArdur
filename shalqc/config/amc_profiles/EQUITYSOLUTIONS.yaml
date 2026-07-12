@@ -1,0 +1,44 @@
+# Equity Solutions — a REAL AMC profile, deep-merged over _base.yaml by
+# app/profiles/loader.py. SHALqc.md §6 "hardcoded now, dynamic forever": this
+# is just one more YAML file; the engine has ZERO knowledge of Equity Solutions.
+#
+# IMPORTANT (per the build directive): nothing here forces a rule to pass. A
+# profile can only (a) turn rules on/off, (b) remap a canonical severity, (c)
+# set thresholds, (d) supply wording. It NEVER changes what a rule observes on
+# the page — the verdict is still whatever the deterministic/LLM logic renders.
+#
+# `resolve` lets this profile self-register: intake picks it when the order's
+# engagement text matches an alias OR the order_id starts with a declared
+# prefix. Another AMC self-registers the same way in its own file — dynamic.
+
+meta:
+  amc_code: EQUITYSOLUTIONS
+  name: "Equity Solutions"
+  version: prof-EQUITYSOLUTIONS-1.0.0
+
+resolve:
+  aliases: ["equity solutions", "equity solutions usa", "eqs"]
+  order_id_prefixes: ["ES"]      # ESTX-…, ESCA-…, ESNV-… are Equity Solutions orders
+
+rules:
+  default: on
+  off: []
+  on: []
+  # Equity's checklist treats Highest-and-Best-Use = No as an escalation (their
+  # catalog item 31 says "Please review (HOLD)"). We express that as a canonical
+  # FAIL remapped to HOLD for ST-6 — a severity choice, NOT a verdict override:
+  # the rule still only fires when H&BU is actually not "Yes".
+  severity_overrides:
+    ST-6:
+      FAIL: HOLD
+  thresholds:
+    S-1.name_match_jw: 0.90
+    SCA-NET.net_adjustment_pct: 15
+    SCA-GROSS.gross_pct: 25
+  custom_rules: []
+
+wording_file: EQUITYSOLUTIONS.wording.yaml
+routing_overrides: {}
+output:
+  group_by: root_cause
+  tone: reviewer_plain

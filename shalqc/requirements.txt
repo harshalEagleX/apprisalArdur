@@ -1,0 +1,37 @@
+# SHALqc — locked stack (SHALqc.md §0). Pin versions on first `pip freeze`
+# once the venv is built; unpinned here because this is the spec-driven skeleton.
+fastapi
+uvicorn[standard]
+celery
+redis
+psycopg2-binary
+alembic
+
+# Extraction
+pymupdf
+pdfplumber
+camelot-py[cv]
+ghostscript
+pytesseract
+pdf2image
+opencv-python
+scikit-learn
+PyYAML
+
+# HTTP / LLM / observability
+httpx
+openai
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-httpx
+opentelemetry-exporter-otlp-proto-http
+
+python-dotenv
+python-multipart
+
+# Tests
+pytest
+pytest-asyncio
+usaddress
+openpyxl

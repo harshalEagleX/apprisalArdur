@@ -1,0 +1,67 @@
+# =============================================================================
+# SHALqc — Rule-side Field Resolution (frl-1.0.0)
+#
+# Closes the drift between the vocabulary rules use in needs[]/lookups and the
+# vocabulary extraction actually stores. Consulted by DocView.field() AFTER a
+# direct hit and the schema-synonym fallback both miss, BEFORE declaring a field
+# missing. Derived from tools/alias_audit.py output, hand-approved against the
+# extraction dump (never auto-applied — the audit is a candidate generator).
+#
+#   aliases:            exact rule-name -> extracted-name (string or ordered list;
+#                       first found wins).
+#   comp_suffix_aliases: for comp_<N>_<suffix> names, rename <suffix> only and
+#                       keep the index N. Covers all comps with one entry each.
+#   derive:             rule-name -> a named function in app/rules/derivations.py
+#                       (computed value, not a stored one).
+#
+# NOT listed here on purpose: comp adjustment columns (comp_N_quality_adj etc.)
+# — the grid does not itemize per-attribute adjustments, so aliasing them would
+# be fabricating a match. Those are handled by Fix 2 compare-logic, not aliases.
+# =============================================================================
+
+meta:
+  version: "frl-1.0.0"
+  updated: "2026-07-12"
+
+aliases:
+  # --- neighborhood price range (schema canonicals price_low/high/predominant) ---
+  price_range_low: price_low
+  price_range_high: price_high
+  predominant_value: price_predominant
+
+  # --- subject site / assessments ---
+  special_assessment: special_assessments
+  adverse_conditions_flag: adverse_conditions
+  adverse_site_flag: adverse_site_conditions
+
+  # --- subject "as-is" condition (two possible extracted homes) ---
+  as_is_flag: [appraisal_subject_to, assignment_condition]
+
+  # --- subject grid single-value columns ---
+  garage: [subject_grid_garage, garage_carport]
+  subject_actual_age: subject_grid_age
+  actual_age: subject_grid_age
+  subject_basement: subject_grid_basement
+  subject_basement_finish: subject_grid_basement
+  basement_area: subject_grid_basement
+  basement_finish: subject_grid_basement
+  cooling: subject_grid_heating_cooling
+  heating: subject_grid_heating_cooling
+
+  # --- subject prior sale ---
+  subject_prior_sale_price: prior_sale_price_subject
+
+comp_suffix_aliases:
+  quality: quality_rating
+  location: location_rating
+  concession: concessions
+  porch: porch_patio_deck
+  energy: energy_efficient
+  rights: leasehold
+
+derive:
+  property_type: property_type_compose
+  appliances: appliances_join
+  housing_trends: housing_trends_present
+  mca_total_sales: mca_total_sales_sum
+  sales_count: mca_total_sales_sum

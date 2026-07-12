@@ -1,0 +1,41 @@
+# config/section_scope.yaml — the binder's candidate-narrowing map (Step 1).
+#
+# The heuristic/full-dictionary binder handed the LLM (or a token scan) ALL ~600
+# labels for every check. That is why "# of Stories" bound to bath_floor_material
+# and a subject check bound to air_conditioning_type: token soup over the whole
+# schema. This map scopes the candidate labels a check may bind to, by the check's
+# checklist section — the binder never sees a bath-material label when it is
+# binding an order-form check.
+#
+# key   = checklist section (CompiledItem.section, from tools/xlsx_to_checklist.py)
+# value = the field_schema.yaml `sections:` groups whose labels are candidates.
+#
+# `_anchor` is appended to EVERY scope: the cross-reference labels (subject
+# identity + address) that almost any check may legitimately compare against.
+# An empty list, or a section not listed here, falls back to the full dictionary
+# (safe but wide) and is flagged low-confidence by the gate.
+
+version: scope-1.0.0
+
+# Always-available cross-reference labels (kept small on purpose).
+_anchor: [subject]
+
+sections:
+  order:            [engagement_letter, sales_contract, appraiser]
+  subject:          [subject, engagement_letter]
+  contract:         [contract, sales_contract]
+  neighborhood:     [neighborhood]
+  site:             [site]
+  improvements:     [improvements, condo_unit]
+  sales_comparison: [sales_comparison]
+  prior_sales:      [prior_sale_history, sales_comparison, contract]
+  reconciliation:   [reconciliation, sales_comparison]
+  cost:             [cost_approach, site, improvements]
+  income:           [income_approach, rent_schedule]
+  pud:              [condo_project, condo_unit]
+  signature:        [appraiser, uspap_addendum]
+  mc_1004:          [market_conditions_addendum, neighborhood]
+  uspap:            [uspap_addendum, appraiser]
+  fha:              [fha_specific]
+  # exhibits compile to visual (no field binding); listed so the scope is known.
+  exhibits:         []

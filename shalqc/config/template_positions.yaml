@@ -1,0 +1,99 @@
+# template_positions (tpl-1.1.0) — SHALqc-CORE §2/§9/§10.
+#
+# The UAD 2.6 layout is fixed PER rendering vendor, so this map is vendor-keyed.
+# Each field entry declares its static `page` + `anchor` (label text to the
+# left/above the value) + optional `region` (value rectangle relative to the
+# anchor). The template-anchored PDF pass and the back-locator (L2/L3) use it to
+# go straight to a field's value instead of hunting.
+#
+# HONESTY NOTE: precise per-field `region` rectangles are built ONCE from a
+# golden blank form (CORE §2). That golden form is not in-repo yet, so this file
+# ships the STRUCTURE + vendor detection + the AcroForm alias table + a SEED of
+# high-value fields with page+anchor (no fabricated rectangles). Add a field's
+# region when it is measured from the golden form — YAML only, no code change.
+
+meta:
+  version: "tpl-1.1.0"
+  status: "scaffold + seed — full region map pending a golden blank form (CORE §2)"
+
+# CORE §9 vendor detection: PDF producer/creator metadata → vendor block.
+# Unlisted → _default with +15% region tolerance and run note `vendor: unknown`.
+vendor_detect:
+  TOTAL:      ["total", "a la mode", "alamode"]
+  ACI:        ["aci", "aci report"]
+  ClickForms: ["clickforms", "bradford"]
+
+# CORE §10: AcroForm widget field-name → canonical schema field. Single source of
+# truth for the widget alias table (app/extraction/acroform.py reads this).
+acroform_aliases:
+  borrower: borrower_name
+  borrowername: borrower_name
+  propertyaddress: property_address
+  address: property_address
+  city: city
+  state: state
+  zipcode: zip_code
+  zip: zip_code
+  county: county
+  lender: lender_name
+  lenderclient: lender_name
+  apn: apn
+  parcelnumber: apn
+  legaldescription: legal_description
+  taxyear: tax_year
+  retaxes: real_estate_taxes
+  censustract: census_tract
+  neighborhoodname: neighborhood_name
+  occupant: occupant_status
+  yearbuilt: year_built
+  appraisedvalue: appraised_value
+  effectivedate: effective_date
+  appraisername: appraiser_name
+
+vendors:
+  _default:
+    # URAR (Form 1004) labels. `anchor` = the printed label; the template
+    # extractor reads the value to the right of / below the anchor on `page`.
+    # `read` = right (default) | below controls where the value sits.
+    fields:
+      # --- subject (page 1) ---
+      property_address: {page: 1, anchor: "Property Address"}
+      city:             {page: 1, anchor: "City"}
+      state:            {page: 1, anchor: "State"}
+      zip_code:         {page: 1, anchor: "Zip Code"}
+      county:           {page: 1, anchor: "County"}
+      borrower_name:    {page: 1, anchor: "Borrower"}
+      owner_of_public_record: {page: 1, anchor: "Owner of Public Record"}
+      apn:              {page: 1, anchor: "Assessor's Parcel #"}
+      tax_year:         {page: 1, anchor: "Tax Year"}
+      real_estate_taxes: {page: 1, anchor: "R.E. Taxes $"}
+      legal_description: {page: 1, anchor: "Legal Description"}
+      neighborhood_name: {page: 1, anchor: "Neighborhood Name"}
+      census_tract:     {page: 1, anchor: "Census Tract"}
+      map_reference:    {page: 1, anchor: "Map Reference"}
+      occupant_status:  {page: 1, anchor: "Occupant"}
+      hoa_dues:         {page: 1, anchor: "per year"}
+      # --- neighborhood / site (page 1) ---
+      property_values:  {page: 1, anchor: "Property Values"}
+      neighborhood_name2: {page: 1, anchor: "Location"}
+      zoning_classification: {page: 1, anchor: "Zoning Classification"}
+      zoning_compliance: {page: 1, anchor: "Zoning Compliance"}
+      flood_zone:       {page: 1, anchor: "FEMA Flood Zone"}
+      site_area:        {page: 1, anchor: "Area"}
+      view:             {page: 1, anchor: "View"}
+      # --- improvements (page 1) ---
+      year_built:       {page: 1, anchor: "Year Built"}
+      effective_age:    {page: 1, anchor: "Effective Age"}
+      foundation:       {page: 1, anchor: "Foundation"}
+      # --- reconciliation / value (page 2) ---
+      appraised_value:  {page: 2, anchor: "indicated value, as defined"}
+      effective_date:   {page: 2, anchor: "effective date"}
+      # --- signature (last pages) ---
+      appraiser_name:   {page: 6, anchor: "Appraiser Name"}
+      appraiser_email:  {page: 6, anchor: "Email Address"}
+      signature_date:   {page: 6, anchor: "Date Signed"}
+      appraiser_license_number: {page: 6, anchor: "State Certification #"}
+
+  TOTAL:
+    # inherits _default; add only fields whose position differs for TOTAL.
+    fields: {}

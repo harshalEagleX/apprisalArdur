@@ -1,0 +1,29 @@
+# AMC profile defaults every AMC inherits — SHALqc.md §6.2.
+# Loaded by app/profiles/loader.py; deep-merged UNDER each <code>.yaml.
+
+meta:
+  amc_code: _base
+  name: "Default profile (every AMC deep-merges over this)"
+  version: prof-_base-1.0.0
+
+rules:
+  default: on                 # everything in the library runs unless overridden
+  off: []                     # rule_ids this AMC does not want
+  on: []                      # rule_ids to force on when default is off
+  severity_overrides: {}      # rule_id -> {canonical_status: remapped_status}
+  thresholds:                 # dotted keys read by rules via profile.threshold(...)
+    SCA-NET.net_adjustment_pct: 15
+    SCA-GROSS.gross_pct: 25
+    S-1.name_match_jw: 0.90
+  custom_rules: []            # module names under app/rules/custom/<amc_code>/
+
+wording_file: null
+routing_overrides: {}
+output:
+  group_by: root_cause
+  tone: reviewer_plain
+
+# SHALqc-CORE §12: per-AMC engagement-letter label variance merges over the
+# extractor's built-in defaults. Empty here = use extraction/engagement.py's
+# built-in label set (wiring this through is a later Part-6 task).
+engagement_hints: {}

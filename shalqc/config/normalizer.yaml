@@ -1,0 +1,135 @@
+# normalizer (nrm-1.0.0) — SHALqc.md §4. THE single comparison-prep config.
+#
+# app/normalize/normalizer.py loads this and applies normalize(field_def, raw)
+# to BOTH sides of every comparison. No rule does its own string cleanup (P6).
+# Hot-reloadable via schema_loader-style reload (SHALqc.md §9 /schema/reload).
+#
+# Bump rules (SHALqc.md §1): MAJOR = output contract change, MINOR = behavior
+# change (a table gains entries that change a canonical output), PATCH = bugfix.
+
+meta:
+  version: "nrm-1.0.0"
+
+# ── USPS street suffixes (Pub 28) — Mdw->Meadow, Ct->Court, ... ──────────────
+# Applied token-wise to address-typed fields. Not exhaustive of all ~200 Pub 28
+# variants; this is the common set seen in the corpus. Add variants freely —
+# additions are a MINOR bump, never a code change (P7).
+usps_street_suffixes:
+  st: street
+  str: street
+  ave: avenue
+  av: avenue
+  blvd: boulevard
+  rd: road
+  dr: drive
+  ln: lane
+  ct: court
+  cir: circle
+  pl: place
+  pkwy: parkway
+  hwy: highway
+  ter: terrace
+  trl: trail
+  sq: square
+  mdw: meadow
+  xing: crossing
+  cv: cove
+  pt: point
+  trce: terrace
+
+# Directionals — folded into the same street-token pass.
+usps_directionals:
+  n: north
+  s: south
+  e: east
+  w: west
+  ne: northeast
+  nw: northwest
+  se: southeast
+  sw: southwest
+
+# Secondary-unit designators (address-typed fields only).
+usps_secondary_units:
+  apt: unit
+  ste: unit
+  suite: unit
+  unit: unit
+  bldg: building
+  fl: floor
+  rm: room
+
+# ── Enum synonyms — Owner<->OwnerOccupied, Det.<->Detached, ... ──────────────
+# canonical_value: [all raw variants that normalize to it]. Keyed loosely, not
+# per-field, because these tokens are unambiguous across the UAD form. Matched
+# case/punct-insensitively against the raw value.
+enum_synonyms:
+  Owner:            [owner, owneroccupied, owner occupied, own]
+  Tenant:           [tenant, tenantoccupied, tenant occupied, lease]
+  Vacant:           [vacant, unoccupied]
+  Fee Simple:       [fee, fee simple, feesimple]
+  Leasehold:        [leasehold, lease hold]
+  Detached:         [det, "det.", detached]
+  Attached:         [att, "att.", attached]
+  Concrete Slab:    [conc slab, "conc. slab", concrete slab, concreteslab, slab]
+  Purchase:         [purchase, purchasetransaction, purchase transaction, purchase money]
+  Refinance:        [refinance, refi, "re-finance", refinancetransaction, refinance transaction]
+  UnderThreeMonths: [under 3 mths, under 3 months, "under three months", "< 3 mths"]
+  ThreeToSixMonths: [3-6 mths, 3 to 6 months, "3-6 months"]
+  OverSixMonths:    [over 6 mths, over 6 months, "over six months", "> 6 mths"]
+  Increasing:       [increasing, rising, appreciating]
+  Stable:           [stable, steady, flat]
+  Declining:        [declining, decreasing, depreciating]
+  Shortage:         [shortage, under supply, undersupply]
+  In Balance:       [in balance, balance, balanced]
+  Over Supply:      [over supply, oversupply, surplus]
+
+# ── Boolean <-> categorical — True<->Public (utilities), Yes<->True ──────────
+# The utility columns extract "Public"/"None"/"Private" (XML) or a bare "True"
+# (a checked box — see extraction/checkbox.py, which emits "True" for a present
+# utility because field_schema has no Public/Private enum there). This table is
+# how a rule comparing them treats "True" and "Public" as the same fact.
+# NB: yes/no/true/false/on/off are quoted — unquoted, YAML 1.1 parses them as
+# booleans and the string tokens would be lost from these tables.
+boolean_true:  ["true", "yes", "1", "x", "checked", "public", "present"]
+boolean_false: ["false", "no", "0", "unchecked", "none", "absent"]
+
+# ── Units — "4800 sf"->4800(sf), 0.25 ac<->10890 sf ─────────────────────────
+units:
+  sqft_per_acre: 43560          # 1 ac = 43,560 sf (unit-normalizing site area)
+  acre_tokens:   [ac, acre, acres]
+  sqft_tokens:   [sf, sqft, "sq ft", "sq.ft.", square feet]
+
+# ── Numbers / words — One<->1, currency strip ───────────────────────────────
+number_words:
+  zero: 0
+  one: 1
+  two: 2
+  three: 3
+  four: 4
+  five: 5
+  six: 6
+  seven: 7
+  eight: 8
+  nine: 9
+  ten: 10
+
+# ── Names — Jaro-Winkler >=0.90 auto-PASS, <0.90 never auto-FAIL (route VERIFY)
+names:
+  jaro_winkler_auto_pass: 0.90
+  # noise tokens dropped before comparison (titles); generational suffixes are
+  # kept but a suffix-only difference is "review", never "mismatch".
+  noise_tokens:     [jr, sr, ii, iii, iv, mr, mrs, ms, dr]
+  suffix_tokens:    [jr, sr, ii, iii, iv]
+  company_noise:    [inc, llc, corp, corporation, co, company, na, lp, llp, ltd, pllc, pc, fsb, isaoa, atima]
+  county_suffixes:  [county, parish, borough, "census area", municipality, "city and county", district, township]
+
+# ── Text-match tolerance bands (SHALqc.md §4 / matching) ────────────────────
+match_bands:
+  match:  0.88     # >= this  -> "match"  (PASS)
+  review: 0.75     # >= this  -> "review" (VERIFY);  below -> "mismatch" (FAIL-eligible)
+
+# ── Dates — any input -> ISO. See app/normalize/dates.py (§17 date discipline).
+dates:
+  output_format: "ISO"      # YYYY-MM-DD
+  two_digit_year_pivot: 50  # yy < 50 -> 20yy, else 19yy
+  timezone: "UTC"

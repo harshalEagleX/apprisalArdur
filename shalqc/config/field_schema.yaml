@@ -1,0 +1,3425 @@
+# =============================================================================
+# SHALqc — Canonical Field Schema (sch-1.0.0)
+# SHALqc.md §1 Component Versioning / §2 Folder Structure artifact.
+#
+# RULES:
+#   - Never hardcode field definitions in Python. This file is the source of truth.
+#   - Edit here and call schema_loader.reload() — no service restart needed.
+#   - Every field MUST have: canonical_name, data_type, required, synonyms,
+#     source_authority, sections. Optional: allowed_values, value_range, notes.
+#   - Canonical names never change. Add synonyms — never rename a canonical.
+#   - Ported from ocr-service/config/field_schema.yaml (schema_version 2.0.0) —
+#     the "biggest reuse" item called out in SHALqc.md §11 D1-2. Re-versioned to
+#     sch-1.0.0 for the ground-up rebuild; field definitions carried over as-is.
+# =============================================================================
+
+meta:
+  schema_version: "sch-1.0.0"
+  created: "2026-07-10"
+  updated: "2026-07-10"
+  purpose: >
+    Authoritative field schema for all extractable fields across all appraisal
+    document types. Every extractor, normalizer, rule, and reviewer display
+    references this file. It is the contract between all SHALqc components
+    (SHALqc.md §1: schema fingerprint = sch-1.0.0).
+
+# -----------------------------------------------------------------------------
+# DOCUMENT TYPES — what the system knows how to process
+# -----------------------------------------------------------------------------
+document_types:
+
+  engagement_letter:
+    description: "AMC engagement order / appraisal order form"
+    authority_for:
+      - borrower_name
+      - co_borrower_name
+      - property_address
+      - city
+      - state
+      - zip_code
+      - county
+      - lender_name
+      - lender_address
+      - assignment_type
+      - loan_type
+
+  appraisal_report:
+    description: "URAR UAD 1004 appraisal report (all pages)"
+    sections:
+      - subject
+      - contract
+      - neighborhood
+      - site
+      - improvements
+      - sales_comparison
+      - reconciliation
+
+  sales_contract:
+    description: "Purchase and Sale Agreement / Sales Contract"
+    authority_for:
+      - contract_price
+      - contract_date
+      - seller_name
+      - concessions_amount
+      - personal_property_items
+
+  qc_checklist:
+    description: "AMC QC checklist or review scorecard document"
+    authority_for: []
+
+# -----------------------------------------------------------------------------
+# DATA TYPES glossary
+#   string        — free text, whitespace-trimmed
+#   date          — normalized to YYYY-MM-DD
+#   currency      — US dollar amount as float (no symbols, no commas)
+#   integer       — whole number as int
+#   numeric       — decimal number as float
+#   percent       — float 0.0–100.0
+#   year          — 4-digit integer
+#   boolean       — three-state: True / False / None (None means VERIFY, not FAIL)
+#   state_code    — 2-letter uppercase US state abbreviation
+#   zip5          — 5-digit string "12345"
+#   uad_condition — enum C1..C6
+#   uad_quality   — enum Q1..Q6
+#   fema_zone     — enum A/AE/AH/AO/AR/A99/V/VE/X/B/C/D
+#   enum          — fixed list of allowed string values (listed in allowed_values)
+#   string_list   — list of strings, comma- or newline-separated
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# REQUIRED STATUS
+#   required_cross_document — must be present AND match across documents
+#   required                — must be present in its source document
+#   optional                — extracted if present, no failure if absent
+#   derived                 — computed from other fields, not directly extracted
+# -----------------------------------------------------------------------------
+
+fields:
+
+  # ===========================================================================
+  # SECTION: subject  (URAR Subject section, items S-1 through S-12)
+  # ===========================================================================
+
+  property_address:
+    canonical_name: property_address
+    data_type: string
+    required: required_cross_document
+    synonyms:
+      - "Property Address"
+      - "Subject Property"
+      - "Subject Property Address"
+      - "Property Addr"
+      - "Property Addr."
+      - "Prop. Address"
+      - "Subject Addr"
+      - "Address"
+      - "Property Location"
+      - "Subject Address"
+      - "Location of Property"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+    required_for_review: true
+    notes: "Street + number only. City/State/Zip extracted separately. Find by data pattern (5-digit zip anchor), not label word."
+
+  city:
+    canonical_name: city
+    data_type: string
+    required: required_cross_document
+    synonyms:
+      - "City"
+      - "Town"
+      - "Municipality"
+      - "City/Town"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+    required_for_review: true
+
+  state:
+    canonical_name: state
+    data_type: state_code
+    required: required_cross_document
+    allowed_values:
+      - AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY
+      - LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND
+      - OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY, DC
+    synonyms:
+      - "State"
+      - "St."
+      - "ST"
+      - "State Code"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+    required_for_review: true
+    notes: "Find by 2-letter uppercase before the 5-digit zip — do not depend on label word."
+
+  zip_code:
+    canonical_name: zip_code
+    data_type: zip5
+    required: required_cross_document
+    value_range: {pattern: "^\\d{5}$"}
+    synonyms:
+      - "Zip"
+      - "Zip Code"
+      - "ZIP"
+      - "ZIP Code"
+      - "Postal Code"
+      - "Post Code"
+      - "Zip/Postal"
+      - "Zip #"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+    required_for_review: true
+    notes: "Find by 5-digit numeric pattern at end of address block. OCR mangles label words but rarely mangles the digits themselves."
+
+  county:
+    canonical_name: county
+    data_type: string
+    required: optional
+    synonyms:
+      - "County"
+      - "Co."
+      - "Parish"
+      - "Borough"
+      - "County/Parish"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+
+  borrower_name:
+    canonical_name: borrower_name
+    data_type: string
+    required: required_cross_document
+    synonyms:
+      - "Borrower"
+      - "Borrower Name"
+      - "Borrower(s)"
+      - "Client"
+      - "Client Name"
+      - "Applicant"
+      - "Loan Applicant"
+      - "Customer"
+      - "Customer Name"
+      - "Mortgagor"
+      - "Mortgagor Name"
+      - "B/R"
+      - "Borrower/Client"
+      - "Name of Borrower"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+    required_for_review: true
+
+  co_borrower_name:
+    canonical_name: co_borrower_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Co-Borrower"
+      - "Co Borrower"
+      - "Co-Borrower Name"
+      - "Co-Applicant"
+      - "Second Borrower"
+      - "CB"
+      - "C/B"
+      - "Co Borrower Name"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+
+  owner_of_public_record:
+    canonical_name: owner_of_public_record
+    data_type: string
+    required: optional
+    synonyms:
+      - "Owner of Public Record"
+      - "Owner of Record"
+      - "Public Record Owner"
+      - "Record Owner"
+      - "Property Owner"
+      - "Owner"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  legal_description:
+    canonical_name: legal_description
+    data_type: string
+    required: optional
+    synonyms:
+      - "Legal Description"
+      - "Legal Desc"
+      - "Legal Desc."
+      - "Legal"
+      - "Leg. Description"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  assessors_parcel_number:
+    canonical_name: assessors_parcel_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "Assessor's Parcel #"
+      - "Assessor's Parcel Number"
+      - "Assessors Parcel Number"
+      - "APN"
+      - "Parcel Number"
+      - "Parcel #"
+      - "Parcel No."
+      - "Tax Parcel #"
+      - "Parcel ID"
+      - "PIN"
+      - "Folio"
+      - "Folio Number"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  tax_year:
+    canonical_name: tax_year
+    data_type: year
+    required: optional
+    value_range: {min: 2000, max: 2030}
+    synonyms:
+      - "Tax Year"
+      - "R.E. Taxes (Year)"
+      - "RE Taxes (Year)"
+      - "Tax Yr"
+      - "Year"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  real_estate_taxes:
+    canonical_name: real_estate_taxes
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 500000}
+    synonyms:
+      - "R.E. Taxes"
+      - "RE Taxes"
+      - "Real Estate Taxes"
+      - "Annual Taxes"
+      - "Property Taxes"
+      - "Tax Amount"
+      - "Taxes"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  neighborhood_name:
+    canonical_name: neighborhood_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Neighborhood Name"
+      - "Neighborhood"
+      - "Subdivision"
+      - "Sub-division"
+      - "Subdivision Name"
+      - "Development Name"
+      - "Complex Name"
+      - "Community Name"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  map_reference:
+    canonical_name: map_reference
+    data_type: string
+    required: optional
+    synonyms:
+      - "Map Reference"
+      - "Map Ref"
+      - "Map Ref."
+      - "Thomas Bros Map"
+      - "Map #"
+      - "Map Book"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  census_tract:
+    canonical_name: census_tract
+    data_type: string
+    required: optional
+    synonyms:
+      - "Census Tract"
+      - "Census Tract #"
+      - "Tract #"
+      - "Census #"
+      - "Census"
+    source_authority: appraisal_report
+    sections: [subject]
+    notes: "Normalize: remove leading zeros, standardize decimal format."
+
+  occupant_status:
+    canonical_name: occupant_status
+    data_type: enum
+    required: optional
+    allowed_values: ["Owner", "Tenant", "Vacant"]
+    synonyms:
+      - "Occupant"
+      - "Occupancy"
+      - "Occupancy Status"
+      - "Current Occupant"
+      - "Property Occupancy"
+      - "Occupied By"
+    source_authority: appraisal_report
+    sections: [subject]
+    notes: "Three-state checkbox. None → VERIFY. Never FAIL on None."
+
+  lease_dates:
+    canonical_name: lease_dates
+    data_type: string
+    required: optional
+    synonyms:
+      - "Lease Date(s)"
+      - "Lease Dates"
+      - "Rental Period"
+      - "Lease Term"
+    source_authority: appraisal_report
+    sections: [subject]
+    notes: "Populated only when occupant_status = Tenant."
+
+  rental_amount:
+    canonical_name: rental_amount
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 50000}
+    synonyms:
+      - "Rental Amount"
+      - "Monthly Rent"
+      - "Rent Amount"
+      - "Rental Rate"
+      - "Rent"
+    source_authority: appraisal_report
+    sections: [subject]
+    notes: "Populated only when occupant_status = Tenant."
+
+  utilities_on:
+    canonical_name: utilities_on
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Utilities On"
+      - "Utilities Connected"
+      - "Utilities"
+    source_authority: appraisal_report
+    sections: [subject]
+    notes: "Populated only when occupant_status = Vacant."
+
+  special_assessments:
+    canonical_name: special_assessments
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 1000000}
+    synonyms:
+      - "Special Assessments"
+      - "Special Assessment"
+      - "Special Assess."
+      - "HOA Special Assessment"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  special_assessments_comment:
+    canonical_name: special_assessments_comment
+    data_type: string
+    required: optional
+    synonyms:
+      - "Special Assessments Comment"
+      - "Assessments Comment"
+      - "Assessment Description"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  is_pud_checked:
+    canonical_name: is_pud_checked
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "PUD"
+      - "Is PUD"
+      - "Planned Unit Development"
+      - "P.U.D."
+    source_authority: appraisal_report
+    sections: [subject]
+    notes: "Three-state checkbox: True=PUD, False=not PUD, None=VERIFY."
+
+  hoa_dues:
+    canonical_name: hoa_dues
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000}
+    synonyms:
+      - "HOA Dues"
+      - "HOA Fee"
+      - "H.O.A. Dues"
+      - "Homeowner Association Dues"
+      - "Homeowners Association Dues"
+      - "Association Dues"
+      - "Monthly HOA"
+      - "HOA"
+      - "Condo Fees"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  hoa_period:
+    canonical_name: hoa_period
+    data_type: enum
+    required: optional
+    allowed_values: ["Per Year", "Per Month", "Annually", "Monthly"]
+    synonyms:
+      - "HOA Period"
+      - "HOA Frequency"
+      - "Due Period"
+      - "per year"
+      - "per month"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  lender_name:
+    canonical_name: lender_name
+    data_type: string
+    required: required_cross_document
+    synonyms:
+      - "Lender/Client"
+      - "Lender"
+      - "Client"
+      - "Lender Name"
+      - "Client Name"
+      - "Financial Institution"
+      - "Bank"
+      - "Mortgage Company"
+      - "Creditor"
+      - "Bank Name"
+      - "Lender / Client"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+    required_for_review: true
+
+  lender_address:
+    canonical_name: lender_address
+    data_type: string
+    required: optional
+    synonyms:
+      - "Lender/Client Address"
+      - "Lender Address"
+      - "Client Address"
+      - "Lender / Client Address"
+    source_authority: engagement_letter
+    sections: [subject, engagement_letter]
+
+  property_rights:
+    canonical_name: property_rights
+    data_type: enum
+    required: optional
+    allowed_values:
+      - "Fee Simple"
+      - "Leasehold"
+      - "De Minimis PUD"
+      - "Other"
+    synonyms:
+      - "Property Rights Appraised"
+      - "Property Rights"
+      - "Rights Appraised"
+      - "Type of Rights"
+      - "Rights"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  offered_for_sale_12mo:
+    canonical_name: offered_for_sale_12mo
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Offered for Sale (Prior 12 Months)"
+      - "Listed in Past 12 Months"
+      - "Prior Listing"
+      - "Offered for Sale"
+      - "Listed Prior 12 Months"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  data_source:
+    canonical_name: data_source
+    data_type: string
+    required: optional
+    synonyms:
+      - "Data Source(s)"
+      - "Data Source"
+      - "Source"
+      - "MLS"
+      - "Public Record"
+      - "Listing Service"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  mls_number:
+    canonical_name: mls_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "MLS#"
+      - "MLS Number"
+      - "MLS No."
+      - "Listing Number"
+      - "MLS ID"
+      - "MLS"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  days_on_market:
+    canonical_name: days_on_market
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 3650}
+    synonyms:
+      - "Days on Market"
+      - "DOM"
+      - "Days Listed"
+      - "# of Days on Market"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  list_price:
+    canonical_name: list_price
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "List Price"
+      - "Listing Price"
+      - "Listed Price"
+      - "Original List Price"
+      - "Asking Price"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  list_date:
+    canonical_name: list_date
+    data_type: date
+    required: optional
+    synonyms:
+      - "List Date"
+      - "Listing Date"
+      - "Date Listed"
+      - "Date of Listing"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  market_value_opinion:
+    canonical_name: market_value_opinion
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "Market Value"
+      - "Opinion of Market Value"
+      - "Estimated Market Value"
+    source_authority: appraisal_report
+    sections: [subject]
+
+  condition_rating:
+    canonical_name: condition_rating
+    data_type: uad_condition
+    required: optional
+    allowed_values: ["C1", "C2", "C3", "C4", "C5", "C6"]
+    synonyms:
+      - "Condition"
+      - "Condition Rating"
+      - "UAD Condition"
+      - "Property Condition"
+    source_authority: appraisal_report
+    sections: [subject, improvements, sales_comparison]
+    notes: "C1=New, C2=Excellent, C3=Good, C4=Average, C5=Fair, C6=Poor. Extract the code, not the label."
+
+  quality_rating:
+    canonical_name: quality_rating
+    data_type: uad_quality
+    required: optional
+    allowed_values: ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"]
+    synonyms:
+      - "Quality"
+      - "Quality Rating"
+      - "UAD Quality"
+      - "Construction Quality"
+    source_authority: appraisal_report
+    sections: [subject, improvements, sales_comparison]
+    notes: "Q1=Unique, Q2=Custom, Q3=Quality, Q4=Standard, Q5=Fair, Q6=Low."
+
+  # ===========================================================================
+  # SECTION: contract  (URAR Contract section, C-1 through C-5)
+  # ===========================================================================
+
+  assignment_type:
+    canonical_name: assignment_type
+    data_type: enum
+    required: optional
+    allowed_values:
+      - "Purchase Transaction"
+      - "Refinance Transaction"
+      - "Other"
+    synonyms:
+      - "Assignment Type"
+      - "Type of Assignment"
+      - "Transaction Type"
+      - "Type of Transaction"
+      - "Purchase"
+      - "Refinance"
+      - "Refi"
+      - "Loan Purpose"
+    source_authority: engagement_letter
+    sections: [contract, engagement_letter]
+
+  did_analyze_contract:
+    canonical_name: did_analyze_contract
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Did Analyze Contract"
+      - "Contract Analyzed"
+      - "Analyzed Contract"
+      - "I did analyze the contract"
+      - "analyzed the contract of sale"
+      - "did analyze the agreement"
+    source_authority: appraisal_report
+    sections: [contract]
+    notes: "Three-state checkbox. None → VERIFY. Never FAIL on None."
+
+  sale_type:
+    canonical_name: sale_type
+    data_type: enum
+    required: optional
+    allowed_values:
+      - "Arms-Length"
+      - "Non Arms-Length"
+      - "REO"
+      - "Short Sale"
+      - "Court Ordered"
+      - "Estate Sale"
+      - "Foreclosure"
+    synonyms:
+      - "Sale Type"
+      - "Type of Sale"
+      - "Sale Classification"
+      - "Transaction Classification"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  contract_analysis_comment:
+    canonical_name: contract_analysis_comment
+    data_type: string
+    required: optional
+    synonyms:
+      - "Contract Analysis"
+      - "Contract Commentary"
+      - "Contract Comment"
+      - "Analysis of Agreement"
+      - "Agreement Analysis"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  contract_price:
+    canonical_name: contract_price
+    data_type: currency
+    required: optional
+    value_range: {min: 10000, max: 100000000}
+    synonyms:
+      - "Contract Price"
+      - "Purchase Price"
+      - "Sales Price"
+      - "Sale Price"
+      - "Price"
+      - "Contract Sales Price"
+      - "Agreed Price"
+      - "Purchase Agreement Price"
+      - "Contract Amount"
+      - "Offer Price"
+      - "Selling Price"
+    source_authority: sales_contract
+    sections: [contract, sales_contract, engagement_letter]
+    required_for_review: true
+    notes: "Cross-validate against appraised_value (±3% flag, ±10% escalation)."
+
+  contract_date:
+    canonical_name: contract_date
+    data_type: date
+    required: optional
+    synonyms:
+      - "Date of Contract"
+      - "Contract Date"
+      - "Date of Sale"
+      - "Sale Date"
+      - "Date of Agreement"
+      - "Execution Date"
+      - "Date Signed"
+      - "Date of Last Signature"
+      - "Last Signature Date"
+      - "Effective Date of Contract"
+    source_authority: sales_contract
+    sections: [contract, sales_contract]
+    notes: "Must be date of LAST signature (fully executed contract). Not listing date."
+
+  is_seller_owner_of_record:
+    canonical_name: is_seller_owner_of_record
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Is Seller Owner of Record"
+      - "Seller is Owner"
+      - "Property Seller Owner of Public Record"
+      - "Seller Owner"
+      - "Is the seller the owner of public record"
+    source_authority: appraisal_report
+    sections: [contract]
+    notes: "When False, owner_record_data_source and commentary required by business rules."
+
+  owner_record_data_source:
+    canonical_name: owner_record_data_source
+    data_type: string
+    required: optional
+    synonyms:
+      - "Owner Record Data Source"
+      - "Data Source for Owner"
+      - "Source of Owner Record"
+      - "Data Source(s)"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  has_financial_assistance:
+    canonical_name: has_financial_assistance
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Financial Assistance"
+      - "Has Financial Assistance"
+      - "Seller Concessions"
+      - "Financing Concessions"
+      - "Loan Charges/Concessions"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  financial_assistance_amount:
+    canonical_name: financial_assistance_amount
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 5000000}
+    synonyms:
+      - "Financial Assistance Amount"
+      - "Concession Amount"
+      - "Seller Concession"
+      - "Concessions Amount"
+      - "Financing Assistance"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  financial_assistance_description:
+    canonical_name: financial_assistance_description
+    data_type: string
+    required: optional
+    synonyms:
+      - "Financial Assistance Description"
+      - "Concessions Description"
+      - "Description of Concessions"
+      - "Nature of Assistance"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  personal_property_items:
+    canonical_name: personal_property_items
+    data_type: string_list
+    required: optional
+    synonyms:
+      - "Personal Property"
+      - "Personal Property Items"
+      - "Non-Realty Items"
+      - "Included Items"
+      - "Chattel"
+      - "Personal Items"
+    source_authority: sales_contract
+    sections: [contract, sales_contract]
+
+  personal_property_contributes_to_value:
+    canonical_name: personal_property_contributes_to_value
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Personal Property Contributes to Value"
+      - "PP Contributes to Value"
+      - "Personal property included"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  seller_concessions:
+    canonical_name: seller_concessions
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 5000000}
+    synonyms:
+      - "Seller Concessions"
+      - "Seller's Concessions"
+      - "Concessions"
+      - "Sales Concessions"
+    source_authority: appraisal_report
+    sections: [contract]
+
+  # ===========================================================================
+  # SECTION: neighborhood
+  # ===========================================================================
+
+  location:
+    canonical_name: location
+    data_type: enum
+    required: optional
+    allowed_values: ["Urban", "Suburban", "Rural"]
+    synonyms:
+      - "Location"
+      - "Area Type"
+      - "Neighborhood Type"
+      - "Market Area"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  built_up:
+    canonical_name: built_up
+    data_type: enum
+    required: optional
+    allowed_values: ["Over 75%", "25-75%", "Under 25%"]
+    synonyms:
+      - "Built Up"
+      - "Built-Up"
+      - "% Built Up"
+      - "Build Up"
+      - "Percent Built Up"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  growth_rate:
+    canonical_name: growth_rate
+    data_type: enum
+    required: optional
+    allowed_values: ["Rapid", "Stable", "Slow"]
+    synonyms:
+      - "Growth Rate"
+      - "Growth"
+      - "Rate of Growth"
+      - "Market Growth"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  property_values:
+    canonical_name: property_values
+    data_type: enum
+    required: optional
+    allowed_values: ["Increasing", "Stable", "Declining"]
+    synonyms:
+      - "Property Values"
+      - "Home Values"
+      - "Values"
+      - "Value Trend"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  demand_supply:
+    canonical_name: demand_supply
+    data_type: enum
+    required: optional
+    allowed_values: ["Shortage", "In Balance", "Over Supply"]
+    synonyms:
+      - "Demand/Supply"
+      - "Supply/Demand"
+      - "Supply and Demand"
+      - "Demand & Supply"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  marketing_time:
+    canonical_name: marketing_time
+    data_type: enum
+    required: optional
+    allowed_values: ["Under 3 mths", "3-6 mths", "Over 6 mths"]
+    synonyms:
+      - "Marketing Time"
+      - "Avg. Marketing Time"
+      - "Average Marketing Time"
+      - "Market Time"
+      - "Avg Marketing Time"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  price_low:
+    canonical_name: price_low
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "Price Low"
+      - "Low Price"
+      - "Price Range Low"
+      - "Low"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  price_high:
+    canonical_name: price_high
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "Price High"
+      - "High Price"
+      - "Price Range High"
+      - "High"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  predominant_price:
+    canonical_name: predominant_price
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "Predominant Price"
+      - "Predominant Value"
+      - "Pred. Price"
+      - "Pred Price"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  age_low:
+    canonical_name: age_low
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 200}
+    synonyms:
+      - "Age Low"
+      - "Low Age"
+      - "Age Range Low"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  age_high:
+    canonical_name: age_high
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 200}
+    synonyms:
+      - "Age High"
+      - "High Age"
+      - "Age Range High"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  predominant_age:
+    canonical_name: predominant_age
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 200}
+    synonyms:
+      - "Predominant Age"
+      - "Pred. Age"
+      - "Pred Age"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  land_use_one_unit:
+    canonical_name: land_use_one_unit
+    data_type: percent
+    required: optional
+    value_range: {min: 0.0, max: 100.0}
+    synonyms:
+      - "One-Unit"
+      - "One Unit"
+      - "Single Family"
+      - "SFR %"
+      - "1-Unit"
+      - "Single-Family"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  land_use_2_4_unit:
+    canonical_name: land_use_2_4_unit
+    data_type: percent
+    required: optional
+    value_range: {min: 0.0, max: 100.0}
+    synonyms:
+      - "2-4 Unit"
+      - "2-4 Units"
+      - "2 to 4 Unit"
+      - "Multi-Unit (2-4)"
+      - "2-4 Family"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  land_use_multi_family:
+    canonical_name: land_use_multi_family
+    data_type: percent
+    required: optional
+    value_range: {min: 0.0, max: 100.0}
+    synonyms:
+      - "Multi-Family"
+      - "Multi Family"
+      - "Multifamily"
+      - "MF"
+      - "5+ Unit"
+      - "Apartment"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  land_use_commercial:
+    canonical_name: land_use_commercial
+    data_type: percent
+    required: optional
+    value_range: {min: 0.0, max: 100.0}
+    synonyms:
+      - "Commercial"
+      - "Commercial %"
+      - "Comm."
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  land_use_other:
+    canonical_name: land_use_other
+    data_type: percent
+    required: optional
+    value_range: {min: 0.0, max: 100.0}
+    synonyms:
+      - "Other"
+      - "Other Land Use"
+      - "Other %"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  land_use_total:
+    canonical_name: land_use_total
+    data_type: percent
+    required: derived
+    value_range: {min: 98.0, max: 102.0}
+    source_authority: appraisal_report
+    sections: [neighborhood]
+    notes: "Derived: sum of all land_use_* fields. Should equal 100% ±2%."
+
+  neighborhood_boundaries:
+    canonical_name: neighborhood_boundaries
+    data_type: string
+    required: optional
+    synonyms:
+      - "Neighborhood Boundaries"
+      - "Boundaries"
+      - "Bounded By"
+      - "Neighborhood Boundary Description"
+      - "Market Area Boundaries"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  neighborhood_description:
+    canonical_name: neighborhood_description
+    data_type: string
+    required: optional
+    synonyms:
+      - "Neighborhood Description"
+      - "Neighborhood Characteristics"
+      - "Description of Neighborhood"
+      - "Market Characteristics"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+
+  market_conditions_commentary:
+    canonical_name: market_conditions_commentary
+    data_type: string
+    required: optional
+    synonyms:
+      - "Market Conditions"
+      - "Market Conditions Commentary"
+      - "Market Analysis"
+      - "Current Market Conditions"
+      - "Market Conditions Narrative"
+    source_authority: appraisal_report
+    sections: [neighborhood]
+    notes: "LLM evaluates for canned-vs-specific quality. Extraction uses text only — never LLM for the value itself."
+
+  # ===========================================================================
+  # SECTION: site
+  # ===========================================================================
+
+  site_dimensions:
+    canonical_name: site_dimensions
+    data_type: string
+    required: optional
+    synonyms:
+      - "Dimensions"
+      - "Site Dimensions"
+      - "Lot Dimensions"
+      - "Lot Size"
+      - "Lot Dim."
+    source_authority: appraisal_report
+    sections: [site]
+
+  site_area:
+    canonical_name: site_area
+    data_type: numeric
+    required: optional
+    value_range: {min: 100, max: 100000000}
+    synonyms:
+      - "Area"
+      - "Site Area"
+      - "Lot Area"
+      - "Lot Size"
+      - "Land Area"
+      - "Sq Ft"
+      - "Acres"
+    source_authority: appraisal_report
+    sections: [site]
+
+  site_area_unit:
+    canonical_name: site_area_unit
+    data_type: enum
+    required: optional
+    allowed_values: ["sf", "ac", "acres", "sq ft", "square feet", "Sq. Ft.", "Acres"]
+    synonyms:
+      - "Area Unit"
+      - "Unit of Measure"
+      - "Unit"
+    source_authority: appraisal_report
+    sections: [site]
+
+  site_shape:
+    canonical_name: site_shape
+    data_type: string
+    required: optional
+    synonyms:
+      - "Shape"
+      - "Site Shape"
+      - "Lot Shape"
+    source_authority: appraisal_report
+    sections: [site]
+
+  site_view:
+    canonical_name: site_view
+    data_type: string
+    required: optional
+    synonyms:
+      - "View"
+      - "Site View"
+      - "View Description"
+    source_authority: appraisal_report
+    sections: [site]
+
+  zoning_classification:
+    canonical_name: zoning_classification
+    data_type: string
+    required: optional
+    synonyms:
+      - "Zoning Classification"
+      - "Specific Zoning Classification"
+      - "Zoning Code"
+      - "Zone"
+      - "Zoning"
+      - "Specific Zoning"
+    source_authority: appraisal_report
+    sections: [site]
+
+  zoning_compliance:
+    canonical_name: zoning_compliance
+    data_type: enum
+    required: optional
+    allowed_values:
+      - "Legal"
+      - "Legal Non-Conforming"
+      - "No Zoning"
+      - "Illegal"
+    synonyms:
+      - "Zoning Compliance"
+      - "Compliance Status"
+      - "Zoning Status"
+      - "Conforming"
+    source_authority: appraisal_report
+    sections: [site]
+
+  highest_and_best_use:
+    canonical_name: highest_and_best_use
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Highest and Best Use"
+      - "H&BU"
+      - "HBU"
+      - "Highest & Best Use"
+      - "Is existing use the highest and best use"
+      - "Is the property's existing use its highest and best use"
+    source_authority: appraisal_report
+    sections: [site]
+
+  utilities_electricity:
+    canonical_name: utilities_electricity
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Electricity"
+      - "Electric"
+      - "Elec."
+      - "Electrical"
+    source_authority: appraisal_report
+    sections: [site]
+
+  utilities_gas:
+    canonical_name: utilities_gas
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Gas"
+      - "Natural Gas"
+      - "Gas/Oil"
+    source_authority: appraisal_report
+    sections: [site]
+
+  utilities_water:
+    canonical_name: utilities_water
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Water"
+      - "Public Water"
+      - "Water Supply"
+    source_authority: appraisal_report
+    sections: [site]
+
+  utilities_sewer:
+    canonical_name: utilities_sewer
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Sewer"
+      - "Public Sewer"
+      - "Sanitary Sewer"
+    source_authority: appraisal_report
+    sections: [site]
+
+  fema_flood_hazard:
+    canonical_name: fema_flood_hazard
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "FEMA Flood Hazard"
+      - "In FEMA Flood Hazard Area"
+      - "Flood Hazard"
+      - "Special Flood Hazard Area"
+      - "SFHA"
+      - "Flood Hazard Area"
+    source_authority: appraisal_report
+    sections: [site]
+
+  fema_flood_zone:
+    canonical_name: fema_flood_zone
+    data_type: fema_zone
+    required: optional
+    allowed_values: ["A", "AE", "AH", "AO", "AR", "A99", "V", "VE", "X", "B", "C", "D"]
+    synonyms:
+      - "FEMA Map Zone"
+      - "Flood Zone"
+      - "FEMA Flood Zone"
+      - "Flood Zone Designation"
+      - "FEMA Zone"
+    source_authority: appraisal_report
+    sections: [site]
+
+  fema_map_date:
+    canonical_name: fema_map_date
+    data_type: date
+    required: optional
+    synonyms:
+      - "FEMA Map Date"
+      - "FIRM Date"
+      - "Map Date"
+      - "Effective FEMA Date"
+      - "FEMA Map Effective Date"
+      - "FIRM Effective Date"
+    source_authority: appraisal_report
+    sections: [site]
+
+  adverse_site_conditions:
+    canonical_name: adverse_site_conditions
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Adverse Site Conditions"
+      - "Environmental Conditions"
+      - "Adverse Conditions"
+      - "Adverse Environmental Conditions"
+    source_authority: appraisal_report
+    sections: [site]
+
+  # ===========================================================================
+  # SECTION: improvements
+  # ===========================================================================
+
+  units_count:
+    canonical_name: units_count
+    data_type: enum
+    required: optional
+    allowed_values: ["One", "One with Accessory Unit"]
+    synonyms:
+      - "Units"
+      - "Number of Units"
+      - "Unit Count"
+      - "# of Units"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  dwelling_type:
+    canonical_name: dwelling_type
+    data_type: enum
+    required: optional
+    allowed_values: ["Det.", "Att.", "S-Det./End Unit"]
+    synonyms:
+      - "Type"
+      - "Dwelling Type"
+      - "Attached/Detached"
+      - "Style Type"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  design_style:
+    canonical_name: design_style
+    data_type: string
+    required: optional
+    synonyms:
+      - "Design (Style)"
+      - "Design Style"
+      - "Style"
+      - "Architectural Style"
+      - "Property Style"
+      - "Design"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  year_built:
+    canonical_name: year_built
+    data_type: year
+    required: optional
+    value_range: {min: 1800, max: 2030}
+    synonyms:
+      - "Year Built"
+      - "Yr. Built"
+      - "Actual Age"
+      - "Built"
+      - "Construction Year"
+      - "Built In"
+      - "Year of Construction"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  effective_age:
+    canonical_name: effective_age
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 100}
+    synonyms:
+      - "Effective Age"
+      - "Eff. Age"
+      - "Effective Yr. Age"
+      - "Effective Age (Yrs)"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  stories:
+    canonical_name: stories
+    data_type: numeric
+    required: optional
+    value_range: {min: 1, max: 10}
+    synonyms:
+      - "Stories"
+      - "# of Stories"
+      - "Number of Stories"
+      - "Floors"
+      - "Levels"
+      - "Story"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  status:
+    canonical_name: status
+    data_type: enum
+    required: optional
+    allowed_values: ["Existing", "Proposed", "Under Const."]
+    synonyms:
+      - "Status"
+      - "Property Status"
+      - "Existing/Proposed"
+      - "Construction Status"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  foundation_type:
+    canonical_name: foundation_type
+    data_type: enum
+    required: optional
+    allowed_values: ["Concrete Slab", "Crawl Space", "Full Basement", "Partial Basement"]
+    synonyms:
+      - "Foundation"
+      - "Foundation Type"
+      - "Basement"
+      - "Foundation Style"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  exterior_walls:
+    canonical_name: exterior_walls
+    data_type: string
+    required: optional
+    synonyms:
+      - "Exterior Walls"
+      - "Exterior"
+      - "Ext. Walls"
+      - "Siding"
+      - "Exterior Wall"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  roof_surface:
+    canonical_name: roof_surface
+    data_type: string
+    required: optional
+    synonyms:
+      - "Roof Surface"
+      - "Roof"
+      - "Roofing"
+      - "Roof Material"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  heating:
+    canonical_name: heating
+    data_type: string
+    required: optional
+    synonyms:
+      - "Heating"
+      - "Heating Type"
+      - "Heat Source"
+      - "HVAC Heat"
+      - "Heat"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  cooling:
+    canonical_name: cooling
+    data_type: string
+    required: optional
+    synonyms:
+      - "Cooling"
+      - "Cooling Type"
+      - "Air Conditioning"
+      - "A/C"
+      - "AC"
+      - "HVAC Cool"
+      - "Central Air"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  total_rooms:
+    canonical_name: total_rooms
+    data_type: integer
+    required: optional
+    value_range: {min: 1, max: 50}
+    synonyms:
+      - "Total Rooms"
+      - "Rooms"
+      - "# of Rooms"
+      - "Room Count"
+      - "Total # of Rooms"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  bedrooms:
+    canonical_name: bedrooms
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 20}
+    synonyms:
+      - "Bedrooms"
+      - "Bdrms"
+      - "BR"
+      - "Bed"
+      - "Beds"
+      - "# Bedrooms"
+      - "# of Bedrooms"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  baths:
+    canonical_name: baths
+    data_type: numeric
+    required: optional
+    value_range: {min: 0.5, max: 15.0}
+    synonyms:
+      - "Baths"
+      - "Bathrooms"
+      - "Bath"
+      - "Full/Half Baths"
+      - "BA"
+      - "# Baths"
+      - "# of Baths"
+      - "Bathrooms (Full/Half)"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  gla:
+    canonical_name: gla
+    data_type: numeric
+    required: optional
+    value_range: {min: 100, max: 50000}
+    synonyms:
+      - "GLA"
+      - "Gross Living Area"
+      - "Living Area"
+      - "Sq. Ft. of GLA"
+      - "Above Grade Living Area"
+      - "Total GLA"
+      - "GLA Sq. Ft."
+      - "Above Grade"
+      - "Square Footage"
+      - "Total Sq. Ft."
+    source_authority: appraisal_report
+    sections: [improvements, sales_comparison]
+
+  adverse_conditions:
+    canonical_name: adverse_conditions
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Adverse Conditions"
+      - "Physical Deficiencies"
+      - "Adverse Physical Conditions"
+      - "Physical Deficiencies or Adverse Conditions"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  conforms_to_neighborhood:
+    canonical_name: conforms_to_neighborhood
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Conforms to Neighborhood"
+      - "Conforming"
+      - "Neighborhood Conformity"
+      - "Does property conform"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  # ===========================================================================
+  # SECTION: sales_comparison
+  # ===========================================================================
+
+  comparable_count:
+    canonical_name: comparable_count
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 20}
+    synonyms:
+      - "Number of Comparables"
+      - "Comparable Count"
+      - "# Comparables"
+      - "Comps"
+      - "Number of Sales"
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  # Comparable fields — N = 1, 2, 3 (sometimes up to 6)
+  # Each field below applies per comp; prefix with comp_1_, comp_2_, comp_3_
+  comp_address:
+    canonical_name: comp_N_address
+    data_type: string
+    required: optional
+    synonyms: ["Address", "Property Address", "Location", "Sale Address"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_proximity:
+    canonical_name: comp_N_proximity
+    data_type: string
+    required: optional
+    synonyms: ["Proximity to Subject", "Proximity", "Distance", "Miles from Subject"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_sale_price:
+    canonical_name: comp_N_sale_price
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms: ["Sale Price", "Sales Price", "Price", "Original Sale Price"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_data_source:
+    canonical_name: comp_N_data_source
+    data_type: string
+    required: optional
+    synonyms: ["Data Source(s)", "Data Source", "Source"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_verification_source:
+    canonical_name: comp_N_verification_source
+    data_type: string
+    required: optional
+    synonyms: ["Verification Source(s)", "Verification Source", "Verified By"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_sale_date:
+    canonical_name: comp_N_sale_date
+    data_type: date
+    required: optional
+    synonyms: ["Date of Sale/Time", "Sale Date", "Date of Sale", "Sold Date"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_location_rating:
+    canonical_name: comp_N_location_rating
+    data_type: string
+    required: optional
+    synonyms: ["Location", "Location Rating", "Loc."]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_site_size:
+    canonical_name: comp_N_site_size
+    data_type: string
+    required: optional
+    synonyms: ["Site", "Site Size", "Lot Size", "Site Area"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_quality_rating:
+    canonical_name: comp_N_quality_rating
+    data_type: uad_quality
+    required: optional
+    allowed_values: ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"]
+    synonyms: ["Quality", "Quality Rating"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_actual_age:
+    canonical_name: comp_N_actual_age
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 200}
+    synonyms: ["Actual Age", "Age", "Yr. Built"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_condition_rating:
+    canonical_name: comp_N_condition_rating
+    data_type: uad_condition
+    required: optional
+    allowed_values: ["C1", "C2", "C3", "C4", "C5", "C6"]
+    synonyms: ["Condition", "Condition Rating"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_room_count_total:
+    canonical_name: comp_N_room_count_total
+    data_type: integer
+    required: optional
+    value_range: {min: 1, max: 50}
+    synonyms: ["Total Rooms", "Rooms", "Room Count"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_bedrooms:
+    canonical_name: comp_N_bedrooms
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 20}
+    synonyms: ["Bedrooms", "Bdrms", "BR"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_bathrooms:
+    canonical_name: comp_N_bathrooms
+    data_type: numeric
+    required: optional
+    value_range: {min: 0.5, max: 15.0}
+    synonyms: ["Bathrooms", "Baths", "BA"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_gla:
+    canonical_name: comp_N_gla
+    data_type: numeric
+    required: optional
+    value_range: {min: 100, max: 50000}
+    synonyms: ["Gross Living Area", "GLA", "Living Area", "Sq. Ft."]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_basement_gla:
+    canonical_name: comp_N_basement_gla
+    data_type: numeric
+    required: optional
+    value_range: {min: 0, max: 20000}
+    synonyms: ["Basement & Finished Rooms Below Grade", "Basement Area", "Below Grade", "Basement"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_garage_carport:
+    canonical_name: comp_N_garage_carport
+    data_type: string
+    required: optional
+    synonyms: ["Garage/Carport", "Garage", "Parking", "Garage/Carport Spaces"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_net_adjustment:
+    canonical_name: comp_N_net_adjustment
+    data_type: currency
+    required: optional
+    synonyms: ["Net Adj.", "Net Adjustment", "Net Adj. to Sale Price"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_adjusted_sale_price:
+    canonical_name: comp_N_adjusted_sale_price
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms: ["Indicated Value of Subject", "Adjusted Sale Price", "Adjusted Value", "Adjusted Price"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_is_listing:
+    canonical_name: comp_N_is_listing
+    data_type: boolean
+    required: optional
+    synonyms: ["Listing", "Active Listing", "Current Listing"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  sales_comparison_summary:
+    canonical_name: sales_comparison_summary
+    data_type: string
+    required: optional
+    synonyms:
+      - "Summary of Sales Comparison Approach"
+      - "Sales Comparison Summary"
+      - "Summary"
+      - "Sales Comparison Approach Summary"
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  # ===========================================================================
+  # SECTION: reconciliation
+  # ===========================================================================
+
+  appraised_value:
+    canonical_name: appraised_value
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "Final Opinion of Value"
+      - "Estimated Market Value"
+      - "Opinion of Value"
+      - "Market Value"
+      - "Appraised Value"
+      - "Final Reconciled Value"
+      - "Value"
+      - "Final Value"
+      - "As Is Value"
+      - "As-Is Value"
+    source_authority: appraisal_report
+    sections: [reconciliation]
+    required_for_review: true
+    notes: "Cross-validate against contract_price: ±3% flag, ±10% escalation. Cross-validate against comp adjusted sale prices."
+
+  effective_date:
+    canonical_name: effective_date
+    data_type: date
+    required: optional
+    synonyms:
+      - "Effective Date"
+      - "Date of Appraisal"
+      - "Appraisal Date"
+      - "Date of Value"
+      - "Date of Inspection"
+      - "Inspection Date"
+      - "Date of the Appraisal"
+      - "Effective Date of Appraisal"
+    source_authority: appraisal_report
+    sections: [reconciliation]
+    required_for_review: true
+    notes: "Date the appraiser physically inspected the property."
+
+  # ===========================================================================
+  # SECTION: engagement_letter standalone fields
+  # ===========================================================================
+
+  loan_type:
+    canonical_name: loan_type
+    data_type: enum
+    required: optional
+    allowed_values: ["Conventional", "FHA", "VA", "USDA", "Other"]
+    synonyms:
+      - "Loan Type"
+      - "Type of Loan"
+      - "Mortgage Type"
+      - "Loan Program"
+      - "Financing Type"
+      - "Product Type"
+    source_authority: engagement_letter
+    sections: [engagement_letter]
+
+  seller_name:
+    canonical_name: seller_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Seller"
+      - "Seller Name"
+      - "Property Seller"
+      - "Vendor"
+      - "Grantor"
+      - "Owner/Seller"
+    source_authority: sales_contract
+    sections: [sales_contract, engagement_letter]
+
+  concessions_amount:
+    canonical_name: concessions_amount
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 5000000}
+    synonyms:
+      - "Concessions"
+      - "Concessions Amount"
+      - "Seller Concessions"
+      - "Total Concessions"
+    source_authority: sales_contract
+    sections: [sales_contract, engagement_letter]
+
+  # ===========================================================================
+  # SECTION: condo_project  (Form 1073 — Individual Condominium Unit)
+  # Visible in screenshots: 90 NE 32nd St Unit 524, Miami FL — The Standard Residences
+  # ===========================================================================
+
+  unit_number:
+    canonical_name: unit_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "Unit #"
+      - "Unit Number"
+      - "Unit No."
+      - "Apt #"
+      - "Apartment #"
+      - "Suite #"
+    source_authority: appraisal_report
+    sections: [condo_project, subject]
+    notes: "Condo unit identifier within the project."
+
+  project_name:
+    canonical_name: project_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Project Name"
+      - "Condominium Name"
+      - "Development Name"
+      - "Project"
+      - "Condominium Project"
+      - "Building Name"
+    source_authority: appraisal_report
+    sections: [condo_project, subject]
+
+  project_phase:
+    canonical_name: project_phase
+    data_type: string
+    required: optional
+    synonyms:
+      - "Phase #"
+      - "Phase"
+      - "Project Phase"
+    source_authority: appraisal_report
+    sections: [condo_project, subject]
+
+  stories_in_building:
+    canonical_name: stories_in_building
+    data_type: integer
+    required: optional
+    value_range: {min: 1, max: 200}
+    synonyms:
+      - "# of Stories"
+      - "Number of Stories"
+      - "Stories"
+      - "Total Stories"
+      - "Floors in Building"
+      - "# Stories"
+    source_authority: appraisal_report
+    sections: [condo_project]
+    notes: "Total stories in the condo building — distinct from unit stories."
+
+  elevators_count:
+    canonical_name: elevators_count
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 50}
+    synonyms:
+      - "# of Elevators"
+      - "Number of Elevators"
+      - "Elevators"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  total_units_in_project:
+    canonical_name: total_units_in_project
+    data_type: integer
+    required: optional
+    value_range: {min: 1, max: 10000}
+    synonyms:
+      - "# of Units"
+      - "Total Units"
+      - "Number of Units"
+      - "Units in Project"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  units_completed:
+    canonical_name: units_completed
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 10000}
+    synonyms:
+      - "# of Units Completed"
+      - "Units Completed"
+      - "Completed Units"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  units_for_sale:
+    canonical_name: units_for_sale
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 10000}
+    synonyms:
+      - "# of Units For Sale"
+      - "Units For Sale"
+      - "Active Units For Sale"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  units_sold:
+    canonical_name: units_sold
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 10000}
+    synonyms:
+      - "# of Units Sold"
+      - "Units Sold"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  units_rented:
+    canonical_name: units_rented
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 10000}
+    synonyms:
+      - "# of Units Rented"
+      - "Units Rented"
+      - "Rental Units"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  units_owner_occupied:
+    canonical_name: units_owner_occupied
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 10000}
+    synonyms:
+      - "# of Owner Occupied Units"
+      - "Owner Occupied Units"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  parking_ratio_spaces_per_unit:
+    canonical_name: parking_ratio_spaces_per_unit
+    data_type: numeric
+    required: optional
+    value_range: {min: 0, max: 10}
+    synonyms:
+      - "Ratio (spaces/units)"
+      - "Parking Ratio"
+      - "Parking Spaces per Unit"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  hoa_monthly_assessment:
+    canonical_name: hoa_monthly_assessment
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 50000}
+    synonyms:
+      - "HOA $"
+      - "HOA"
+      - "HOA Mo. Assessment"
+      - "HOA Monthly Assessment"
+      - "Monthly HOA Assessment"
+      - "Unit Charge"
+      - "Monthly Assessment"
+      - "Condo Fees"
+      - "HOA per month"
+    source_authority: appraisal_report
+    sections: [condo_project, sales_comparison]
+    notes: "Monthly figure — distinct from hoa_dues which may be annual."
+
+  project_primary_occupancy:
+    canonical_name: project_primary_occupancy
+    data_type: enum
+    required: optional
+    allowed_values:
+      - "Principal Residence"
+      - "Second Home"
+      - "Recreational"
+      - "Tenant"
+    synonyms:
+      - "Project Primary Occupancy"
+      - "Primary Occupancy"
+      - "Project Occupancy"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  management_group_type:
+    canonical_name: management_group_type
+    data_type: enum
+    required: optional
+    allowed_values: ["Homeowners' Association", "Developer", "Other"]
+    synonyms:
+      - "Management Group"
+      - "Managed By"
+      - "HOA Management"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  is_developer_controls_hoa:
+    canonical_name: is_developer_controls_hoa
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Is the developer/builder in control of the Homeowners' Association"
+      - "Developer in control of HOA"
+      - "Builder controls HOA"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  is_single_entity_owns_10pct:
+    canonical_name: is_single_entity_owns_10pct
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Does any single entity own more than 10% of total units"
+      - "Single entity 10% ownership"
+      - "10% concentration"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  is_project_from_conversion:
+    canonical_name: is_project_from_conversion
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Was the project created by conversion"
+      - "Conversion project"
+      - "Converted to condominium"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  are_facilities_complete:
+    canonical_name: are_facilities_complete
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Are the recreational facilities complete"
+      - "Facilities complete"
+      - "Common amenities complete"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  has_commercial_space:
+    canonical_name: has_commercial_space
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Is any commercial space in the project"
+      - "Commercial space"
+      - "Retail space in project"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  commercial_space_pct:
+    canonical_name: commercial_space_pct
+    data_type: percent
+    required: optional
+    value_range: {min: 0, max: 100}
+    synonyms:
+      - "Commercial space percentage"
+      - "% commercial"
+      - "Commercial use %"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  common_elements_description:
+    canonical_name: common_elements_description
+    data_type: string
+    required: optional
+    synonyms:
+      - "Common Elements and Rec. Facilities"
+      - "Common Elements"
+      - "Recreational Facilities"
+      - "Describe the common elements"
+      - "Common amenities"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  are_common_elements_leased:
+    canonical_name: are_common_elements_leased
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Are common elements leased"
+      - "Common elements leased to HOA"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  is_parking_adequate:
+    canonical_name: is_parking_adequate
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Are the parking facilities adequate"
+      - "Parking adequate"
+      - "Parking facilities adequate"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  is_subject_to_ground_rent:
+    canonical_name: is_subject_to_ground_rent
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Is the project subject to a ground rent"
+      - "Ground rent"
+      - "Subject to ground lease"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  project_condition_description:
+    canonical_name: project_condition_description
+    data_type: string
+    required: optional
+    synonyms:
+      - "Describe the condition of the project"
+      - "Project condition"
+      - "Condition of project"
+    source_authority: appraisal_report
+    sections: [condo_project]
+
+  # ===========================================================================
+  # SECTION: condo_unit  (Individual condo unit improvements — Form 1073)
+  # ===========================================================================
+
+  floor_number:
+    canonical_name: floor_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "Floor #"
+      - "Floor Number"
+      - "Floor"
+      - "Located on Floor"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  floor_location:
+    canonical_name: floor_location
+    data_type: string
+    required: optional
+    synonyms:
+      - "Floor Location"
+      - "Unit Location"
+      - "Location on Floor"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+    notes: "Interior / End / Corner / Other — unit position on floor."
+
+  fireplace_count:
+    canonical_name: fireplace_count
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 10}
+    synonyms:
+      - "Fireplace(s) #"
+      - "Fireplaces"
+      - "Number of Fireplaces"
+      - "Fireplace(s)"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  air_conditioning_type:
+    canonical_name: air_conditioning_type
+    data_type: string
+    required: optional
+    synonyms:
+      - "Air Conditioning"
+      - "A/C Type"
+      - "Cooling System"
+      - "Central A/C"
+      - "Individual AC"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  functional_utility:
+    canonical_name: functional_utility
+    data_type: string
+    required: optional
+    synonyms:
+      - "Functional Utility"
+      - "Utility"
+      - "Functional Util."
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements, sales_comparison]
+
+  porch_patio_deck:
+    canonical_name: porch_patio_deck
+    data_type: string
+    required: optional
+    synonyms:
+      - "Porch/Patio/Deck"
+      - "Porch Patio Deck"
+      - "Balcony"
+      - "Outdoor Space"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements, sales_comparison]
+
+  floor_material:
+    canonical_name: floor_material
+    data_type: string
+    required: optional
+    synonyms:
+      - "Floor"
+      - "Floor Material"
+      - "Floors"
+      - "Flooring"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  walls_material:
+    canonical_name: walls_material
+    data_type: string
+    required: optional
+    synonyms:
+      - "Walls"
+      - "Wall Material"
+      - "Interior Walls"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  trim_finish_material:
+    canonical_name: trim_finish_material
+    data_type: string
+    required: optional
+    synonyms:
+      - "Trim/Finish"
+      - "Trim Finish"
+      - "Interior Trim"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  bath_floor_material:
+    canonical_name: bath_floor_material
+    data_type: string
+    required: optional
+    synonyms:
+      - "Bath Floor"
+      - "Bathroom Floor"
+      - "Bath Flooring"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  bath_wainscot_material:
+    canonical_name: bath_wainscot_material
+    data_type: string
+    required: optional
+    synonyms:
+      - "Bath Wainscot"
+      - "Bathroom Wainscot"
+      - "Tub Surround"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  appliance_refrigerator:
+    canonical_name: appliance_refrigerator
+    data_type: boolean
+    required: optional
+    synonyms: ["Refrigerator", "Refrig."]
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  appliance_range_oven:
+    canonical_name: appliance_range_oven
+    data_type: boolean
+    required: optional
+    synonyms: ["Range/Oven", "Range", "Oven", "Stove"]
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  appliance_disposal:
+    canonical_name: appliance_disposal
+    data_type: boolean
+    required: optional
+    synonyms: ["Disposal", "Garbage Disposal", "Disp."]
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  appliance_dishwasher:
+    canonical_name: appliance_dishwasher
+    data_type: boolean
+    required: optional
+    synonyms: ["Dishwasher", "D/W", "DW"]
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  appliance_microwave:
+    canonical_name: appliance_microwave
+    data_type: boolean
+    required: optional
+    synonyms: ["Microwave", "Micro.", "Microwave Oven"]
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  appliance_washer_dryer:
+    canonical_name: appliance_washer_dryer
+    data_type: boolean
+    required: optional
+    synonyms: ["Washer/Dryer", "W/D", "Washer Dryer", "Laundry"]
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  number_of_cars:
+    canonical_name: number_of_cars
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 20}
+    synonyms:
+      - "# of Cars"
+      - "Number of Cars"
+      - "Car Spaces"
+      - "Parking Spaces"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  parking_space_number:
+    canonical_name: parking_space_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "Parking Space #"
+      - "Parking Space Number"
+      - "Assigned Parking"
+    source_authority: appraisal_report
+    sections: [condo_unit, improvements]
+
+  # ===========================================================================
+  # SECTION: income_approach
+  # From screenshots: $2,300 monthly rent × GRM = indicated value $587,000
+  # ===========================================================================
+
+  income_approach_monthly_rent:
+    canonical_name: income_approach_monthly_rent
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000}
+    synonyms:
+      - "Estimated Monthly Market Rent"
+      - "Monthly Market Rent"
+      - "Market Rent"
+      - "Gross Monthly Rent"
+      - "Monthly Rent"
+    source_authority: appraisal_report
+    sections: [income_approach]
+
+  gross_rent_multiplier:
+    canonical_name: gross_rent_multiplier
+    data_type: numeric
+    required: optional
+    value_range: {min: 1, max: 1000}
+    synonyms:
+      - "Gross Rent Multiplier"
+      - "GRM"
+      - "X Gross Rent Multiplier"
+    source_authority: appraisal_report
+    sections: [income_approach]
+
+  indicated_value_income_approach:
+    canonical_name: indicated_value_income_approach
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Indicated Value by Income Approach"
+      - "Income Approach Value"
+      - "Income Approach (if developed)"
+    source_authority: appraisal_report
+    sections: [income_approach, reconciliation]
+
+  is_income_approach_used:
+    canonical_name: is_income_approach_used
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Income Approach was performed"
+      - "Income Approach developed"
+    source_authority: appraisal_report
+    sections: [income_approach]
+
+  # ===========================================================================
+  # SECTION: cost_approach  (required for USDA; see QC Rule CA-1, CA-2)
+  # ===========================================================================
+
+  site_value_estimate:
+    canonical_name: site_value_estimate
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Land Value"
+      - "Site Value"
+      - "Estimated Site Value"
+      - "Land Value $"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  cost_new_improvements:
+    canonical_name: cost_new_improvements
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Cost New"
+      - "Dwelling $"
+      - "Estimated Cost New"
+      - "Reproduction/Replacement Cost"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  physical_depreciation:
+    canonical_name: physical_depreciation
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Physical"
+      - "Physical Depreciation"
+      - "Physical Deterioration"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  functional_depreciation:
+    canonical_name: functional_depreciation
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Functional"
+      - "Functional Depreciation"
+      - "Functional Obsolescence"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  external_depreciation:
+    canonical_name: external_depreciation
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "External"
+      - "External Depreciation"
+      - "External Obsolescence"
+      - "Economic Depreciation"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  total_depreciation:
+    canonical_name: total_depreciation
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Total Depreciation"
+      - "Less: Total Depreciation"
+      - "Total Accrued Depreciation"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  depreciated_cost_improvements:
+    canonical_name: depreciated_cost_improvements
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Depreciated Cost of Improvements"
+      - "Dwelling after Depreciation"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  indicated_value_cost_approach:
+    canonical_name: indicated_value_cost_approach
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Indicated Value by Cost Approach"
+      - "Cost Approach Value"
+      - "Cost Approach (if developed)"
+    source_authority: appraisal_report
+    sections: [cost_approach, reconciliation]
+
+  is_cost_approach_used:
+    canonical_name: is_cost_approach_used
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Cost Approach developed"
+      - "Cost Approach performed"
+    source_authority: appraisal_report
+    sections: [cost_approach]
+
+  # ===========================================================================
+  # SECTION: reconciliation (additional)
+  # ===========================================================================
+
+  indicated_value_sca:
+    canonical_name: indicated_value_sca
+    data_type: currency
+    required: optional
+    value_range: {min: 1000, max: 100000000}
+    synonyms:
+      - "Indicated Value by Sales Comparison Approach"
+      - "Indicated Value by: Sales Comparison Approach"
+      - "Sales Comparison Value"
+      - "Indicated Value"
+    source_authority: appraisal_report
+    sections: [reconciliation]
+
+  final_reconciliation_comment:
+    canonical_name: final_reconciliation_comment
+    data_type: string
+    required: optional
+    synonyms:
+      - "Final Reconciliation"
+      - "Reconciliation"
+      - "Reconciliation Commentary"
+      - "Value Reconciliation"
+    source_authority: appraisal_report
+    sections: [reconciliation]
+
+  appraisal_subject_to:
+    canonical_name: appraisal_subject_to
+    data_type: enum
+    required: optional
+    allowed_values:
+      - "As Is"
+      - "Subject to Completion per Plans"
+      - "Subject to Repairs/Alterations"
+      - "Subject to Inspection"
+    synonyms:
+      - "This appraisal is made"
+      - "Subject To"
+      - "As Is / Subject To"
+      - "Appraisal made subject to"
+    source_authority: appraisal_report
+    sections: [reconciliation]
+
+  date_report_signed:
+    canonical_name: date_report_signed
+    data_type: date
+    required: optional
+    synonyms:
+      - "Date Signed"
+      - "Report Date"
+      - "Date of Report"
+      - "Date Prepared"
+    source_authority: appraisal_report
+    sections: [reconciliation, appraiser]
+
+  # ===========================================================================
+  # SECTION: prior_sale_history
+  # Prior sale/transfer data for subject and each comparable
+  # ===========================================================================
+
+  prior_sale_date_subject:
+    canonical_name: prior_sale_date_subject
+    data_type: date
+    required: optional
+    synonyms:
+      - "Date of Prior Sale/Transfer"
+      - "Prior Sale Date"
+      - "Date of Prior Sale"
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  prior_sale_price_subject:
+    canonical_name: prior_sale_price_subject
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms:
+      - "Price of Prior Sale/Transfer"
+      - "Prior Sale Price"
+      - "Prior Transfer Price"
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  prior_sale_data_source_subject:
+    canonical_name: prior_sale_data_source_subject
+    data_type: string
+    required: optional
+    synonyms:
+      - "Data Source(s)"
+      - "Prior Sale Data Source"
+      - "Transfer Data Source"
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  prior_sale_effective_date_subject:
+    canonical_name: prior_sale_effective_date_subject
+    data_type: date
+    required: optional
+    synonyms:
+      - "Effective Date of Data Source(s)"
+      - "Effective Date of Data"
+      - "Data Source Effective Date"
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  prior_sale_analysis_comment:
+    canonical_name: prior_sale_analysis_comment
+    data_type: string
+    required: optional
+    synonyms:
+      - "Analysis of prior sale"
+      - "Prior Sale Analysis"
+      - "Analysis of prior sale or transfer history"
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  # Prior sale for comparables (template — prefix with prior_comp_1_, prior_comp_2_, etc.)
+  prior_comp_sale_date:
+    canonical_name: "prior_comp_N_sale_date"
+    data_type: date
+    required: optional
+    synonyms: ["Date of Prior Sale/Transfer", "Prior Sale Date"]
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  prior_comp_sale_price:
+    canonical_name: "prior_comp_N_sale_price"
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms: ["Price of Prior Sale/Transfer", "Prior Sale Price"]
+    source_authority: appraisal_report
+    sections: [prior_sale_history]
+
+  # ===========================================================================
+  # SECTION: market_conditions_addendum  (Form 1004MC / 1004MC2)
+  # Three time periods × 9 metrics + overall trend = ~36 data points
+  # Each metric: prior_7_12 / prior_4_6 / current_3 / overall_trend
+  # From screenshots: Miami condo project data visible
+  # ===========================================================================
+
+  mca_total_sales_prior_7_12:
+    canonical_name: mca_total_sales_prior_7_12
+    data_type: integer
+    required: optional
+    synonyms:
+      - "Total # of Comparable Sales (Settled)"
+      - "Comparable Sales Prior 7-12"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_total_sales_prior_4_6:
+    canonical_name: mca_total_sales_prior_4_6
+    data_type: integer
+    required: optional
+    synonyms: ["Total # of Comparable Sales (Settled)", "Comparable Sales Prior 4-6"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_total_sales_current_3:
+    canonical_name: mca_total_sales_current_3
+    data_type: integer
+    required: optional
+    synonyms: ["Total # of Comparable Sales (Settled)", "Comparable Sales Current"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_absorption_rate_prior_7_12:
+    canonical_name: mca_absorption_rate_prior_7_12
+    data_type: numeric
+    required: optional
+    synonyms: ["Absorption Rate (Total Sales/Months)", "Absorption Rate"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_absorption_rate_prior_4_6:
+    canonical_name: mca_absorption_rate_prior_4_6
+    data_type: numeric
+    required: optional
+    synonyms: ["Absorption Rate (Total Sales/Months)"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_absorption_rate_current_3:
+    canonical_name: mca_absorption_rate_current_3
+    data_type: numeric
+    required: optional
+    synonyms: ["Absorption Rate (Total Sales/Months)"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_active_listings_prior_7_12:
+    canonical_name: mca_active_listings_prior_7_12
+    data_type: integer
+    required: optional
+    synonyms: ["Total # of Comparable Active Listings", "Active Listings"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_active_listings_current_3:
+    canonical_name: mca_active_listings_current_3
+    data_type: integer
+    required: optional
+    synonyms: ["Total # of Comparable Active Listings"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_months_supply_prior_7_12:
+    canonical_name: mca_months_supply_prior_7_12
+    data_type: numeric
+    required: optional
+    synonyms: ["Months of Housing Supply", "Months Supply"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_months_supply_current_3:
+    canonical_name: mca_months_supply_current_3
+    data_type: numeric
+    required: optional
+    synonyms: ["Months of Housing Supply"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_median_sale_price_prior_7_12:
+    canonical_name: mca_median_sale_price_prior_7_12
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms: ["Median Comparable Sale Price", "Median Sale Price"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_median_sale_price_prior_4_6:
+    canonical_name: mca_median_sale_price_prior_4_6
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms: ["Median Comparable Sale Price"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_median_sale_price_current_3:
+    canonical_name: mca_median_sale_price_current_3
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms: ["Median Comparable Sale Price"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_median_sale_dom_prior_7_12:
+    canonical_name: mca_median_sale_dom_prior_7_12
+    data_type: integer
+    required: optional
+    synonyms: ["Median Comparable Sale Days on Market", "Median Sale DOM"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_median_list_price_prior_7_12:
+    canonical_name: mca_median_list_price_prior_7_12
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000000}
+    synonyms: ["Median Comparable List Price", "Median List Price"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_median_sale_list_ratio_prior_7_12:
+    canonical_name: mca_median_sale_list_ratio_prior_7_12
+    data_type: percent
+    required: optional
+    value_range: {min: 0, max: 200}
+    synonyms:
+      - "Median Sale Price as % of List Price"
+      - "Sale/List Ratio"
+      - "Sale Price % of List"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_seller_concessions_prevalent:
+    canonical_name: mca_seller_concessions_prevalent
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Seller-developer contributions prevalent"
+      - "Seller concessions prevalent"
+      - "Financing concessions prevalent"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_foreclosure_sales_factor:
+    canonical_name: mca_foreclosure_sales_factor
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Are foreclosure sales a factor"
+      - "Foreclosure sales factor"
+      - "REO sales factor"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_trend_total_sales:
+    canonical_name: mca_trend_total_sales
+    data_type: enum
+    required: optional
+    allowed_values: ["Increasing", "Stable", "Declining"]
+    synonyms: ["Overall Trend - Total Sales", "Sales Trend"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_trend_median_sale_price:
+    canonical_name: mca_trend_median_sale_price
+    data_type: enum
+    required: optional
+    allowed_values: ["Increasing", "Stable", "Declining"]
+    synonyms: ["Overall Trend - Median Sale Price", "Price Trend"]
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_neighborhood_analysis_comment:
+    canonical_name: mca_neighborhood_analysis_comment
+    data_type: string
+    required: optional
+    synonyms:
+      - "Market Conditions Comments"
+      - "Neighborhood Analysis"
+      - "Summarize the above information"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_project_total_sales_current_3:
+    canonical_name: mca_project_total_sales_current_3
+    data_type: integer
+    required: optional
+    synonyms:
+      - "Subject Project Data - Total Sales"
+      - "Project Comparable Sales"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  mca_project_months_supply_current_3:
+    canonical_name: mca_project_months_supply_current_3
+    data_type: numeric
+    required: optional
+    synonyms:
+      - "Subject Project - Months of Unit Supply"
+      - "Project Months Supply"
+    source_authority: appraisal_report
+    sections: [market_conditions_addendum]
+
+  # ===========================================================================
+  # SECTION: appraiser  (signature page, certification page)
+  # From screenshots: Juan Mendoza, JM Property Appraisal Inc, CERT RES RD5879
+  # ===========================================================================
+
+  appraiser_name:
+    canonical_name: appraiser_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Appraiser Name"
+      - "Appraiser's Name"
+      - "Appraisers Name"
+      - "APPRAISER:"
+      - "Appraiser (print)"
+      - "Signature Appraiser Name"
+    source_authority: appraisal_report
+    sections: [appraiser]
+    required_for_review: true
+
+  appraiser_company_name:
+    canonical_name: appraiser_company_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Company Name"
+      - "Appraiser Company"
+      - "Appraisal Company"
+      - "Firm Name"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  appraiser_company_address:
+    canonical_name: appraiser_company_address
+    data_type: string
+    required: optional
+    synonyms:
+      - "Company Address"
+      - "Appraiser Address"
+      - "Firm Address"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  appraiser_phone:
+    canonical_name: appraiser_phone
+    data_type: string
+    required: optional
+    synonyms:
+      - "Phone #"
+      - "Telephone"
+      - "Phone Number"
+      - "Tel."
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  appraiser_email:
+    canonical_name: appraiser_email
+    data_type: string
+    required: optional
+    synonyms:
+      - "Email"
+      - "Email Address"
+      - "E-mail"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  appraiser_state_cert_number:
+    canonical_name: appraiser_state_cert_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "State Certification #"
+      - "State License/Certification #"
+      - "License or Certification #"
+      - "State Cert #"
+      - "Appraiser License"
+      - "Certification Number"
+    source_authority: appraisal_report
+    sections: [appraiser]
+    notes: "State-issued appraiser certification number. Pattern varies by state."
+
+  appraiser_cert_state:
+    canonical_name: appraiser_cert_state
+    data_type: state_code
+    required: optional
+    synonyms:
+      - "or State License"
+      - "State of License"
+      - "License State"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  appraiser_cert_expiration_date:
+    canonical_name: appraiser_cert_expiration_date
+    data_type: date
+    required: optional
+    synonyms:
+      - "Expiration Date of Certification"
+      - "Expiration Date of License"
+      - "License Expiration"
+      - "Cert Expiration"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  date_of_signature:
+    canonical_name: date_of_signature
+    data_type: date
+    required: optional
+    synonyms:
+      - "Date Signed"
+      - "Signature Date"
+      - "Date of Signature"
+      - "Date Report Signed"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  supervisory_appraiser_name:
+    canonical_name: supervisory_appraiser_name
+    data_type: string
+    required: optional
+    synonyms:
+      - "Supervisory Appraiser Name"
+      - "Supervisory Appraiser"
+      - "Review Appraiser"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  supervisory_appraiser_cert_number:
+    canonical_name: supervisory_appraiser_cert_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "Supervisory Appraiser State License/Certification #"
+      - "Review Appraiser License #"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  supervisory_appraiser_did_inspect:
+    canonical_name: supervisory_appraiser_did_inspect
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Did Inspect Property"
+      - "Supervisory Did/Did Not Inspect"
+      - "Inspect Subject Property"
+    source_authority: appraisal_report
+    sections: [appraiser]
+
+  # ===========================================================================
+  # SECTION: uspap_addendum
+  # From screenshots: Appraisal Report vs Restricted Appraisal Report
+  # ===========================================================================
+
+  appraisal_report_type:
+    canonical_name: appraisal_report_type
+    data_type: enum
+    required: optional
+    allowed_values: ["Appraisal Report", "Restricted Appraisal Report"]
+    synonyms:
+      - "This report was prepared under"
+      - "Reporting Option"
+      - "Report Type"
+      - "USPAP Reporting Option"
+    source_authority: appraisal_report
+    sections: [uspap_addendum]
+
+  reasonable_exposure_time:
+    canonical_name: reasonable_exposure_time
+    data_type: string
+    required: optional
+    synonyms:
+      - "Reasonable Exposure Time"
+      - "Exposure Time"
+      - "My opinion of a reasonable exposure time"
+    source_authority: appraisal_report
+    sections: [uspap_addendum]
+    notes: "E.g. '60 to 365 days' or '90 days'. String not integer."
+
+  prior_services_performed:
+    canonical_name: prior_services_performed
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "I HAVE performed services"
+      - "I have NOT performed services"
+      - "Prior services on this property"
+      - "Additional Certifications"
+    source_authority: appraisal_report
+    sections: [uspap_addendum]
+
+  # ===========================================================================
+  # SECTION: rent_schedule  (Form 1007 — Single Family Comparable Rent Schedule)
+  # From screenshots: Market rent $2,300/month for Miami condo
+  # ===========================================================================
+
+  indicated_monthly_market_rent:
+    canonical_name: indicated_monthly_market_rent
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000}
+    synonyms:
+      - "Indicated Monthly Market Rent"
+      - "Market Rent"
+      - "Estimated Market Rent"
+      - "ESTIMATE THE MONTHLY MARKET RENT"
+      - "Final Reconciliation of Market Rent"
+    source_authority: appraisal_report
+    sections: [rent_schedule]
+
+  rent_comp_address:
+    canonical_name: "rent_comp_N_address"
+    data_type: string
+    required: optional
+    synonyms: ["Address and Unit #", "Rental Comp Address"]
+    source_authority: appraisal_report
+    sections: [rent_schedule]
+
+  rent_comp_monthly_rent:
+    canonical_name: "rent_comp_N_monthly_rent"
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000}
+    synonyms: ["Monthly Rental", "Monthly Rent", "If Currently Rented $"]
+    source_authority: appraisal_report
+    sections: [rent_schedule]
+
+  rent_comp_adjusted_rent:
+    canonical_name: "rent_comp_N_adjusted_rent"
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 100000}
+    synonyms: ["Adjusted Monthly Rent", "Adjusted Rent", "Indicated Monthly Market Rent"]
+    source_authority: appraisal_report
+    sections: [rent_schedule]
+
+  rent_market_comments:
+    canonical_name: rent_market_comments
+    data_type: string
+    required: optional
+    synonyms:
+      - "Comments on market data"
+      - "Rent Market Comments"
+      - "Market Rent Commentary"
+    source_authority: appraisal_report
+    sections: [rent_schedule]
+
+  # ===========================================================================
+  # SECTION: fha_specific  (FHA/HUD assignment requirements — QC FHA rules)
+  # ===========================================================================
+
+  fha_case_number:
+    canonical_name: fha_case_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "FHA Case Number"
+      - "FHA Case #"
+      - "Case Number"
+      - "HUD Case #"
+      - "Case No."
+    source_authority: appraisal_report
+    sections: [fha_specific]
+    notes: "Format: XXX-XXXXXXX (10 digits total with dash). Must appear on ALL pages for FHA."
+
+  remaining_economic_life:
+    canonical_name: remaining_economic_life
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 200}
+    synonyms:
+      - "Estimated Remaining Economic Life"
+      - "Remaining Economic Life"
+      - "Economic Life"
+    source_authority: appraisal_report
+    sections: [fha_specific, improvements]
+    notes: "FHA requires this. If <30 years, requires detailed explanation."
+
+  intended_use_statement:
+    canonical_name: intended_use_statement
+    data_type: string
+    required: optional
+    synonyms:
+      - "Intended Use"
+      - "INTENDED USE"
+      - "The intended use of this appraisal"
+    source_authority: appraisal_report
+    sections: [fha_specific, uspap_addendum]
+
+  intended_user_statement:
+    canonical_name: intended_user_statement
+    data_type: string
+    required: optional
+    synonyms:
+      - "Intended User"
+      - "INTENDED USER"
+      - "The intended user of this appraisal"
+    source_authority: appraisal_report
+    sections: [fha_specific, uspap_addendum]
+
+  # ===========================================================================
+  # Condo-specific comp fields (additions to comp template)
+  # ===========================================================================
+
+  comp_hoa_monthly_assessment:
+    canonical_name: "comp_N_hoa_monthly_assessment"
+    data_type: currency
+    required: optional
+    value_range: {min: 0, max: 50000}
+    synonyms: ["HOA Mo. Assessment", "HOA Monthly", "Condo Fees"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_floor_location:
+    canonical_name: "comp_N_floor_location"
+    data_type: string
+    required: optional
+    synonyms: ["Floor Location", "Unit Location", "Floor"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_common_elements:
+    canonical_name: "comp_N_common_elements"
+    data_type: string
+    required: optional
+    synonyms: ["Common Elements and Rec. Facilities", "Common Elements", "Amenities"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_project_name:
+    canonical_name: "comp_N_project_name"
+    data_type: string
+    required: optional
+    synonyms: ["Project Name and Phase", "Project Name", "Condominium Name"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_unit_number:
+    canonical_name: "comp_N_unit_number"
+    data_type: string
+    required: optional
+    synonyms: ["Unit #", "Unit Number", "Apt #"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+# =============================================================================
+# NORMALIZATIONS — how raw extracted text maps to canonical stored values
+# =============================================================================
+
+normalizations:
+
+  state_code:
+    description: "2-letter uppercase US state abbreviation"
+    transform: uppercase_strip
+    reject_if_not_in_allowed_values: true
+
+  zip5:
+    description: "5-digit US zip code string"
+    transform: digits_only_first5
+    pattern: "^\\d{5}$"
+    notes: "Find by 5-digit numeric pattern. Do NOT rely on label word 'Zip'."
+
+  money:
+    description: "US dollar as float rounded to 2 decimals"
+    transform: strip_currency_symbols_commas_then_float
+    strip_chars: ["$", ",", " ", " "]
+
+  date:
+    description: "ISO 8601 date string YYYY-MM-DD"
+    transform: parse_date_to_iso8601
+    input_formats:
+      - "MM/DD/YYYY"
+      - "MM-DD-YYYY"
+      - "M/D/YYYY"
+      - "MMMM D, YYYY"
+      - "MMM D, YYYY"
+      - "YYYY-MM-DD"
+      - "MM/DD/YY"
+
+  year:
+    description: "4-digit year as integer"
+    transform: extract_4digit_year
+    value_range: {min: 1800, max: 2030}
+
+  integer:
+    description: "Whole number as int"
+    transform: strip_non_digits_then_int
+
+  numeric:
+    description: "Decimal number as float"
+    transform: strip_currency_then_float
+
+  percent:
+    description: "Percentage as float 0.0–100.0"
+    transform: strip_percent_then_float
+    value_range: {min: 0.0, max: 100.0}
+
+  boolean:
+    description: "Three-state: True / False / None"
+    transform: checkbox_to_three_state
+    true_values: ["Yes", "Y", "X", "x", "✓", "☑", "True", "1", "yes", "YES"]
+    false_values: ["No", "N", "☐", "False", "0", "no", "NO"]
+    unknown_sentinel: null
+    notes: "None = VERIFY. Never FAIL from unknown. Never treat not-found same as False."
+
+  uad_condition:
+    description: "UAD condition code C1 through C6"
+    transform: extract_uad_code
+    allowed_values: ["C1", "C2", "C3", "C4", "C5", "C6"]
+    descriptions:
+      C1: "New — never previously occupied"
+      C2: "Excellent — no deferred maintenance"
+      C3: "Good — well-maintained, minor deferred maintenance"
+      C4: "Average — adequately maintained, some deferred maintenance"
+      C5: "Fair — poor maintenance, significant deferred maintenance"
+      C6: "Poor — extreme deferred maintenance, uninhabitable"
+
+  uad_quality:
+    description: "UAD quality code Q1 through Q6"
+    transform: extract_uad_code
+    allowed_values: ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"]
+    descriptions:
+      Q1: "Unique — architecturally significant, one-of-a-kind"
+      Q2: "Custom — individually designed"
+      Q3: "Quality — above-standard construction and finishes"
+      Q4: "Standard — meets standard building codes"
+      Q5: "Fair — below-standard construction"
+      Q6: "Low — minimal quality, lowest-grade construction"
+
+  fema_zone:
+    description: "FEMA flood zone designation"
+    transform: uppercase_strip
+    allowed_values: ["A", "AE", "AH", "AO", "AR", "A99", "V", "VE", "X", "B", "C", "D"]
+
+  census_tract:
+    description: "Normalized census tract"
+    transform: strip_whitespace_normalize_decimal
+
+  area:
+    description: "Area as float"
+    transform: strip_commas_then_float
+
+  string_trim:
+    description: "Whitespace-trimmed string"
+    transform: strip_whitespace
+
+  string_list:
+    description: "List of strings, comma or newline separated"
+    transform: split_on_comma_or_newline_strip_each
+
+# =============================================================================
+# CONFIDENCE THRESHOLDS
+# Routing: auto_accept → no review needed
+#          review      → optional human review
+#          reject      → treat as not-found, flag for manual input
+# All values stored here, never hardcoded. Override per-field or per-AMC.
+# =============================================================================
+
+confidence_thresholds:
+
+  defaults:
+    auto_accept: 0.90
+    review: 0.65
+    reject: 0.30
+
+  per_field:
+    property_address:   {auto_accept: 0.92, review: 0.70, reject: 0.35}
+    borrower_name:      {auto_accept: 0.90, review: 0.65, reject: 0.30}
+    contract_price:     {auto_accept: 0.95, review: 0.75, reject: 0.40}
+    contract_date:      {auto_accept: 0.93, review: 0.70, reject: 0.35}
+    appraised_value:    {auto_accept: 0.95, review: 0.75, reject: 0.40}
+    effective_date:     {auto_accept: 0.93, review: 0.70, reject: 0.35}
+    condition_rating:   {auto_accept: 0.88, review: 0.65, reject: 0.30}
+    quality_rating:     {auto_accept: 0.88, review: 0.65, reject: 0.30}
+    lender_name:        {auto_accept: 0.90, review: 0.65, reject: 0.30}
+    market_conditions_commentary: {auto_accept: 0.80, review: 0.55, reject: 0.25}
+
+  extraction_method_base_confidence:
+    exact_label_match:   0.95
+    synonym_match:       0.85
+    positional_anchor:   0.82
+    data_pattern_only:   0.78
+    fuzzy_label_match:   0.72
+    embedding_match:     0.68
+    llm_inference:       0.55
+    not_found:           0.00
