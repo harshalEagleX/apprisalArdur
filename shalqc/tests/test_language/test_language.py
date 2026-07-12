@@ -1,0 +1,281 @@
+"""
+Acceptance-invariant tests for the language-driven judgment path (final_
+shalqccore.md §10). These run fully offline (no live LLM) and lock the structural
+guarantees the doctrine promises: no SATISFIED-on-nothing, no ungrounded/low-conf
+NOT_SATISFIED, binder can only bind real labels, visual items never call the LLM.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.extraction.result import ExtractedField, ExtractedFieldSet, Source
+from app.language import hints as H
+from app.language import label_dictionary as LD
+from app.language.packet_v2 import Sources, build_packet
+from app.language.spec import CompiledItem
+from app.language.verdict_v2 import StatusV2
+from app.language.validate_v2 import validate
+
+
+def _fs(**vals) -> ExtractedFieldSet:
+    fs = ExtractedFieldSet()
+    for name, v in vals.items():
+        fs.add(ExtractedField(canonical_name=name, value=v, source=Source.XML,
+                              confidence=0.97, page=3, location_quality="exact"))
+    return fs
+
+
+def _item(**kw) -> CompiledItem:
+    base = dict(item_id="XX-1", check_text="the check", bound_labels=[], scope="subject")
+    base.update(kw)
+    return CompiledItem(**base)
+
+
+# ── packet builder (§4.1) ─────────────────────────────────────────────────────
+
+def test_absent_labels_are_names_only_not_null_objects():
+    fs = _fs(property_address="123 Main St")
+    src = Sources.of(fs)
+    item = _item(bound_labels=["property_address", "flood_zone_id"], scope="subject")
+    p = build_packet(item, src)
+    assert "property_address" in p.values
+    assert "flood_zone_id" in p.absent_labels           # name only
+    assert "flood_zone_id" not in p.values              # never a null object
+
+
+def test_comp_labels_expand_from_present_comps_only():
+    fs = _fs(comp_1_sale_price="250000", comp_2_sale_price="260000",
+             comp_1_gla="1800", comp_2_gla="1900")
+    src = Sources.of(fs)
+    item = _item(bound_labels=["comp_N_gla"], scope="comps")
+    p = build_packet(item, src)
+    assert set(["comp_1_gla", "comp_2_gla"]) <= set(p.values)
+    assert "comp_3_gla" not in p.values and "comp_3_gla" not in p.absent_labels
+    cc = next(h for h in p.computed_hints if h["hint"] == "comp_count_present")
+    assert cc["value"] == 2                              # S-10: count at any N
+
+
+# ── hints (§4.1) ──────────────────────────────────────────────────────────────
+
+def test_equal_after_norm_token_subset_1004_vs_1004fha():
+    # acceptance #4: 1004 vs 1004 FHA must not read as a mismatch.
+    vals = {"form_type": "1004", "engagement.form_type": "1004 FHA"}
+    assert H.equal_after_norm(vals, "form_type", "engagement.form_type") is True
+
+
+# ── validator degrade ladder (§4.4) ───────────────────────────────────────────
+
+def _packet_with(values_present, absent=None, hints=None, check="c", reject="reject me"):
+    from app.language.packet_v2 import Packet
+    values = {k: {"v": v, "page": 3, "lq": "exact"} for k, v in values_present.items()}
+    return Packet(item_id="XX-1", check_text=check, reject_text=reject, values=values,
+                  absent_labels=absent or [], computed_hints=hints or [],
+                  section_snapshot=None, source_notes={}, scope="subject")
+
+
+def test_not_satisfied_low_confidence_degrades_to_review():
+    pkt = _packet_with({"comp_1_gla": "1800"})
+    raw = {"item_id": "XX-1", "status": "NOT_SATISFIED", "expected": "x", "found": "1800",
+           "reviewer_line": "expected x found 1800 please reject or override.",
+           "evidence": [{"label": "comp_1_gla", "quote": "1800"}], "confidence": 0.3}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.REVIEW
+    assert "low_judge_confidence" in jv.guardrails
+
+
+def test_not_satisfied_ungrounded_quote_degrades_to_review():
+    pkt = _packet_with({"comp_1_gla": "1800"})
+    raw = {"item_id": "XX-1", "status": "NOT_SATISFIED", "expected": "x", "found": "9999",
+           "reviewer_line": "expected x found 9999 please reject or override.",
+           "evidence": [{"label": "comp_1_gla", "quote": "NOT ON PAGE"}], "confidence": 0.9}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.REVIEW
+    assert "ungrounded" in jv.guardrails
+
+
+def test_not_satisfied_relying_on_absent_label_capped_at_review():
+    pkt = _packet_with({"property_address": "123 Main"}, absent=["flood_zone_id"])
+    raw = {"item_id": "XX-1", "status": "NOT_SATISFIED", "expected": "flood zone present",
+           "found": "flood_zone_id is missing", "confidence": 0.95,
+           "reviewer_line": "flood zone appears missing please reject or override.",
+           "evidence": [{"label": "property_address", "quote": "123 Main"}]}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.REVIEW
+    assert "absent_data" in jv.guardrails
+
+
+def test_clean_not_satisfied_survives_with_reject_wording():
+    hints = [{"hint": "comp_count_present", "value": 4, "labels": []}]
+    pkt = _packet_with({"comp_1_sale_price": "250000"}, hints=hints, reject="only 4 comps")
+    raw = {"item_id": "XX-1", "status": "NOT_SATISFIED", "expected": "6 comparables",
+           "found": "4 comparables", "confidence": 0.9,
+           "reviewer_line": "Expected 6 comparables; found 4. Recommend reject.",
+           "evidence": [{"label": "comp_1_sale_price", "quote": "250000"}]}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.NOT_SATISFIED
+    assert jv.suggest_reject_wording == "only 4 comps"
+
+
+def test_reject_wording_dropped_when_not_a_reject():
+    pkt = _packet_with({"comp_1_sale_price": "250000"}, reject="reject wording")
+    raw = {"item_id": "XX-1", "status": "SATISFIED", "found": "ok", "confidence": 0.9,
+           "reviewer_line": "Looks satisfied for this check.", "evidence": []}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.SATISFIED
+    assert jv.suggest_reject_wording is None
+
+
+def test_bad_status_degrades_to_review():
+    pkt = _packet_with({"x": "1"})
+    raw = {"item_id": "XX-1", "status": "REJECTED", "reviewer_line": "x", "evidence": []}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.REVIEW and "bad_status" in jv.guardrails
+
+
+# ── binder drift guard (§3) ───────────────────────────────────────────────────
+
+def test_binder_binds_only_known_labels():
+    from app.language.compiler import _compile_item
+    row = {"item_id": "SCA-X", "section": "sales_comparison",
+           "check_text": "comp gla must be reported", "reject_text": None,
+           "check_type": "same_section",
+           "sources": [{"doc": "appraisal", "fields": ["comp_N_gla", "totally_fake_field"]}]}
+    item = _compile_item(row, client=None)
+    assert "comp_N_gla" in item.bound_labels
+    assert all(LD.is_known(l) for l in item.bound_labels)   # fake field dropped
+
+
+def test_visual_item_compiles_to_constant_never_packeted():
+    from app.language.compiler import _compile_item
+    from app.language.run import judge_items
+    row = {"item_id": "CAT-124", "section": "improvements", "check_type": "cross_modal",
+           "check_text": "Subject photos: front, rear, street present", "sources": []}
+    item = _compile_item(row, client=None)
+    assert item.judgeable == "visual" and item.scope == "visual"
+    # judge_items must never build a packet for it (client=None would otherwise
+    # fallback); it should be a precompiled visual card.
+    res = judge_items([item], Sources.of(_fs()), _fs(), client=None)
+    jv = res["CAT-124"]
+    assert jv.decided_by == "precompiled" and jv.card_group() == "manual_visual"
+
+
+# ── S-6 / S-9 fallbacks never SATISFIED ───────────────────────────────────────
+
+def test_no_llm_fallback_is_review_never_satisfied():
+    from app.language.run import judge_items
+    fs = _fs(property_address="123 Main St")
+    item = _item(item_id="S-1", bound_labels=["property_address"], scope="subject",
+                 judgeable="text")
+    res = judge_items([item], Sources.of(fs), fs, client=None)
+    jv = res["S-1"]
+    assert jv.status == StatusV2.REVIEW
+    assert jv.status != StatusV2.SATISFIED
+    assert "llm_unavailable" in jv.guardrails
+    assert "property_address" in jv.values           # packet attached for eyeball
+
+
+# ── AnnexB Part 2: cross-section conditionals ─────────────────────────────────
+
+def test_compiler_detects_conditional_and_binds_condition_consequence():
+    from app.language.compiler import _compile_item
+    row = {"item_id": "IMP-12", "section": "improvements", "check_type": "same_section",
+           "check_text": ("If the actual age of the property exceeds 30 years, the "
+                          "improvement section must describe updates and the effective "
+                          "age must be supported."),
+           "sources": []}
+    item = _compile_item(row, client=None)
+    assert item.scope == "cross_section"
+    assert item.conditional is not None
+    # age condition force-includes year_built so the runtime can derive age.
+    assert "year_built" in item.conditional["condition_labels"]
+
+
+def test_conditional_packet_carries_condition_block_and_derived_age():
+    fs = _fs(year_built="1942", condition_comments="kitchen and bath fully remodeled 2020",
+             effective_age="25")
+    item = _item(item_id="IMP-12", bound_labels=[], scope="cross_section",
+                 conditional={"condition_labels": ["year_built"],
+                              "consequence_labels": ["condition_comments", "effective_age"]})
+    p = build_packet(item, Sources.of(fs))
+    assert p.conditional and "year_built" in p.conditional["condition_labels"]
+    age_hint = next(h for h in p.computed_hints if h["hint"] == "derived_age_from_year_built")
+    assert age_hint["value"] == __import__("datetime").date.today().year - 1942
+
+
+# ── AnnexB Part 3 Stage A: narrative pointer guard ────────────────────────────
+
+def test_narrative_classify():
+    from app.language import narrative as NAR
+    assert NAR.classify("See attached addenda for details") == "pointer"
+    assert NAR.classify("RATHNASEKARA 7243 Foxtail Meadow") == "header_grab"
+    assert NAR.classify("x" * 200) == "prose"
+    assert NAR.classify("") == "empty"
+
+
+def test_narrative_pointer_becomes_a3_review_not_judged():
+    from app.language.run import judge_items
+    fs = _fs(neighborhood_boundaries="See attached addenda")
+    item = _item(item_id="N-1", check_text="Neighborhood description must be specific",
+                 bound_labels=["neighborhood_boundaries"], scope="narrative")
+    res = judge_items([item], Sources.of(fs), fs, client=None)
+    jv = res["N-1"]
+    assert jv.status == StatusV2.REVIEW
+    assert "narrative_pointer" in jv.guardrails
+    assert jv.decided_by == "precompiled:a3"
+
+
+def test_real_narrative_prose_is_not_flagged_a3():
+    from app.language.run import judge_items
+    fs = _fs(neighborhood_boundaries="The subject neighborhood is bounded by " + "x" * 120)
+    item = _item(item_id="N-2", check_text="Neighborhood description must be specific",
+                 bound_labels=["neighborhood_boundaries"], scope="narrative")
+    res = judge_items([item], Sources.of(fs), fs, client=None)
+    jv = res["N-2"]
+    # real prose → not an A-3 card; with no LLM it is the normal S-6 fallback.
+    assert "narrative_pointer" not in jv.guardrails
+    assert "llm_unavailable" in jv.guardrails
+
+
+# ── native checklist (Excel-derived "new way") ────────────────────────────────
+
+def test_native_checklist_loads_and_compiles():
+    from app.language.compiler import checklist_for, load_checklist, _compile_item
+    path = checklist_for("EQUITYSOLUTIONS")
+    if not path.name.startswith("checklist_"):
+        pytest.skip("native checklist not generated")
+    rows = load_checklist(path)
+    assert rows and all(r["check_text"] for r in rows)
+    assert any(r["reject_text"] for r in rows)          # verbatim AMC reject wording
+    # a native row compiles to a CompiledItem bound to real labels only.
+    it = _compile_item(rows[0], client=None)
+    assert all(LD.is_known(l) for l in it.bound_labels)
+
+
+def test_native_reject_wording_flows_to_not_satisfied_card():
+    # a native item's reject_text becomes the editable draft on a NOT_SATISFIED.
+    item = _item(item_id="EQ-C", check_text="zip must match order form",
+                 bound_labels=["zip_code"], reject_text="Zip code does not match order form.")
+    from app.language.packet_v2 import Packet
+    pkt = Packet(item_id="EQ-C", check_text=item.check_text, reject_text=item.reject_text,
+                 values={"zip_code": {"v": "77338", "page": 1, "lq": "exact"},
+                         "engagement.zip_code": {"v": "78701", "page": 1, "lq": "exact"}},
+                 absent_labels=[], computed_hints=[], section_snapshot=None,
+                 source_notes={}, scope="subject")
+    raw = {"item_id": "EQ-C", "status": "NOT_SATISFIED", "expected": "match", "found": "77338 vs 78701",
+           "confidence": 0.9, "reviewer_line": "Zip 77338 does not match order form 78701. Recommend reject.",
+           "evidence": [{"label": "zip_code", "quote": "77338"}]}
+    jv = validate(raw, pkt, item)
+    assert jv.status == StatusV2.NOT_SATISFIED
+    assert jv.suggest_reject_wording == "Zip code does not match order form."
+
+
+def test_empty_packet_is_forced_review():
+    from app.language.run import judge_items
+    # a check bound to a comp attribute with NO comps present, subject scope so no
+    # snapshot → empty packet (S-9).
+    item = _item(item_id="E-1", bound_labels=["comp_N_gla"], scope="comps")
+    res = judge_items([item], Sources.of(_fs()), _fs(), client=None)
+    jv = res["E-1"]
+    assert jv.status == StatusV2.REVIEW
+    assert "empty_packet" in jv.guardrails
