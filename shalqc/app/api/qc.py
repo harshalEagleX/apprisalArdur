@@ -47,18 +47,28 @@ async def process(request: Request):
 
     if content_type.startswith("multipart/form-data"):
         form = await request.form()
-        package = form.get("package")
-        if package is None:
-            raise HTTPException(status_code=400, detail="multipart request missing `package` file")
-        tmp = Path(tempfile.mkdtemp(prefix="shalqc_"))
-        zip_path = tmp / (getattr(package, "filename", None) or "package.zip")
-        zip_path.write_bytes(await package.read())
-        try:
-            extract_dir = safe_extract_zip(zip_path, tmp / "unpacked")
-        except ValueError as exc:
-            # G-1 package safety (path traversal etc.) → 422, never a 5xx (§14)
-            raise HTTPException(status_code=422, detail=f"package_unsafe: {exc}")
-        return run_qc(extract_dir)
+        # Mode A (Java): individual file parts appraisal/xml/engagement/contract
+        # (mirrors PythonClientService.buildBaseBody). Mode B: a single `package`
+        # zip. Individual files win when an `appraisal` part is present.
+        if form.get("appraisal") is not None:
+            extract_dir = await _order_dir_from_files(form)
+        else:
+            package = form.get("package")
+            if package is None:
+                raise HTTPException(status_code=400,
+                                    detail="multipart request missing `appraisal` or `package` file")
+            tmp = Path(tempfile.mkdtemp(prefix="shalqc_"))
+            zip_path = tmp / (getattr(package, "filename", None) or "package.zip")
+            zip_path.write_bytes(await package.read())
+            try:
+                extract_dir = safe_extract_zip(zip_path, tmp / "unpacked")
+            except ValueError as exc:
+                # G-1 package safety (path traversal etc.) → 422, never a 5xx (§14)
+                raise HTTPException(status_code=422, detail=f"package_unsafe: {exc}")
+        # Java integration runs the language judge (OrderQCResponse: cards +
+        # coordinates + llm_interactions). use_llm defaults on.
+        use_llm = str(form.get("use_llm", "true")).lower() not in ("false", "0", "no")
+        return run_qc(extract_dir, llm_client=_resolve_client(use_llm), mode="language")
 
     body = await request.json()
     order_dir = (body or {}).get("order_dir")
@@ -69,7 +79,27 @@ async def process(request: Request):
         raise HTTPException(status_code=404, detail=f"order_dir not found: {order_dir}")
     # Production path uses the LLM (tier-2/3 + gap-fill); pass use_llm:false to
     # run deterministic-only (tier-2/3 rules then degrade to VERIFY).
-    return run_qc(order_path, llm_client=_resolve_client((body or {}).get("use_llm", True)))
+    mode = (body or {}).get("mode")   # None → settings.judge_mode
+    return run_qc(order_path, llm_client=_resolve_client((body or {}).get("use_llm", True)), mode=mode)
+
+
+async def _order_dir_from_files(form) -> Path:
+    """Materialize an order folder from Java's individual multipart file parts,
+    laid out the way assemble_order expects: appraisal/ (pdf + optional xml),
+    engagement/, contract/. Returns the order dir path."""
+    base = Path(tempfile.mkdtemp(prefix="shalqc_order_"))
+    async def _save(part, subdir: str, default_name: str):
+        if part is None:
+            return
+        d = base / subdir
+        d.mkdir(parents=True, exist_ok=True)
+        name = getattr(part, "filename", None) or default_name
+        (d / name).write_bytes(await part.read())
+    await _save(form.get("appraisal"), "appraisal", "appraisal.pdf")
+    await _save(form.get("xml"), "appraisal", "appraisal.xml")
+    await _save(form.get("engagement"), "engagement", "engagement.pdf")
+    await _save(form.get("contract"), "contract", "contract.pdf")
+    return base
 
 
 def _resolve_client(use_llm):
