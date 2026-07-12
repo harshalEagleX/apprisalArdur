@@ -64,6 +64,56 @@ def _packet_value_strings(packet: Packet) -> List[str]:
     return [str(v.get("v")) for v in packet.values.values() if v.get("v") is not None]
 
 
+# SHALqc-CORE §5: human-facing badge for where a value came from (mirrors
+# report.builder._SOURCE_BADGE; kept here so the language card is self-describing).
+_SOURCE_BADGE = {
+    "xml": "XML", "pdf_digital": "Report", "pdf_scanned": "Report", "grid": "Report",
+    "checkbox": "Report", "acroform": "Report", "engagement": "Order form",
+    "llm": "AI-read", "contract": "Contract",
+}
+
+
+def _badge(source: Optional[str]) -> str:
+    if not source:
+        return ""
+    key = source.split(".")[-1].lower() if source else ""
+    return _SOURCE_BADGE.get(key, "Report")
+
+
+def _located_evidence(packet: Packet, quotes_by_label: Dict[str, str]) -> List[Dict[str, Any]]:
+    """One evidence row per bound packet value, carrying coordinates so the
+    frontend can auto-scroll the document. A grounded LLM quote is attached to its
+    label when present. Order: best-located first (exact > region > page > none)."""
+    rank = {"exact": 0, "region": 1, "page": 2, "none": 3}
+    rows: List[Dict[str, Any]] = []
+    for label, entry in packet.values.items():
+        if entry.get("v") is None:
+            continue
+        rows.append({
+            "label": label,
+            "value": entry.get("v"),
+            "quote": quotes_by_label.get(label),
+            "page": entry.get("page"),
+            "bbox": entry.get("bbox"),
+            "location_quality": entry.get("lq") or "none",
+            "source": entry.get("source"),
+            "source_badge": _badge(entry.get("source")),
+            "confidence": round(float(entry.get("confidence") or 0.0), 3),
+        })
+    rows.sort(key=lambda r: rank.get(r["location_quality"], 3))
+    return rows
+
+
+def _primary_location(evidence: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The single best {page, bbox} to jump the document to on card click — the
+    first located evidence row that actually has a page."""
+    for e in evidence:
+        if e.get("page") is not None:
+            return {"page": e["page"], "bbox": e.get("bbox"),
+                    "label": e.get("label"), "location_quality": e.get("location_quality")}
+    return None
+
+
 def _hint_values(packet: Packet) -> List[float]:
     out: List[float] = []
     for h in packet.computed_hints:
@@ -102,17 +152,22 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
 
     # --- grounding: keep only quotes that are verbatim in a packet VALUE --------
     value_strings = _packet_value_strings(packet)
-    grounded_ev: List[Dict[str, Any]] = []
+    quotes_by_label: Dict[str, str] = {}
     for e in (raw.get("evidence") or []):
         if not isinstance(e, dict):
             continue
         quote = str(e.get("quote", "") or "")
         if quote and is_grounded(quote, *value_strings):
-            grounded_ev.append({"label": e.get("label"), "quote": quote})
+            lbl = e.get("label")
+            if lbl and lbl not in quotes_by_label:
+                quotes_by_label[str(lbl)] = quote
+    # Evidence rows carry COORDINATES (page/bbox) for the document auto-scroll —
+    # every bound value, with the grounded LLM quote attached to its label.
+    grounded_ev = _located_evidence(packet, quotes_by_label)
 
     # --- the degrade ladder, only for the consequential NOT_SATISFIED ----------
     if status == StatusV2.NOT_SATISFIED:
-        if not grounded_ev:
+        if not quotes_by_label:
             status, reason = StatusV2.REVIEW, "ungrounded"
             guardrails.append(reason)
         elif confidence < _CONF_FLOOR:
@@ -139,11 +194,15 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
 
     return JudgeVerdict(
         item_id=item.item_id, status=status, check_text=item.check_text,
-        section=item.section, expected=expected, found=found,
+        section=item.section, item_name=item.item_name, reject_text=item.reject_text,
+        expected=expected, found=found,
         reviewer_line=reviewer_line, evidence=grounded_ev,
+        primary_location=_primary_location(grounded_ev),
         suggest_reject_wording=suggest, confidence=round(confidence, 3),
         judgeable=item.judgeable, guardrails=guardrails, decided_by="judge_v2",
         values=packet.raw_values(),
+        bound_by=item.bound_by, binder_confidence=item.binder_confidence,
+        bound_labels=list(item.bound_labels),
     )
 
 

@@ -18,13 +18,15 @@ defined outcome, none crash, none silently pass:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+import uuid
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.language import judge_v2 as J
 from app.language import narrative as NAR
 from app.language import validate_v2 as V
 from app.language.packet_v2 import Packet, Sources, build_packet
 from app.language.spec import CompiledItem
+from app.language.validate_v2 import _located_evidence, _primary_location
 from app.language.verdict_v2 import CARD_ORDER, JudgeVerdict, StatusV2
 
 logger = logging.getLogger(__name__)
@@ -68,25 +70,47 @@ def _collect_gaps(packets: List[Packet], appraisal_fs) -> List[Dict[str, Any]]:
 
 # ── fallbacks / precompiled cards ─────────────────────────────────────────────
 
+def _item_fields(item: CompiledItem) -> Dict[str, Any]:
+    """Shared reviewer/provenance fields every card carries, LLM-judged or not."""
+    return {
+        "item_name": item.item_name, "reject_text": item.reject_text,
+        "bound_by": item.bound_by, "binder_confidence": item.binder_confidence,
+        "bound_labels": list(item.bound_labels),
+    }
+
+
 def _visual_card(item: CompiledItem) -> JudgeVerdict:
     return JudgeVerdict(
         item_id=item.item_id, status=StatusV2.REVIEW, check_text=item.check_text,
         section=item.section, judgeable="visual", decided_by="precompiled",
         reviewer_line=(f"Manual visual check: {item.check_text[:180]}"
                        " — review the photos/sketch/map by eye.")[:240],
+        **_item_fields(item),
     )
 
 
-def _fallback_card(packet: Packet, reason: str) -> JudgeVerdict:
-    """S-6 / S-9: never SATISFIED. Packet values ride along so the reviewer can
-    still judge by eye."""
+def _packet_fields(packet: Packet) -> Dict[str, Any]:
+    """Fallback reviewer/provenance fields when only a packet is available."""
+    return {"item_name": "", "reject_text": packet.reject_text,
+            "bound_by": "", "binder_confidence": 0.0, "bound_labels": []}
+
+
+def _fallback_card(packet: Packet, reason: str,
+                   item: Optional[CompiledItem] = None) -> JudgeVerdict:
+    """S-6 / S-9: never SATISFIED. Packet values (WITH coordinates) ride along so
+    the reviewer can still judge by eye and the document can still auto-scroll."""
     line = ("Automated judgment was unavailable for this check — please review the "
             "values shown.") if reason == "llm_unavailable" else (
             "This check produced no data to judge — please review manually.")
+    evidence = _located_evidence(packet, {})
     return JudgeVerdict(
-        item_id=packet.item_id, status=StatusV2.REVIEW, check_text=packet.check_text,
-        section=packet.scope, reviewer_line=line, guardrails=[reason],
+        item_id=packet.item_id, status=StatusV2.REVIEW,
+        check_text=(item.check_text if item else packet.check_text),
+        section=(item.section if item else packet.scope),
+        reviewer_line=line, guardrails=[reason],
         decided_by=f"fallback:{reason}", values=packet.raw_values(),
+        evidence=evidence, primary_location=_primary_location(evidence),
+        **(_item_fields(item) if item else _packet_fields(packet)),
     )
 
 
@@ -104,12 +128,14 @@ def _narrative_pointer_card(item: CompiledItem, packet: Packet):
                     for l in labels)
     if has_prose:
         return None
+    evidence = _located_evidence(packet, {})
     return JudgeVerdict(
         item_id=item.item_id, status=StatusV2.REVIEW, check_text=item.check_text,
         section=item.section, decided_by="precompiled:a3", guardrails=["narrative_pointer"],
-        values=raw,
+        values=raw, evidence=evidence, primary_location=_primary_location(evidence),
         reviewer_line=("The form points to an addendum for this narrative but I could not "
                        "find the matching text — please check the addendum pages by eye.")[:240],
+        **_item_fields(item),
     )
 
 
@@ -135,11 +161,36 @@ def _classify_cannot_evaluate(jv: JudgeVerdict, packet: Packet, appraisal_fs) ->
 
 # ── the run ───────────────────────────────────────────────────────────────────
 
+def _interaction(item_id: str, packet: Optional[Packet], response: Optional[dict],
+                 meta: Optional[dict]) -> Dict[str, Any]:
+    """One stored LLM exchange for one item: the request packet we sent, the parsed
+    response, the raw model text, and the call metadata — everything needed to
+    replay or audit the judgment. `id` links it from the reviewer card."""
+    meta = meta or {}
+    return {
+        "id": uuid.uuid4().hex,
+        "item_id": item_id,
+        "call_type": meta.get("call_type", ""),
+        "prompt_version": meta.get("prompt_version", ""),
+        "batch_id": meta.get("batch_id", ""),
+        "provider": meta.get("provider", ""),
+        "model": meta.get("model", ""),
+        "ms": meta.get("ms", 0.0),
+        "cached": meta.get("cached", False),
+        "request": packet.to_json() if packet is not None else None,
+        "response": response,
+        "raw_response": meta.get("raw_response"),
+        "error": meta.get("error"),
+    }
+
+
 def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
-                client) -> Dict[str, JudgeVerdict]:
+                client) -> Tuple[Dict[str, JudgeVerdict], List[Dict[str, Any]]]:
     """Bind→packet→judge→validate for a list of compiled items. Returns
-    item_id → validated JudgeVerdict (visual + fallbacks included)."""
+    (item_id → validated JudgeVerdict, list of stored LLM interactions). Visual +
+    fallback cards are included; every judged/failed item gets an interaction."""
     results: Dict[str, JudgeVerdict] = {}
+    interactions: List[Dict[str, Any]] = []
     packets: List[Packet] = []
     packet_by_id: Dict[str, Packet] = {}
 
@@ -149,7 +200,7 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
             continue
         packet = build_packet(item, src)
         if _empty_packet(packet):
-            results[item.item_id] = _fallback_card(packet, "empty_packet")
+            results[item.item_id] = _fallback_card(packet, "empty_packet", item)
             logger.warning("language.run: empty packet for %s (S-9)", item.item_id)
             continue
         # AnnexB Part 3 A-3: a narrative check whose only value is a pointer /
@@ -167,7 +218,7 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
     for p in packets:
         by_section.setdefault(p.scope or "other", []).append(p)
 
-    verdicts, failed = J.judge_all(client, by_section)
+    verdicts, failed, metas = J.judge_all(client, by_section)
     item_by_id = {it.item_id: it for it in items}
 
     for item_id, raw in verdicts.items():
@@ -177,16 +228,25 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
             continue
         jv = V.validate(raw, packet, item)
         jv = _classify_cannot_evaluate(jv, packet, appraisal_fs)
+        rec = _interaction(item_id, packet, raw, metas.get(item_id))
+        jv.llm_interaction_id = rec["id"]
+        interactions.append(rec)
         results[item_id] = jv
 
     for item_id in failed:
         if item_id in results:
             continue
         packet = packet_by_id.get(item_id)
+        item = item_by_id.get(item_id)
         if packet is not None:
-            results[item_id] = _fallback_card(packet, "llm_unavailable")
+            jv = _fallback_card(packet, "llm_unavailable", item)
+            # store the failed exchange too (raw model text + error) for audit.
+            rec = _interaction(item_id, packet, None, metas.get(item_id))
+            jv.llm_interaction_id = rec["id"]
+            interactions.append(rec)
+            results[item_id] = jv
 
-    return results
+    return results, interactions
 
 
 def _card(jv: JudgeVerdict) -> Dict[str, Any]:
@@ -195,17 +255,26 @@ def _card(jv: JudgeVerdict) -> Dict[str, Any]:
         "group": jv.card_group(),
         "section": jv.section,
         "status": jv.status.value,
+        "item_name": jv.item_name,
         "check_text": jv.check_text,
+        "description": jv.check_text,          # alias: the full check in the AMC's words
+        "reject_text": jv.reject_text,
         "headline": _headline(jv),
         "expected": jv.expected,
         "found": jv.found,
         "reviewer_line": jv.reviewer_line,
-        "evidence": jv.evidence,
+        "evidence": jv.evidence,               # each row carries page/bbox for auto-scroll
+        "primary_location": jv.primary_location,
         "values": jv.values,
         "suggested_wording": jv.suggest_reject_wording,
         "confidence": jv.confidence,
+        "judgeable": jv.judgeable,
         "guardrails": jv.guardrails,
         "decided_by": jv.decided_by,
+        "bound_by": jv.bound_by,
+        "binder_confidence": jv.binder_confidence,
+        "bound_labels": jv.bound_labels,
+        "llm_interaction_id": jv.llm_interaction_id,
     }
 
 
@@ -236,7 +305,8 @@ def build_language_report(order_id: str, amc_code: str,
                           results: Dict[str, JudgeVerdict], appraisal_fs,
                           gaps: List[Dict[str, Any]],
                           degradations: Optional[List[str]] = None,
-                          versions: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                          versions: Optional[Dict[str, Any]] = None,
+                          interactions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """§5: EVERY item → a reviewer card, grouped + severity-sorted; engine gaps go
     to the Ops tab (extraction_gaps), never the reviewer queue."""
     reviewer: List[JudgeVerdict] = []
@@ -276,6 +346,7 @@ def build_language_report(order_id: str, amc_code: str,
         },
         "cards": cards,
         "extraction_gaps": ops,
+        "llm_interactions": interactions or [],
         "location_metric": _location_metric(appraisal_fs),
         "degradations": degradations or [],
         "versions": versions or {},
@@ -288,7 +359,7 @@ def run_language(order_id: str, amc_code: str, appraisal_fs, engagement_fs,
                  versions: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Full language-mode judgment for one order → reviewer report."""
     src = Sources.of(appraisal_fs, engagement_fs, contract_fs)
-    results = judge_items(compiled_items, src, appraisal_fs, client)
+    results, interactions = judge_items(compiled_items, src, appraisal_fs, client)
 
     # gaps: recompute over the packets we actually built (absent + engine-unread).
     packets = [build_packet(it, src) for it in compiled_items
@@ -296,4 +367,5 @@ def run_language(order_id: str, amc_code: str, appraisal_fs, engagement_fs,
     gaps = _collect_gaps(packets, appraisal_fs)
 
     return build_language_report(order_id, amc_code, results, appraisal_fs, gaps,
-                                 degradations=degradations, versions=versions)
+                                 degradations=degradations, versions=versions,
+                                 interactions=interactions)

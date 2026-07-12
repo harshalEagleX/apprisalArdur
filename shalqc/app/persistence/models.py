@@ -18,9 +18,10 @@ Tables:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import (JSON, DateTime, ForeignKey, Integer, String, Text,
-                        UniqueConstraint)
+from sqlalchemy import (JSON, Boolean, DateTime, Float, ForeignKey, Integer,
+                        String, Text, UniqueConstraint)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 __version__ = "persist-1.0.0"
@@ -65,6 +66,59 @@ class Finding(Base):
     root_field: Mapped[str] = mapped_column(String(64), default="")
     status: Mapped[str] = mapped_column(String(16))
     message: Mapped[str] = mapped_column(Text, default="")
+
+
+class ItemVerdict(Base):
+    """One row per checklist item per run — the reviewer-grade verdict Java queries
+    (status, description, coordinates, provenance). Joined to LLMInteraction via
+    llm_interaction_id, and later to reviewer decisions (the agreement loop)."""
+    __tablename__ = "item_verdicts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), ForeignKey("runs.run_id"), index=True)
+    order_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    item_id: Mapped[str] = mapped_column(String(32), index=True)
+    section: Mapped[str] = mapped_column(String(32), default="")
+    card_group: Mapped[str] = mapped_column(String(24), default="")
+    status: Mapped[str] = mapped_column(String(20), default="")
+    item_name: Mapped[str] = mapped_column(Text, default="")
+    check_text: Mapped[str] = mapped_column(Text, default="")
+    reject_text: Mapped[str] = mapped_column(Text, default="")
+    expected: Mapped[str] = mapped_column(Text, default="")
+    found: Mapped[str] = mapped_column(Text, default="")
+    reviewer_line: Mapped[str] = mapped_column(Text, default="")
+    suggested_wording: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    decided_by: Mapped[str] = mapped_column(String(40), default="")
+    bound_by: Mapped[str] = mapped_column(String(20), default="")
+    binder_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    evidence_json: Mapped[list] = mapped_column(JSON, default=list)   # incl page/bbox
+    primary_location: Mapped[dict] = mapped_column(JSON, default=dict)
+    llm_interaction_id: Mapped[Optional[str]] = mapped_column(String(40), index=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (UniqueConstraint("run_id", "item_id", name="uq_item_verdict_run_item"),)
+
+
+class LLMInteraction(Base):
+    """One row per stored LLM exchange for one item — request packet, parsed
+    response, raw model text, and call metadata. Enables replay + reviewer drill-in
+    ("what did the model see and say for this check")."""
+    __tablename__ = "llm_interactions"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), ForeignKey("runs.run_id"), index=True)
+    order_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    item_id: Mapped[str] = mapped_column(String(32), index=True)
+    call_type: Mapped[str] = mapped_column(String(64), default="")
+    prompt_version: Mapped[str] = mapped_column(String(32), default="")
+    batch_id: Mapped[str] = mapped_column(String(64), default="")
+    provider: Mapped[str] = mapped_column(String(24), default="")
+    model: Mapped[str] = mapped_column(String(64), default="")
+    ms: Mapped[float] = mapped_column(Float, default=0.0)
+    cached: Mapped[bool] = mapped_column(Boolean, default=False)
+    request_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    raw_response: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class Correction(Base):

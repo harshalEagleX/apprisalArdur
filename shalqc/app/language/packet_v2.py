@@ -103,7 +103,8 @@ def _value_entry(view: DocView, name: str) -> Optional[Dict[str, Any]]:
     if ev.value is None:
         return None
     entry: Dict[str, Any] = {"v": ev.value, "page": ev.page,
-                             "lq": ev.location_quality or "none"}
+                             "lq": ev.location_quality or "none",
+                             "source": ev.source, "confidence": ev.confidence}
     if ev.bbox:
         entry["bbox"] = ev.bbox
     # S-8: surface a retained cross-source conflict inline with both coordinates.

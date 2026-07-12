@@ -79,6 +79,7 @@ def load_checklist(path: Path = _DEFAULT_CHECKLIST) -> List[Dict[str, Any]]:
                 "section": it.get("section") or _section_of(str(it.get("item_id", ""))),
                 "check_text": it["check_text"],
                 "reject_text": it.get("reject_text"),
+                "item_name": it.get("item") or it.get("item_name") or "",
                 "check_type": it.get("check_type", "presence"),
                 "sources": it.get("sources") or [],
             })
@@ -97,6 +98,7 @@ def load_checklist(path: Path = _DEFAULT_CHECKLIST) -> List[Dict[str, Any]]:
             "section": _section_of(rid),
             "check_text": check_text,
             "reject_text": reject,
+            "item_name": it.get("item") or it.get("item_name") or "",
             "check_type": it.get("check_type", "presence"),
             "sources": it.get("sources") or [],
         })
@@ -213,6 +215,7 @@ def _compile_item(row: Dict[str, Any], client) -> CompiledItem:
     item = CompiledItem(
         item_id=row["item_id"], check_text=check_text,
         reject_text=row.get("reject_text"), section=row.get("section", "other"),
+        item_name=row.get("item_name", "") or "",
     )
 
     # Visual → constant card, never the LLM (§3).

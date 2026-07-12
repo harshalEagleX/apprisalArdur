@@ -23,6 +23,9 @@ class CompiledItem:
     check_text: str
     reject_text: Optional[str] = None
     section: str = "other"
+    # the checklist's short human name for this check (e.g. "Form Type (Product)")
+    # — carried to the reviewer card as its title/description.
+    item_name: str = ""
     bound_labels: List[str] = field(default_factory=list)
     scope: str = "unbound"
     expects: str = ""
@@ -44,6 +47,7 @@ class CompiledItem:
             check_text=d.get("check_text", "") or "",
             reject_text=d.get("reject_text"),
             section=d.get("section", "other") or "other",
+            item_name=d.get("item_name", "") or "",
             bound_labels=list(d.get("bound_labels") or []),
             scope=d.get("scope", "unbound") or "unbound",
             expects=d.get("expects", "") or "",
@@ -57,6 +61,7 @@ class CompiledItem:
         return {
             "item_id": self.item_id, "check_text": self.check_text,
             "reject_text": self.reject_text, "section": self.section,
+            "item_name": self.item_name,
             "bound_labels": self.bound_labels, "scope": self.scope,
             "expects": self.expects, "judgeable": self.judgeable,
             "conditional": self.conditional,

@@ -63,12 +63,28 @@ class JudgeVerdict:
     status: StatusV2
     check_text: str = ""
     section: str = ""
+    # reviewer-facing description: the checklist's short name + the AMC's reject
+    # wording (always carried, not only on NOT_SATISFIED, so the card can show it).
+    item_name: str = ""
+    reject_text: Optional[str] = None
     expected: str = ""
     found: str = ""
     reviewer_line: str = ""
+    # located evidence, each entry: {label, value, quote?, page, bbox,
+    # location_quality, source, source_badge, confidence} — page/bbox drive the
+    # frontend document auto-scroll when the reviewer clicks the card.
     evidence: List[Dict[str, Any]] = field(default_factory=list)
+    # the single best {page, bbox} to jump the document to on card click.
+    primary_location: Optional[Dict[str, Any]] = None
     suggest_reject_wording: Optional[str] = None
     confidence: float = 0.0
+    # binding provenance carried from the compiled item (so the reviewer/Java see
+    # how the check was bound and whether a human should trust it).
+    bound_by: str = ""
+    binder_confidence: float = 0.0
+    bound_labels: List[str] = field(default_factory=list)
+    # link to the stored raw LLM exchange for this item (llm_interactions.id).
+    llm_interaction_id: Optional[str] = None
     # "report" (the report lacks the data → reviewer checks by eye) or "engine"
     # (extraction failed to read a value the XML/PDF actually carries → Ops tab).
     # Only meaningful for CANNOT_EVALUATE.

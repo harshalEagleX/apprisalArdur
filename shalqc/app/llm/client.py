@@ -68,9 +68,12 @@ class LLMCall:
 
 
 class LLMResult:
-    def __init__(self, data: Optional[dict], call: LLMCall):
+    def __init__(self, data: Optional[dict], call: LLMCall, raw: Optional[str] = None):
         self.data = data
         self.call = call
+        # the raw model text (before JSON parsing) — kept so every exchange can be
+        # persisted verbatim for the reviewer/replay (llm_interactions audit).
+        self.raw = raw
 
     @property
     def ok(self) -> bool:
@@ -180,7 +183,7 @@ class LLMClient:
         if cached is not None:
             call = LLMCall(call_type=call_type, provider="cache", model=model, cached=True, ok=True)
             self.telemetry.append(call)
-            return LLMResult(cached, call)
+            return LLMResult(cached, call, raw=json.dumps(cached, ensure_ascii=False))
 
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -195,14 +198,14 @@ class LLMClient:
 
         last_err = "no_provider_configured"
         for provider, url, key, model in attempts:
-            data, err, ms = self._one_call(url, key, model, messages, max_tokens)
+            data, err, ms, raw = self._one_call(url, key, model, messages, max_tokens)
             if data is not None:
                 call = LLMCall(call_type=call_type, provider=provider, model=model, ok=True, ms=ms)
                 self.telemetry.append(call)
                 self._cache_put(cache_key, data,
                                 meta={"call_type": call_type, "model": model,
                                       "system": system, "user": user})
-                return LLMResult(data, call)
+                return LLMResult(data, call, raw=raw)
             last_err = err
             logger.warning("LLM %s failed on %s: %s", call_type, provider, err)
 
@@ -221,16 +224,16 @@ class LLMClient:
         try:
             resp = httpx.post(url, json=body, headers=headers, timeout=_TIMEOUT)
         except Exception as exc:
-            return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000
+            return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000, None
         ms = (time.perf_counter() - t0) * 1000
         if resp.status_code in (429,) or resp.status_code >= 500:
-            return None, f"http_{resp.status_code}", ms   # failover trigger
+            return None, f"http_{resp.status_code}", ms, None   # failover trigger
         if resp.status_code != 200:
-            return None, f"http_{resp.status_code}:{resp.text[:120]}", ms
+            return None, f"http_{resp.status_code}:{resp.text[:120]}", ms, None
         try:
             content = resp.json()["choices"][0]["message"]["content"]
         except Exception as exc:
-            return None, f"bad_envelope:{exc}", ms
+            return None, f"bad_envelope:{exc}", ms, None
         data = _parse_json(content)
         if data is None:
             # one retry with a repair nudge appended (SHALqc-CORE §4.0)
@@ -241,13 +244,13 @@ class LLMClient:
             body["messages"] = retry_messages
             try:
                 resp2 = httpx.post(url, json=body, headers=headers, timeout=_TIMEOUT)
-                content2 = resp2.json()["choices"][0]["message"]["content"]
-                data = _parse_json(content2)
+                content = resp2.json()["choices"][0]["message"]["content"]
+                data = _parse_json(content)
             except Exception:
                 data = None
         if data is None:
-            return None, "invalid_json_after_retry", ms
-        return data, None, ms
+            return None, "invalid_json_after_retry", ms, content
+        return data, None, ms, content
 
     # ------------------------------------------------------------------
     # GapfillClient protocol (extraction/llm_gapfill.py C1)

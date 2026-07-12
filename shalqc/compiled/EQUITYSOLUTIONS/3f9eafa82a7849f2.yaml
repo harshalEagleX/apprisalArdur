@@ -116,6 +116,7 @@ items:
   check_text: Form Type (Product) — Report must be provided same as ordered
   reject_text: null
   section: order
+  item_name: Form Type (Product)
   bound_labels:
   - assignment_type
   scope: cross_document
@@ -128,6 +129,7 @@ items:
   check_text: Transaction type — Loan type on order form match with Assignment Type
   reject_text: null
   section: order
+  item_name: Transaction type
   bound_labels:
   - loan_type
   - assignment_type
@@ -145,6 +147,7 @@ items:
   reject_text: Property Zip code does not match with order form. (For Zip code only
     first 5 digit should be match)
   section: subject
+  item_name: Property Address, City, State, Zip Code and County
   bound_labels:
   - property_address
   - city
@@ -172,6 +175,7 @@ items:
     name.'
   reject_text: Please include Co-borrower name _______ as per order form.
   section: subject
+  item_name: Borrower
   bound_labels:
   - borrower_name
   - co_borrower_name
@@ -198,6 +202,7 @@ items:
   reject_text: Assignment type of the report is noted as ‘Refinance’; however, the
     owner name and the borrower name are different, please revise or comment.
   section: subject
+  item_name: Owner of Public record
   bound_labels:
   - owner_of_public_record
   - borrower_name
@@ -215,6 +220,7 @@ items:
   check_text: Legal Description — This field should not be blank
   reject_text: null
   section: subject
+  item_name: Legal Description
   bound_labels:
   - legal_description
   scope: subject
@@ -227,6 +233,7 @@ items:
   check_text: 'Assessor''s parcel # — This field should not be blank'
   reject_text: null
   section: subject
+  item_name: 'Assessor''s parcel #'
   bound_labels:
   - assessors_parcel_number
   scope: subject
@@ -239,6 +246,7 @@ items:
   check_text: Tax Year — Must be latest or last 2 year (This field should not be blank)
   reject_text: null
   section: subject
+  item_name: Tax Year
   bound_labels:
   - tax_year
   scope: subject
@@ -251,6 +259,7 @@ items:
   check_text: R.E. Taxes $ — Not allow in decimals (This field should not be blank)
   reject_text: null
   section: subject
+  item_name: R.E. Taxes $
   bound_labels:
   - real_estate_taxes
   scope: subject
@@ -269,6 +278,7 @@ items:
     subdivision name. If there is no neighborhood name recognized by the municipality,
     enter the common name by which residents refer to the location. Please revise.
   section: subject
+  item_name: Neighborhood Name
   bound_labels:
   - neighborhood_name
   scope: cross_section
@@ -292,6 +302,7 @@ items:
     IF Map Reference missing or blank'
   reject_text: null
   section: subject
+  item_name: Map Reference
   bound_labels: []
   scope: visual
   expects: ''
@@ -304,6 +315,7 @@ items:
     Census Tract missing or blank'
   reject_text: null
   section: subject
+  item_name: Census Tract
   bound_labels:
   - census_tract
   scope: cross_section
@@ -331,6 +343,7 @@ items:
   reject_text: The subject section indicates that the property is owner occupied however
     the photos appear to show the property is currently vacant. Please revise or comment.
   section: subject
+  item_name: Occupant
   bound_labels: []
   scope: visual
   expects: ''
@@ -345,6 +358,7 @@ items:
   reject_text: In the subject section, please specify what is the special assessment
     of $*** for?
   section: subject
+  item_name: Special Assessments
   bound_labels:
   - special_assessments
   - special_assessments_comment
@@ -374,6 +388,7 @@ items:
   reject_text: HOA dues are noted as “$660” per year in the subject section however
     PUD box is not marked, please revise.
   section: subject
+  item_name: PUD and HOA
   bound_labels:
   - hoa_dues
   - hoa_period
@@ -402,6 +417,7 @@ items:
   reject_text: 'Please correct the lender''s name so it reflects as: (name as per
     order form)'
   section: subject
+  item_name: Lender/Client Name
   bound_labels:
   - lender_name
   scope: cross_section
@@ -427,6 +443,7 @@ items:
   reject_text: 'Please correct the lender''s address so it reflects as: (name as per
     order form)'
   section: subject
+  item_name: Lender/client Address
   bound_labels:
   - lender_address
   scope: cross_section
@@ -449,6 +466,7 @@ items:
   check_text: Property Rights Appraised — Only one checkbox mark is allow
   reject_text: null
   section: subject
+  item_name: Property Rights Appraised
   bound_labels:
   - property_rights
   scope: subject
@@ -473,6 +491,7 @@ items:
     in the twelve months prior to the effective date of this appraisal?” as per UAD
     requirement.
   section: subject
+  item_name: Subject Listed/Sold within 12 Months
   bound_labels:
   - data_source
   - days_on_market
@@ -503,6 +522,7 @@ items:
     is for Re-finance then contract section must be blank.'
   reject_text: null
   section: contract
+  item_name: Did & Did Not box
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -522,6 +542,7 @@ items:
   reject_text: In the contract section Contract Price noted as this however in the
     purchase contract shows this, Please verify.
   section: contract
+  item_name: Contract Price & Date of Contract
   bound_labels:
   - contract_price
   - contract_date
@@ -538,6 +559,7 @@ items:
   reject_text: Please provide data source for "Is the property seller the owner of
     public record?" under contract section
   section: contract
+  item_name: Data Source(s)
   bound_labels:
   - data_source
   scope: subject
@@ -558,6 +580,8 @@ items:
     different from purchase agreement'
   reject_text: null
   section: contract
+  item_name: Is there any financial assistance (loan charges, sale concessions, gift
+    or downpayment assistance, etc.) to be paid by any party on behalf of the borrower?
   bound_labels:
   - has_financial_assistance
   - financial_assistance_amount
@@ -586,6 +610,7 @@ items:
     please revise.'
   reject_text: null
   section: neighborhood
+  item_name: Characteristcis & Housing Trends
   bound_labels: []
   scope: cross_section
   expects: count(comp_* present) >= 1
@@ -612,6 +637,7 @@ items:
     Trend should match MC form or specific commentary is required.
   reject_text: null
   section: neighborhood
+  item_name: Unit Housing Price and Age
   bound_labels:
   - price_high
   - price_low
@@ -640,6 +666,7 @@ items:
   check_text: Present Land Use — One-Unit Housing and Present Land Use %
   reject_text: null
   section: neighborhood
+  item_name: Present Land Use
   bound_labels:
   - land_use_one_unit
   scope: subject
@@ -654,6 +681,7 @@ items:
     Boundries , please revise.'
   reject_text: null
   section: neighborhood
+  item_name: Boundaries
   bound_labels:
   - neighborhood_boundaries
   scope: cross_section
@@ -676,6 +704,7 @@ items:
   check_text: Description — Neighborhood description should be fill up
   reject_text: null
   section: neighborhood
+  item_name: Description
   bound_labels:
   - neighborhood_description
   scope: narrative
@@ -689,6 +718,7 @@ items:
     on the 1004MC form. Stating, "See 1004MC" is not acceptable.
   reject_text: null
   section: neighborhood
+  item_name: Market Conditions
   bound_labels:
   - market_conditions_commentary
   scope: narrative
@@ -702,6 +732,7 @@ items:
     should be fill up
   reject_text: null
   section: site
+  item_name: Dimentions, Area, Shape and View
   bound_labels:
   - site_dimensions
   - site_area
@@ -723,6 +754,7 @@ items:
     if blank then add rejection'
   reject_text: null
   section: site
+  item_name: Zoning Classification, Description and Compliance
   bound_labels:
   - zoning_compliance
   - zoning_classification
@@ -747,6 +779,7 @@ items:
     Hold'
   reject_text: null
   section: site
+  item_name: Highest and Best Use
   bound_labels:
   - highest_and_best_use
   scope: subject
@@ -764,6 +797,7 @@ items:
     marked as private then add rejection'
   reject_text: null
   section: site
+  item_name: Utilities/Off‐Site Improvement Type
   bound_labels:
   - utilities_gas
   - utilities_electricity
@@ -786,6 +820,7 @@ items:
     marked as YES'
   reject_text: null
   section: site
+  item_name: Flood Hazard Area
   bound_labels:
   - fema_flood_hazard
   scope: subject
@@ -800,6 +835,7 @@ items:
     marked
   reject_text: null
   section: site
+  item_name: Utilities and Off‐site Improvements Typical
   bound_labels: []
   scope: unbound
   expects: ''
@@ -813,6 +849,7 @@ items:
     etc.)? | Triggers: If Yes checbox is marked'
   reject_text: null
   section: site
+  item_name: Adverse Site Conditions
   bound_labels:
   - adverse_site_conditions
   scope: subject
@@ -827,6 +864,7 @@ items:
     checkbox is marked then sales grid and sketch should reflects ADU'
   reject_text: null
   section: improvements
+  item_name: General description should be fill up
   bound_labels: []
   scope: visual
   expects: ''
@@ -838,6 +876,7 @@ items:
   check_text: '# of Stories — No. of floor except ground level.'
   reject_text: null
   section: improvements
+  item_name: '# of Stories'
   bound_labels:
   - stories
   scope: subject
@@ -851,6 +890,7 @@ items:
     work is going on then this checkbox should be selected'
   reject_text: null
   section: improvements
+  item_name: Type
   bound_labels: []
   scope: visual
   expects: ''
@@ -862,6 +902,7 @@ items:
   check_text: 'Design (Style): — Structural build type'
   reject_text: null
   section: improvements
+  item_name: 'Design (Style):'
   bound_labels:
   - foundation_type
   scope: subject
@@ -875,6 +916,7 @@ items:
     constructed.'
   reject_text: null
   section: improvements
+  item_name: 'Year Built:'
   bound_labels:
   - year_built
   scope: subject
@@ -887,6 +929,7 @@ items:
   check_text: 'Effective Age (Yrs): — Appearance of property'
   reject_text: null
   section: improvements
+  item_name: 'Effective Age (Yrs):'
   bound_labels:
   - effective_age
   scope: subject
@@ -901,6 +944,7 @@ items:
   reject_text: Photo of attic is provided in the report however in the improvement
     section the attic box is not marked, please verify
   section: improvements
+  item_name: Attic
   bound_labels: []
   scope: visual
   expects: ''
@@ -916,6 +960,7 @@ items:
     | Trigger: if checkbox is marked check commentary for adversity'
   reject_text: null
   section: improvements
+  item_name: Foundation
   bound_labels:
   - foundation_type
   - adverse_conditions
@@ -945,6 +990,7 @@ items:
     then attach detach or built in should be checked (atleast 1 checkbox )'
   reject_text: null
   section: improvements
+  item_name: Exterior and Interior Description should
   bound_labels:
   - exterior_walls
   - floor_material
@@ -975,6 +1021,7 @@ items:
   check_text: Appliances — Note only built in items.
   reject_text: null
   section: improvements
+  item_name: Appliances
   bound_labels:
   - appliance_dishwasher
   - appliance_disposal
@@ -993,6 +1040,7 @@ items:
     be fill up
   reject_text: null
   section: improvements
+  item_name: ABOVE Grade Contains
   bound_labels:
   - total_rooms
   - bedrooms
@@ -1009,6 +1057,7 @@ items:
     none, state NONE.
   reject_text: null
   section: improvements
+  item_name: Additional Features
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -1027,6 +1076,7 @@ items:
     needed repairs, deterioration, renovations, remodeling, etc.)
   reject_text: null
   section: improvements
+  item_name: Condition of the Property
   bound_labels:
   - condition_rating
   scope: subject
@@ -1041,6 +1091,7 @@ items:
     property?
   reject_text: null
   section: improvements
+  item_name: Adverse conditions
   bound_labels:
   - adverse_conditions
   scope: subject
@@ -1055,6 +1106,7 @@ items:
     etc.)?
   reject_text: null
   section: improvements
+  item_name: Does Property Conform to Neighborhood
   bound_labels:
   - conforms_to_neighborhood
   scope: subject
@@ -1068,6 +1120,7 @@ items:
     fill up'
   reject_text: null
   section: sales_comparison
+  item_name: '# of COMPARABLE Properties Currently Offered'
   bound_labels:
   - comp_count_present
   scope: subject
@@ -1083,6 +1136,7 @@ items:
     also Predominant price ranges from page 1.'
   reject_text: null
   section: sales_comparison
+  item_name: '# of COMPARABLE Sales w/in 12 Months'
   bound_labels:
   - comparable_count
   scope: comps
@@ -1097,6 +1151,7 @@ items:
     grid or location map so it reflects as ____'
   reject_text: null
   section: sales_comparison
+  item_name: Address
   bound_labels: []
   scope: visual
   expects: ''
@@ -1110,6 +1165,7 @@ items:
     that the location Map is provided.
   reject_text: null
   section: sales_comparison
+  item_name: Proximity to Subject
   bound_labels: []
   scope: visual
   expects: ''
@@ -1124,6 +1180,7 @@ items:
     for ___ comp # under sales grid section.'
   reject_text: null
   section: sales_comparison
+  item_name: Data Sources
   bound_labels:
   - comp_N_data_source
   scope: cross_section
@@ -1148,6 +1205,7 @@ items:
     Please have verification source for ___ comp # under sales grid section.'
   reject_text: null
   section: sales_comparison
+  item_name: Verification Sources
   bound_labels:
   - comp_N_verification_source
   scope: cross_section
@@ -1172,6 +1230,7 @@ items:
   reject_text: Please provide "Sales or Financing Concessions" for comp 1, or comment
     why adjustment is not warranted.
   section: sales_comparison
+  item_name: Sale or Financing Concessions
   bound_labels: []
   scope: unbound
   expects: ''
@@ -1186,6 +1245,7 @@ items:
     is prior to the contract date (c11/14)'
   reject_text: null
   section: sales_comparison
+  item_name: Date of Sale/Time
   bound_labels:
   - comp_N_sale_date
   scope: comps
@@ -1200,6 +1260,7 @@ items:
     (N - Neutral) than value must be reflect in negative (-)'
   reject_text: null
   section: sales_comparison
+  item_name: Location
   bound_labels:
   - comp_N_location_rating
   scope: cross_section
@@ -1225,6 +1286,7 @@ items:
     leasehold and any of the comp shows fee simple then adjustment should be reflected.'
   reject_text: null
   section: sales_comparison
+  item_name: Leasehold/Fee Simple
   bound_labels:
   - property_rights
   scope: cross_section
@@ -1245,6 +1307,7 @@ items:
     one acre or more must be provided in acreage.
   reject_text: null
   section: sales_comparison
+  item_name: Site
   bound_labels:
   - comp_N_site_size
   scope: comps
@@ -1258,6 +1321,7 @@ items:
     be provided for the same.
   reject_text: null
   section: sales_comparison
+  item_name: View
   bound_labels: []
   scope: visual
   expects: ''
@@ -1271,6 +1335,7 @@ items:
     or sales grid'
   reject_text: Please provide Design (style) under improvement and sales grid.
   section: sales_comparison
+  item_name: Design (Style)
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -1291,6 +1356,7 @@ items:
     commentary must be provided to address no adjustment given.
   reject_text: null
   section: sales_comparison
+  item_name: Quality of Construction
   bound_labels:
   - quality_rating
   - comp_N_quality_rating
@@ -1309,6 +1375,7 @@ items:
     age should be 1, however the sales comparison grid shows the actual age as 0.
     Please verify.
   section: sales_comparison
+  item_name: Actual Age
   bound_labels:
   - comp_N_actual_age
   scope: comps
@@ -1324,6 +1391,7 @@ items:
   reject_text: Please provide condition adjustment for comps# 2, 3 and 4 or comment
     why it was not warranted as compare to subject.
   section: sales_comparison
+  item_name: Condition
   bound_labels:
   - comp_N_condition_rating
   scope: comps
@@ -1337,6 +1405,7 @@ items:
     and GLA match Sketch.
   reject_text: null
   section: sales_comparison
+  item_name: Above Grade/Room count/ and GLA
   bound_labels: []
   scope: visual
   expects: ''
@@ -1351,6 +1420,7 @@ items:
     Rooms Below Grade)
   reject_text: null
   section: sales_comparison
+  item_name: Basement & Finish/Rooms Below Grade
   bound_labels:
   - comp_N_basement_gla
   scope: cross_section
@@ -1373,6 +1443,7 @@ items:
   check_text: Functional Utility — must be provided as Standard, Average or Typical
   reject_text: null
   section: sales_comparison
+  item_name: Functional Utility
   bound_labels:
   - functional_utility
   scope: subject
@@ -1388,6 +1459,7 @@ items:
     property has no permanent heat source, please provide comment any impact on marketability.'
   reject_text: null
   section: sales_comparison
+  item_name: Heating/Cooling
   bound_labels: []
   scope: cross_section
   expects: count(comp_* present) >= 1
@@ -1409,6 +1481,7 @@ items:
     field.
   reject_text: null
   section: sales_comparison
+  item_name: Energy Efficient Items
   bound_labels:
   - comp_N_net_adjustment
   scope: comps
@@ -1423,6 +1496,7 @@ items:
     this is differnt with subject the adjustment or 0 is required.'
   reject_text: null
   section: sales_comparison
+  item_name: Garage/Carport
   bound_labels:
   - comp_N_garage_carport
   scope: cross_section
@@ -1445,6 +1519,7 @@ items:
     amenities are differnt with subject the adjustment or 0 is required.'
   reject_text: null
   section: sales_comparison
+  item_name: Porch/Patio/Deck
   bound_labels:
   - porch_patio_deck
   scope: cross_section
@@ -1465,6 +1540,7 @@ items:
     the appraiser must place a label in the proper section.
   reject_text: null
   section: sales_comparison
+  item_name: Additional Fields for use
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -1490,6 +1566,7 @@ items:
     15% net adjustments.'
   reject_text: null
   section: sales_comparison
+  item_name: Net Adjustment (total)
   bound_labels:
   - comp_N_net_adjustment
   - comp_N_sale_price
@@ -1505,6 +1582,7 @@ items:
     a more accurate range of value for the subject.
   reject_text: null
   section: sales_comparison
+  item_name: Adjusted Sale Price of Comparables
   bound_labels:
   - comp_N_adjusted_sale_price
   scope: comps
@@ -1519,6 +1597,7 @@ items:
     sales must be marked.
   reject_text: null
   section: prior_sales
+  item_name: Research the sale or transfer history of subject
   bound_labels:
   - prior_sale_date_subject
   - prior_sale_price_subject
@@ -1538,6 +1617,7 @@ items:
     Sale/Transfer and Price of Prior Sale/Transfer" must be included in the report.'
   reject_text: null
   section: prior_sales
+  item_name: Subject Property 3 year sales or transfer history
   bound_labels:
   - prior_sale_date_subject
   - prior_sale_price_subject
@@ -1565,6 +1645,7 @@ items:
     box must be marked
   reject_text: null
   section: prior_sales
+  item_name: Comparables 12 month sales or transfer history
   bound_labels:
   - prior_comp_N_sale_date
   scope: cross_section
@@ -1585,6 +1666,7 @@ items:
     more than 1, commentary must be provided.
   reject_text: null
   section: prior_sales
+  item_name: Sales History Table
   bound_labels:
   - prior_sale_date_subject
   scope: cross_section
@@ -1609,6 +1691,7 @@ items:
     is more than 1, commentary must be provided.
   reject_text: null
   section: prior_sales
+  item_name: Price of Prior Sale/Transfer
   bound_labels:
   - prior_sale_price_subject
   scope: cross_section
@@ -1634,6 +1717,7 @@ items:
     #T2321256'
   reject_text: null
   section: prior_sales
+  item_name: Data Source(s)
   bound_labels:
   - prior_sale_data_source_subject
   scope: cross_section
@@ -1657,6 +1741,7 @@ items:
     Must be provided even if no sale or transfer is reported.
   reject_text: null
   section: prior_sales
+  item_name: Effective Date of Data Source (s)
   bound_labels:
   - prior_sale_effective_date_subject
   scope: cross_section
@@ -1679,6 +1764,7 @@ items:
   check_text: Analysis of prior sales or transfers
   reject_text: null
   section: prior_sales
+  item_name: Analysis of prior sales or transfers
   bound_labels:
   - prior_sale_analysis_comment
   scope: subject
@@ -1694,6 +1780,7 @@ items:
     prices. If unable to bracket, sufficient commentary must be provided.
   reject_text: null
   section: prior_sales
+  item_name: Summary of Sales Comparison Approach
   bound_labels:
   - comp_N_sale_price
   - comp_N_adjusted_sale_price
@@ -1719,6 +1806,7 @@ items:
     final value given.
   reject_text: null
   section: prior_sales
+  item_name: Indicated value by sales comparison
   bound_labels:
   - sales_comparison_summary
   scope: subject
@@ -1734,6 +1822,7 @@ items:
     Approach. Please revise.'
   reject_text: null
   section: reconciliation
+  item_name: Indicated Value by Sales Comparison Appr
   bound_labels:
   - indicated_value_sca
   - market_value_opinion
@@ -1758,6 +1847,7 @@ items:
     is" or "subject to"'
   reject_text: null
   section: reconciliation
+  item_name: 'Appraisal: As Is or Subject To'
   bound_labels:
   - appraisal_subject_to
   scope: subject
@@ -1772,6 +1862,7 @@ items:
     of site value in the report.'
   reject_text: null
   section: cost
+  item_name: Support for the Opinion of Site value
   bound_labels:
   - site_value_estimate
   scope: cross_section
@@ -1795,6 +1886,7 @@ items:
     30 years
   reject_text: null
   section: cost
+  item_name: Estimated Remaining Economic Life (HUD and VA only)
   bound_labels:
   - remaining_economic_life
   scope: subject
@@ -1808,6 +1900,7 @@ items:
     add revision.
   reject_text: null
   section: cost
+  item_name: INCOME APPROACH TO VALUE
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -1827,6 +1920,7 @@ items:
     checkbox is marked then all pud information should be fill up'
   reject_text: null
   section: pud
+  item_name: Is Developer/builder in control?
   bound_labels:
   - is_developer_controls_hoa
   scope: cross_section
@@ -1848,6 +1942,7 @@ items:
     the report, please sign in all the designated spaces.'
   reject_text: null
   section: signature
+  item_name: Appraiser
   bound_labels:
   - date_report_signed
   scope: cross_section
@@ -1870,6 +1965,7 @@ items:
   check_text: Name — Appraiser name should be match with engagement letter
   reject_text: null
   section: signature
+  item_name: Name
   bound_labels:
   - appraiser_name
   scope: subject
@@ -1882,6 +1978,7 @@ items:
   check_text: Company Name — Should match the engagement letter
   reject_text: null
   section: signature
+  item_name: Company Name
   bound_labels:
   - appraiser_company_name
   scope: cross_document
@@ -1894,6 +1991,7 @@ items:
   check_text: Company Address — Should match the engagement letter
   reject_text: null
   section: signature
+  item_name: Company Address
   bound_labels:
   - appraiser_company_address
   scope: subject
@@ -1906,6 +2004,7 @@ items:
   check_text: Telephone number — Should match the engagement letter
   reject_text: null
   section: signature
+  item_name: Telephone number
   bound_labels:
   - appraiser_phone
   scope: cross_document
@@ -1918,6 +2017,7 @@ items:
   check_text: Email Address — Should match the engagement letter
   reject_text: null
   section: signature
+  item_name: Email Address
   bound_labels:
   - appraiser_email
   scope: subject
@@ -1931,6 +2031,7 @@ items:
     and Report Effective Date of Appraisal
   reject_text: null
   section: signature
+  item_name: Date of Signature & Effective Date of Appraisal
   bound_labels:
   - date_of_signature
   - date_report_signed
@@ -1945,6 +2046,7 @@ items:
     or License'
   reject_text: null
   section: signature
+  item_name: 'State Certification #'
   bound_labels:
   - appraiser_state_cert_number
   - appraiser_cert_expiration_date
@@ -1959,6 +2061,7 @@ items:
     type can be completed by State Licensed appraiser. Must read as it does on ASC.gov.'
   reject_text: null
   section: signature
+  item_name: 'State License #'
   bound_labels:
   - appraiser_state_cert_number
   scope: cross_section
@@ -1978,6 +2081,7 @@ items:
     appraise in multiple states) State must match the appraiser's license state attached.
   reject_text: null
   section: signature
+  item_name: State
   bound_labels:
   - state
   - appraiser_cert_state
@@ -1992,6 +2096,7 @@ items:
     matches attached License.
   reject_text: null
   section: signature
+  item_name: Expiration Date of Certification or License
   bound_labels:
   - appraiser_cert_expiration_date
   scope: subject
@@ -2005,6 +2110,7 @@ items:
     letter or Subject section
   reject_text: null
   section: signature
+  item_name: ADDRESS OF PROPERTY APPRAISED
   bound_labels:
   - property_address
   scope: subject
@@ -2018,6 +2124,7 @@ items:
     section
   reject_text: null
   section: signature
+  item_name: APPRAISED VALUE OF SUBJECT PROPERTY $
   bound_labels:
   - market_value_opinion
   scope: cross_document
@@ -2034,6 +2141,7 @@ items:
     Appraisal Management Company.'
   reject_text: null
   section: signature
+  item_name: Name
   bound_labels:
   - lender_name
   scope: subject
@@ -2047,6 +2155,7 @@ items:
     name)
   reject_text: null
   section: signature
+  item_name: Company Name
   bound_labels:
   - appraiser_company_name
   - lender_name
@@ -2061,6 +2170,7 @@ items:
     address)
   reject_text: null
   section: signature
+  item_name: Company Address
   bound_labels:
   - appraiser_company_address
   scope: cross_document
@@ -2073,6 +2183,7 @@ items:
   check_text: Email Address — not required
   reject_text: null
   section: signature
+  item_name: Email Address
   bound_labels:
   - appraiser_email
   scope: subject
@@ -2087,6 +2198,7 @@ items:
     completed with a "0" if there are none or N/A.
   reject_text: null
   section: mc_1004
+  item_name: Inventory Analysis
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -2110,6 +2222,7 @@ items:
     neighborhood.'
   reject_text: null
   section: mc_1004
+  item_name: 'Total # of Comparables Sales (Settled)'
   bound_labels:
   - comp_count_present
   scope: comps
@@ -2125,6 +2238,7 @@ items:
     match the data given at the top of the sales grid.'
   reject_text: null
   section: mc_1004
+  item_name: 'Total # of Comparable Active Listings'
   bound_labels:
   - mca_active_listings_current_3
   scope: cross_section
@@ -2150,6 +2264,7 @@ items:
     shaded areas cannot be provided, N/A should be provided.
   reject_text: null
   section: mc_1004
+  item_name: Median Sale & List Price, DOM, Sale/List %
   bound_labels:
   - mca_median_sale_price_current_3
   - mca_median_list_price_prior_7_12
@@ -2179,6 +2294,7 @@ items:
     dates or explain why this is not applicable.
   reject_text: null
   section: mc_1004
+  item_name: Overall Trend
   bound_labels:
   - mca_trend_median_sale_price
   scope: cross_section
@@ -2201,6 +2317,7 @@ items:
     is acceptable.
   reject_text: null
   section: mc_1004
+  item_name: Commentary
   bound_labels:
   - market_conditions_commentary
   scope: narrative
@@ -2214,6 +2331,7 @@ items:
     the subject is a Condo Co‐ Op and deal specifically with the subject's project.
   reject_text: null
   section: mc_1004
+  item_name: Condo/Co‐Op Projects
   bound_labels:
   - project_name
   - project_phase
@@ -2240,6 +2358,7 @@ items:
     is acceptable.
   reject_text: null
   section: mc_1004
+  item_name: Commentary
   bound_labels:
   - market_conditions_commentary
   scope: narrative
@@ -2253,6 +2372,7 @@ items:
     should be available, Appraisal Report and Restricted Appraisal Report.
   reject_text: null
   section: uspap
+  item_name: Appraisal and report Identification
   bound_labels:
   - appraisal_report_type
   scope: subject
@@ -2266,6 +2386,7 @@ items:
     in time. (i.e. 90 or 30‐60) Additional commentary is suggested but not required.
   reject_text: null
   section: uspap
+  item_name: Reasonable Exposure Time
   bound_labels:
   - reasonable_exposure_time
   scope: subject
@@ -2280,6 +2401,7 @@ items:
     services are.
   reject_text: null
   section: uspap
+  item_name: Additional Certifications
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -2304,6 +2426,7 @@ items:
     in photos, commentary must be provided.
   reject_text: null
   section: exhibits
+  item_name: Subject Photo Pages
   bound_labels: []
   scope: visual
   expects: ''
@@ -2318,6 +2441,7 @@ items:
     with the specific room name.
   reject_text: null
   section: exhibits
+  item_name: Interior photos
   bound_labels: []
   scope: unbound
   expects: ''
@@ -2333,6 +2457,7 @@ items:
     pictures should be avoided if possible.
   reject_text: null
   section: exhibits
+  item_name: Additional Subject photos
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -2356,6 +2481,7 @@ items:
     fact drive by them.
   reject_text: null
   section: exhibits
+  item_name: Comparable Photos
   bound_labels: []
   scope: unbound
   expects: ''
@@ -2371,6 +2497,7 @@ items:
     to value must be on the sketch with proper dimensions.
   reject_text: null
   section: exhibits
+  item_name: Sketch
   bound_labels: []
   scope: visual
   expects: ''
@@ -2383,6 +2510,7 @@ items:
     the sketch page.
   reject_text: null
   section: exhibits
+  item_name: Area Calculations
   bound_labels: []
   scope: visual
   expects: ''
@@ -2395,6 +2523,7 @@ items:
     as : Please Provide Aerial Map In the Report.'
   reject_text: null
   section: exhibits
+  item_name: Aerial Map
   bound_labels: []
   scope: visual
   expects: ''
@@ -2407,6 +2536,7 @@ items:
     with sufficient detail to identify their relative locations.
   reject_text: null
   section: exhibits
+  item_name: Location Map
   bound_labels: []
   scope: visual
   expects: ''
@@ -2419,6 +2549,7 @@ items:
     1.
   reject_text: null
   section: exhibits
+  item_name: Plat Map
   bound_labels: []
   scope: visual
   expects: ''
@@ -2430,6 +2561,7 @@ items:
   check_text: Flood Map — Is required if the subject is located in a Flood Zone.
   reject_text: null
   section: exhibits
+  item_name: Flood Map
   bound_labels: []
   scope: visual
   expects: ''
@@ -2444,6 +2576,7 @@ items:
     copy of your License, as the copy provided in the report has expired.'
   reject_text: null
   section: exhibits
+  item_name: Appraisers License
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -2466,6 +2599,7 @@ items:
     this is ok and will not need a revision.
   reject_text: null
   section: exhibits
+  item_name: E & O Insurance
   bound_labels: []
   scope: cross_section
   expects: ''
@@ -2482,6 +2616,7 @@ items:
   check_text: UAD data set
   reject_text: null
   section: exhibits
+  item_name: UAD data set
   bound_labels:
   - data_source
   scope: subject

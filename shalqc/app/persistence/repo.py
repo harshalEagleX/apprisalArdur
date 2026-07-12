@@ -134,15 +134,86 @@ def save_run(order_id: str, amc_code: str, package_hash: str, fingerprint: str,
     with _session() as s:
         if s is None:
             return None
-        from app.persistence.models import Finding, Order, Run
+        from app.persistence.models import (Finding, ItemVerdict, LLMInteraction,
+                                            Order, Run)
         if s.get(Order, order_id) is None:
             s.add(Order(order_id=order_id, amc_code=amc_code))
         run_id = uuid.uuid4().hex
         s.add(Run(run_id=run_id, order_id=order_id, revision_no=revision_no,
                   package_hash=package_hash, fingerprint=fingerprint, amc_code=amc_code,
                   summary_json=report.get("summary", {}), report_json=report))
+
+        # Store the raw LLM exchanges FIRST (item_verdicts reference them).
+        for it in report.get("llm_interactions", []):
+            iid = it.get("id")
+            if not iid:
+                continue
+            s.add(LLMInteraction(
+                id=iid, run_id=run_id, order_id=order_id, item_id=it.get("item_id", ""),
+                call_type=it.get("call_type", ""), prompt_version=it.get("prompt_version", ""),
+                batch_id=it.get("batch_id", ""), provider=it.get("provider", ""),
+                model=it.get("model", ""), ms=float(it.get("ms") or 0.0),
+                cached=bool(it.get("cached")), request_json=it.get("request") or {},
+                response_json=it.get("response") or {}, raw_response=(it.get("raw_response") or "")[:20000]))
+
         for card in report.get("cards", []):
-            s.add(Finding(run_id=run_id, rule_id=",".join(card.get("rule_ids", [])),
-                          message_key="", root_field=card.get("group", ""),
-                          status=card.get("status", ""), message=card.get("what_we_found", "")))
+            # Language cards are per-item (have item_id) → rich ItemVerdict rows.
+            if card.get("item_id"):
+                s.add(ItemVerdict(
+                    run_id=run_id, order_id=order_id, item_id=card["item_id"],
+                    section=card.get("section", ""), card_group=card.get("group", ""),
+                    status=card.get("status", ""), item_name=card.get("item_name", "") or "",
+                    check_text=card.get("check_text", "") or "",
+                    reject_text=card.get("reject_text") or "",
+                    expected=card.get("expected", "") or "", found=card.get("found", "") or "",
+                    reviewer_line=card.get("reviewer_line", "") or "",
+                    suggested_wording=card.get("suggested_wording") or "",
+                    confidence=float(card.get("confidence") or 0.0),
+                    decided_by=card.get("decided_by", "") or "",
+                    bound_by=card.get("bound_by", "") or "",
+                    binder_confidence=float(card.get("binder_confidence") or 0.0),
+                    evidence_json=card.get("evidence") or [],
+                    primary_location=card.get("primary_location") or {},
+                    llm_interaction_id=card.get("llm_interaction_id")))
+            # Legacy rules-mode cards (rule_ids) keep the Finding row for the diff.
+            elif card.get("rule_ids") is not None:
+                s.add(Finding(run_id=run_id, rule_id=",".join(card.get("rule_ids", [])),
+                              message_key="", root_field=card.get("group", ""),
+                              status=card.get("status", ""), message=card.get("what_we_found", "")))
         return run_id
+
+
+def get_item_verdicts(run_id: str) -> List[dict]:
+    """Every per-item verdict for a run (for the Java reviewer view), each with its
+    coordinates and a link to the stored LLM interaction."""
+    with _session() as s:
+        if s is None:
+            return []
+        from app.persistence.models import ItemVerdict
+        rows = s.query(ItemVerdict).filter_by(run_id=run_id).all()
+        return [{
+            "item_id": r.item_id, "section": r.section, "group": r.card_group,
+            "status": r.status, "item_name": r.item_name, "check_text": r.check_text,
+            "reject_text": r.reject_text, "expected": r.expected, "found": r.found,
+            "reviewer_line": r.reviewer_line, "suggested_wording": r.suggested_wording,
+            "confidence": r.confidence, "decided_by": r.decided_by, "bound_by": r.bound_by,
+            "binder_confidence": r.binder_confidence, "evidence": r.evidence_json,
+            "primary_location": r.primary_location, "llm_interaction_id": r.llm_interaction_id,
+        } for r in rows]
+
+
+def get_llm_interaction(interaction_id: str) -> Optional[dict]:
+    """The stored raw LLM exchange for one item (reviewer drill-in / replay)."""
+    with _session() as s:
+        if s is None:
+            return None
+        from app.persistence.models import LLMInteraction
+        r = s.get(LLMInteraction, interaction_id)
+        if r is None:
+            return None
+        return {
+            "id": r.id, "run_id": r.run_id, "order_id": r.order_id, "item_id": r.item_id,
+            "call_type": r.call_type, "prompt_version": r.prompt_version, "batch_id": r.batch_id,
+            "provider": r.provider, "model": r.model, "ms": r.ms, "cached": r.cached,
+            "request": r.request_json, "response": r.response_json, "raw_response": r.raw_response,
+        }

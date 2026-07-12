@@ -34,22 +34,40 @@ def _system() -> str:
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-def _judge_batch(client, section: str, packets: List) -> Tuple[str, Optional[Dict[str, dict]]]:
+def _batch_meta(section: str, res) -> Dict[str, object]:
+    """The audit metadata for one batched judge call — stamped onto every item's
+    stored interaction so a reviewer can see exactly which model/lane judged it."""
+    call = getattr(res, "call", None)
+    return {
+        "call_type": f"judge2:{PROMPT_VERSION}:{section}",
+        "prompt_version": PROMPT_VERSION,
+        "batch_id": section,
+        "provider": getattr(call, "provider", "") if call else "",
+        "model": getattr(call, "model", "") if call else "",
+        "ms": getattr(call, "ms", 0.0) if call else 0.0,
+        "cached": getattr(call, "cached", False) if call else False,
+        "raw_response": getattr(res, "raw", None),
+    }
+
+
+def _judge_batch(client, section: str, packets: List
+                 ) -> Tuple[str, Optional[Dict[str, dict]], Dict[str, object]]:
     """One batched call over one section's packets. Returns (section, verdicts-by-
-    item_id) or (section, None) when the LLM was unusable for this batch."""
+    item_id | None, batch_meta). batch_meta always describes the call made."""
     payload = {"packets": [p.to_json() for p in packets]}
     res = client.complete(f"judge2:{PROMPT_VERSION}:{section}", _system(),
                           json.dumps(payload), max_tokens=3500)
+    meta = _batch_meta(section, res)
     if not res.ok or not isinstance(res.data, dict):
-        return section, None
+        return section, None, meta
     verdicts = _normalize_reply(res.data)
     if verdicts is None:
-        return section, None
+        return section, None, meta
     out: Dict[str, dict] = {}
     for v in verdicts:
         if isinstance(v, dict) and v.get("item_id"):
             out[str(v["item_id"])] = v
-    return section, out
+    return section, out, meta
 
 
 def _normalize_reply(data: dict):
@@ -66,14 +84,17 @@ def _normalize_reply(data: dict):
     return None
 
 
-def judge_all(client, packets_by_section: Dict[str, List]) -> Tuple[Dict[str, dict], List[str]]:
+def judge_all(client, packets_by_section: Dict[str, List]
+              ) -> Tuple[Dict[str, dict], List[str], Dict[str, dict]]:
     """Judge every section concurrently. Returns (verdicts keyed by item_id,
-    item_ids whose batch failed → caller applies the S-6 fallback)."""
+    item_ids whose batch failed → caller applies the S-6 fallback, and metas keyed
+    by item_id → the batch call's audit metadata for the stored interaction)."""
     if client is None or not getattr(client, "available", False):
         failed = [p.item_id for ps in packets_by_section.values() for p in ps]
-        return {}, failed
+        return {}, failed, {}
 
     verdicts: Dict[str, dict] = {}
+    metas: Dict[str, dict] = {}
     # sub-chunk each section into ~_CHUNK-item batches (§8) so no reply truncates.
     batches: List[tuple] = []
     for sec, ps in packets_by_section.items():
@@ -82,7 +103,9 @@ def judge_all(client, packets_by_section: Dict[str, List]) -> Tuple[Dict[str, di
         for i in range(0, len(ps), _CHUNK):
             batches.append((f"{sec}#{i // _CHUNK}", ps[i:i + _CHUNK]))
 
-    def _absorb(sec, ps, got, failed_chunks):
+    def _absorb(sec, ps, got, meta, failed_chunks):
+        for p in ps:                                       # every item gets the call meta
+            metas[p.item_id] = meta
         if got is None:                                    # whole-batch failure
             failed_chunks.append((sec, ps))
             return
@@ -97,11 +120,11 @@ def judge_all(client, packets_by_section: Dict[str, List]) -> Tuple[Dict[str, di
         for fut in as_completed(futures):
             sec, ps = futures[fut]
             try:
-                _sec, got = fut.result()
+                _sec, got, meta = fut.result()
             except Exception as exc:                       # never let one batch sink the run
                 logger.warning("judge_v2 batch %s crashed: %s", sec, exc)
-                got = None
-            _absorb(sec, ps, got, failed_chunks)
+                got, meta = None, {"batch_id": sec, "error": str(exc)}
+            _absorb(sec, ps, got, meta, failed_chunks)
 
     # §8 / §7 S-6: retry failed chunks SEQUENTIALLY once — a rate-limit 429 under
     # concurrency clears when the batches are spaced out. Anything still failing
@@ -109,9 +132,11 @@ def judge_all(client, packets_by_section: Dict[str, List]) -> Tuple[Dict[str, di
     still_failed: List[str] = []
     for sec, ps in failed_chunks:
         try:
-            _sec, got = _judge_batch(client, sec, ps)
-        except Exception:
-            got = None
+            _sec, got, meta = _judge_batch(client, sec, ps)
+        except Exception as exc:
+            got, meta = None, {"batch_id": sec, "error": str(exc)}
+        for p in ps:
+            metas[p.item_id] = meta
         if got is None:
             still_failed += [p.item_id for p in ps]
         else:
@@ -121,4 +146,4 @@ def judge_all(client, packets_by_section: Dict[str, List]) -> Tuple[Dict[str, di
                     verdicts[p.item_id] = jr
                 else:
                     still_failed.append(p.item_id)
-    return verdicts, still_failed
+    return verdicts, still_failed, metas
