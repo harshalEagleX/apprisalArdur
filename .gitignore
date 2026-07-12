@@ -75,7 +75,7 @@ ehthumbs.db
 Thumbs.db
 
 # =============================================================================
-# PYTHON  (ocr-service/)
+# PYTHON
 # =============================================================================
 __pycache__/
 *.py[cod]
@@ -100,14 +100,6 @@ build/
 wheels/
 pip-wheel-metadata/
 .eggs/
-
-# ML models — large binaries, train locally
-ocr-service/training/models/*.pkl
-ocr-service/training/models/*.h5
-ocr-service/training/models/*.pt
-ocr-service/training/models/*.pth
-ocr-service/training/models/*.onnx
-ocr-service/training/models/*.bin
 
 # Test / coverage
 .pytest_cache/
@@ -189,10 +181,6 @@ diff.txt
 # PROJECT-SPECIFIC (VERY IMPORTANT)
 # =============================================================================
 
-# Python runtime outputs
-ocr-service/test_output/
-ocr-service/logs/
-ocr-service/python_service.log
 
 # Jupyter notebooks (optional but recommended)
 *.ipynb
@@ -240,6 +228,3 @@ Understand-Anything-main/
 loadtest/
 uploads/
 
-# Real appraisal sample corpus — contains borrower PII (names, addresses, loan #s).
-# Keep locally only; never commit/push to the remote.
-ocr-service/exttestfile/

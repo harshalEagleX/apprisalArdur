@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Full data reset for the running UAT stack — mirrors reset_db.sh but inside compose.
-# Drops ALL tables (Java + Python), then lets each service recreate its own:
-#   • Python-owned tables  -> manage_db.py create (on ocr-service restart)
+# Drops ALL tables, then lets the service recreate its own:
 #   • Java-owned tables    -> JPA/Hibernate (on java-backend restart)
 # No Flyway/Alembic (DB Schema Policy).
 #   bash scripts/uat/reset-data.sh --yes
@@ -25,7 +24,7 @@ echo "==> Dropping public schema…"
   psql -U "$DB_USERNAME" -d "$DB_NAME" \
   -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
-echo "==> Recreating service schemas (restarting ocr-service + java-backend)…"
-"${COMPOSE[@]}" restart ocr-service celery-worker java-backend
+echo "==> Recreating service schemas (restarting java-backend)…"
+"${COMPOSE[@]}" restart java-backend
 
 echo "✅ UAT data reset. Admin user re-seeds on Java startup."

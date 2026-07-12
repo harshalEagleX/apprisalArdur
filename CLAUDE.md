@@ -41,5 +41,5 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 
 - Do not add or re-enable Flyway, Liquibase, Alembic for Java, or any other third-party Java migration runner.
 - Java-owned tables are managed by JPA/Hibernate (`spring.jpa.hibernate.ddl-auto=update`) plus manual database work when needed.
-- Python-owned tables are recreated with `cd ocr-service && python manage_db.py recreate`.
+- Python-owned tables are recreated with `cd shalqc && python manage_db.py recreate` (the legacy `ocr-service` was retired).
 - Keep comments, scripts, and docs aligned with this policy whenever database behavior changes.

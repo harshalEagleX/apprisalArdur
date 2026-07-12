@@ -15,7 +15,7 @@ fi
 
 # shellcheck disable=SC1091
 set -a; source .env.uat; set +a
-OCR_PORT="${OCR_PORT:-5001}"; JAVA_PORT="${JAVA_PORT:-8080}"; FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+JAVA_PORT="${JAVA_PORT:-8080}"; FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
 echo "==> Building images…"
 "${COMPOSE[@]}" build
@@ -42,7 +42,6 @@ wait_for_tcp() { # name host port
   echo " OK"
 }
 
-wait_for ocr-service   "http://localhost:${OCR_PORT}/live"
 wait_for_tcp java-backend localhost "${JAVA_PORT}"
 wait_for frontend      "http://localhost:${FRONTEND_PORT}"
 
@@ -51,7 +50,6 @@ cat <<EOF
 ✅ SHAL UAT stack is up.
    Frontend   : http://localhost:${FRONTEND_PORT}
    Java API   : http://localhost:${JAVA_PORT}
-   OCR/QC API : http://localhost:${OCR_PORT}
    Prometheus : http://localhost:${PROMETHEUS_PORT:-9090}
    Grafana    : http://localhost:${GRAFANA_PORT:-3001}
 

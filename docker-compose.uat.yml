@@ -1,10 +1,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # SHAL Appraisal QC — UAT stack (single-host shared environment)
 #
-#   postgres ─┬─ ocr-service (FastAPI :5001) ─┐
-#   redis ────┤   celery-worker               ├─ java-backend (:8080) ─ frontend (:3000)
-#             └─ (broker + Groq cache)        ┘        │
-#                                              prometheus (:9090) ─ grafana (:3001)
+#   postgres ─┐
+#   redis ────┼─ java-backend (:8080) ─ frontend (:3000)
+#             │        │
+#             │   prometheus (:9090) ─ grafana (:3001)
+#
+# NOTE: the Python OCR/QC service (ocr-service) was retired; QC is being rebuilt
+# as the standalone `shalqc` service and is not yet wired into this stack.
 #
 # Usage:  cp .env.uat.example .env.uat && edit secrets, then  bash scripts/uat/up.sh
 # Secrets come from .env.uat (git-ignored). Service-to-service wiring is explicit below.
@@ -43,53 +46,6 @@ services:
       retries: 20
     restart: unless-stopped
 
-  ocr-service:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.ocr
-    environment:
-      DATABASE_URL: postgresql://${DB_USERNAME:-shal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-shal}
-      REDIS_URL: redis://redis:6379/0
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in .env.uat}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_VISION_API_KEY: ${GROQ_VISION_API_KEY:-}
-      GROQ_CACHE_ENABLED: "true"
-      ENVIRONMENT: uat
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    ports:
-      - "${OCR_PORT:-5001}:5001"
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    restart: unless-stopped
-
-  celery-worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.ocr
-    command: ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=2"]
-    environment:
-      RUN_DB_CREATE: "0"   # the web service owns schema setup
-      DATABASE_URL: postgresql://${DB_USERNAME:-shal}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-shal}
-      REDIS_URL: redis://redis:6379/0
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_VISION_API_KEY: ${GROQ_VISION_API_KEY:-}
-      GROQ_CACHE_ENABLED: "true"
-      ENVIRONMENT: uat
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    depends_on:
-      redis: { condition: service_healthy }
-      postgres: { condition: service_healthy }
-      ocr-service: { condition: service_started }
-    restart: unless-stopped
-
   java-backend:
     build:
       context: .
@@ -116,7 +72,6 @@ services:
       - "${JAVA_PORT:-8080}:8080"
     depends_on:
       postgres: { condition: service_healthy }
-      ocr-service: { condition: service_started }
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080'"]
       interval: 10s

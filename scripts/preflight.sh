@@ -42,7 +42,6 @@ load_env() {
         [[ -z "${!key:-}" ]] && export "$key=$val"
     done < "$file"
 }
-load_env "$SCRIPT_DIR/ocr-service/.env"
 load_env "$SCRIPT_DIR/.env"
 load_env "$SCRIPT_DIR/.env.uat"
 
@@ -71,7 +70,6 @@ require INTERNAL_API_KEY "shared Java↔Python secret (X-API-Key)"
 # DB may be provided as DB_URL (Java) or DATABASE_URL (Python) — need at least one.
 if [[ -n "${DB_URL:-}" || -n "${DATABASE_URL:-}" ]]; then ok "database URL is set (DB_URL/DATABASE_URL)"
 else fail "no DB_URL / DATABASE_URL — the database is required"; fi
-[[ -n "${OCR_SERVICE_URL:-}" ]] && ok "OCR_SERVICE_URL is set" || warn "OCR_SERVICE_URL not set (Java defaults to http://localhost:5001)"
 
 # ── 3. Secret hygiene (WARN in dev, FAIL in --strict) ─────────────────────────
 head "3. Secret hygiene"
@@ -101,13 +99,7 @@ if [[ -n "$PSQL_URL" ]] && command -v psql >/dev/null 2>&1; then
     else fail "database NOT reachable at the configured URL — start/verify Postgres before running"; fi
 else warn "database probe skipped (no psql or no URL) — verify DB manually"; fi
 
-# 4b. OCR/QC service (optional at boot — Java degrades to 503 if down).
-if [[ -n "${OCR_SERVICE_URL:-}" ]]; then
-    if curl -fsS -o /dev/null "${OCR_SERVICE_URL%/}/live" 2>/dev/null; then ok "OCR service reachable (${OCR_SERVICE_URL})"
-    else warn "OCR service not reachable yet (${OCR_SERVICE_URL}) — QC will 503 until it is up; startup is NOT blocked"; fi
-fi
-
-# 4c. Redis (optional — Java + Python fall back to local/sync if absent).
+# 4b. Redis (optional — Java + Python fall back to local/sync if absent).
 if [[ -n "${REDIS_URL:-}" ]]; then
     if command -v redis-cli >/dev/null 2>&1 && redis-cli -u "$REDIS_URL" ping 2>/dev/null | grep -qi pong; then
         ok "Redis reachable"
