@@ -171,6 +171,35 @@ public class QCRuleResult {
     @Column(name = "bbox_h", nullable = false, columnDefinition = "REAL DEFAULT 0.0")
     private Float bboxH = 0.0f;
 
+    // ── SHALqc language contract (Approach B) — provenance + LLM drill-in link ──
+    // Nullable so legacy rule-mode rows survive ddl-auto=update. item_id is the
+    // checklist item (e.g. "EQ-B"); card_group is the reviewer bucket
+    // (recommended_reject | please_verify | looks_good | manual_visual |
+    // not_applicable); bound_by/decided_by/binder_confidence record how the check
+    // was bound + judged; llm_interaction_id links to the stored raw model exchange.
+    @Column(name = "item_id")
+    private String itemId;
+
+    // The AMC's full check text (verbatim) — what the reviewer sees as "what we
+    // checked". Distinct from `message` (the one-line reviewer verdict).
+    @Column(name = "check_text", columnDefinition = "TEXT")
+    private String checkText;
+
+    @Column(name = "card_group", length = 24)
+    private String cardGroup;
+
+    @Column(name = "bound_by", length = 20)
+    private String boundBy;
+
+    @Column(name = "decided_by", length = 40)
+    private String decidedBy;
+
+    @Column(name = "binder_confidence")
+    private Double binderConfidence;
+
+    @Column(name = "llm_interaction_id", length = 40)
+    private String llmInteractionId;
+
     public QCRuleResult() {
     }
 
@@ -529,6 +558,27 @@ public class QCRuleResult {
     public void setBboxH(Float bboxH) {
         this.bboxH = bboxH;
     }
+
+    public String getItemId() { return itemId; }
+    public void setItemId(String itemId) { this.itemId = itemId; }
+
+    public String getCheckText() { return checkText; }
+    public void setCheckText(String checkText) { this.checkText = checkText; }
+
+    public String getCardGroup() { return cardGroup; }
+    public void setCardGroup(String cardGroup) { this.cardGroup = cardGroup; }
+
+    public String getBoundBy() { return boundBy; }
+    public void setBoundBy(String boundBy) { this.boundBy = boundBy; }
+
+    public String getDecidedBy() { return decidedBy; }
+    public void setDecidedBy(String decidedBy) { this.decidedBy = decidedBy; }
+
+    public Double getBinderConfidence() { return binderConfidence; }
+    public void setBinderConfidence(Double binderConfidence) { this.binderConfidence = binderConfidence; }
+
+    public String getLlmInteractionId() { return llmInteractionId; }
+    public void setLlmInteractionId(String llmInteractionId) { this.llmInteractionId = llmInteractionId; }
 
     // Builder pattern
     public static QCRuleResultBuilder builder() {
