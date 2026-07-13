@@ -54,6 +54,7 @@ public class ReviewerApiController {
     private final com.shal.qc.service.PythonClientService pythonClientService;
     private final com.shal.common.repository.AppraisalTransactionRepository orderRepository;
     private final com.shal.common.repository.BatchFileRepository batchFileRepository;
+    private final com.shal.common.repository.LLMInteractionRepository llmInteractionRepository;
 
     public ReviewerApiController(VerificationService verificationService,
                                  QCResultRepository qcResultRepository,
@@ -64,7 +65,8 @@ public class ReviewerApiController {
                                  ObjectMapper objectMapper,
                                  com.shal.qc.service.PythonClientService pythonClientService,
                                  com.shal.common.repository.AppraisalTransactionRepository orderRepository,
-                                 com.shal.common.repository.BatchFileRepository batchFileRepository) {
+                                 com.shal.common.repository.BatchFileRepository batchFileRepository,
+                                 com.shal.common.repository.LLMInteractionRepository llmInteractionRepository) {
         this.verificationService = verificationService;
         this.qcResultRepository  = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
@@ -75,6 +77,7 @@ public class ReviewerApiController {
         this.pythonClientService = pythonClientService;
         this.orderRepository = orderRepository;
         this.batchFileRepository = batchFileRepository;
+        this.llmInteractionRepository = llmInteractionRepository;
     }
 
     /**
@@ -558,6 +561,75 @@ public class ReviewerApiController {
         } catch (Exception e) {
             log.warn("Failed to get rule detail for ruleResultId={}: {}", ruleResultId, e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * The stored LLM exchange behind a checklist card ("why this verdict" drawer).
+     * Returns the request packet the judge saw, its parsed + raw response, which
+     * model/lane judged it, and the card's binding provenance. A pure read — no LLM
+     * call. 404 when the card was decided without an LLM (visual / precompiled) or
+     * the interaction was not stored.
+     */
+    @GetMapping("/qc/rules/{ruleResultId}/llm")
+    public ResponseEntity<Map<String, Object>> getRuleLlmInteraction(
+            @PathVariable Long ruleResultId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        try {
+            com.shal.common.entity.QCRuleResult rule = qcRuleResultRepository.findById(ruleResultId)
+                    .orElseThrow(() -> new IllegalArgumentException("Rule result not found: " + ruleResultId));
+            Long qcResultId = rule.getQcResult() != null ? rule.getQcResult().getId() : null;
+            if (principal != null && principal.getUser().getRole() == Role.REVIEWER && qcResultId != null) {
+                verificationService.assertReviewerOwnsQcResult(qcResultId, principal.getUser().getId());
+            }
+            String iid = rule.getLlmInteractionId();
+            if (iid == null || iid.isBlank()) {
+                return ResponseEntity.status(404).body(Map.of(
+                        "error", "no_llm_interaction",
+                        "decided_by", rule.getDecidedBy() != null ? rule.getDecidedBy() : "",
+                        "message", "This check was not judged by the LLM (visual/precompiled) "
+                                + "or the exchange was not stored."));
+            }
+            var opt = llmInteractionRepository.findByInteractionId(iid);
+            if (opt.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("error", "interaction_not_found", "interactionId", iid));
+            }
+            com.shal.common.entity.LLMInteraction i = opt.get();
+            Map<String, Object> body = new HashMap<>();
+            body.put("interactionId", i.getInteractionId());
+            body.put("itemId",        i.getItemId());
+            body.put("provider",      i.getProvider());
+            body.put("model",         i.getModel());
+            body.put("promptVersion", i.getPromptVersion());
+            body.put("batchId",       i.getBatchId());
+            body.put("latencyMs",     i.getLatencyMs());
+            body.put("cacheHit",      i.getCacheHit());
+            body.put("request",       parseJsonLoose(i.getRequestJson()));
+            body.put("response",      parseJsonLoose(i.getResponseJson()));
+            body.put("rawResponse",   i.getRawResponse());
+            // binding provenance so the reviewer sees how the check was bound + judged
+            body.put("boundBy",           rule.getBoundBy());
+            body.put("decidedBy",         rule.getDecidedBy());
+            body.put("binderConfidence",  rule.getBinderConfidence());
+            body.put("checkText",         rule.getCheckText());
+            return ResponseEntity.ok(body);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.warn("Failed to get LLM interaction for ruleResultId={}: {}", ruleResultId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Parse a stored JSON object/array string into a structure; raw string on failure. */
+    private Object parseJsonLoose(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, Object.class);
+        } catch (Exception e) {
+            return json;
         }
     }
 
