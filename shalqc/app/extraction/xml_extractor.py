@@ -125,6 +125,21 @@ def _extract_report(root: ET.Element, f: dict) -> None:
     f["appraiser_file_id"] = report.get("AppraiserFileIdentifier", "")
     f["assignment_type"] = report.get("AppraisalPurposeType", "")
     f["signature_date"] = report.get("AppraiserReportSignedDate", "")
+    # 2026-07-13: also write the field_schema.yaml canonical names directly
+    # (not just the field_resolution.yaml aliases) — app/rules/* (v1 rules
+    # engine, catalog.py's own alias map) reads "form_type"/"signature_date"
+    # directly, so those internal names stay put; but a checklist/binder that
+    # asks for the schema field ("report_form_number", "date_of_signature")
+    # would otherwise only see it via the alias FALLBACK, which only fires
+    # when the direct name is absent — a wrong-but-plausible-looking PDF
+    # label-proximity guess for that same schema field (e.g. the software
+    # watermark text pdf_digital found for "report_form_number") is "found"
+    # and never falls through to the alias at all. Writing XML's 0.97-
+    # confidence value under the canonical name too lets it win the merge
+    # outright, the way SHALqc.md step 9 intends.
+    f["report_form_number"] = f["form_type"]
+    f["date_of_signature"] = f["signature_date"]
+    f["date_report_signed"] = f["signature_date"]
 
 
 def _extract_parties(root: ET.Element, f: dict) -> None:
@@ -184,6 +199,14 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
             parts = [p.strip() for p in raw_name.split("&", 1)]
             f["co_borrower_name"] = parts[1]
 
+    # Appraisal Management Company — MISMO carries it on MANAGEMENT_COMPANY
+    # (not always under PARTIES, so search from root). Backs EQ-109, which asks
+    # the AMC named on the report matches the AMC on the engagement letter.
+    mgmt = root.find(".//MANAGEMENT_COMPANY")
+    if mgmt is not None and _a(mgmt, "GSEManagementCompanyName"):
+        f["management_company"] = _a(mgmt, "GSEManagementCompanyName")
+        f["amc_name"] = f["management_company"]
+
 
 def _extract_property(root: ET.Element, f: dict) -> None:
     prop = root.find("PROPERTY")
@@ -209,6 +232,8 @@ def _extract_property(root: ET.Element, f: dict) -> None:
             if _pud:
                 f["is_pud"] = "Yes" if _pud.strip().upper() == "Y" else "No"
                 break
+    if "is_pud" in f:
+        f["is_pud_checked"] = f["is_pud"]
 
     ident = prop.find("_IDENTIFICATION")
     if ident is not None:
@@ -241,23 +266,60 @@ def _extract_property(root: ET.Element, f: dict) -> None:
             _fld = _APPLIANCE_FIELD.get(_a(keq, "_Type"))
             if _fld and _a(keq, "_ExistsIndicator").upper() == "Y":
                 f[_fld] = "Yes"
+        # total parking = sum of the subject's CAR_STORAGE_LOCATION spaces
+        # (Garage + Carport + Driveway); scoped to THIS subject STRUCTURE so a
+        # comp's storage can never leak in.
+        _spaces, _seen = 0, False
+        for cs in struct.iter("CAR_STORAGE_LOCATION"):
+            n = _a(cs, "ParkingSpacesCount").strip()
+            if n.isdigit():
+                _spaces += int(n); _seen = True
+        if _seen:
+            f["parking_space_number"] = str(_spaces)
         sa = struct.find("STRUCTURE_ANALYSIS")
         if sa is not None:
             f["effective_age"] = _a(sa, "EffectiveAgeYearsCount")
 
-    _ANALYSIS_FIELD = {"QualityAndAppearance": "condition_comments",
-                       "PropertyCondition":    "improvements_comments"}
+    # PROPERTY_ANALYSIS is a typed repeater (P2) hung directly off PROPERTY:
+    # select by _Type, then read the free-text _Comment and/or the Y/N
+    # _ExistsIndicator depending on the field. Previously only the two comment
+    # rows were mapped, so the six Y/N conformance/deficiency boxes the checklist
+    # asks about (EQ-34/49/51/52) fell to a PDF label-proximity guess or stayed
+    # unbound → REVIEW even though MISMO carries them cleanly.
+    _ANALYSIS_COMMENT = {"QualityAndAppearance": "condition_comments",
+                         "PropertyCondition":    "improvements_comments",
+                         "AdditionalFeatures":   "additional_features"}
+    # Y/N indicators — surfaced three-state ("Yes"/"No"; absent ⇒ VERIFY, never FAIL).
+    _ANALYSIS_INDICATOR = {
+        "ConformsToNeighborhood": "conforms_to_neighborhood",
+        "UtilitiesAndOffSiteImprovementsConformToNeighborhood": "utilities_typical",
+        "PhysicalDeficiency": "physical_deficiency",
+        # AdverseSiteConditions also arrives via _CONDITION → adverse_site_conditions;
+        # keep a distinct name here so the two sources never clobber each other.
+        "AdverseSiteConditions": "adverse_site_conditions_analysis",
+    }
     for pa in prop.findall("PROPERTY_ANALYSIS"):
-        key = _ANALYSIS_FIELD.get(_a(pa, "_Type"))
+        t = _a(pa, "_Type")
         comment = _a(pa, "_Comment")
-        if key and comment:
-            f[key] = comment
+        ckey = _ANALYSIS_COMMENT.get(t)
+        if ckey and comment:
+            f[ckey] = comment
+        ikey = _ANALYSIS_INDICATOR.get(t)
+        if ikey:
+            ind = _a(pa, "_ExistsIndicator").upper()
+            if ind in ("Y", "N"):
+                f[ikey] = "Yes" if ind == "Y" else "No"
+            # carry the narrative alongside the box state so a judge can read the "why"
+            if comment:
+                f.setdefault(f"{ikey}_comment", comment)
 
     site = prop.find("SITE")
     if site is not None:
         f["site_area"]          = _a(site, "_AreaDescription")
         f["site_dimensions"]    = _a(site, "_DimensionsDescription")
         f["zoning"]             = _a(site, "_ZoningClassificationIdentifier")
+        if f["zoning"]:
+            f["zoning_classification"] = f["zoning"]
         f["zoning_description"] = _a(site, "_ZoningClassificationDescription")
         f["zoning_compliance"]  = _a(site, "_ZoningComplianceType")
         _hbu = _a(site, "HighestBestUseIndicator")
@@ -279,6 +341,12 @@ def _extract_property(root: ET.Element, f: dict) -> None:
             key = _UTIL_FIELD.get(_a(util, "_Type"))
             if not key:
                 continue
+            # Value keeps the informative supplier (Public / Private / a
+            # _NonPublicDescription like "Septic"/"Well"/"Electric") — the field
+            # is data_type=string so the descriptor survives the schema gate
+            # instead of being dropped as a non-boolean. A companion
+            # utilities_<x>_present carries the plain present/absent boolean for
+            # any consumer that only needs "is it there?" (§ user-approved merge).
             if _a(util, "_PublicIndicator").upper() == "Y":
                 f[key] = "Public"
             elif _a(util, "_NonPublicDescription"):
@@ -287,10 +355,29 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                 f[key] = "Private"
             else:
                 f[key] = "None"
+            f[f"{key}_present"] = "No" if f[key] in ("None", "") else "Yes"
         fz = site.find("FLOOD_ZONE")
         if fz is not None:
+            # NOTE ...Indicator vs ...Identifier: SpecialFloodHazardAreaIndicator is
+            # a Y/N flag; NFIPFloodZoneIdentifier is a ZONE CODE ("X"=minimal risk,
+            # "AE"/"VE"=SFHA, …) — stored as the literal string, never coerced to a
+            # boolean (fema_flood_zone's schema allowed_values include "X").
             f["flood_zone_indicator"] = _a(fz, "SpecialFloodHazardAreaIndicator")
             f["flood_zone_id"]        = _a(fz, "NFIPFloodZoneIdentifier")
+            if f["flood_zone_indicator"]:
+                f["fema_flood_hazard"] = f["flood_zone_indicator"]
+            if f["flood_zone_id"]:
+                f["fema_flood_zone"] = f["flood_zone_id"]
+            # ST-8 requires zone, map number AND map date even outside an SFHA.
+            # Map number/date live on the same element; fall back to the UAD GSE
+            # extension copy (FLOOD_ZONE_INFORMATION) when the primary is blank.
+            gse = fz.find(".//FLOOD_ZONE_INFORMATION")
+            map_no = _a(fz, "NFIPMapIdentifier") or (_a(gse, "GSEFEMAFloodMapIdentifier") if gse is not None else "")
+            map_dt = _a(fz, "NFIPMapPanelDate")
+            if map_no:
+                f["fema_map_number"] = map_no
+            if map_dt:
+                f["fema_map_date"] = map_dt
 
     nbhd = prop.find("NEIGHBORHOOD")
     if nbhd is not None:
@@ -338,14 +425,51 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         f["contract_price"]      = _a(sc, "_Amount")
         f["contract_date"]       = _a(sc, "_Date")
         f["contract_analyzed"]   = _a(sc, "_ReviewedIndicator")
+        if f["contract_analyzed"]:
+            f["did_analyze_contract"] = f["contract_analyzed"]
         f["concessions_indicator"] = _a(sc, "SalesConcessionIndicator")
+        if f["concessions_indicator"]:
+            f["has_financial_assistance"] = f["concessions_indicator"]
         f["concessions_amount"]  = _a(sc, "SalesConcessionAmount")
         f["contract_analysis_comment"] = _a(sc, "_ReviewComment")
+        f["is_seller_owner_of_record"] = _a(sc, "SellerIsOwnerIndicator")
+        # subject sale type (arms-length?) lives on the GSE SALES_TRANSACTION
+        # extension INSIDE the contract — NOT the COMPARISON_DETAIL copies, which
+        # are the comps' sale types (→ comp_N_sale_type, handled in the grid).
+        st = sc.find(".//SALES_TRANSACTION")
+        if st is not None and _a(st, "GSESaleType"):
+            f["sale_type"] = _a(st, "GSESaleType")
 
     lh = prop.find("LISTING_HISTORY")
     if lh is not None:
         f["listed_past_year"]    = _a(lh, "ListedWithinPreviousYearIndicator")
         f["listing_history"]     = _a(lh, "ListedWithinPreviousYearDescription")
+
+    # Special assessments — the _TAX row carries a _TotalSpecialTaxAmount even
+    # when it is "0" (a real answer, not a gap; EQ-10 only needs a comment when > 0).
+    tax = prop.find(".//_TAX")
+    if tax is not None and _a(tax, "_TotalSpecialTaxAmount"):
+        f["special_assessments"] = _a(tax, "_TotalSpecialTaxAmount")
+
+    # PUD/condo PROJECT block (only present for project properties).
+    proj = prop.find("PROJECT")
+    if proj is not None:
+        if _a(proj, "_CommonElementsDescription"):
+            f["common_elements_description"] = _a(proj, "_CommonElementsDescription")
+        puf = proj.find(".//_PER_UNIT_FEE")
+        if puf is not None:
+            if _a(puf, "_PeriodType"):
+                f["hoa_period"] = _a(puf, "_PeriodType")
+            # Only surface hoa_dues when there is an actual due. A "0" _Amount is
+            # "no HOA dues" — emitting it would make EQ-11's `hoa_dues present`
+            # antecedent fire on every non-HOA property and demand is_pud=True.
+            _fee = _a(puf, "_Amount").replace("$", "").replace(",", "").strip()
+            try:
+                if float(_fee) > 0:
+                    f["hoa_dues"] = _a(puf, "_Amount")
+            except ValueError:
+                if _fee:
+                    f["hoa_dues"] = _a(puf, "_Amount")
 
 
 def _extract_market_inventory(root: ET.Element, f: dict) -> None:
@@ -355,7 +479,9 @@ def _extract_market_inventory(root: ET.Element, f: dict) -> None:
               "Last3Months": "current_3"}
     _TYPE = {"TotalSales": "total_sales", "AbsorptionRate": "absorption_rate",
              "Supply": "months_supply", "MedianSalesPrice": "median_sale_price",
-             "TotalListings": "total_listings", "MedianSalesDOM": "median_dom"}
+             "TotalListings": "total_listings", "MedianSalesDOM": "median_dom",
+             "MedianListPrice": "median_list_price", "MedianListDOM": "median_list_dom",
+             "MedianSalesToListRatio": "median_sale_list_ratio"}
     for mi in root.findall(".//MARKET_INVENTORY"):
         t = _TYPE.get(_a(mi, "_Type"))
         if not t:
@@ -376,6 +502,11 @@ def _extract_conditions(root: ET.Element, f: dict) -> None:
     if conds:
         any_yes = any(_a(c, "_ExistsIndicator").upper() == "Y" for c in conds)
         f["adverse_conditions"] = "Yes" if any_yes else "No"
+        # "adverse_site_conditions" is a duplicate schema entry for the same
+        # form checkbox ("Are there any adverse site conditions...?") — XML
+        # only ever populated the first name, so the second fell to a PDF
+        # label-proximity guess every time ("or" — grabbed off "Yes  or  No").
+        f["adverse_site_conditions"] = f["adverse_conditions"]
 
     coa = root.find(".//_CONDITION_OF_APPRAISAL")
     if coa is not None and _a(coa, "_Type"):
@@ -396,13 +527,34 @@ def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
     sca = vm.find("SALES_COMPARISON")
     if sca is not None:
         f["final_value_sca"]      = _a(sca, "ValueIndicatedBySalesComparisonApproachAmount")
+        if f["final_value_sca"]:
+            f["indicated_value_sca"] = f["final_value_sca"]
         f["sca_comment"]          = _a(sca, "_Comment")
+        if f["sca_comment"]:
+            f["sales_comparison_summary"] = f["sca_comment"]
         f["prior_sale_analysis_comment"] = _a(sca, "_CurrentSalesAgreementAnalysisComment")
+        # "I researched N comparable sales" — the top-of-grid count (ST/checklist
+        # asks it be filled). Subject-level, single RESEARCH element.
+        research = sca.find("RESEARCH")
+        if research is not None:
+            if _a(research, "ComparableSalesResearchedCount"):
+                f["comparable_count"] = _a(research, "ComparableSalesResearchedCount")
+            # the "I DID / DID NOT research the sale history" checkbox — carried in
+            # XML as a Y/N indicator, not a value. Checks EQ-79/80 ask whether this
+            # box is marked; surface it so the judge sees the box STATE, not just
+            # the prior-sale dates.
+            if _a(research, "SalesHistoryResearchedIndicator"):
+                f["sales_history_researched"] = "Yes" if _a(research, "SalesHistoryResearchedIndicator").upper() == "Y" else "No"
 
     ca = vm.find("COST_ANALYSIS")
     if ca is not None:
         f["cost_approach_value"]       = _a(ca, "ValueIndicatedByCostApproachAmount")
+        if f["cost_approach_value"]:
+            f["indicated_value_cost_approach"] = f["cost_approach_value"]
         f["site_value"]                = _a(ca, "SiteEstimatedValueAmount")
+        if f["site_value"]:
+            f["site_value_estimate"] = f["site_value"]
+        f["remaining_economic_life"]   = _a(ca, "EstimatedRemainingEconomicLifeYearsCount")
         f["total_improvements_cost"]   = _a(ca, "NewImprovementTotalCostAmount")
         f["cost_new_improvements"]     = f["total_improvements_cost"]
         f["site_other_improvements"]   = _a(ca, "SiteOtherImprovementsAsIsAmount")
@@ -415,6 +567,8 @@ def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
     ia = vm.find("INCOME_ANALYSIS")
     if ia is not None:
         f["income_approach_value"]  = _a(ia, "ValueIndicatedByIncomeApproachAmount")
+        if f["income_approach_value"]:
+            f["indicated_value_income_approach"] = f["income_approach_value"]
         f["gross_rent_multiplier"]  = _a(ia, "GrossRentMultiplierFactor")
 
 
@@ -454,6 +608,17 @@ def _extract_comp_grid(root: ET.Element, f: dict) -> None:
                 f[f"{pfx}_bedrooms"]  = _a(rooms_el, "TotalBedroomCount")
                 f[f"{pfx}_bathrooms"] = _a(rooms_el, "TotalBathroomCount")
             _map_adj(adj_by_type, pfx, f)
+            # the subject's OWN condition/quality rating (schema fields
+            # condition_rating/quality_rating, sections subject+improvements+
+            # sales_comparison) is the exact same fact as the grid's subject
+            # row — xml_extractor had only ever written the latter, so the
+            # bare canonical name was never populated by XML and fell to a
+            # PDF label-proximity guess ("of", "A head") every time (2026-07-13
+            # dry-run cause #1/#3).
+            if f.get(f"{pfx}_condition_rating"):
+                f["condition_rating"] = f[f"{pfx}_condition_rating"]
+            if f.get(f"{pfx}_quality_rating"):
+                f["quality_rating"] = f[f"{pfx}_quality_rating"]
             if prior is not None:
                 f["prior_sale_date"]  = _a(prior, "PropertySalesDate")
                 f["prior_sale_price"] = _a(prior, "PropertySalesAmount")
@@ -560,6 +725,14 @@ def _extract_subject_prior_sales(root: ET.Element, f: dict) -> None:
         if _a(ps, "GSEPriorSaleDate"):
             f.setdefault("subject_prior_sale_date", _a(ps, "GSEPriorSaleDate"))
 
+    # Surface the subject prior-sale under the checklist's OWN canonical names too
+    # (the internal names alias only partially). setdefault → additive: never
+    # overwrites a value another source already supplied.
+    if f.get("subject_prior_sale_date"):
+        f.setdefault("prior_sale_date_subject", f["subject_prior_sale_date"])
+    if f.get("subject_prior_sale_price"):
+        f.setdefault("prior_sale_price_subject", f["subject_prior_sale_price"])
+
 
 def _extract_forms(root: ET.Element, f: dict) -> None:
     """Extract photo/sketch/addendum presence from FORM elements."""
@@ -567,6 +740,11 @@ def _extract_forms(root: ET.Element, f: dict) -> None:
 
     for form in root.findall(".//FORM"):
         content_type = form.get("AppraisalReportContentType", "")
+        # UAD data-set stamp (EQ-136): "UAD Version 9/2011" lives on the FORM's
+        # AppraisalReportContentIdentifier. First non-empty one wins.
+        cid = form.get("AppraisalReportContentIdentifier", "")
+        if cid and "uad_version" not in f:
+            f["uad_version"] = cid
         addendum_text = form.get("AppraisalAddendumText", "")
         if addendum_text.strip():
             addendum_parts.append(addendum_text.strip())
