@@ -705,6 +705,18 @@ public class BatchService {
                 }
             } else if (typeFolder != null) {
                 fileType = fileTypeForFolder(typeFolder);
+                // The "appraisal" folder is the DEFAULT bucket (also the switch default),
+                // so a file whose NAME unmistakably says engagement/contract — common in
+                // flat AMC dumps where every doc lands in one "apprisal/" folder — is
+                // reclassified by filename. Explicit engagement/contract folders stay
+                // authoritative (guarded on "appraisal" only).
+                if (fileType == FileType.APPRAISAL && "appraisal".equals(typeFolder)) {
+                    FileType byName = classifyPdfByFilename(filenameOnly);
+                    if (byName != FileType.APPRAISAL) {
+                        fileType = byName;
+                        inferred = true;
+                    }
+                }
             } else {
                 fileType = classifyPdfByFilename(filenameOnly);
                 inferred = true;

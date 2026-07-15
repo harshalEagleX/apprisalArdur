@@ -40,6 +40,7 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 ## Database Schema Policy
 
 - Do not add or re-enable Flyway, Liquibase, Alembic for Java, or any other third-party Java migration runner.
+- Java (backend) and SHALqc (Python) share ONE Postgres database (`shal_qc`). Their table names are disjoint, so both coexist without collision. (The legacy `ocr-service` and its separate DB were retired.)
 - Java-owned tables are managed by JPA/Hibernate (`spring.jpa.hibernate.ddl-auto=update`) plus manual database work when needed.
-- Python-owned tables are recreated with `cd shalqc && python manage_db.py recreate` (the legacy `ocr-service` was retired).
+- Python-owned tables (orders/runs/findings/item_verdicts/llm_interactions/corrections/config_audit) are created JPA-style via SQLAlchemy `Base.metadata.create_all` on first DB connection (`shalqc/app/persistence/repo.py`) — there is no `manage_db.py`. To wipe & recreate everything for a clean run: `psql "$SHAL_QC_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"`, then start Java (recreates its tables) and SHALqc (recreates its tables on first use).
 - Keep comments, scripts, and docs aligned with this policy whenever database behavior changes.
