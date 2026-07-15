@@ -54,6 +54,27 @@ class ShalqcRoundTripRegressionTest {
     }
 
     @Test
+    void blockedOrderNeverMapsToAutoPass() throws Exception {
+        // A G-0-blocked order comes back status=BLOCKED with EMPTY cards and a
+        // LEGACY-keyed summary (hold/to_verify/failed — no v2 keys). This must map to
+        // BLOCKED, never AUTO_PASS (which would silently auto-complete a held order).
+        String blockedJson = "{\"order_id\":\"ORD-B\",\"amc_code\":\"EQ\",\"status\":\"BLOCKED\","
+                + "\"summary\":{\"passed\":0,\"failed\":0,\"hold\":1,\"to_verify\":0,\"not_applicable\":0},"
+                + "\"cards\":[],\"hold_reasons\":[\"engagement letter missing\"],\"degradations\":[]}";
+        ShalqcResponse blocked = om.readValue(blockedJson, ShalqcResponse.class);
+
+        assertThat(blocked.holdReasons()).containsExactly("engagement letter missing");
+        assertThat(mapper.decisionFrom(blocked.status(), blocked.summary()))
+                .as("status=BLOCKED must map to BLOCKED, not AUTO_PASS")
+                .isEqualTo(QCDecision.BLOCKED);
+        // Even without the status word, the legacy `hold` count alone must block.
+        assertThat(mapper.decisionFrom(blocked.summary()))
+                .as("legacy hold>0 summary must block on counts alone")
+                .isEqualTo(QCDecision.BLOCKED);
+        assertThat(mapper.verify(blocked.summary())).as("hold counts as a verify-side item").isEqualTo(1);
+    }
+
+    @Test
     void severityLandsInDetailsAndInformationalStaysOffQueue() throws Exception {
         // A rejectable card carries its reject authority into the details JSON and
         // stays in the reviewer queue.

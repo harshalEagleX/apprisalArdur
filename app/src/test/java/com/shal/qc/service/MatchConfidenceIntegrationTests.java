@@ -240,7 +240,7 @@ class MatchConfidenceIntegrationTests {
                 Map.of("satisfied", 1, "not_satisfied", 0, "review", 0,
                        "not_applicable", 0, "cannot_evaluate", 0),
                 List.of(pass), List.of(), List.of(), List.of(), Map.of(),
-                List.of(), Map.of(), null, 0, false);
+                List.of(), List.of(), Map.of(), null, 0, false);
     }
 
     private static String uuid() {

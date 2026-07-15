@@ -140,22 +140,42 @@ public class ShalqcResponseMapper {
     // ── roll-up → QCDecision ────────────────────────────────────────────────────
 
     /**
+     * The order-level decision, honoring the Python response {@code status} first.
+     * A G-0-gated order comes back with {@code status="BLOCKED"}, empty cards and a
+     * LEGACY-keyed summary ({@code hold/to_verify/failed}); without this the v2-only
+     * count read below sees all-zero and would wrongly return AUTO_PASS — silently
+     * auto-completing a held order. Delegates to the summary path when not blocked.
+     */
+    public QCDecision decisionFrom(String status, Map<String, Object> summary) {
+        if ("BLOCKED".equalsIgnoreCase(status)) return QCDecision.BLOCKED;
+        return decisionFrom(summary);
+    }
+
+    /**
      * The order-level decision from the summary counts. Mirrors the legacy
-     * precedence: anything to verify pins the whole file to TO_VERIFY (a human must
-     * look) before a confident AUTO_FAIL; all-clear is AUTO_PASS. NOT_APPLICABLE is
-     * neutral. SHALqc emits no explicit `blocking`, so a confirmed reject is derived.
+     * precedence: a HOLD blocks; anything to verify pins the whole file to TO_VERIFY
+     * (a human must look) before a confident AUTO_FAIL; all-clear is AUTO_PASS.
+     * NOT_APPLICABLE is neutral. Reads both the v2 keys ({@code review/not_satisfied/
+     * cannot_evaluate}) and their legacy synonyms ({@code hold/to_verify/failed}) so a
+     * legacy-shaped summary is never mistaken for an all-pass.
      */
     public QCDecision decisionFrom(Map<String, Object> summary) {
-        int review = asInt(summary, "review") + asInt(summary, "cannot_evaluate");
-        int notSatisfied = asInt(summary, "not_satisfied");
+        if (asInt(summary, "hold") > 0) return QCDecision.BLOCKED;
+        int review = asInt(summary, "review") + asInt(summary, "cannot_evaluate")
+                + asInt(summary, "to_verify");
+        int notSatisfied = asInt(summary, "not_satisfied") + asInt(summary, "failed");
         if (review > 0)       return QCDecision.TO_VERIFY;
         if (notSatisfied > 0) return QCDecision.AUTO_FAIL;
         return QCDecision.AUTO_PASS;
     }
 
-    public int passed(Map<String, Object> s)  { return asInt(s, "satisfied"); }
-    public int failed(Map<String, Object> s)  { return asInt(s, "not_satisfied"); }
-    public int verify(Map<String, Object> s)  { return asInt(s, "review") + asInt(s, "cannot_evaluate"); }
+    // Read v2 keys plus their legacy synonyms so a BLOCKED/legacy-shaped summary still
+    // yields sane counts (passed↔satisfied, failed↔not_satisfied, hold+to_verify↔review).
+    public int passed(Map<String, Object> s)  { return asInt(s, "satisfied") + asInt(s, "passed"); }
+    public int failed(Map<String, Object> s)  { return asInt(s, "not_satisfied") + asInt(s, "failed"); }
+    public int verify(Map<String, Object> s)  {
+        return asInt(s, "review") + asInt(s, "cannot_evaluate") + asInt(s, "to_verify") + asInt(s, "hold");
+    }
 
     // ── helpers ──────────────────────────────────────────────────────────────────
 

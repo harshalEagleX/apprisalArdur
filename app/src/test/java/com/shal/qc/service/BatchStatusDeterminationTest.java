@@ -172,7 +172,7 @@ class BatchStatusDeterminationTest {
                     scopedCard("G-1",   "cross_document"),
                     scopedCard("SEM-1", "semantic")
                 ),
-                List.of(), List.of(), List.of(), Map.of(), List.of(), Map.of(), null, 0, false);
+                List.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), Map.of(), null, 0, false);
     }
 
     private static ShalqcCard scopedCard(String itemId, String scope) {

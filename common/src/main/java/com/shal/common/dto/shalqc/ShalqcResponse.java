@@ -33,6 +33,10 @@ public record ShalqcResponse(
         @JsonProperty("llm_interactions") List<ShalqcInteraction> llmInteractions,
         @JsonProperty("location_metric")  Map<String, Object> locationMetric,
         List<String> degradations,
+        // Why the order was blocked at the G-0 gate (missing required document, wrong
+        // XML, …). Present only when status == "BLOCKED"; surfaced to the reviewer so a
+        // held order shows the reason instead of an empty, misleading pass.
+        @JsonProperty("hold_reasons")  List<String> holdReasons,
         Map<String, Object> versions,
         String fingerprint,
         @JsonProperty("revision_no")   Integer revisionNo,

@@ -392,6 +392,6 @@ class RerunGuardIntegrationTests {
                 Map.of("satisfied", 0, "not_satisfied", 0, "review", 1,
                        "not_applicable", 0, "cannot_evaluate", 0),
                 List.of(verify), List.of(), List.of(), List.of(), Map.of(),
-                List.of(), Map.of(), null, 0, false);
+                List.of(), List.of(), Map.of(), null, 0, false);
     }
 }

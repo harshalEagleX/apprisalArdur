@@ -760,7 +760,7 @@ public class QCProcessingService {
         boolean isRerun = activeAfter.isPresent();
         QCResult previousActive = activeAfter.orElse(null);
 
-        QCDecision decision = shalqcMapper.decisionFrom(summary);
+        QCDecision decision = shalqcMapper.decisionFrom(response.status(), summary);
 
         if (isRerun && previousActive != null) {
             previousActive.setSupersededAt(Instant.now().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
@@ -793,6 +793,13 @@ public class QCProcessingService {
 
         if (previousActive != null) {
             qcResult.setRerunOf(previousActive);
+        }
+
+        // A G-0-blocked order comes back with no cards; surface WHY it was held so the
+        // reviewer sees the reason rather than an empty result. (decisionFrom already
+        // mapped status=BLOCKED → QCDecision.BLOCKED, keeping it off the auto-pass path.)
+        if (decision == QCDecision.BLOCKED && response.holdReasons() != null && !response.holdReasons().isEmpty()) {
+            qcResult.setReviewerNotes("QC on hold: " + String.join("; ", response.holdReasons()));
         }
 
         for (ShalqcCard c : cards) {
