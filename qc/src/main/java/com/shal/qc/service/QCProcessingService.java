@@ -1,11 +1,14 @@
 package com.shal.qc.service;
 
-import com.shal.common.dto.python.PythonQCResponse;
-import com.shal.common.dto.python.PythonRuleResult;
+import com.shal.common.dto.shalqc.ShalqcResponse;
+import com.shal.common.dto.shalqc.ShalqcCard;
+import com.shal.common.dto.shalqc.ShalqcInteraction;
+import com.shal.common.mapper.ShalqcResponseMapper;
 import com.shal.common.entity.*;
+import com.shal.common.repository.LLMInteractionRepository;
+import com.shal.common.repository.ClientRepository;
 import com.shal.common.repository.BatchFileRepository;
 import com.shal.common.repository.BatchRepository;
-import com.shal.common.repository.ProcessingMetricsRepository;
 import com.shal.common.repository.QCResultRepository;
 import com.shal.common.realtime.RealtimeEventPublisher;
 import com.shal.common.service.BusinessEventService;
@@ -30,7 +33,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.Objects;
@@ -60,10 +62,11 @@ public class QCProcessingService {
     private final FileMatchingService fileMatchingService;
     private final QCResultRepository qcResultRepository;
     private final com.shal.common.repository.QCRuleResultRepository qcRuleResultRepository;
+    private final LLMInteractionRepository llmInteractionRepository;
+    private final ClientRepository clientRepository;
+    private final ShalqcResponseMapper shalqcMapper;
     private final BatchRepository batchRepository;
     private final BatchFileRepository batchFileRepository;
-    private final ProcessingMetricsRepository metricsRepository;
-    private final com.shal.common.repository.DocStatRepository docStatRepository;
     private final ObjectMapper objectMapper;
     private final RealtimeEventPublisher realtimeEventPublisher;
     private final BusinessEventService businessEventService;
@@ -96,7 +99,7 @@ public class QCProcessingService {
      *
      * Spring's AOP proxies cannot intercept THIS.method() calls (self-calls).
      * By injecting ourselves through the container, calls such as
-     * self.persistPythonResult(...) go through the CGLIB proxy, so the short
+     * self.persistShalqcResult(...) go through the CGLIB proxy, so the short
      * save transaction is applied after the long Python call has finished.
      */
     @Autowired @Lazy
@@ -107,10 +110,10 @@ public class QCProcessingService {
             FileMatchingService fileMatchingService,
             QCResultRepository qcResultRepository,
             com.shal.common.repository.QCRuleResultRepository qcRuleResultRepository,
+            LLMInteractionRepository llmInteractionRepository,
+            ClientRepository clientRepository,
             BatchRepository batchRepository,
             BatchFileRepository batchFileRepository,
-            ProcessingMetricsRepository metricsRepository,
-            com.shal.common.repository.DocStatRepository docStatRepository,
             ObjectMapper objectMapper,
             RealtimeEventPublisher realtimeEventPublisher,
             BusinessEventService businessEventService,
@@ -122,10 +125,11 @@ public class QCProcessingService {
         this.fileMatchingService = fileMatchingService;
         this.qcResultRepository = qcResultRepository;
         this.qcRuleResultRepository = qcRuleResultRepository;
+        this.llmInteractionRepository = llmInteractionRepository;
+        this.clientRepository = clientRepository;
+        this.shalqcMapper = new ShalqcResponseMapper(objectMapper);
         this.batchRepository = batchRepository;
         this.batchFileRepository = batchFileRepository;
-        this.metricsRepository = metricsRepository;
-        this.docStatRepository = docStatRepository;
         this.objectMapper = objectMapper;
         this.realtimeEventPublisher = realtimeEventPublisher;
         this.businessEventService = businessEventService;
@@ -464,7 +468,6 @@ public class QCProcessingService {
         }
     }
 
-
     // ── Progress / cancel coordination, generalized over the job grain ──────────
     // A QC run is coordinated at ONE grain: the Batch (legacy) or the Order (target).
     // Both ids are Long, so JobScope carries which grain — it selects the right progress
@@ -665,113 +668,53 @@ public class QCProcessingService {
         // Order (AppraisalTransaction) traceability: threaded to Python via MDC — same
         // mechanism appendProcessingContext already uses for correlationId — so Python's
         // own audit tables can be cross-referenced back to the Java Order without adding
-        // a new parameter to every processQC/submitQCJob overload.
+        // a new parameter to every processQCShalqc overload.
         if (appraisal.getOrder() != null) {
             org.slf4j.MDC.put("orderRef", appraisal.getOrder().getTransactionRef());
         }
 
-        PythonQCResponse pythonResponse;
-        try {
-        if (!pythonClient.isCeleryWorkerRunning()) {
-            log.warn("Celery worker is not connected; using synchronous Python QC for batch {} file {}",
-                    progressBatchId, appraisal.getFilename());
-            updateSubProgress(scope,"python_sync",
-                    "Celery worker unavailable — running OCR directly for " + appraisal.getFilename(), 0.05, 0);
-            pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, scope, appraisal, clientId);
-            retryCount = pythonClient.getLastRetryCount();
-            throwIfCancelled(scope);
-        } else {
-            // --- Async queue path (Celery worker) ---
-            PythonClientService.JobSubmitResponse job;
+        // SHALqc (Approach B, sync-first): the retired ocr-service async/rule-engine
+        // flow is replaced by SHALqc's synchronous /qc/process, which returns the
+        // native OrderQCResponse (cards + coordinates + llm_interactions), mapped and
+        // persisted via ShalqcResponseMapper. The Celery async path below is bypassed.
+        {  // SHALqc synchronous /qc/process is the ONLY QC path — the legacy Celery
+           // async + ocr-service rule-engine flow was removed 2026-07-15.
+            updateSubProgress(scope, "python_sync",
+                    "Running SHALqc QC for " + appraisal.getFilename(), 0.05, 0);
+            // The client's AMC code selects shalqc's compiled bundle; without it
+            // shalqc falls back to the generic _base catalog. Resolve it via the
+            // repository (by id) rather than appraisal.getBatch().getClient().getCode(),
+            // which lazy-inits the Client proxy outside a Hibernate session and throws.
+            String amcCode = null;
+            if (clientId != null) {
+                try {
+                    amcCode = clientRepository.findById(Long.valueOf(clientId))
+                            .map(com.shal.common.entity.Client::getCode).orElse(null);
+                } catch (Exception ex) {
+                    log.warn("Could not resolve AMC code for clientId {}: {}", clientId, ex.getMessage());
+                }
+            }
             try {
-                job = pythonClient.submitQCJob(
+                ShalqcResponse shalqcResponse = pythonClient.processQCShalqc(
                         pair.getAppraisalPath(),
                         pair.getAppraisalXmlPath(),
                         pair.getEngagementPath(),
                         pair.getContractPath(),
                         modelConfig,
-                        progressBatchId,
-                        appraisal.getId(),
-                        null,
-                        appraisal.getContentHash(),
-                        engagementStatusFor(pair),
-                        clientId);
-
-                updateSubProgress(scope,"queued",
-                        "Job queued — waiting for Celery worker (" + appraisal.getFilename() + ")", 0.02, 0);
-
-            } catch (CancellationException ce) {
-                throw ce;
-            } catch (Exception submitEx) {
-                log.warn("Async submit unavailable for batch {} file {} ({}), falling back to sync call",
-                        progressBatchId, appraisal.getFilename(), submitEx.getMessage());
-                updateSubProgress(scope,"python_sync",
-                        "Running OCR (sync fallback) for " + appraisal.getFilename(), 0.05, 0);
-                pythonResponse = pythonClient.processQC(
-                        pair.getAppraisalPath(),
-                        pair.getAppraisalXmlPath(),
-                        pair.getEngagementPath(),
-                        pair.getContractPath(),
-                        modelConfig,
-                        snapshot -> {
-                            String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
-                            String subMessage = snapshot.message() != null ? snapshot.message()
-                                    : "Processing " + appraisal.getFilename();
-                            updateSubProgress(scope,subStage, subMessage,
-                                    snapshot.subPercent(), snapshot.elapsedMs());
-                        },
-                        progressBatchId, // Python still gets the real batch id for correlation
-                        appraisal.getId(),
-                        null,
-                        appraisal.getContentHash(),
-                        engagementStatusFor(pair),
-                        clientId);
+                        snapshot -> updateSubProgress(scope,
+                                snapshot.stage() != null ? snapshot.stage() : "python",
+                                snapshot.message() != null ? snapshot.message() : "Processing " + appraisal.getFilename(),
+                                snapshot.subPercent(), snapshot.elapsedMs()),
+                        progressBatchId, appraisal.getId(), null,
+                        appraisal.getContentHash(), engagementStatusFor(pair), clientId, amcCode);
                 retryCount = pythonClient.getLastRetryCount();
                 throwIfCancelled(scope);
-
-                QCResult syncFallbackResult = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
-                self.recordQcEventsAsync(syncFallbackResult, pythonResponse, syncFallbackResult.getQcDecision(), modelConfig,
-                        progressBatchId, appraisal.getId());
-                return syncFallbackResult;
+                return self.persistShalqcResult(appraisal.getId(), shalqcResponse, modelConfig, queueWaitMs, retryCount);
+            } finally {
+                org.slf4j.MDC.remove("orderRef");
             }
-
-            Duration timeout = Duration.ofSeconds(Math.max(900, (long) pythonClient.getConfig().getTimeoutSeconds() * 4));
-            try {
-                pythonResponse = pythonClient.waitForJobResult(
-                        job.jobId(),
-                        timeout,
-                        () -> isCancellationRequested(scope),
-                        snapshot -> {
-                            String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
-                            String subMessage = snapshot.message() != null ? snapshot.message()
-                                    : "Processing " + appraisal.getFilename();
-                            updateSubProgress(scope,subStage, subMessage,
-                                    snapshot.subPercent(), snapshot.elapsedMs());
-                        });
-            } catch (PythonClientService.CeleryWorkerUnavailableException workerEx) {
-                log.warn("Queued Python job {} was not picked up by Celery; taking it over synchronously",
-                        workerEx.jobId());
-                updateSubProgress(scope,"python_sync",
-                        "Celery worker did not pick up queued job — running OCR directly for " + appraisal.getFilename(),
-                        0.05, 0);
-                pythonResponse = runSyncPythonQc(pair, modelConfig, progressBatchId, scope, appraisal, clientId);
-            }
-            retryCount = pythonClient.getLastRetryCount();
-            throwIfCancelled(scope);
         }
 
-        QCResult result = self.persistPythonResult(appraisal.getId(), pythonResponse, modelConfig, queueWaitMs, retryCount);
-        // Re-fetch so the switch below sees the decision after any match-confidence downgrade
-        result = qcResultRepository.findById(result.getId()).orElse(result);
-
-        // Fire QC rule events in the background — user sees REVIEW_PENDING immediately,
-        // 137 event inserts happen after the batch status is already unlocked.
-        self.recordQcEventsAsync(result, pythonResponse, result.getQcDecision(), modelConfig,
-                progressBatchId, appraisal.getId());
-        return result;
-        } finally {
-            org.slf4j.MDC.remove("orderRef");
-        }
     }
 
     /**
@@ -790,241 +733,106 @@ public class QCProcessingService {
         return null; // COMPLETED → the path is passed and Python will extract it
     }
 
-    private PythonQCResponse runSyncPythonQc(
-            FilePair pair,
-            QCModelConfig modelConfig,
-            Long progressBatchId,
-            JobScope scope,
-            BatchFile appraisal) {
-        return runSyncPythonQc(pair, modelConfig, progressBatchId, scope, appraisal, null);
-    }
-
-    private PythonQCResponse runSyncPythonQc(
-            FilePair pair,
-            QCModelConfig modelConfig,
-            Long progressBatchId,
-            JobScope scope,
-            BatchFile appraisal,
-            String clientId) {
-        return pythonClient.processQC(
-                pair.getAppraisalPath(),
-                pair.getAppraisalXmlPath(),
-                pair.getEngagementPath(),
-                pair.getContractPath(),
-                modelConfig,
-                snapshot -> {
-                    String subStage   = snapshot.stage()   != null ? snapshot.stage()   : "python";
-                    String subMessage = snapshot.message() != null ? snapshot.message()
-                            : "Processing " + appraisal.getFilename();
-                    updateSubProgress(scope, subStage, subMessage,
-                            snapshot.subPercent(), snapshot.elapsedMs());
-                },
-                progressBatchId,
-                appraisal.getId(),
-                null,
-                appraisal.getContentHash(),
-                engagementStatusFor(pair),
-                clientId);
-    }
-
+    /**
+     * Persist a SHALqc native {@link ShalqcResponse} (Approach B) — the ONLY QC
+     * persistence path. Sources every field from {@link ShalqcResponseMapper}:
+     * cards → QCRuleResult (with bbox coordinates for the reviewer auto-scroll),
+     * informational cards → off-queue QCRuleResult rows, llm_interactions →
+     * LLMInteraction (keyed by the persisted qcResultId for the drill-in endpoint),
+     * summary counts → decision. Re-run supersede, reviewer-decision carry and
+     * review-lock carry are preserved.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public @NonNull QCResult persistPythonResult(
+    public @NonNull QCResult persistShalqcResult(
             Long appraisalId,
-            PythonQCResponse pythonResponse,
+            ShalqcResponse response,
             QCModelConfig modelConfig,
             long queueWaitMs,
             int retryCount) {
-        long persistStarted = System.nanoTime();
         BatchFile appraisal = batchFileRepository.findWithBatchAndReviewerById(appraisalId)
                 .orElseThrow(() -> new RuntimeException("BatchFile not found: " + appraisalId));
         Long batchId = appraisal.getBatch() != null ? appraisal.getBatch().getId() : null;
-        // Contract-drift guard (non-fatal): a Python build whose wire schema_version
-        // differs from what this backend expects may have reshaped a nested payload.
-        // We still persist (Jackson ignores unknown fields), but flag it loudly so a
-        // mismatched deploy is caught in logs rather than as silent data corruption.
-        String pySchema = pythonResponse.schemaVersion();
-        if (pySchema != null && !EXPECTED_PYTHON_SCHEMA_VERSION.equals(pySchema)) {
-            log.warn("Python QC response schema_version='{}' != expected '{}' (batch_file_id={}). "
-                    + "Verify Java/Python are deployed together; nested payloads may have drifted.",
-                    pySchema, EXPECTED_PYTHON_SCHEMA_VERSION, appraisal.getId());
-        }
-        log.debug(TimelineLog.event("admin_batches", "java_qc_result_save_start",
-                "batch_id", batchId,
-                "batch_file_id", appraisal.getId(),
-                "appraisal", appraisal.getFilename(),
-                "python_processing_ms", pythonResponse.processingTimeMs(),
-                "total_rules", pythonResponse.totalRules()));
 
-        // Re-fetch the active result after the Python call. On a rerun, the
-        // pre-call active result will be superseded; on a race from a duplicate
-        // worker, the result from the first worker will already be present.
-        var activeAfterPython = qcResultRepository.findActiveByBatchFileId(appraisal.getId());
-        boolean isRerun = activeAfterPython.isPresent();
-        QCResult previousActive = activeAfterPython.orElse(null);
+        Map<String, Object> summary = response.summary() != null ? response.summary() : Map.of();
+        List<ShalqcCard> cards = response.cards() != null ? response.cards() : List.of();
 
-        // Determine decision
-        QCDecision decision = determineDecision(pythonResponse);
+        var activeAfter = qcResultRepository.findActiveByBatchFileId(appraisal.getId());
+        boolean isRerun = activeAfter.isPresent();
+        QCResult previousActive = activeAfter.orElse(null);
 
-        // On rerun: mark the previously-active result as superseded so it becomes
-        // historical. The new result will reference it via rerunOf.
+        QCDecision decision = shalqcMapper.decisionFrom(summary);
+
         if (isRerun && previousActive != null) {
             previousActive.setSupersededAt(Instant.now().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
             qcResultRepository.save(previousActive);
-            log.debug("QC result {} superseded for file {} (rerun)", previousActive.getId(), appraisal.getFilename());
         }
 
-        // Create QCResult
+        String ruleEngineVersion = "shalqc-language";
+        if (response.versions() != null) {
+            Object jp = response.versions().getOrDefault("judge_prompt",
+                    response.versions().getOrDefault("binder_prompt", "shalqc-language"));
+            ruleEngineVersion = String.valueOf(jp);
+        }
+
         QCResult qcResult = QCResult.builder()
                 .batchFile(appraisal)
                 .qcDecision(decision)
-                .pythonResponse(toJson(pythonResponse))
-                .totalRules(pythonResponse.totalRules())
-                .passedCount(pythonResponse.passed())
-                .failedCount(pythonResponse.failed())
-                .verifyCount(pythonResponse.verify())
+                .pythonResponse(toJson(response))
+                .totalRules(cards.size())
+                .passedCount(shalqcMapper.passed(summary))
+                .failedCount(shalqcMapper.failed(summary))
+                .verifyCount(shalqcMapper.verify(summary))
                 .errorCount(0)
-                .processingTimeMs(pythonResponse.processingTimeMs())
-                .extractionMethod(pythonResponse.extractionMethod())
-                .ruleEngineVersion(pythonResponse.ruleEngineVersion())
-                .pythonDocumentId(pythonResponse.documentId())
-                .pythonProcessingJobId(pythonResponse.processingJobId())
-                .cacheHit(pythonResponse.cacheHit())
-                .missingDocuments(missingDocumentsJson(pythonResponse))
-                .subjectAddress(subjectAddressFrom(pythonResponse))
+                .extractionMethod("shalqc-language")
+                .ruleEngineVersion(ruleEngineVersion)
+                .pythonDocumentId(response.orderId())
+                .cacheHit(Boolean.TRUE.equals(response.cachedRun()))
                 .sourceDocumentHash(appraisal.getContentHash())
                 .sourceDocumentVersion(appraisal.getContentVersion())
                 .build();
 
-        // Link to superseded result so the full version chain is traceable.
         if (previousActive != null) {
             qcResult.setRerunOf(previousActive);
         }
 
-        // Create rule results
-        if (pythonResponse.ruleResults() != null) {
-            for (PythonRuleResult pr : pythonResponse.ruleResults()) {
-                String normalizedStatus = normalizePythonStatus(pr.status());
-                boolean needsReview = pr.reviewRequired() || needsVerification(normalizedStatus);
-                QCRuleResult ruleResult = QCRuleResult.builder()
-                        .ruleId(textOr(pr.ruleId(), "UNKNOWN_RULE"))
-                        .ruleName(textOr(pr.ruleName(), textOr(pr.ruleId(), "UNKNOWN_RULE")))
-                        .section(pr.section())
-                        .status(normalizedStatus)
-                        .message(textOr(pr.message(), "No rule message provided."))
-                        .severity(pr.severity() != null ? pr.severity() : "STANDARD")
-                        .details(pr.details() != null ? toJson(pr.details()) : "{}")
-                        .actionItem(textOr(pr.actionItem(), textOr(pr.verifyQuestion(), textOr(pr.rejectionText(), "No reviewer action required."))))
-                        .needsVerification(needsReview)
-                        .reviewRequired(needsReview)
-                        .appraisalValue(textOr(pr.appraisalValue(), NO_APPRAISAL_VALUE))
-                        .engagementValue(textOr(pr.engagementValue(), NO_ENGAGEMENT_VALUE))
-                        .confidenceScore(confidenceFor(pr, normalizedStatus))
-                        .extractedValue(pr.extractedValue() != null ? String.valueOf(pr.extractedValue()) : NO_EXTRACTED_VALUE)
-                        .expectedValue(pr.expectedValue() != null ? String.valueOf(pr.expectedValue()) : NO_EXPECTED_VALUE)
-                        .verifyQuestion(textOr(pr.verifyQuestion(), ""))
-                        .rejectionText(textOr(pr.rejectionText(), ""))
-                        .evidence(pr.evidence() != null ? toJson(pr.evidence()) : "[]")
-                        // Slim finding contract — persisted at eval time so the reviewer
-                        // list endpoint is a pure read (no recompute, no LLM on read).
-                        .summary(textOr(pr.summary(), textOr(pr.ruleName(), pr.ruleId())))
-                        .confidenceTier(textOr(pr.confidenceTier(), "medium"))
-                        .highlightedValues(pr.highlightedValues() != null ? toJson(pr.highlightedValues()) : "[]")
-                        .targetField(textOr(pr.targetField(), targetFieldFor(pr.ruleId())))
-                        .pdfPage(pr.sourcePage() != null ? pr.sourcePage() : 0)
-                        .bboxX(pr.bboxX() != null ? pr.bboxX() : 0.0f)
-                        .bboxY(pr.bboxY() != null ? pr.bboxY() : 0.0f)
-                        .bboxW(pr.bboxW() != null ? pr.bboxW() : 0.0f)
-                        .bboxH(pr.bboxH() != null ? pr.bboxH() : 0.0f)
-                        .scope(pr.scope())
-                        .build();
-                qcResult.addRuleResult(ruleResult);
-            }
+        for (ShalqcCard c : cards) {
+            qcResult.addRuleResult(shalqcMapper.toRuleResult(c));
+        }
+        // Informational items (no reject authority) are persisted too — flagged
+        // card_group="informational" with the review flags off — so the reviewer UI
+        // can show them in a collapsed tab without them ever entering the queue.
+        List<ShalqcCard> informational = response.informationalCards() != null
+                ? response.informationalCards() : List.of();
+        for (ShalqcCard c : informational) {
+            qcResult.addRuleResult(shalqcMapper.toRuleResult(c));
         }
 
-        // Carry the reviewer's prior decisions across a rerun: where a finding
-        // recurs with the same rule id, target field AND outcome, the reviewer's
-        // Pass/Fail/override is preserved, so a rerun (often a single-field
-        // extraction fix) does not silently discard their work. Findings that are
-        // new, gone, or whose status changed are left pending and re-queued for
-        // re-examination.
-        User carriedLockHolder = null;
         if (isRerun && previousActive != null) {
-            int carried = migrateReviewerDecisions(previousActive, qcResult);
-            if (carried > 0) {
-                log.debug("Carried {} reviewer decision(s) from result {} for file {}",
-                        carried, previousActive.getId(), appraisal.getFilename());
-            }
-            carriedLockHolder = carryReviewLock(previousActive, qcResult);
-            if (carriedLockHolder != null) {
-                log.debug("Carried review lock (held by {}) from result {} for file {}",
-                        carriedLockHolder.getUsername(), previousActive.getId(), appraisal.getFilename());
+            migrateReviewerDecisions(previousActive, qcResult);
+            carryReviewLock(previousActive, qcResult);
+        }
+
+        qcResult = Objects.requireNonNull(qcResultRepository.save(qcResult));
+
+        // Stored LLM exchanges are keyed by the now-persisted qcResultId so the
+        // reviewer drill-in endpoint can fetch them per finding. Best-effort.
+        if (response.llmInteractions() != null) {
+            for (ShalqcInteraction i : response.llmInteractions()) {
+                try {
+                    llmInteractionRepository.save(shalqcMapper.toInteraction(i, qcResult.getId()));
+                } catch (Exception ex) {
+                    log.warn("Failed to persist LLM interaction {} for qcResult {}: {}",
+                            i.id(), qcResult.getId(), ex.getMessage());
+                }
             }
         }
 
-        // Save
-        qcResult = Objects.requireNonNull(qcResultRepository.save(qcResult));
         appraisal.setStatus(FileStatus.COMPLETED);
         batchFileRepository.save(appraisal);
-        log.debug("QC result saved: file={} decision={} pass={} fail={} verify={}",
-                appraisal.getFilename(), decision,
-                pythonResponse.passed(), pythonResponse.failed(), pythonResponse.verify());
-
-        // Re-run conflict handling: a reviewer may have the now-superseded result
-        // open. Their in-progress decisions on it are preserved (the old result is
-        // kept, only stamped supersededAt), but they must be told the results they
-        // are looking at have been replaced — push to the OLD result's topic (the
-        // one their session is subscribed to) with the new id so the UI can offer
-        // to load it. Best-effort: never block persistence (P-6).
-        if (isRerun && previousActive != null) {
-            try {
-                realtimeEventPublisher.publish(
-                        "/topic/reviewer/qc/" + previousActive.getId() + "/superseded",
-                        Map.of(
-                                "supersededResultId", previousActive.getId(),
-                                "newResultId", qcResult.getId(),
-                                "supersededAt", AppTime.now().toString(),
-                                "message", "This report was re-processed by a new QC run. "
-                                        + "Your decisions so far are preserved for audit; "
-                                        + "load the new results to continue."
-                        ));
-            } catch (Exception pubEx) {
-                log.warn("Failed to publish supersede event for result {}: {}",
-                        previousActive.getId(), pubEx.getMessage());
-            }
-            // A1: durable audit record of the re-run so the audit graph/timeline is never blind
-            // to it (the WS event above is transient). One event per superseded file.
-            try {
-                Map<String, Object> rerunPayload = new LinkedHashMap<>();
-                rerunPayload.put("superseded_result_id", previousActive.getId());
-                rerunPayload.put("new_result_id", qcResult.getId());
-                rerunPayload.put("filename", appraisal.getFilename());
-                rerunPayload.put("had_reviewer_decisions", previousActive.getFinalDecision() != null);
-                rerunPayload.put("lock_carried_to", carriedLockHolder != null ? carriedLockHolder.getUsername() : null);
-                businessEventService.record("QC_RESULT_SUPERSEDED", null, "java", "RERUN",
-                        "QCResult", previousActive.getId(), batchId, appraisal.getId(),
-                        qcResult.getId(), null, rerunPayload);
-            } catch (Exception evEx) {
-                log.warn("Failed to record QC_RESULT_SUPERSEDED audit event for result {}: {}",
-                        previousActive.getId(), evEx.getMessage());
-            }
-        }
-        log.debug(TimelineLog.event("admin_batches", "java_qc_result_saved",
-                "batch_id", batchId,
-                "batch_file_id", appraisal.getId(),
-                "qc_result_id", qcResult.getId(),
-                "decision", decision,
-                "passed", pythonResponse.passed(),
-                "failed", pythonResponse.failed(),
-                "verify", pythonResponse.verify(),
-                "total_rules", pythonResponse.totalRules(),
-                "rule_rows", qcResult.getRuleResults() != null ? qcResult.getRuleResults().size() : 0,
-                "elapsed_ms", TimelineLog.elapsedMs(persistStarted)));
-
-        // Capture processing metrics for analytics
-        saveMetrics(qcResult, pythonResponse, appraisal, modelConfig, queueWaitMs, retryCount);
-
-        // Capture per-section / per-rule timing breakdown (docStats)
-        saveDocStats(qcResult, pythonResponse, appraisal);
+        log.info("SHALqc QC result saved: file={} order={} decision={} pass={} fail={} verify={} cards={} llm={} batch={}",
+                appraisal.getFilename(), response.orderId(), decision,
+                shalqcMapper.passed(summary), shalqcMapper.failed(summary), shalqcMapper.verify(summary),
+                cards.size(), response.llmInteractions() != null ? response.llmInteractions().size() : 0, batchId);
 
         // If the engagement letter OR contract was matched by filename heuristic or
         // positional guess (confidence < 0.82) and the rules all auto-passed, force
@@ -1036,12 +844,12 @@ public class QCProcessingService {
             final double MATCH_CONFIDENCE_THRESHOLD = 0.82;
             double worstMatchConf = 1.0;
             String worstDocType = null;
-            Optional<Double> engConf = fileMatchingService.getEngagementMatchConfidence(appraisal.getId());
+            var engConf = fileMatchingService.getEngagementMatchConfidence(appraisal.getId());
             if (engConf.isPresent() && engConf.get() < worstMatchConf) {
                 worstMatchConf = engConf.get();
                 worstDocType = "Engagement letter";
             }
-            Optional<Double> conConf = fileMatchingService.getContractMatchConfidence(appraisal.getId());
+            var conConf = fileMatchingService.getContractMatchConfidence(appraisal.getId());
             if (conConf.isPresent() && conConf.get() < worstMatchConf) {
                 worstMatchConf = conConf.get();
                 worstDocType = "Contract";
@@ -1049,6 +857,9 @@ public class QCProcessingService {
             if (worstDocType != null && worstMatchConf < MATCH_CONFIDENCE_THRESHOLD) {
                 final String docType = worstDocType;
                 final double conf = worstMatchConf;
+                // Direct self-call (NOT via `self` proxy): must run in THIS transaction so it
+                // sees the qcResult just saved above. A REQUIRES_NEW proxy hop would open a
+                // separate tx that cannot see the uncommitted row and would silently no-op.
                 downgradeToVerifyForLowMatchConfidence(qcResult.getId(), conf, docType);
                 qcResult = qcResultRepository.findById(qcResult.getId()).orElse(qcResult);
                 log.info("AUTO_PASS downgraded to TO_VERIFY for file {} — {} match confidence={} < {}",
@@ -1056,202 +867,7 @@ public class QCProcessingService {
             }
         }
 
-        // Roll this per-file QC result up into its Order's computed lifecycle status.
-        // Legacy files ingested before Order resolution existed have no order — skip.
-        if (appraisal.getOrder() != null) {
-            orderStatusService.recompute(appraisal.getOrder());
-        }
-
         return qcResult;
-    }
-
-    /**
-     * Persist the real, measured QC timing breakdown reported by Python into the
-     * doc_stat tables (the admin docStats feature). The numbers are written
-     * verbatim from the engine's perf_counter measurements — never derived or
-     * synthesized here. Best-effort: a failure never blocks QC persistence (P-6).
-     */
-    private void saveDocStats(QCResult qcResult, PythonQCResponse r, BatchFile file) {
-        var timings = r.timings();
-        if (timings == null) {
-            return; // older Python build without timing instrumentation
-        }
-        try {
-            // remove any prior timing for this result (rerun) to avoid duplicates
-            docStatRepository.findByQcResultId(qcResult.getId())
-                    .ifPresent(docStatRepository::delete);
-
-            var batch = file.getBatch();
-            Long batchId = batch != null ? batch.getId() : null;
-            Long clientId = (batch != null && batch.getClient() != null) ? batch.getClient().getId() : null;
-            String clientName = (batch != null && batch.getClient() != null) ? batch.getClient().getName() : null;
-
-            var slowStage   = (timings.stages()   != null && !timings.stages().isEmpty())   ? timings.stages().get(0)   : null;
-            var slowSection = (timings.sections() != null && !timings.sections().isEmpty()) ? timings.sections().get(0) : null;
-            var slowRule    = (timings.rules()    != null && !timings.rules().isEmpty())    ? timings.rules().get(0)    : null;
-            var llm         = timings.llm();
-
-            DocStat docStat = DocStat.builder()
-                    .qcResult(qcResult)
-                    .batchFileId(file.getId())
-                    .batchId(batchId)
-                    .clientId(clientId)
-                    .filename(file.getFilename())
-                    .clientName(clientName)
-                    .qcDecision(qcResult.getQcDecision() != null ? qcResult.getQcDecision().name() : null)
-                    .totalMs(timings.totalMs())
-                    .ruleEngineMs(timings.ruleEngineMs())
-                    .measuredPipelineMs(timings.measuredPipelineMs())
-                    .ruleCount(timings.ruleCount())
-                    // Store the slowest stage's stable KEY (not a display label); the UI
-                    // derives the name from the key (frontend/lib/stageLabels.ts).
-                    .slowestStageLabel(slowStage != null ? slowStage.stage() : null)
-                    .slowestStageMs(slowStage != null ? slowStage.ms() : null)
-                    .slowestSectionLabel(slowSection != null ? slowSection.label() : null)
-                    .slowestSectionMs(slowSection != null ? slowSection.ms() : null)
-                    .slowestRuleId(slowRule != null ? slowRule.ruleId() : null)
-                    .slowestRuleName(slowRule != null ? slowRule.ruleName() : null)
-                    .slowestRuleMs(slowRule != null ? slowRule.ms() : null)
-                    .llmCalls(llm != null ? llm.totalCalls() : 0)
-                    .llmInferenceMs(llm != null ? llm.totalInferenceMs() : 0.0)
-                    .llmThrottleWaitMs(llm != null ? llm.totalThrottleWaitMs() : 0.0)
-                    .rateLimitHits(llm != null ? llm.rateLimitHits() : 0)
-                    .build();
-
-            int i = 0;
-            if (timings.stages() != null) {
-                for (var s : timings.stages()) {
-                    docStat.addStage(new DocStatStage(s.stage(), s.ms(), s.pctOfPipeline(),
-                            s.llmCalls(), s.inferenceMs(), s.throttleWaitMs(), i++));
-                }
-            }
-            i = 0;
-            if (timings.sections() != null) {
-                for (var s : timings.sections()) {
-                    docStat.addSection(new DocStatSection(s.section(), s.label(), s.ms(),
-                            s.ruleCount(), s.pctOfRules(), i++));
-                }
-            }
-            i = 0;
-            if (timings.rules() != null) {
-                for (var rule : timings.rules()) {
-                    docStat.addRule(new DocStatRule(rule.ruleId(), rule.ruleName(), rule.section(),
-                            rule.status(), rule.ms(), rule.confidence(), rule.llmCalls(),
-                            rule.llmMs(), rule.throttleMs(), i++));
-                }
-            }
-
-            docStatRepository.save(docStat);
-            log.debug("DocStats saved: file={} rules={} ruleEngineMs={} pipelineMs={}",
-                    file.getFilename(), timings.ruleCount(), timings.ruleEngineMs(),
-                    timings.measuredPipelineMs());
-        } catch (Exception e) {
-            log.warn("Failed to save docStats for file {}: {}", file.getFilename(), e.getMessage());
-        }
-    }
-
-    /**
-     * Build and persist all QC events for a single file result in one DB round trip.
-     *
-     * Runs @Async so the caller (processFilePair) is unblocked immediately after saving
-     * the QCResult. The batch status transitions to REVIEW_PENDING before these events land.
-     * Previously this fired 137 individual REQUIRES_NEW transactions (≈112s on remote Neon).
-     *
-     * batchId/fileId are passed in rather than derived from qcResult.getBatchFile().getBatch():
-     * qcResult is re-fetched outside a transaction in processFilePair (detached), so touching
-     * its lazy BatchFile/Batch proxies here — on a separate @Async thread with no session —
-     * throws LazyInitializationException. The caller already has both ids from its own
-     * eagerly-fetched `appraisal` (findWithBatchAndReviewerById), so just forward them.
-     */
-    @Async("qcTaskExecutor")
-    public void recordQcEventsAsync(QCResult qcResult, PythonQCResponse pythonResponse, QCDecision decision,
-                                     QCModelConfig modelConfig, Long batchId, Long fileId) {
-        try {
-            // Re-fetch with ruleResults eagerly joined: qcResult was loaded outside this
-            // method's transaction (see class-level note above), so its ruleResults LAZY
-            // collection is not safe to iterate on this @Async thread otherwise.
-            qcResult = qcResultRepository.findWithRuleResultsById(qcResult.getId()).orElse(qcResult);
-
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("decision", decision.name());
-            payload.put("total_rules", pythonResponse.totalRules());
-            payload.put("passed", pythonResponse.passed());
-            payload.put("failed", pythonResponse.failed());
-            payload.put("verify", pythonResponse.verify());
-            payload.put("processing_time_ms", pythonResponse.processingTimeMs());
-            payload.put("model_provider", pythonResponse.modelProvider() != null ? pythonResponse.modelProvider() : modelConfig.provider());
-            payload.put("model_name", pythonResponse.modelName() != null ? pythonResponse.modelName() : modelConfig.textModel());
-            payload.put("vision_model", pythonResponse.visionModel() != null ? pythonResponse.visionModel() : modelConfig.visionModel());
-            payload.put("supporting_document_missing", Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing()));
-            payload.put("missing_supporting_documents", pythonResponse.missingSupportingDocuments());
-
-            List<BusinessEvent> events = new ArrayList<>();
-
-            // OCR event
-            events.add(businessEventService.buildEvent(
-                    Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "FILE_OCR_CACHED" : "FILE_OCR_EXTRACTED",
-                    null, "java",
-                    Boolean.TRUE.equals(pythonResponse.cacheHit()) ? "CACHE_HIT" : "EXTRACTED",
-                    "QCResult", qcResult.getId(), batchId, fileId, qcResult.getId(), null, payload));
-
-            // QC completed event
-            events.add(businessEventService.buildEvent(
-                    "QC_COMPLETED", null, "java", decision.name(),
-                    "QCResult", qcResult.getId(), batchId, fileId, qcResult.getId(), null, payload));
-
-            // One event per rule result
-            if (qcResult.getRuleResults() != null) {
-                for (QCRuleResult ruleResult : qcResult.getRuleResults()) {
-                    Map<String, Object> rulePayload = new LinkedHashMap<>();
-                    rulePayload.put("rule_id", ruleResult.getRuleId());
-                    rulePayload.put("rule_name", ruleResult.getRuleName());
-                    rulePayload.put("status", ruleResult.getStatus());
-                    rulePayload.put("severity", ruleResult.getSeverity());
-                    rulePayload.put("review_required", Boolean.TRUE.equals(ruleResult.getReviewRequired()));
-                    rulePayload.put("needs_verification", Boolean.TRUE.equals(ruleResult.getNeedsVerification()));
-                    rulePayload.put("confidence_score", ruleResult.getConfidenceScore());
-                    rulePayload.put("pdf_page", ruleResult.getPdfPage());
-                    events.add(businessEventService.buildEvent(
-                            "QC_RULE_EVALUATED", null, "java", ruleResult.getStatus(),
-                            "QCRuleResult", ruleResult.getId(), batchId, fileId,
-                            qcResult.getId(), ruleResult.getId(), rulePayload));
-                }
-            }
-
-            // Save all events in a single transaction instead of one per event
-            businessEventService.recordAll(events);
-        } catch (Exception e) {
-            log.error("Async QC event recording failed for qcResult={}: {}", qcResult.getId(), e.getMessage(), e);
-        }
-    }
-
-    private String missingDocumentsJson(PythonQCResponse pythonResponse) {
-        if (!Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing())
-                && (pythonResponse.missingSupportingDocuments() == null || pythonResponse.missingSupportingDocuments().isEmpty())) {
-            return null;
-        }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("supporting_document_missing", Boolean.TRUE.equals(pythonResponse.supportingDocumentMissing()));
-        payload.put("missing_supporting_documents", pythonResponse.missingSupportingDocuments());
-        return toJson(payload);
-    }
-
-    /**
-     * Determine QC decision based on Python response.
-     * 
-     * NEW PHILOSOPHY:
-     * - VERIFY items (OCR uncertain) → TO_VERIFY (human review)
-     * - FAIL with no OCR errors → AUTO_FAIL (confident rejection)
-     * - FAIL with OCR errors → TO_VERIFY (needs human verification)
-     * - All PASS → AUTO_PASS
-     */
-    private QCDecision determineDecision(PythonQCResponse response) {
-        // A HOLD rule blocks the report regardless of the other counts — checked
-        // first so the blocking contract holds for every client, not just the UI.
-        if (Boolean.TRUE.equals(response.blocking()))                   return QCDecision.BLOCKED;
-        if (response.verify()       != null && response.verify()       > 0) return QCDecision.TO_VERIFY;
-        if (response.failed()       != null && response.failed()       > 0) return QCDecision.AUTO_FAIL;
-        return QCDecision.AUTO_PASS;
     }
 
     // Known rule-status vocabulary the engine may emit. Used only to detect ENUM
@@ -1261,31 +877,6 @@ public class QCProcessingService {
             "pass", "fail", "verify", "review", "hold",
             "extraction_failed", "ocr_low_confidence", "system_error",
             "source_missing", "cross_doc_mismatch", "skipped", "not_applicable");
-
-    private String normalizePythonStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return "verify";
-        }
-        String normalized = status.trim().toLowerCase();
-        if (!KNOWN_RULE_STATUSES.contains(normalized)) {
-            // Drift signal: a status the backend doesn't recognise. It is treated as
-            // needs-review (safe default) but flagged so the vocabulary can be aligned.
-            log.warn("Unknown Python rule status '{}' — treating as review. Align KNOWN_RULE_STATUSES "
-                    + "if this is a deliberate new engine status.", normalized);
-        }
-        return normalized;
-    }
-
-    private boolean needsVerification(String normalizedStatus) {
-        return "fail".equals(normalizedStatus)
-                || "verify".equals(normalizedStatus)
-                || "review".equals(normalizedStatus)
-                || "extraction_failed".equals(normalizedStatus)
-                || "ocr_low_confidence".equals(normalizedStatus)
-                || "system_error".equals(normalizedStatus)
-                || "source_missing".equals(normalizedStatus)
-                || "cross_doc_mismatch".equals(normalizedStatus);
-    }
 
     /**
      * R2: when a re-run supersedes a result that a reviewer is actively holding, carry the lock
@@ -1312,61 +903,6 @@ public class QCProcessingService {
         return holder;
     }
 
-    private void saveMetrics(QCResult qcResult, PythonQCResponse r, BatchFile file, QCModelConfig modelConfig,
-            long queueWaitMs, int retryCount) {
-        try {
-            int total  = Objects.requireNonNullElse(r.totalRules(), 0);
-            int passed = Objects.requireNonNullElse(r.passed(), 0);
-            double passRate = total > 0 ? (passed * 100.0 / total) : 0.0;
-
-            // Derive OCR confidence from field_confidence map.
-            // Python extraction produces confidence as a decimal fraction in [0.0, 1.0]
-            // (e.g. 0.88 = 88%). The threshold below must match that scale.
-            // BUG FIX: was "v < 70.0" which compared 0.88 against 70, classifying
-            // every field as low-confidence and inflating fields_low_confidence to 100%.
-            double avgConf = 0.0, minConf = 1.0;
-            int lowConfCount = 0;
-            if (r.fieldConfidence() != null && !r.fieldConfidence().isEmpty()) {
-                var values = r.fieldConfidence().values().stream()
-                    .filter(v -> v != null).mapToDouble(Double::doubleValue).toArray();
-                if (values.length > 0) {
-                    avgConf = java.util.Arrays.stream(values).average().orElse(0);
-                    minConf = java.util.Arrays.stream(values).min().orElse(0);
-                    // 0.70 = 70% confidence threshold (decimal scale, not percentage scale)
-                    lowConfCount = (int) java.util.Arrays.stream(values).filter(v -> v < 0.70).count();
-                }
-            }
-
-            long procMs = Objects.requireNonNullElse(r.processingTimeMs(), 0);
-            ProcessingMetrics metrics = ProcessingMetrics.builder()
-                .qcResult(qcResult)
-                .correlationId(MDC.get("correlationId"))
-                .totalProcessingMs(procMs)
-                .ocrTimeMs(procMs)
-                .ocrConfidenceAvg(avgConf)
-                .ocrConfidenceMin(minConf)
-                .fieldsExtracted(r.fieldConfidence() != null ? r.fieldConfidence().size() : 0)
-                .fieldsLowConfidence(lowConfCount)
-                .extractionMethod(r.extractionMethod())
-                .pagesProcessed(Objects.requireNonNullElse(r.totalPages(), 0))
-                .rulePassRate(passRate)
-                .rulesTotal(total)
-                .rulesPassed(passed)
-                .rulesFailed(Objects.requireNonNullElse(r.failed(), 0))
-                .rulesVerify(Objects.requireNonNullElse(r.verify(), 0))
-                .modelVersion(r.modelName() != null ? r.modelName() : modelConfig.textModel())
-                .retryCount(retryCount)
-                .queueWaitMs(queueWaitMs)
-                .cacheHit(Boolean.TRUE.equals(r.cacheHit()))
-                .fileSizeBytes(file.getFileSize())
-                .build();
-
-            metricsRepository.save(metrics);
-        } catch (Exception e) {
-            log.warn("Failed to save processing metrics for file {}: {}", file.getFilename(), e.getMessage());
-        }
-    }
-
     private long queueWaitMs(JobScope scope, Instant pythonStartedAt) {
         Instant startedAt = startedAtMapFor(scope).get(scope.id());
         if (startedAt == null || pythonStartedAt == null || pythonStartedAt.isBefore(startedAt)) {
@@ -1387,13 +923,6 @@ public class QCProcessingService {
             log.warn("Failed to serialize to JSON: {}", e.getMessage());
             return "{}";
         }
-    }
-
-    private String textOr(String value, String fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback != null ? fallback : NOT_PROVIDED;
-        }
-        return value;
     }
 
     /**
@@ -1438,36 +967,9 @@ public class QCProcessingService {
         return textOr(r.getRuleId(), "?") + "|" + textOr(r.getTargetField(), "");
     }
 
-    /**
-     * Compose the subject property's address from the document's extracted fields
-     * (content, not filename) so the audit anchors identity on what the appraisal
-     * is actually about. Returns null when the address could not be extracted.
-     */
-    private String subjectAddressFrom(PythonQCResponse response) {
-        if (response == null || response.extractedFields() == null) {
-            return null;
-        }
-        Map<String, Object> f = response.extractedFields();
-        String street = fieldText(f.get("property_address"));
-        if (street == null) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder(street);
-        String city  = fieldText(f.get("city"));
-        String state = fieldText(f.get("state"));
-        String zip   = fieldText(f.get("zip_code"));
-        if (city != null)  sb.append(", ").append(city);
-        if (state != null) sb.append(", ").append(state);
-        if (zip != null)   sb.append(" ").append(zip);
-        return sb.toString();
-    }
-
-    /** A non-blank, non-sentinel extracted field value, or null. */
-    private static String fieldText(Object value) {
-        if (value == null) return null;
-        String s = String.valueOf(value).trim();
-        if (s.isEmpty() || "null".equalsIgnoreCase(s) || s.matches("^__[A-Z0-9_]+__$")) return null;
-        return s;
+    /** Trimmed non-blank value, or the fallback. */
+    private static String textOr(String v, String fallback) {
+        return (v == null || v.isBlank()) ? fallback : v;
     }
 
     /**
@@ -1489,95 +991,6 @@ public class QCProcessingService {
 
     private static String normStatus(String s) {
         return s == null ? "" : s.trim().toLowerCase();
-    }
-
-    private double confidenceFor(PythonRuleResult rule, String normalizedStatus) {
-        double reported = rule.confidence() != null ? rule.confidence() : 0.0d;
-        boolean hasAnyValue = hasRealValue(rule.appraisalValue())
-                || hasRealValue(rule.engagementValue())
-                || hasRealValue(rule.extractedValue())
-                || hasRealValue(rule.expectedValue());
-
-        if (!hasAnyValue && needsVerification(normalizedStatus)) {
-            return 0.0d;
-        }
-        return reported;
-    }
-
-    private boolean hasRealValue(Object value) {
-        if (value == null) {
-            return false;
-        }
-        String text = String.valueOf(value).trim();
-        if (text.isBlank()) {
-            return false;
-        }
-        return !text.equals(NO_APPRAISAL_VALUE)
-                && !text.equals(NO_ENGAGEMENT_VALUE)
-                && !text.equals(NO_EXTRACTED_VALUE)
-                && !text.equals(NO_EXPECTED_VALUE)
-                && !text.equals(NOT_PROVIDED)
-                && !text.equals("__NOT_FOUND__");
-    }
-
-    private String targetFieldFor(String ruleId) {
-        String id = textOr(ruleId, "UNKNOWN_RULE").trim().toUpperCase();
-        return switch (id) {
-            case "S-1" -> "property_address";
-            case "S-2" -> "borrower_name";
-            case "S-3", "C-3" -> "owner_of_public_record";
-            case "S-4" -> "legal_description";
-            case "S-5" -> "neighborhood_name";
-            case "S-6" -> "census_tract";
-            case "S-7" -> "occupant_status";
-            case "S-8" -> "special_assessments";
-            case "S-9" -> "hoa_dues";
-            case "S-10" -> "lender_name";
-            case "S-11", "SCA-10" -> "property_rights";
-            case "S-12" -> "offered_for_sale_12mo";
-            case "C-1" -> "contract_analyzed";
-            case "C-2" -> "contract_price";
-            case "C-4" -> "financial_assistance";
-            case "C-5" -> "personal_property";
-            case "N-1", "N-6", "COM-1" -> "neighborhood_description";
-            case "N-2", "N-7", "COM-2" -> "market_conditions_commentary";
-            case "N-3" -> "one_unit_housing_price_age";
-            case "N-4" -> "present_land_use_total";
-            case "N-5" -> "neighborhood_boundaries";
-            case "ST-1" -> "site_dimensions";
-            case "ST-2" -> "site_area";
-            case "ST-3" -> "site_shape";
-            case "ST-4", "SCA-12" -> "view";
-            case "ST-5" -> "zoning_classification";
-            case "ST-6" -> "highest_best_use";
-            case "ST-7", "I-5", "ST-9" -> "utilities";
-            case "ST-8", "M-4" -> "flood_hazard";
-            case "I-7", "SCA-17" -> "gla";
-            case "I-9", "SCA-16", "PH-6" -> "condition_rating";
-            case "SCA-1" -> "comparable_market_summary";
-            case "SCA-2" -> "comparable_count";
-            case "SCA-5" -> "comparable_data_sources";
-            case "R-1" -> "value_reconciliation";
-            case "R-2" -> "final_opinion_value";
-            case "CA-1", "CA-2", "USDA-1" -> "cost_approach";
-            case "IA-1", "MF-1" -> "rent_schedule";
-            case "IA-2", "MF-2" -> "operating_income_statement";
-            case "PH-1" -> "subject_photos";
-            case "PH-2" -> "interior_photos";
-            case "PH-5", "SCA-27" -> "comparable_photos";
-            case "SK-1" -> "sketch_floor_plan";
-            case "M-1" -> "location_map";
-            case "M-2" -> "aerial_map";
-            case "M-3" -> "plat_map";
-            case "DOC-1" -> "appraiser_license";
-            case "SIG-1" -> "signature_date";
-            case "SIG-2" -> "appraiser_information";
-            case "SIG-3" -> "supervisory_appraiser";
-            case "SIG-4" -> "email_address";
-            case "FHA-2" -> "fha_case_number";
-            case "FHA-10" -> "remaining_economic_life";
-            default -> id.toLowerCase().replace("-", "_") + "_evidence";
-        };
     }
 
     /**

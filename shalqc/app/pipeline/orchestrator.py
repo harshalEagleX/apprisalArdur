@@ -16,6 +16,7 @@ processable order.
 from __future__ import annotations
 
 import logging
+import time
 from typing import List, Optional
 
 from app.extraction.engagement import extract_engagement
@@ -51,7 +52,7 @@ def _blocked_report(order, profile) -> dict:
 
 
 def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = False,
-           mode: Optional[str] = None) -> dict:
+           mode: Optional[str] = None, amc_code: Optional[str] = None) -> dict:
     """Run the full synchronous pipeline for one order folder → reviewer report.
 
     Honors §14 G-0..G-3 (block / cache / XML-overlay-disable), §16 partial-
@@ -68,6 +69,12 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     mode = (mode or settings.judge_mode or "legacy").lower()
 
     order = assemble_order(order_dir)
+    # Caller-supplied amc_code (e.g. Java passes the client's AMC code on
+    # /qc/process) wins over engagement/order-id resolution — a co-located temp
+    # order dir has no matching order-id prefix, so without this it silently falls
+    # back to the _base catalog instead of the AMC's own compiled bundle.
+    if amc_code and amc_code.strip():
+        order.amc_code = amc_code.strip()
     profile = load_profile(order.amc_code)
 
     if order.status == "BLOCKED":
@@ -81,6 +88,11 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
             return cached
 
     degradations: List[str] = []
+
+    # 2026-07-13 timing ledger (perf work order): wall-clock the stages that
+    # actually cost time, so speed is a monitored property, not something
+    # re-diagnosed from scratch every time it regresses.
+    _t_extract0 = time.perf_counter()
 
     # §16 partial-failure: each stage is wrapped; a stage crash degrades, never 5xxs.
     appraisal_fs = _safe_stage(
@@ -120,6 +132,8 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     if contract_fs is not None:
         router.apply(contract_fs)
 
+    extract_s = time.perf_counter() - _t_extract0
+
     # final_shalqccore.md §2/§9: the language-driven judgment path. Shares the
     # extraction/locate above; replaces rules+report with the compiled-checklist
     # judge. Wrapped in §16 partial-failure so a language-path crash still returns.
@@ -129,6 +143,9 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
             lambda: _run_language(order, profile, appraisal_fs, engagement_fs,
                                   contract_fs, llm_client, degradations))
         if report is not None:
+            timings = report.setdefault("timings", {})
+            timings["extract_s"] = round(extract_s, 2)
+            timings["total_s"] = round(extract_s + timings.get("judge_and_packet_s", 0.0), 2)
             return _finalize(report, order, profile, persist, repo)
         # a total language-path failure degrades to the legacy path rather than 5xx.
         degradations.append("language_path_failed: fell back to legacy engine")

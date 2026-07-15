@@ -24,7 +24,7 @@ class _FakeJudge:
         self._reply = reply
         self.telemetry = []
 
-    def complete(self, call_type, system, user, max_tokens=1024):
+    def complete(self, call_type, system, user, max_tokens=1024, reasoning_effort=None):
         class _R:
             def __init__(s, d):
                 s.data = d; s.ok = True; s.call = type("C", (), {"cached": False})()

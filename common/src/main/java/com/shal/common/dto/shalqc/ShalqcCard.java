@@ -41,5 +41,9 @@ public record ShalqcCard(
         @JsonProperty("bound_by")   String boundBy,
         @JsonProperty("binder_confidence") Double binderConfidence,
         @JsonProperty("bound_labels") List<String> boundLabels,
-        @JsonProperty("llm_interaction_id") String llmInteractionId
+        @JsonProperty("llm_interaction_id") String llmInteractionId,
+        // Reject authority (PART 1.1): "rejectable" | "informational". Distinct from
+        // QCRuleResult.severity (BLOCKING/STANDARD) — this says whether the AMC can
+        // reject on the check at all. Only rejectable items reach the reviewer queue.
+        String severity
 ) {}

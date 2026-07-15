@@ -50,7 +50,10 @@ _MAX_COMPS = 9
 
 def _num(value: str) -> Optional[float]:
     try:
-        return float(str(value).replace(",", "").replace("$", "").strip())
+        # a leading "=" is a form/spreadsheet artifact ("= $158,868"); strip it,
+        # but NEVER strip internal whitespace — "$575,000 $475,000" is a genuine
+        # multi-value concatenation that must still fail to parse (and be rejected).
+        return float(str(value).strip().lstrip("=").replace(",", "").replace("$", "").strip())
     except (TypeError, ValueError):
         return None
 
@@ -234,6 +237,192 @@ def _suppress(result: ExtractedField, reason: str) -> None:
     result.suppression_reason = f"rejected as implausible {result.canonical_name}: {reason} (was '{result.value}')"
 
 
+# ── generic schema-driven gate ───────────────────────────────────────────────
+#
+# The per-field validators above are a hand-curated allowlist — they only cover
+# the ~15 fields someone has already gotten burned by. A layout-anchored PDF
+# reader (label-proximity, spatial-row, checkbox) can miss on ANY field: the
+# printed form label itself ("of", "is", the option list next to an unchecked
+# checkbox) is grammatically indistinguishable from a real value unless you
+# know what KIND of value that field is allowed to hold. field_schema.yaml
+# already carries that knowledge (data_type, allowed_values) for every field —
+# this reuses it, generically, with zero per-field code, so a field added to
+# the schema tomorrow is covered automatically (2026-07-13 dry-run causes #1).
+_NUMERIC_TYPES = frozenset({"integer", "number", "currency", "percent", "float"})
+
+# Function/stop words that can never be a real field value on their own — a
+# form's printed label text ("Yes  or  No", "...analysis of...") is built from
+# these; a genuine answer never is. Deliberately excludes yes/no/true/false —
+# those ARE legitimate boolean answers.
+_STOPWORDS = frozenset({
+    "a", "an", "the", "of", "is", "are", "was", "were", "be", "been", "being",
+    "or", "and", "nor", "but", "if", "then", "than", "so", "as", "at", "by",
+    "for", "from", "in", "into", "on", "onto", "to", "with", "within", "this",
+    "that", "these", "those", "it", "its", "not", "no.", "which", "who",
+})
+
+
+def _enum_plausible(fd, value: str) -> bool:
+    v = value.strip().upper()
+    allowed = {a.strip().upper() for a in fd.allowed_values}
+    if v in allowed:
+        return True
+    # a value the reader concatenated across a checkbox's option list ("FWA
+    # HWBB Radiant") is the JOIN of 2+ allowed tokens, never a single one of
+    # them — reject; a genuine multi-select answer for a field that legitimately
+    # allows one is still an exact/singular match handled above.
+    tokens = {t.strip().rstrip(".,;:") for t in re.split(r"[\s/,]+", v) if t.strip()}
+    return bool(tokens) and tokens <= allowed and len(tokens) == 1
+
+
+# MISMO controlled-vocabulary tokens → the UAD-display string the schema enum
+# uses. MISMO ships its own enumerations (_BuiltupRangeType="Over75Percent",
+# _TypicalMarketingTimeDurationType="UnderThreeMonths", dwelling "Detached") that
+# no amount of token/camelCase matching reconciles with the schema's display form
+# ("Over 75%", "Under 3 mths", "Det.") — % vs Percent, word vs abbreviation. Keyed
+# by squished-lowercase; the target is only returned if the FIELD actually allows
+# it, so an entry can never inject a value into a field that doesn't list it. An
+# unknown MISMO spelling simply falls through to suppression (today's behavior) —
+# so this table is strictly additive and safe. Seeded from the 3 test orders
+# (ESNV/ESTX/ESCA); extend as new AMCs surface new MISMO spellings.
+_MISMO_ENUM_SYNONYMS: Dict[str, str] = {
+    # _BuiltupRangeType
+    "over75percent": "Over 75%",
+    "2575percent": "25-75%", "twentyfivetoseventyfivepercent": "25-75%", "25to75percent": "25-75%",
+    "under25percent": "Under 25%", "undertwentyfivepercent": "Under 25%",
+    # _TypicalMarketingTimeDurationType
+    "underthreemonths": "Under 3 mths", "under3months": "Under 3 mths",
+    "threetosixmonths": "3-6 mths", "3to6months": "3-6 mths",
+    "oversixmonths": "Over 6 mths", "over6months": "Over 6 mths",
+    # dwelling type
+    "detached": "Det.", "attached": "Att.",
+    "semidetached": "S-Det./End Unit", "semidetachedendunit": "S-Det./End Unit",
+    # units_count (MISMO carries the integer; schema enumerates the word)
+    "1": "One",
+    # GSESaleType
+    "armslengthsale": "Arms-Length", "nonarmslengthsale": "Non Arms-Length",
+    "shortsale": "Short Sale", "reosale": "REO", "reo": "REO",
+}
+
+
+def _enum_tokens(s: str) -> frozenset:
+    """Uppercased word tokens, splitting on whitespace/slash/comma AND camelCase
+    boundaries — so MISMO's 'FeeSimple'/'OwnerOccupied' tokenize the same way as
+    the schema's 'Fee Simple'/'Owner Occupied'."""
+    spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s)
+    return frozenset(t.rstrip(".,;:") for t in re.split(r"[\s/,]+", spaced.upper()) if t.strip())
+
+
+def _enum_squish(s: str) -> str:
+    """All separators/case removed — 'FeeSimple' and 'Fee Simple' both → 'FEESIMPLE'."""
+    return re.sub(r"[^A-Z0-9]", "", s.upper())
+
+
+def _canonicalize_enum(fd, value: str) -> Optional[str]:
+    """Map a raw enum value to the schema's allowed_value it UNAMBIGUOUSLY names,
+    or None if it matches none / more than one.
+
+    MISMO XML carries terse/camelCase enum tokens ("Purchase", "FeeSimple",
+    "OwnerOccupied") while the schema allowed_values are verbose UAD phrases
+    ("Purchase Transaction", "Fee Simple", "Owner"). Before 2026-07-13 the generic
+    gate compared them VERBATIM and suppressed the terse-but-correct XML answer as
+    implausible — so every conditional check keyed on that field saw an absent
+    label and hedged to REVIEW. Canonicalizing (not merely accepting) rewrites the
+    value to the enum the downstream judge/rules expect. Match order, each gated on
+    EXACTLY ONE allowed value:
+      1. squish-equal ('FeeSimple'=='Fee Simple');
+      2. value's tokens ⊆ an allowed value's tokens ('Purchase' → 'Purchase Transaction');
+      3. an allowed value's tokens ⊆ value's tokens ('OwnerOccupied' → 'Owner').
+    'FWA HWBB Radiant' (a concatenated checkbox join) matches THREE allowed values
+    under rule 3, so the single-match guard still correctly rejects it."""
+    allowed = [a.strip() for a in fd.allowed_values]
+    vsq = _enum_squish(value)
+    if not vsq:
+        return None
+    exact = [a for a in allowed if _enum_squish(a) == vsq]
+    if exact:
+        return exact[0]
+    vtok = _enum_tokens(value)
+    if not vtok:
+        return None
+    sub = [a for a in allowed if vtok <= _enum_tokens(a)]           # value is terser
+    if len(sub) == 1:
+        return sub[0]
+    sup = [a for a in allowed if _enum_tokens(a) <= vtok]           # value has extra word(s)
+    if len(sup) == 1:
+        return sup[0]
+    # controlled-vocabulary synonym, returned only if the field lists it
+    syn = _MISMO_ENUM_SYNONYMS.get(vsq.lower())
+    if syn:
+        ssq = _enum_squish(syn)
+        for a in allowed:
+            if _enum_squish(a) == ssq:
+                return a
+    return None
+
+
+def _numeric_plausible(value: str) -> bool:
+    return _num(value) is not None
+
+
+_BOOLEAN_TOKENS = frozenset({"yes", "no", "y", "n", "true", "false", "1", "0"})
+
+
+def _boolean_plausible(value: str) -> bool:
+    return value.strip().lower().rstrip(".") in _BOOLEAN_TOKENS
+
+
+def _string_plausible(value: str) -> bool:
+    """Reject a value whose every token is a stopword ("of", "is", "or", a
+    label fragment with no content word) — never true for a real answer."""
+    tokens = [t for t in re.split(r"\s+", value.strip().lower()) if t]
+    if not tokens:
+        return False
+    return not all(t.rstrip(".,;:()") in _STOPWORDS for t in tokens)
+
+
+def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
+    from app.extraction.schema import schema_loader
+
+    suppressed = 0
+    for fname, ef in list(merged.items()):
+        if not ef.found:
+            continue
+        fd = schema_loader.get_field(fname)
+        if fd is None:
+            continue
+        value = str(ef.value)
+        ok = True
+        reason = ""
+        if fd.allowed_values:
+            # canonicalize a terse-but-valid enum ("Purchase" → "Purchase
+            # Transaction") to the schema value before judging plausibility, so a
+            # correct XML answer is kept (rewritten), not suppressed.
+            canon = _canonicalize_enum(fd, value)
+            if canon is not None:
+                if canon != ef.value:
+                    logger.info("Plausibility: canonicalized %s='%s' → '%s'", fname, value, canon)
+                    ef.value = canon
+                ok = True
+            else:
+                ok = False
+            reason = f"not one of allowed_values={fd.allowed_values}"
+        elif fd.data_type in _NUMERIC_TYPES:
+            ok = _numeric_plausible(value)
+            reason = f"not numeric (data_type={fd.data_type})"
+        elif fd.data_type == "boolean":
+            ok = _boolean_plausible(value)
+            reason = "not a recognized yes/no/true/false token"
+        elif fd.data_type == "string" and not fd._is_narrative:
+            ok = _string_plausible(value)
+            reason = "value is only stopwords/label-fragment text"
+        if not ok:
+            logger.info("Plausibility (generic) rejected %s='%s': %s", fname, value, reason)
+            _suppress(ef, reason)
+            suppressed += 1
+    return suppressed
+
+
 def validate_fields(merged: Dict[str, ExtractedField]) -> int:
     """Run every field validator over the merged fields in place.
 
@@ -253,4 +442,10 @@ def validate_fields(merged: Dict[str, ExtractedField]) -> int:
             logger.info("Plausibility rejected %s='%s'", fname, ef.value)
             _suppress(ef, "failed plausibility check")
             suppressed += 1
+
+    try:
+        suppressed += _generic_schema_gate(merged)
+    except Exception as exc:  # a buggy gate never breaks extraction (P6)
+        logger.debug("Generic schema gate raised %s — leaving values untouched", exc)
+
     return suppressed

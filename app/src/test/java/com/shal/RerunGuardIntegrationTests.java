@@ -1,6 +1,7 @@
 package com.shal;
 
-import com.shal.common.dto.python.PythonQCResponse;
+import com.shal.common.dto.shalqc.ShalqcResponse;
+import com.shal.common.dto.shalqc.ShalqcCard;
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
 import com.shal.qc.service.QCModelConfig;
@@ -157,7 +158,7 @@ class RerunGuardIntegrationTests {
     /**
      * R2: a re-run of a file whose result is actively held by a reviewer must carry that lock onto
      * the new result, so a *different* reviewer cannot grab it in the window before the original
-     * reviewer reloads. Drives the real {@link QCProcessingService#persistPythonResult} re-run path
+     * reviewer reloads. Drives the real {@link QCProcessingService#persistShalqcResult} re-run path
      * (which supersedes the prior result and creates the new one) and asserts the lock moved, then
      * proves the carried lock still blocks reviewer B while letting reviewer A back in.
      */
@@ -203,7 +204,7 @@ class RerunGuardIntegrationTests {
             });
 
             // Drive the real re-run persist path (supersedes prior, creates the new active result).
-            qcProcessingService.persistPythonResult(ids[1], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
+            qcProcessingService.persistShalqcResult(ids[1], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
 
             // Prior result is now superseded.
             QCResult prior = qcResultRepository.findById(ids[2]).orElseThrow();
@@ -253,7 +254,7 @@ class RerunGuardIntegrationTests {
     /**
      * R1 headline: a partial re-run of a multi-file batch must supersede ONLY the re-run files and
      * leave every other file's active result — and any reviewer decision on it — completely
-     * untouched. Drives the real per-file persist path (persistPythonResult) for a 2-of-4 subset
+     * untouched. Drives the real per-file persist path (persistShalqcResult) for a 2-of-4 subset
      * and asserts the isolation: the 2 re-run files gain a new active result (prior superseded),
      * while the 2 untouched files keep their single active result, including a finalized PASS.
      */
@@ -297,8 +298,8 @@ class RerunGuardIntegrationTests {
             batchId = capturedBatch[0];
 
             // Partial re-run: only files 0 and 1 (simulates the per-file persist the partial path runs).
-            qcProcessingService.persistPythonResult(fileIds[0], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
-            qcProcessingService.persistPythonResult(fileIds[1], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
+            qcProcessingService.persistShalqcResult(fileIds[0], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
+            qcProcessingService.persistShalqcResult(fileIds[1], syntheticResponse(), QCModelConfig.defaults(), 0L, 0);
 
             // Re-run files: prior superseded, a NEW active result exists (history of 2).
             for (int i : new int[]{0, 1}) {
@@ -381,17 +382,16 @@ class RerunGuardIntegrationTests {
     }
 
     /** Minimal Python QC response for driving a re-run persist (no timing/docStats block). */
-    private static PythonQCResponse syntheticResponse() {
-        return new PythonQCResponse(
-                "1.0",
-                true, 10, 1, "test",
-                Map.of(), Map.of(),
-                0, "qc-test", 0, 0, 0,
-                "doc", "job", false, null,
-                "groq", "gpt-oss-120b", null,
-                false, List.of(),
-                false, List.of(),
-                List.of(), List.of(), List.of(), List.of(),
-                null);
+    private static ShalqcResponse syntheticResponse() {
+        ShalqcCard verify = new ShalqcCard(
+                "EQ-1", "please_verify", "SUBJECT", "REVIEW", "Test item", "check", "check",
+                "reject text", "please verify", "expected", "found", "please verify",
+                List.of(), null, Map.of(), null, 0.9, "text", List.of(), "judge_v2",
+                "llm", 0.9, List.of("field_a"), null, "rejectable");
+        return new ShalqcResponse("ORD-test", "TEST", "OK", "v2",
+                Map.of("satisfied", 0, "not_satisfied", 0, "review", 1,
+                       "not_applicable", 0, "cannot_evaluate", 0),
+                List.of(verify), List.of(), List.of(), List.of(), Map.of(),
+                List.of(), Map.of(), null, 0, false);
     }
 }

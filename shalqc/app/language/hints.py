@@ -16,6 +16,50 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.normalize import dates as _dates
+from app.normalize.normalizer import match_band as _match_band
+
+_NUMERIC_TYPES = frozenset({"integer", "number", "currency", "percent", "float"})
+
+# PART 1.3: values that LOOK present but carry no positive/triggering content. A
+# "field must not be blank" check is satisfied by any of these ONLY if the check
+# wants mere presence; a "field triggers X" check must treat them as absent
+# ($0 HOA dues is NOT "HOA dues present"). Surfaced to the judge as a hint.
+_NULLISH = frozenset({
+    "", "0", "0.0", "0.00", "$0", "$0.00", "n/a", "na", "none", "--", "-", "0%", "tbd"})
+
+
+def _is_nullish(v: Any) -> bool:
+    if v is None:
+        return True
+    s = re.sub(r"\s+", " ", str(v)).strip().lower()
+    if s in _NULLISH:
+        return True
+    num = re.sub(r"[,$%\s]", "", s)          # a currency/number that reduces to zero
+    try:
+        return float(num) == 0.0
+    except ValueError:
+        return False
+
+
+def _xdoc_kind(label: str) -> str:
+    """PART 1.2: the comparison kind for a cross-document label (its
+    engagement./contract. prefix stripped), so match_band normalizes correctly."""
+    n = label.split(".", 1)[-1].lower()
+    if "address" in n or "street" in n or n in ("city", "state", "zip", "zip_code"):
+        return "address"
+    if "phone" in n:
+        return "phone"
+    if "email" in n:
+        return "email"
+    if "company" in n or "lender" in n or "client" in n or "amc" in n:
+        return "company"
+    if "borrower" in n or "seller" in n or "owner" in n or n in ("appraiser_name",):
+        return "person"
+    if "transaction_type" in n or "loan_program" in n or "assignment" in n or "purpose" in n:
+        return "enum"
+    if "form" in n or "product" in n:
+        return "form"
+    return "generic"
 
 
 def _num(v: Any) -> Optional[float]:
@@ -84,6 +128,28 @@ def date_diff_days(values: Dict[str, Any], a: str, b: str) -> Optional[int]:
     return abs((da - db).days)
 
 
+def _numeric_family(label: str) -> Optional[str]:
+    """The comp_N-collapsed schema attribute this label is, iff the schema says
+    it is actually numeric-typed — None otherwise (excludes it from sum/min/max
+    entirely). Two labels are commensurable (safe to sum/min/max together) only
+    when they reduce to the SAME family: comp_1_sale_price..comp_7_sale_price
+    are the same attribute repeated across comps (the intended §7 S-10 use);
+    contract_price + year_built, or a quality-rating code + a dollar
+    adjustment, are not — they only look numeric because a regex found digits
+    somewhere in the string (2026-07-13 dry-run cause #5: sums that silently
+    added quality-rating codes to dollar adjustments, and street numbers to
+    census tracts, then had the validator penalize a correct judge answer for
+    disagreeing with the resulting nonsense)."""
+    from app.extraction.schema import schema_loader
+    from app.language.label_dictionary import canonical_label
+
+    family = canonical_label(label)
+    fd = schema_loader.get_field(family)
+    if fd is None or fd.data_type not in _NUMERIC_TYPES:
+        return None
+    return family
+
+
 def equal_after_norm(values: Dict[str, Any], a: str, b: str) -> Optional[bool]:
     va, vb = values.get(a), values.get(b)
     if va is None or vb is None:
@@ -113,11 +179,24 @@ def compute_hints(values: Dict[str, Any], bound_labels: List[str],
         {"hint": "count(bound labels present)", "value": len(present), "labels": present},
     ]
 
-    numeric_labels = [lbl for lbl in bound_labels if _num(values.get(lbl)) is not None]
-    if len(numeric_labels) >= 2:
-        hints.append({"hint": "sum", "value": sum_of(values, numeric_labels), "labels": numeric_labels})
-        hints.append({"hint": "min", "value": min_of(values, numeric_labels), "labels": numeric_labels})
-        hints.append({"hint": "max", "value": max_of(values, numeric_labels), "labels": numeric_labels})
+    # sum/min/max: only across labels that are (a) schema-numeric-typed, not
+    # just regex-parseable, and (b) all the SAME attribute (e.g. every present
+    # comp's sale price) — see _numeric_family. One aggregate block per family
+    # that actually has 2+ members; unrelated numeric fields never mix.
+    families: Dict[str, List[str]] = {}
+    for lbl in bound_labels:
+        if _num(values.get(lbl)) is None:
+            continue
+        fam = _numeric_family(lbl)
+        if fam is not None:
+            families.setdefault(fam, []).append(lbl)
+    for fam, numeric_labels in families.items():
+        if len(numeric_labels) < 2:
+            continue
+        suffix = f" ({fam})" if len(families) > 1 else ""
+        hints.append({"hint": f"sum{suffix}", "value": sum_of(values, numeric_labels), "labels": numeric_labels})
+        hints.append({"hint": f"min{suffix}", "value": min_of(values, numeric_labels), "labels": numeric_labels})
+        hints.append({"hint": f"max{suffix}", "value": max_of(values, numeric_labels), "labels": numeric_labels})
 
     date_labels = [lbl for lbl in bound_labels
                    if _dates.parse_date(str(values.get(lbl) or ""))]
@@ -126,12 +205,29 @@ def compute_hints(values: Dict[str, Any], bound_labels: List[str],
         if dd is not None:
             hints.append({"hint": "date_diff_days", "value": dd, "labels": date_labels})
 
-    # equality: only when the check text/expects reads like a match, and exactly
-    # two non-comp labels are bound (cross-document / cross-section agreement).
-    non_comp = [lbl for lbl in present if not lbl.startswith("comp_")]
-    if len(non_comp) == 2 and re.search(r"match|agree|same|consisten|equal", expects or "", re.I):
-        eq = equal_after_norm(values, non_comp[0], non_comp[1])
-        if eq is not None:
-            hints.append({"hint": "equal_after_norm", "value": eq, "labels": non_comp})
+    # PART 1.3: present-looking values that are actually nullish ($0/N/A/blank).
+    # The judge is told (doctrine) to treat these as NOT present for a presence
+    # check — the fix for EQ-11 ("hoa_dues $0" was read as "HOA present").
+    nullish = [lbl for lbl in present if _is_nullish(values.get(lbl))]
+    if nullish:
+        hints.append({"hint": "nullish_values (present but $0/N/A/blank)",
+                      "value": nullish, "labels": nullish})
+
+    # PART 1.2: a NORMALIZED cross-document comparison, so a trailing comma, a
+    # corporate suffix, ZIP+4, or "Refinance Transaction" vs "Refinance" can no
+    # longer read as a mismatch. Fires ONLY for a genuine cross-document PAIR — an
+    # engagement./contract.-prefixed label AND its same-named appraisal counterpart.
+    # (It must never compare two unrelated same-document fields, e.g. heating vs
+    # air_conditioning — that produced a false "mismatch" reject on EQ-72.)
+    for lbl in present:
+        if not lbl.startswith(("engagement.", "contract.")):
+            continue
+        base = lbl.split(".", 1)[1]
+        if base not in values or values.get(base) is None:
+            continue
+        kind = _xdoc_kind(base)
+        band = _match_band(values.get(base), values.get(lbl), kind)
+        hints.append({"hint": f"normalized_match ({kind}): {band}",
+                      "value": band, "labels": [base, lbl]})
 
     return hints

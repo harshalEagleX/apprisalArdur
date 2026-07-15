@@ -26,6 +26,9 @@ public record ShalqcResponse(
         @JsonProperty("verdict_vocab") String verdictVocab,   // "v2"
         Map<String, Object> summary,
         List<ShalqcCard> cards,
+        // PART 1.1: items with no reject authority — demoted from the reviewer queue,
+        // carried here so the UI can show them in a separate collapsed tab.
+        @JsonProperty("informational_cards") List<ShalqcCard> informationalCards,
         @JsonProperty("extraction_gaps")  List<Map<String, Object>> extractionGaps,
         @JsonProperty("llm_interactions") List<ShalqcInteraction> llmInteractions,
         @JsonProperty("location_metric")  Map<String, Object> locationMetric,

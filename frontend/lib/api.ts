@@ -1169,6 +1169,10 @@ export interface QCRuleResult {
   retryEligible?: boolean;
   help?: RuleHelp | null;
   reviewRequired: boolean;
+  // Reviewer bucket from the SHALqc severity gate: recommended_reject | please_verify
+  // | looks_good | manual_visual | not_applicable | informational. Informational rows
+  // carry no reject authority and are kept OUT of the queue (shown in a collapsed tab).
+  cardGroup?: string | null;
   reviewerVerified?: boolean;
   reviewerComment?: string;
   firstPresentedAt?: string | null;

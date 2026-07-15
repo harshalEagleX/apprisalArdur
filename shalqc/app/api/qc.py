@@ -68,7 +68,12 @@ async def process(request: Request):
         # Java integration runs the language judge (OrderQCResponse: cards +
         # coordinates + llm_interactions). use_llm defaults on.
         use_llm = str(form.get("use_llm", "true")).lower() not in ("false", "0", "no")
-        return run_qc(extract_dir, llm_client=_resolve_client(use_llm), mode="language")
+        # Java passes the client's AMC code so shalqc loads THAT AMC's compiled
+        # bundle (e.g. EQUITYSOLUTIONS) rather than resolving from the temp order
+        # dir and falling back to _base.
+        amc_code = form.get("amc_code") or None
+        return run_qc(extract_dir, llm_client=_resolve_client(use_llm),
+                      mode="language", amc_code=amc_code)
 
     body = await request.json()
     order_dir = (body or {}).get("order_dir")

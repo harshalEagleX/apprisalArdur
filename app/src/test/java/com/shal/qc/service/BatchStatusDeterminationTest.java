@@ -1,6 +1,7 @@
 package com.shal.qc.service;
 
-import com.shal.common.dto.python.PythonQCResponse;
+import com.shal.common.dto.shalqc.ShalqcResponse;
+import com.shal.common.dto.shalqc.ShalqcCard;
 import com.shal.common.dto.python.PythonRuleResult;
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Regression coverage for the scope field round-trip and the needsVerification contract.
  *
- * - scope column persists correctly from syntheticResponse via persistPythonResult  [Fix 6]
+ * - scope column persists correctly from syntheticResponse via persistShalqcResult  [Fix 6]
  * - PythonRuleResult.needsVerification() contract for all recognized statuses
  *
  * (Batch-status determination tests were removed with the batch QC path — QC is order-scoped.)
@@ -60,7 +61,7 @@ class BatchStatusDeterminationTest {
         long[] ids = new long[3];
         seed(tag, ids, QCDecision.TO_VERIFY, null, FileStatus.COMPLETED);
         try {
-            qcProcessingService.persistPythonResult(ids[1], syntheticResponseWithScope(),
+            qcProcessingService.persistShalqcResult(ids[1], syntheticResponseWithScope(),
                     QCModelConfig.defaults(), 0L, 0);
 
             QCResult active = tx.execute(s -> qcResultRepository.findByBatchFileId(ids[1]).orElseThrow());
@@ -162,35 +163,23 @@ class BatchStatusDeterminationTest {
     }
 
     /** Response with one rule of each scope value */
-    private static PythonQCResponse syntheticResponseWithScope() {
-        return new PythonQCResponse(
-                "1.0", true, 5, 1, "test",
-                Map.of(), Map.of(),
-                3, "qc-test", 3, 0, 0,
-                "doc", "job", false, null,
-                "groq", "gpt-oss-120b", null,
-                false, List.of(),
-                false, List.of(),
+    private static ShalqcResponse syntheticResponseWithScope() {
+        // scope persists from each card's `judgeable` (mapper: r.setScope(c.judgeable())).
+        return new ShalqcResponse("ORD-1", "TEST", "OK", "v2",
+                Map.of("satisfied", 3, "not_satisfied", 0, "review", 0),
                 List.of(
-                    scopedRule("S-1",   "pass", "per_document"),
-                    scopedRule("G-1",   "pass", "cross_document"),
-                    scopedRule("SEM-1", "pass", "semantic")
+                    scopedCard("S-1",   "per_document"),
+                    scopedCard("G-1",   "cross_document"),
+                    scopedCard("SEM-1", "semantic")
                 ),
-                List.of(), List.of(), List.of(), null);
+                List.of(), List.of(), List.of(), Map.of(), List.of(), Map.of(), null, 0, false);
     }
 
-    private static PythonRuleResult scopedRule(String ruleId, String status, String scope) {
-        return new PythonRuleResult(
-                ruleId, "Test rule", "SUBJECT", status, "msg",
-                "STANDARD", null, null,           // severity, actionItem, details
-                null, null,                       // appraisalValue, engagementValue
-                0.9, null, null, null,            // confidence, summary, confidenceTier, highlightedValues
-                null, null,                       // extractedValue, expectedValue
-                null, null, null,                 // verifyQuestion, rejectionText, evidence
-                false, null,                      // reviewRequired, targetField
-                null, null, null, null, null,     // sourcePage, bboxX, bboxY, bboxW, bboxH
-                scope                             // scope
-        );
+    private static ShalqcCard scopedCard(String itemId, String scope) {
+        return new ShalqcCard(itemId, "looks_good", "SUBJECT", "SATISFIED", "Test rule",
+                "check", "check", null, "ok", "", "", "ok", List.of(), null, Map.of(),
+                null, 0.9, scope, List.of(), "judge_v2", "llm", 0.9, List.of("f"), null,
+                "informational");
     }
 
     private static String uuid() {

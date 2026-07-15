@@ -124,6 +124,12 @@ def _extract_report(root: ET.Element, f: dict) -> None:
     f["form_type"] = _FORM_TYPE_MAP.get(raw_form, raw_form.lower().replace("fnm", ""))
     f["appraiser_file_id"] = report.get("AppraiserFileIdentifier", "")
     f["assignment_type"] = report.get("AppraisalPurposeType", "")
+    # transaction_type is the report's PURPOSE (Purchase/Refinance) — the same
+    # AppraisalPurposeType attribute, under the vocabulary name the checklist uses
+    # for the order-vs-report match (EQ-B/EQ-D). loan_program (FHA/Conv) is a
+    # DIFFERENT axis and lives only on the engagement letter, never in the XML.
+    if f["assignment_type"]:
+        f["transaction_type"] = f["assignment_type"]
     f["signature_date"] = report.get("AppraiserReportSignedDate", "")
     # 2026-07-13: also write the field_schema.yaml canonical names directly
     # (not just the field_resolution.yaml aliases) — app/rules/* (v1 rules
@@ -140,6 +146,15 @@ def _extract_report(root: ET.Element, f: dict) -> None:
     f["report_form_number"] = f["form_type"]
     f["date_of_signature"] = f["signature_date"]
     f["date_report_signed"] = f["signature_date"]
+    # Appraisal report TYPE (EQ-121) — not a discrete MISMO field, but derivable
+    # from the report title ("Uniform Residential Appraisal Report" → an Appraisal
+    # Report, unless the title/conditions say "Restricted"). A URAR is never a
+    # Restricted report, so this is a clean derivation, not a guess.
+    _title = report.get("_TitleDescription", "") or ""
+    if _title:
+        f["report_title"] = _title
+        f["appraisal_report_type"] = ("Restricted Appraisal Report"
+                                      if "restrict" in _title.lower() else "Appraisal Report")
 
 
 def _extract_parties(root: ET.Element, f: dict) -> None:
@@ -168,11 +183,17 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
                     f["appraiser_phone"] = _cv
                 elif _ct == "email":
                     f.setdefault("appraiser_email", _cv)
-        lic = appraiser.find("APPRAISER_LICENSE")
+        # APPRAISER_LICENSE can repeat (a blank supervisor row alongside the real
+        # one) — pick the license that actually carries an _Identifier so we never
+        # read the empty row (which surfaced appraiser_cert_state as "#").
+        lics = appraiser.findall("APPRAISER_LICENSE")
+        lic = next((l for l in lics if _a(l, "_Identifier")), lics[0] if lics else None)
         if lic is not None:
             f["appraiser_license_number"] = _a(lic, "_Identifier")
+            f["appraiser_state_cert_number"] = f["appraiser_license_number"]
             f["appraiser_license_type"] = _a(lic, "_Type")
             f["appraiser_license_state"] = _a(lic, "_State")
+            f["appraiser_cert_state"] = f["appraiser_license_state"]
             f["appraiser_license_expiration"] = _a(lic, "_ExpirationDate")
             f["appraiser_cert_expiration_date"] = f["appraiser_license_expiration"]
 
@@ -221,6 +242,12 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     f["occupancy_type"]   = _a(prop, "_CurrentOccupancyType")
     f["occupant_status"]  = f["occupancy_type"]
     f["property_rights"]  = _a(prop, "_RightsType")
+    # Legal description — MISMO carries the clean text on PROPERTY/_LEGAL_DESCRIPTION;
+    # without this mapping the field fell to a PDF label-proximity grab that returned
+    # narrative fragments ("aware", "used, offering price(s),") every time.
+    legal = prop.find("_LEGAL_DESCRIPTION")
+    if legal is not None and _a(legal, "_TextDescription"):
+        f["legal_description"] = _a(legal, "_TextDescription")
     _proj = _a(prop, "ProjectClassificationType")
     if _proj:
         f["is_pud"] = "Yes" if _proj.strip().lower() == "pud" else "No"
@@ -253,15 +280,50 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         f["baths"]        = f["bathrooms"]
         f["units_count"]  = _a(struct, "LivingUnitCount")
         f["dwelling_type"] = _a(struct, "AttachmentType")
-        for feat in struct.findall("EXTERIOR_FEATURE"):
-            if _a(feat, "_Type") == "Foundation" and _a(feat, "_Description"):
-                f["foundation_type"] = _a(feat, "_Description")
-                break
-        if not f.get("foundation_type"):
-            for found in struct.findall("FOUNDATION"):
-                if _a(found, "_ExistsIndicator").upper() == "Y":
-                    f["foundation_type"] = _a(found, "_Type")
+        # Heating / cooling — STRUCTURE carries HEATING (_Type + _FuelDescription)
+        # and COOLING (_CentralizedIndicator Y/N). Neither was read before, so the
+        # HVAC checks (EQ-72) fell to a PDF grab that returned "Patio/Deck Cov".
+        _cool = struct.find("COOLING")
+        if _cool is not None and _a(_cool, "_CentralizedIndicator"):
+            f["air_conditioning_type"] = ("Central" if _a(_cool, "_CentralizedIndicator").upper() == "Y"
+                                          else "None")
+        _heat = struct.find("HEATING")
+        if _heat is not None:
+            _htype = _a(_heat, "_Type") or _a(_heat, "_FuelDescription")
+            if _htype:
+                f["heating"] = _htype
+        # Foundation — FOUNDATION repeats once per checkbox; the MARKED one
+        # (_ExistsIndicator='Y') carries the clean type (Slab / Basement). Prefer it
+        # over the free-text EXTERIOR_FEATURE description ("Concrete/ave"). The same
+        # checkbox family also answers basement presence (EQ-70).
+        _found = [(_a(fd, "_Type"), _a(fd, "_ExistsIndicator").upper())
+                  for fd in struct.findall("FOUNDATION")]
+        _marked = [t for t, ind in _found if ind == "Y" and t]
+        if _marked:
+            f["foundation_type"] = _marked[0]
+        else:
+            for feat in struct.findall("EXTERIOR_FEATURE"):
+                if _a(feat, "_Type") == "Foundation" and _a(feat, "_Description"):
+                    f["foundation_type"] = _a(feat, "_Description")
                     break
+        # Basement presence is only informative when a basement EXISTS — the check
+        # (EQ-70) triggers on presence, and foundation_type="Slab" already conveys
+        # "no basement". Emit only the marked (_ExistsIndicator='Y') rows so a slab
+        # house doesn't carry two redundant "No" flags.
+        for _t, _ind in _found:
+            if _t == "Basement" and _ind == "Y":
+                f["has_full_basement"] = "Yes"
+            elif _t == "PartialBasement" and _ind == "Y":
+                f["has_partial_basement"] = "Yes"
+        # Accessory dwelling unit (EQ-36) + basement dimensions — both native.
+        if _a(struct, "_AccessoryUnitExistsIndicator"):
+            f["has_adu"] = "Yes" if _a(struct, "_AccessoryUnitExistsIndicator").upper() == "Y" else "No"
+        _bsmt = struct.find("BASEMENT")
+        if _bsmt is not None:
+            if _a(_bsmt, "SquareFeetCount"):
+                f["basement_gla"] = _a(_bsmt, "SquareFeetCount")
+            if _a(_bsmt, "_FinishedPercent"):
+                f["basement_finish_pct"] = _a(_bsmt, "_FinishedPercent")
         for keq in struct.findall("KITCHEN_EQUIPMENT"):
             _fld = _APPLIANCE_FIELD.get(_a(keq, "_Type"))
             if _fld and _a(keq, "_ExistsIndicator").upper() == "Y":
@@ -431,6 +493,8 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         if f["concessions_indicator"]:
             f["has_financial_assistance"] = f["concessions_indicator"]
         f["concessions_amount"]  = _a(sc, "SalesConcessionAmount")
+        if _a(sc, "SalesConcessionDescription"):
+            f["financial_assistance_description"] = _a(sc, "SalesConcessionDescription")
         f["contract_analysis_comment"] = _a(sc, "_ReviewComment")
         f["is_seller_owner_of_record"] = _a(sc, "SellerIsOwnerIndicator")
         # subject sale type (arms-length?) lives on the GSE SALES_TRANSACTION
@@ -444,6 +508,12 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     if lh is not None:
         f["listed_past_year"]    = _a(lh, "ListedWithinPreviousYearIndicator")
         f["listing_history"]     = _a(lh, "ListedWithinPreviousYearDescription")
+        f["offered_for_sale_12mo"] = f["listed_past_year"]
+        # the UAD description packs "DOM <n>;<free text>" — pull days-on-market out
+        # so EQ-13's data-source/DOM check reads a number, not the whole blob.
+        _dom = re.search(r"\bDOM\s+(\d+)", f["listing_history"], re.I)
+        if _dom:
+            f["days_on_market"] = _dom.group(1)
 
     # Special assessments — the _TAX row carries a _TotalSpecialTaxAmount even
     # when it is "0" (a real answer, not a gap; EQ-10 only needs a comment when > 0).
@@ -454,6 +524,18 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     # PUD/condo PROJECT block (only present for project properties).
     proj = prop.find("PROJECT")
     if proj is not None:
+        # Project name + developer-control flag + PUD classification live natively on
+        # PROJECT — none were read before, so EQ-95 (developer controls HOA) and the
+        # project-name check fell to narrative grabs ("Foxwood Meadows" → "work,").
+        if _a(proj, "_Name"):
+            f["project_name"] = _a(proj, "_Name")
+        _dev = _a(proj, "_DeveloperControlsProjectManagementIndicator")
+        if _dev:
+            f["is_developer_controls_hoa"] = "Yes" if _dev.upper() == "Y" else "No"
+        _pcls = _a(proj, "_ClassificationType")
+        if _pcls and "is_pud" not in f:
+            f["is_pud"] = "Yes" if _pcls.strip().lower() == "pud" else "No"
+            f["is_pud_checked"] = f["is_pud"]
         if _a(proj, "_CommonElementsDescription"):
             f["common_elements_description"] = _a(proj, "_CommonElementsDescription")
         puf = proj.find(".//_PER_UNIT_FEE")
@@ -578,6 +660,11 @@ def _extract_valuation(root: ET.Element, f: dict) -> None:
         return
     f["appraised_value"] = _a(val, "PropertyAppraisedValueAmount")
     f["effective_date"]  = _a(val, "AppraisalEffectiveDate")
+    # market_value_opinion is the SAME fact as the appraised value (there is no
+    # separate MISMO field) — alias it so the reconciliation/site-value checks
+    # (EQ-89, EQ-92, EQ-108, EQ-21) have the value they compare against.
+    if f["appraised_value"]:
+        f["market_value_opinion"] = f["appraised_value"]
 
 
 def _extract_comp_grid(root: ET.Element, f: dict) -> None:
@@ -619,6 +706,11 @@ def _extract_comp_grid(root: ET.Element, f: dict) -> None:
                 f["condition_rating"] = f[f"{pfx}_condition_rating"]
             if f.get(f"{pfx}_quality_rating"):
                 f["quality_rating"] = f[f"{pfx}_quality_rating"]
+            # the subject's own functional-utility rating is the grid's subject-row
+            # value (EQ-71) — the bare canonical name was never populated by XML, so
+            # it fell to a PDF grab that returned the grid ROW LABEL, not the value.
+            if f.get(f"{pfx}_functional_utility"):
+                f["functional_utility"] = f[f"{pfx}_functional_utility"]
             if prior is not None:
                 f["prior_sale_date"]  = _a(prior, "PropertySalesDate")
                 f["prior_sale_price"] = _a(prior, "PropertySalesAmount")
@@ -634,6 +726,26 @@ def _extract_comp_grid(root: ET.Element, f: dict) -> None:
             f[f"{pfx}_sale_price"]          = comp.get("PropertySalesAmount", "")
             f[f"{pfx}_data_source"]         = comp.get("DataSourceDescription", "")
             f[f"{pfx}_verification_source"] = comp.get("DataSourceVerificationDescription", "")
+            # Each comp carries its own COMPARISON_DETAIL (under COMPARISON_DETAIL_
+            # EXTENSION) with the GSE UAD attributes: concession amount, listing
+            # status (SettledSale/ActiveListing), MLS data source, DOM, sale type.
+            # These back EQ-59 (concession w/o adjustment), EQ-115 (sale vs listing),
+            # EQ-13/17 (data source). The plain COMPARABLE_SALE attributes above are
+            # blank in a la mode files — the real values live here.
+            cd = comp.find(".//COMPARISON_DETAIL")
+            if cd is not None:
+                if _a(cd, "GSEConcessionAmount"):
+                    f[f"{pfx}_concession_amount"] = _a(cd, "GSEConcessionAmount")
+                if _a(cd, "GSEDataSourceDescription"):
+                    f[f"{pfx}_data_source"] = _a(cd, "GSEDataSourceDescription")
+                if _a(cd, "GSEDaysOnMarketDescription"):
+                    f[f"{pfx}_days_on_market"] = _a(cd, "GSEDaysOnMarketDescription")
+                # NOTE: GSEListingStatusType (SettledSale/ActiveListing) and
+                # GSESaleType (ArmsLengthSale) are also here and back EQ-115, but they
+                # are MISMO enum codes with NO literal PDF text, so the back-locator
+                # cannot ground them (they'd all land location_quality="none"). Wiring
+                # them now regresses the >=90% exact DoD. Deferred until the back-locator
+                # can page-locate XML-only enum fields (or the DoD excludes that category).
             f[f"{pfx}_adjusted_sale_price"] = comp.get("AdjustedSalesPriceAmount", "")
             f[f"{pfx}_net_adjustment"]      = comp.get("SalePriceTotalAdjustmentAmount", "")
             f[f"{pfx}_net_adj_pct"]         = comp.get("SalePriceTotalAdjustmentNetPercent", "")

@@ -48,6 +48,42 @@ STATUS_DRAFT, STATUS_VALIDATED, STATUS_ACTIVE = "draft", "validated", "active"
 _COMPILED_DIR = Path(__file__).parent.parent.parent / "compiled"
 _DEFAULT_CHECKLIST = (Path(__file__).parent.parent.parent
                       / "readme" / "exampleAMC" / "qc_rejection_catalog.yaml")
+# Per-AMC human-verified binding overrides. Applied verbatim, bypassing the LLM
+# binder AND the label-dictionary filter, so a --force recompile can't regenerate
+# a hand-fixed binding away. See config/binding_overrides/<AMC>.yaml.
+_OVERRIDES_DIR = Path(__file__).parent.parent.parent / "config" / "binding_overrides"
+
+
+def _load_overrides(amc_code: str) -> Dict[str, Dict[str, Any]]:
+    """Return {item_id: override_dict} for an AMC, or {} when none authored."""
+    path = _OVERRIDES_DIR / f"{amc_code}.yaml"
+    if not path.exists():
+        return {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return raw.get("overrides", {}) or {}
+
+
+def _item_from_override(row: Dict[str, Any], ov: Dict[str, Any]) -> CompiledItem:
+    """Build a CompiledItem straight from a human-verified override. Labels are
+    trusted as-is (cross-doc "engagement.*" refs and new canonical names survive);
+    the LLM binder is not consulted. An override may also restate check_text."""
+    return CompiledItem(
+        item_id=row["item_id"],
+        check_text=ov.get("check_text") or row["check_text"],
+        reject_text=row.get("reject_text"),
+        section=row.get("section", "other"),
+        item_name=row.get("item_name", "") or row.get("item", "") or "",
+        bound_labels=list(ov.get("bound_labels") or []),
+        scope=ov.get("scope", "subject"),
+        expects=ov.get("expects", "") or "",
+        judgeable=ov.get("judgeable", "text"),
+        conditional=ov.get("conditional"),
+        bound_by="manual",
+        binder_confidence=float(ov.get("binder_confidence", 0.95) or 0.95),
+        # an override may PIN severity; left unset, __post_init__ derives it from
+        # reject_text + check_text like any other item.
+        severity=ov.get("severity") or "",
+    )
 
 _VISUAL_RX = re.compile(r"\b(photo|photograph|sketch|floor ?plan|map|image|exhibit|picture)\b", re.I)
 _COUNT_RX = re.compile(r"(?:min(?:imum)?|at least|>=|no fewer than)\s*(\d+)", re.I)
@@ -210,7 +246,13 @@ def _llm_bind(client, check_text: str, section: str) -> Optional[Dict[str, Any]]
 
 # ── the compile step ─────────────────────────────────────────────────────────
 
-def _compile_item(row: Dict[str, Any], client) -> CompiledItem:
+def _compile_item(row: Dict[str, Any], client,
+                  overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> CompiledItem:
+    # Human-verified override wins outright — no binder, no drift (§ durable pins).
+    ov = (overrides or {}).get(row["item_id"])
+    if ov:
+        return _item_from_override(row, ov)
+
     check_text = row["check_text"]
     item = CompiledItem(
         item_id=row["item_id"], check_text=check_text,
@@ -229,7 +271,6 @@ def _compile_item(row: Dict[str, Any], client) -> CompiledItem:
     src_labels, needs_other = _labels_from_sources(row.get("sources", []))
     item.bound_labels = list(src_labels)
     item.expects = _expects_from(check_text)
-    is_conditional = bool(_COND_RX.search(check_text) and _THEN_RX.search(check_text))
 
     data = _llm_bind(client, check_text, item.section)
     if data:
@@ -250,9 +291,13 @@ def _compile_item(row: Dict[str, Any], client) -> CompiledItem:
         jd = data.get("judgeable")
         if jd in ("text", "visual", "needs_engagement", "needs_contract"):
             item.judgeable = "needs_engagement" if jd == "needs_contract" else jd
-        cond = data.get("conditional")
-        if isinstance(cond, dict):
-            item.conditional = _filter_conditional(cond)
+        # 2026-07-14: the auto-generated `conditional` block is NOT accepted from the
+        # binder anymore. It carried zero AMC-authored information — the binder
+        # hallucinated a dependency graph (fha_case_number, census_tract, …) around a
+        # plain English sentence and stamped 0.6 on it, which was the sole source of
+        # the "condition label absent → CANNOT_EVALUATE" noise class. The real trigger
+        # is already in check_text, which the judge reads. A genuine machine-readable
+        # gate is authored by hand in a binding override, not generated.
         item.bound_by = "llm"
         item.binder_confidence = float(data.get("binder_confidence", 0.85) or 0.85)
     elif item.bound_labels:
@@ -264,12 +309,6 @@ def _compile_item(row: Dict[str, Any], client) -> CompiledItem:
         # unbound + zero confidence so the gate flags it and it cannot go active.
         item.bound_by = "unbound"
         item.binder_confidence = 0.0
-
-    # AnnexB Part 2: no LLM conditional structure → derive one heuristically.
-    if is_conditional and not item.conditional:
-        item.conditional = _heuristic_conditional(check_text)
-        item.scope = "cross_section"
-        item.binder_confidence = min(item.binder_confidence, 0.6)
 
     # scope/judgeable defaults from deterministic signals.
     if item.scope == "unbound" and item.bound_labels:
@@ -331,7 +370,11 @@ def compile_checklist(amc_code: str, path: Optional[Path] = None,
         return load_compiled(out_path)
 
     rows = load_checklist(path)
-    items = [_compile_item(r, client) for r in rows]
+    overrides = _load_overrides(amc_code)
+    items = [_compile_item(r, client, overrides) for r in rows]
+    if overrides:
+        logger.info("compiler: applied %d human-verified binding override(s) for %s",
+                    len(overrides), amc_code)
     _write_compiled(out_path, amc_code, chash, items, status=STATUS_DRAFT)
     review = _review_needed(items)
     if review:

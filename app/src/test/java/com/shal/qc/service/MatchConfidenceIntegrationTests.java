@@ -1,7 +1,7 @@
 package com.shal.qc.service;
 
-import com.shal.common.dto.python.PythonQCResponse;
-import com.shal.common.dto.python.PythonRuleResult;
+import com.shal.common.dto.shalqc.ShalqcResponse;
+import com.shal.common.dto.shalqc.ShalqcCard;
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
 import com.shal.common.service.FileMatchingService;
@@ -52,7 +52,7 @@ class MatchConfidenceIntegrationTests {
         String tag = "MC_HIGH_" + uuid();
         long[] ids = seedScenario(tag, 1.0, null);
         try {
-            qcProcessingService.persistPythonResult(ids[1], autoPassResponse(),
+            qcProcessingService.persistShalqcResult(ids[1], autoPassResponse(),
                     QCModelConfig.defaults(), 0L, 0);
             QCResult r = tx.execute(s -> qcResultRepository.findByBatchFileId(ids[1]).orElseThrow());
             assertThat(r.getQcDecision())
@@ -71,7 +71,7 @@ class MatchConfidenceIntegrationTests {
         String tag = "MC_LOWENG_" + uuid();
         long[] ids = seedScenario(tag, 0.70, null); // below 0.82 threshold
         try {
-            qcProcessingService.persistPythonResult(ids[1], autoPassResponse(),
+            qcProcessingService.persistShalqcResult(ids[1], autoPassResponse(),
                     QCModelConfig.defaults(), 0L, 0);
             QCResult r = tx.execute(s -> qcResultRepository.findByBatchFileId(ids[1]).orElseThrow());
             assertThat(r.getQcDecision())
@@ -97,7 +97,7 @@ class MatchConfidenceIntegrationTests {
         // high engagement confidence (0.95) but low contract confidence (0.80)
         long[] ids = seedScenario(tag, 0.95, 0.80);
         try {
-            qcProcessingService.persistPythonResult(ids[1], autoPassResponse(),
+            qcProcessingService.persistShalqcResult(ids[1], autoPassResponse(),
                     QCModelConfig.defaults(), 0L, 0);
             QCResult r = tx.execute(s -> qcResultRepository.findByBatchFileId(ids[1]).orElseThrow());
             assertThat(r.getQcDecision())
@@ -118,7 +118,7 @@ class MatchConfidenceIntegrationTests {
         // Both below threshold; contract is worse
         long[] ids = seedScenario(tag, 0.78, 0.70);
         try {
-            qcProcessingService.persistPythonResult(ids[1], autoPassResponse(),
+            qcProcessingService.persistShalqcResult(ids[1], autoPassResponse(),
                     QCModelConfig.defaults(), 0L, 0);
             QCResult r = tx.execute(s -> qcResultRepository.findByBatchFileId(ids[1]).orElseThrow());
             assertThat(r.getQcDecision()).isEqualTo(QCDecision.TO_VERIFY);
@@ -229,24 +229,18 @@ class MatchConfidenceIntegrationTests {
     }
 
     /** Python response where all rules pass (no FAIL/VERIFY) → qcDecision=AUTO_PASS */
-    private static PythonQCResponse autoPassResponse() {
-        PythonRuleResult passRule = new PythonRuleResult(
-                "S-1", "Subject", "SUBJECT", "pass", "OK",
-                "STANDARD", null, null, null, null,             // severity, actionItem, details, appraisalValue, engagementValue
-                0.95, null, null, null,                         // confidence, summary, confidenceTier, highlightedValues
-                null, null,                                     // extractedValue, expectedValue
-                null, null, null,                               // verifyQuestion, rejectionText, evidence
-                false, null, null, null, null, null, null,      // reviewRequired, targetField, sourcePage, bboxX/Y/W/H
-                "per_document");                                // scope
-        return new PythonQCResponse(
-                "1.0", true, 5, 1, "test",
-                Map.of(), Map.of(),
-                1, "qc-test", 1, 0, 0,
-                "doc", "job", false, null,
-                "groq", "gpt-oss-120b", null,
-                false, List.of(),
-                false, List.of(),
-                List.of(passRule), List.of(), List.of(), List.of(), null);
+    /** A SHALqc all-pass response → AUTO_PASS (no not_satisfied, no review). */
+    private static ShalqcResponse autoPassResponse() {
+        ShalqcCard pass = new ShalqcCard(
+                "S-1", "looks_good", "SUBJECT", "SATISFIED", "Subject", "check", "check",
+                null, "ok", "", "", "looks satisfied", List.of(), null, Map.of(),
+                null, 0.95, "text", List.of(), "judge_v2", "llm", 0.9,
+                List.of("subject_x"), null, "informational");
+        return new ShalqcResponse("ORD-1", "TEST", "OK", "v2",
+                Map.of("satisfied", 1, "not_satisfied", 0, "review", 0,
+                       "not_applicable", 0, "cannot_evaluate", 0),
+                List.of(pass), List.of(), List.of(), List.of(), Map.of(),
+                List.of(), Map.of(), null, 0, false);
     }
 
     private static String uuid() {

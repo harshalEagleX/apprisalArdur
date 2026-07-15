@@ -33,15 +33,27 @@ class Settings:
     redis_llm_cache_url: str = field(default_factory=lambda: _env("REDIS_LLM_CACHE_URL") or _env("REDIS_URL"))
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
 
-    # LLM — SHALqc.md §10: 2× openai/gpt-oss-120b, primary → fallback
+    # LLM — 2026-07-13: single-provider (Together only). A second provider
+    # (Groq) was tried as a failover but its account tier's tokens-per-minute
+    # ceiling was far tighter than Together's own capacity, so a Together
+    # slowdown just traded one failure mode for a different, more constrained
+    # one. Deleted entirely rather than left disabled — see TogetherPool
+    # (app/llm/together_pool.py) for the real fix: a per-key token-bucket +
+    # in-flight governor that stops OVER-SENDING instead of reacting to 429s
+    # after the fact.
     together_keys: List[str] = field(default_factory=lambda: [
         k for k in (_env("TOGETHER_API_KEY_1"), _env("TOGETHER_API_KEY_2")) if k
     ])
     together_model: str = field(default_factory=lambda: _env("TOGETHER_MODEL", "openai/gpt-oss-120b"))
     together_base_url: str = "https://api.together.xyz/v1/chat/completions"
-    groq_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
-    groq_model: str = field(default_factory=lambda: _env("GROQ_MODEL", "openai/gpt-oss-120b"))
-    groq_base_url: str = "https://api.groq.com/openai/v1/chat/completions"
+    # Per-key governor (TogetherPool). tpm_budget is conservative-default; set
+    # TOGETHER_TPM_BUDGET_PER_KEY from your actual Together tier limit.
+    together_tpm_budget_per_key: int = field(
+        default_factory=lambda: int(_env("TOGETHER_TPM_BUDGET_PER_KEY", "60000") or 60000))
+    together_max_inflight_per_key: int = field(
+        default_factory=lambda: int(_env("TOGETHER_MAX_INFLIGHT_PER_KEY", "8") or 8))
+    together_timeout_s: float = field(
+        default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "45") or 45))
 
     llm_max_calls_per_order: int = field(default_factory=lambda: int(_env("LLM_MAX_CALLS_PER_ORDER", "28") or 28))
     llm_cache_ttl_hours: int = field(default_factory=lambda: int(_env("LLM_CACHE_TTL_HOURS", "72") or 72))
@@ -60,7 +72,21 @@ class Settings:
 
     @property
     def llm_configured(self) -> bool:
-        return bool(self.together_keys or self.groq_key)
+        return bool(self.together_keys)
+
+    def __post_init__(self) -> None:
+        # Groq was deleted entirely 2026-07-13 (see the LLM block above) — a
+        # stray GROQ_* var almost always means a stale deploy config or a
+        # leftover local .env, not an intentional setting, since nothing reads
+        # it anymore. Fail loudly rather than silently ignoring it, so a
+        # config drift gets caught at boot instead of discovered as "why is
+        # this key configured but never used."
+        stray = [n for n in ("GROQ_API_KEY", "GROQ_MODEL", "GROQ_VISION_API_KEY") if _env(n)]
+        if stray:
+            raise RuntimeError(
+                f"Groq was removed from this codebase (2026-07-13) but {', '.join(stray)} "
+                "is still set in the environment — remove it from .env/deployment secrets. "
+                "Together AI (TOGETHER_API_KEY_1/2) is the only LLM provider now.")
 
 
 settings = Settings()

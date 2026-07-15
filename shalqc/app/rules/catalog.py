@@ -160,7 +160,7 @@ def _body_format(item: dict):
 # check, not a phantom cross-doc VERIFY (defect #3).
 _ENGAGEMENT_HAS = {
     "property_address", "city", "state", "zip_code", "county", "borrower_name",
-    "co_borrower_name", "lender_name", "lender_address", "form_type", "loan_type",
+    "co_borrower_name", "lender_name", "lender_address", "form_type", "loan_program",
     "assignment_type", "legal_description", "appraiser_name", "amc_reg_number",
 }
 

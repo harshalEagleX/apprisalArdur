@@ -118,7 +118,7 @@ items:
   section: order
   item_name: Form Type (Product)
   bound_labels:
-  - assignment_type
+  - report_form_number
   scope: cross_document
   expects: assignment_type == ordered_form_type
   judgeable: text
@@ -157,14 +157,7 @@ items:
   scope: cross_section
   expects: match(order_form_address) && comment_if_mismatch
   judgeable: text
-  conditional:
-    condition_labels:
-    - property_address
-    - city
-    - state
-    - zip_code
-    - county
-    consequence_labels: []
+  conditional: null
   bound_by: llm
   binder_confidence: 0.95
 - item_id: EQ-D
@@ -179,21 +172,16 @@ items:
   bound_labels:
   - borrower_name
   - co_borrower_name
+  - transaction_type
   - owner_of_public_record
-  - loan_type
-  scope: cross_section
-  expects: borrower_name must equal engagement‑letter borrower; co_borrower_name must
-    be present if in letter; if loan_type=Refinance and owner_of_public_record ≠ borrower_name
-    then a comment is required
-  judgeable: text
-  conditional:
-    condition_labels:
-    - loan_type
-    - owner_of_public_record
-    - borrower_name
-    consequence_labels: []
-  bound_by: llm
-  binder_confidence: 0.85
+  scope: cross_document
+  expects: borrower_name == engagement.borrower_name; co_borrower_name present; if
+    transaction_type == Refinance and owner_of_public_record != borrower_name then
+    comment
+  judgeable: needs_engagement
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-1
   check_text: 'Owner of Public record — Provided by the appraiser and be current.
     Owner of Public record does not have to match the borrower. If the transaction
@@ -209,11 +197,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - owner_of_public_record
-    - borrower_name
-    consequence_labels: []
+  conditional: null
   bound_by: llm
   binder_confidence: 0.9
 - item_id: EQ-2
@@ -284,17 +268,7 @@ items:
   scope: cross_section
   expects: neighborhood_name not blank and not one of ['None','N/A','Unknown']
   judgeable: text
-  conditional:
-    condition_labels:
-    - neighborhood_name
-    - appraiser_company_name
-    - appraiser_name
-    - borrower_name
-    consequence_labels:
-    - did_analyze_contract
-    - is_pud_checked
-    - neighborhood_name
-    - occupant_status
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-7
@@ -321,17 +295,7 @@ items:
   scope: cross_section
   expects: format == ^\d{4}\.\d{2}$
   judgeable: text
-  conditional:
-    condition_labels:
-    - census_tract
-    - property_address
-    - state
-    - zip_code
-    consequence_labels:
-    - census_tract
-    - property_address
-    - state
-    - zip_code
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-9
@@ -362,23 +326,13 @@ items:
   bound_labels:
   - special_assessments
   - special_assessments_comment
-  scope: cross_section
-  expects: if special_assessments > 0 then special_assessments_comment non-empty else
-    comment contains "0"
+  scope: subject
+  expects: special_assessments == "0" satisfies (no special assessment); only if special_assessments
+    > 0 must special_assessments_comment be non-empty
   judgeable: text
-  conditional:
-    condition_labels:
-    - special_assessments
-    - special_assessments_comment
-    - comp_N_hoa_monthly_assessment
-    - hoa_monthly_assessment
-    consequence_labels:
-    - special_assessments_comment
-    - special_assessments
-    - comp_N_hoa_monthly_assessment
-    - contract_analysis_comment
-  bound_by: llm
-  binder_confidence: 0.6
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-11
   check_text: 'PUD and HOA — Per FNMA if HOA dues are mandatory, it''s a PUD, proper
     information should filled out in PUD section. Make sure per year or per month
@@ -397,17 +351,7 @@ items:
   scope: cross_section
   expects: if hoa_dues present then is_pud_checked=True and hoa_period not empty
   judgeable: text
-  conditional:
-    condition_labels:
-    - census_tract
-    - fha_case_number
-    - hoa_dues
-    - hoa_monthly_assessment
-    consequence_labels:
-    - fha_case_number
-    - air_conditioning_type
-    - appraisal_report_type
-    - assignment_type
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-E
@@ -423,17 +367,7 @@ items:
   scope: cross_section
   expects: lender_name == order_form_lender_name
   judgeable: needs_engagement
-  conditional:
-    condition_labels:
-    - lender_name
-    - appraiser_company_name
-    - appraiser_name
-    - borrower_name
-    consequence_labels:
-    - lender_name
-    - appraisal_report_type
-    - appraiser_company_name
-    - appraiser_name
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-F
@@ -449,17 +383,7 @@ items:
   scope: cross_section
   expects: lender_address == order_form_lender_address
   judgeable: needs_engagement
-  conditional:
-    condition_labels:
-    - lender_address
-    - appraiser_company_address
-    - comp_N_address
-    - lender_name
-    consequence_labels:
-    - lender_address
-    - rent_comp_N_address
-    - appraiser_company_address
-    - comp_N_address
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-12
@@ -502,17 +426,7 @@ items:
   expects: if offerred_for_sale_12mo == false then data_source present; if true then
     days_on_market, list_price, list_date, mls_number present
   judgeable: text
-  conditional:
-    condition_labels:
-    - mca_median_sale_list_ratio_prior_7_12
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
-    - prior_sale_effective_date_subject
-    consequence_labels:
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
-    - prior_sale_effective_date_subject
-    - prior_sale_price_subject
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-14
@@ -523,16 +437,14 @@ items:
   reject_text: null
   section: contract
   item_name: Did & Did Not box
-  bound_labels: []
+  bound_labels:
+  - did_analyze_contract
+  - contract_analysis_comment
+  - assignment_type
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - assignment_type
-    consequence_labels:
-    - did_analyze_contract
-    - contract_analysis_comment
+  conditional: null
   bound_by: llm
   binder_confidence: 0.95
 - item_id: EQ-15
@@ -562,6 +474,7 @@ items:
   item_name: Data Source(s)
   bound_labels:
   - data_source
+  - is_seller_owner_of_record
   scope: subject
   expects: data_source present when seller is owner of public record
   judgeable: text
@@ -590,17 +503,7 @@ items:
   expects: if has_financial_assistance then financial_assistance_amount > 0 and financial_assistance_description
     non-empty
   judgeable: text
-  conditional:
-    condition_labels:
-    - financial_assistance_amount
-    - concessions_amount
-    - financial_assistance_description
-    - has_financial_assistance
-    consequence_labels:
-    - stories_in_building
-    - appraisal_report_type
-    - comp_N_room_count_total
-    - concessions_amount
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-19
@@ -611,21 +514,17 @@ items:
   reject_text: null
   section: neighborhood
   item_name: Characteristcis & Housing Trends
-  bound_labels: []
+  bound_labels:
+  - location
+  - built_up
+  - growth_rate
+  - property_values
+  - demand_supply
+  - marketing_time
   scope: cross_section
   expects: count(comp_* present) >= 1
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_unit_number
-    - conforms_to_neighborhood
-    - floor_location
-    - land_use_2_4_unit
-    consequence_labels:
-    - is_pud_checked
-    - conforms_to_neighborhood
-    - did_analyze_contract
-    - lease_dates
+  conditional: null
   bound_by: llm
   binder_confidence: 0.3
 - item_id: EQ-21
@@ -647,19 +546,7 @@ items:
   expects: price_high and price_low present; abs(market_value_opinion - predominant_price)
     <= 0.10 * predominant_price
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraised_value
-    - comp_N_adjusted_sale_price
-    - comp_N_sale_price
-    - comp_count_present
-    - year_built
-    - effective_age
-    consequence_labels:
-    - market_conditions_commentary
-    - appraised_value
-    - is_seller_owner_of_record
-    - market_value_opinion
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-22
@@ -687,17 +574,7 @@ items:
   scope: cross_section
   expects: neighborhood_boundaries present
   judgeable: text
-  conditional:
-    condition_labels:
-    - neighborhood_boundaries
-    - conforms_to_neighborhood
-    - mca_neighborhood_analysis_comment
-    - neighborhood_description
-    consequence_labels:
-    - conforms_to_neighborhood
-    - lease_dates
-    - mca_neighborhood_analysis_comment
-    - neighborhood_boundaries
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-24
@@ -761,17 +638,7 @@ items:
   scope: cross_section
   expects: if zoning_compliance != 'legal' then zoning_classification non-empty
   judgeable: text
-  conditional:
-    condition_labels:
-    - zoning_classification
-    - zoning_compliance
-    - appraised_value
-    - common_elements_description
-    consequence_labels:
-    - legal_description
-    - zoning_classification
-    - zoning_compliance
-    - appraisal_subject_to
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-31
@@ -785,10 +652,7 @@ items:
   scope: subject
   expects: highest_and_best_use == false
   judgeable: text
-  conditional:
-    condition_labels:
-    - highest_and_best_use
-    consequence_labels: []
+  conditional: null
   bound_by: llm
   binder_confidence: 0.96
 - item_id: EQ-32
@@ -804,15 +668,7 @@ items:
   scope: cross_section
   expects: utilities_gas == True && utilities_electricity == True
   judgeable: text
-  conditional:
-    condition_labels:
-    - utilities_electricity
-    - adverse_site_conditions
-    - air_conditioning_type
-    - appraisal_report_type
-    consequence_labels:
-    - photo_street
-    - property_address
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-33
@@ -836,13 +692,14 @@ items:
   reject_text: null
   section: site
   item_name: Utilities and Off‐site Improvements Typical
-  bound_labels: []
-  scope: unbound
-  expects: ''
+  bound_labels:
+  - utilities_typical
+  scope: subject
+  expects: utilities_typical == True
   judgeable: text
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.2
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-35
   check_text: 'Adverse Site Conditions — Are there any adverse site conditions or
     external factors (easements, encroachments, environmental conditions, land uses,
@@ -852,11 +709,12 @@ items:
   item_name: Adverse Site Conditions
   bound_labels:
   - adverse_site_conditions
+  - adverse_site_conditions_analysis_comment
   scope: subject
-  expects: adverse_site_conditions == True
+  expects: adverse_site_conditions == False
   judgeable: text
   conditional: null
-  bound_by: llm
+  bound_by: manual
   binder_confidence: 0.95
 - item_id: EQ-36
   check_text: 'General description should be fill up — if one unit checkbox marked
@@ -904,9 +762,9 @@ items:
   section: improvements
   item_name: 'Design (Style):'
   bound_labels:
-  - foundation_type
+  - design_style
   scope: subject
-  expects: foundation_type present
+  expects: design_style present
   judgeable: text
   conditional: null
   bound_by: llm
@@ -967,17 +825,7 @@ items:
   scope: cross_section
   expects: foundation_type present && adverse_conditions present
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraised_value
-    - comp_N_basement_gla
-    - comp_count_present
-    - did_analyze_contract
-    consequence_labels:
-    - comp_N_basement_gla
-    - contract_analysis_comment
-    - did_analyze_contract
-    - fha_case_number
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-45
@@ -1004,17 +852,7 @@ items:
     matches improvement list; porch_patio_deck matches improvement list; if garage/carport
     then number_of_cars present; if car storage None then parking_space_number blank
   judgeable: text
-  conditional:
-    condition_labels:
-    - common_elements_description
-    - exterior_walls
-    - financial_assistance_description
-    - floor_location
-    consequence_labels:
-    - comp_count_present
-    - is_pud_checked
-    - porch_patio_deck
-    - appraised_value
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-47
@@ -1058,19 +896,17 @@ items:
   reject_text: null
   section: improvements
   item_name: Additional Features
-  bound_labels: []
-  scope: cross_section
-  expects: ''
+  bound_labels:
+  - additional_features
+  scope: subject
+  expects: additional_features is non-empty. The field only needs to be filled; a
+    "None", "None Specific.", "N/A" or similar statement DOES satisfy (that is the
+    required way to state there are no energy-efficient items). Do NOT require the
+    literal word "NONE".
   judgeable: text
-  conditional:
-    condition_labels: []
-    consequence_labels:
-    - did_analyze_contract
-    - is_pud_checked
-    - occupant_status
-    - personal_property_items
-  bound_by: llm
-  binder_confidence: 0.2
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-50
   check_text: Condition of the Property — Describe the condition of the property (including
     needed repairs, deterioration, renovations, remodeling, etc.)
@@ -1186,17 +1022,7 @@ items:
   scope: cross_section
   expects: comp_N_data_source present for each comparable
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_data_source
-    - data_source
-    - is_seller_owner_of_record
-    - owner_record_data_source
-    consequence_labels:
-    - comp_count_present
-    - is_seller_owner_of_record
-    - prior_sale_data_source_subject
-    - appraised_value
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-58
@@ -1211,17 +1037,7 @@ items:
   scope: cross_section
   expects: count(comp_* present) >= 1
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_verification_source
-    - comp_N_data_source
-    - data_source
-    - is_seller_owner_of_record
-    consequence_labels:
-    - comp_count_present
-    - appraised_value
-    - comp_N_verification_source
-    - prior_sale_data_source_subject
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-59
@@ -1231,13 +1047,18 @@ items:
     why adjustment is not warranted.
   section: sales_comparison
   item_name: Sale or Financing Concessions
-  bound_labels: []
-  scope: unbound
-  expects: ''
+  bound_labels:
+  - comp_N_concession_amount
+  - comp_N_financing_adj
+  - concessions_amount
+  - has_financial_assistance
+  scope: comps
+  expects: for each comp, if comp_N_concession_amount is a positive amount then a
+    comp_N_financing_adj must be present (a concession given must be adjusted)
   judgeable: text
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.2
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-60
   check_text: 'Date of Sale/Time — S denotes sale date and C denotes closing date
     if the sale date (S) is prior to the closing date (C) reject as: Please verify
@@ -1266,17 +1087,7 @@ items:
   scope: cross_section
   expects: comp_N_location_rating in ['N','B','A']
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_floor_location
-    - comp_N_location_rating
-    - floor_location
-    - location
-    consequence_labels:
-    - adverse_site_conditions
-    - appraised_value
-    - fha_case_number
-    - site_value_estimate
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-62
@@ -1292,14 +1103,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - lease_dates
-    consequence_labels:
-    - appraised_value
-    - comp_count_present
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-63
@@ -1336,20 +1140,16 @@ items:
   reject_text: Please provide Design (style) under improvement and sales grid.
   section: sales_comparison
   item_name: Design (Style)
-  bound_labels: []
-  scope: cross_section
-  expects: ''
+  bound_labels:
+  - design_style
+  - dwelling_type
+  - stories
+  scope: subject
+  expects: design_style present (non-empty)
   judgeable: text
-  conditional:
-    condition_labels:
-    - design_style
-    consequence_labels:
-    - comp_count_present
-    - design_style
-    - sale_type
-    - air_conditioning_type
-  bound_by: llm
-  binder_confidence: 0.3
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-66
   check_text: Quality of Construction — Must be UAD Compliant, Q3, Q4, etc. Any difference
     from subject to comps NOT adjusted must have a 0 in grid adjustment field and
@@ -1426,17 +1226,7 @@ items:
   scope: cross_section
   expects: comp_N_basement_gla present
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_basement_gla
-    - comp_N_room_count_total
-    - total_rooms
-    - trim_finish_material
-    consequence_labels:
-    - comp_count_present
-    - appraised_value
-    - comp_N_adjusted_sale_price
-    - comp_N_basement_gla
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-71
@@ -1460,21 +1250,17 @@ items:
   reject_text: null
   section: sales_comparison
   item_name: Heating/Cooling
-  bound_labels: []
-  scope: cross_section
-  expects: count(comp_* present) >= 1
+  bound_labels:
+  - heating
+  - air_conditioning_type
+  - comp_N_heating_cooling
+  scope: comps
+  expects: heating and air_conditioning_type both present; if the subject heating
+    source is FWA/FWBB/Radiant, at least one comp_N_heating_cooling should match
   judgeable: text
-  conditional:
-    condition_labels:
-    - cooling
-    - heating
-    consequence_labels:
-    - prior_sale_data_source_subject
-    - appraisal_subject_to
-    - appraised_value
-    - comp_N_data_source
-  bound_by: llm
-  binder_confidence: 0.25
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-73
   check_text: Energy Efficient Items — Energy Efficient items need to be described.
     Differences from subject to comp NOT adjusted must have a 0 in grid adjustment
@@ -1503,14 +1289,7 @@ items:
   expects: if subject garage marked then comp_N_garage_carport includes garage with
     driveway (e.g., contains 'ga' and 'dw')
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_garage_carport
-    consequence_labels:
-    - comp_count_present
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
-    - prior_sale_effective_date_subject
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-75
@@ -1525,14 +1304,7 @@ items:
   scope: cross_section
   expects: if porch_patio_deck present then sales grid reflects same amenity
   judgeable: text
-  conditional:
-    condition_labels:
-    - porch_patio_deck
-    consequence_labels:
-    - comp_count_present
-    - fha_case_number
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-76
@@ -1545,17 +1317,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraiser_cert_expiration_date
-    - appraiser_cert_state
-    - appraiser_company_address
-    - appraiser_company_name
-    consequence_labels:
-    - condition_rating
-    - property_address
-    - state
-    - zip_code
+  conditional: null
   bound_by: llm
   binder_confidence: 0.25
 - item_id: EQ-77
@@ -1599,6 +1361,7 @@ items:
   section: prior_sales
   item_name: Research the sale or transfer history of subject
   bound_labels:
+  - sales_history_researched
   - prior_sale_date_subject
   - prior_sale_price_subject
   scope: subject
@@ -1619,23 +1382,14 @@ items:
   section: prior_sales
   item_name: Subject Property 3 year sales or transfer history
   bound_labels:
+  - sales_history_researched
   - prior_sale_date_subject
   - prior_sale_price_subject
   scope: cross_section
   expects: if prior_sale_date_subject within 36 months then prior_sale_price_subject
     must be present and prior sales box marked
   judgeable: text
-  conditional:
-    condition_labels:
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
-    - prior_sale_effective_date_subject
-    - prior_sale_price_subject
-    consequence_labels:
-    - prior_sale_data_source_subject
-    - prior_sale_date_subject
-    - prior_sale_effective_date_subject
-    - prior_sale_price_subject
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-81
@@ -1651,13 +1405,7 @@ items:
   scope: cross_section
   expects: if(comp_N_sale_date within 12mo) then prior_comp_N_sale_date is null
   judgeable: text
-  conditional:
-    condition_labels:
-    - prior_comp_N_sale_date
-    - comp_N_sale_date
-    - comp_count_present
-    - prior_comp_N_sale_price
-    consequence_labels: []
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-82
@@ -1672,17 +1420,7 @@ items:
   scope: cross_section
   expects: date format mm/dd/yyyy, only most recent
   judgeable: text
-  conditional:
-    condition_labels:
-    - prior_comp_N_sale_date
-    - prior_sale_date_subject
-    - prior_sale_effective_date_subject
-    - comp_N_sale_date
-    consequence_labels:
-    - appraisal_report_type
-    - contract_analysis_comment
-    - contract_date
-    - date_report_signed
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-83
@@ -1697,17 +1435,7 @@ items:
   scope: cross_section
   expects: value_present
   judgeable: text
-  conditional:
-    condition_labels:
-    - mca_median_sale_price_prior_4_6
-    - mca_median_sale_price_prior_7_12
-    - prior_comp_N_sale_price
-    - prior_sale_price_subject
-    consequence_labels:
-    - market_conditions_commentary
-    - appraisal_report_type
-    - contract_analysis_comment
-    - contract_date
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-84
@@ -1723,17 +1451,7 @@ items:
   scope: cross_section
   expects: len(prior_sale_data_source_subject) > 0
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_data_source
-    - data_source
-    - is_seller_owner_of_record
-    - owner_record_data_source
-    consequence_labels:
-    - contract_date
-    - fha_case_number
-    - owner_of_public_record
-    - appraisal_report_type
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-85
@@ -1747,17 +1465,7 @@ items:
   scope: cross_section
   expects: date present
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_data_source
-    - data_source
-    - effective_date
-    - is_seller_owner_of_record
-    consequence_labels:
-    - comp_N_sale_date
-    - contract_date
-    - date_report_signed
-    - prior_comp_N_sale_date
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-86
@@ -1788,17 +1496,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - sales_comparison_summary
-    - appraised_value
-    - comp_count_present
-    - appraiser_cert_expiration_date
-    consequence_labels:
-    - appraised_value
-    - comp_N_adjusted_sale_price
-    - comp_N_sale_price
-    - comp_count_present
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-88
@@ -1808,7 +1506,7 @@ items:
   section: prior_sales
   item_name: Indicated value by sales comparison
   bound_labels:
-  - sales_comparison_summary
+  - indicated_value_sca
   scope: subject
   expects: present and equals market_value_opinion
   judgeable: text
@@ -1829,17 +1527,7 @@ items:
   scope: cross_section
   expects: indicated_value_sca == market_value_opinion
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraised_value
-    - indicated_value_cost_approach
-    - indicated_value_income_approach
-    - comp_count_present
-    consequence_labels:
-    - appraised_value
-    - indicated_monthly_market_rent
-    - indicated_value_cost_approach
-    - indicated_value_income_approach
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-91
@@ -1868,17 +1556,7 @@ items:
   scope: cross_section
   expects: site_value_estimate present
   judgeable: text
-  conditional:
-    condition_labels:
-    - market_value_opinion
-    - site_value_estimate
-    - adverse_site_conditions
-    - appraised_value
-    consequence_labels:
-    - market_value_opinion
-    - site_value_estimate
-    - adverse_site_conditions
-    - appraisal_report_type
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-93
@@ -1905,13 +1583,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - indicated_value_income_approach
-    - income_approach_monthly_rent
-    - indicated_value_cost_approach
-    - is_income_approach_used
-    consequence_labels: []
+  conditional: null
   bound_by: llm
   binder_confidence: 0.2
 - item_id: EQ-95
@@ -1926,14 +1598,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - is_developer_controls_hoa
-    consequence_labels:
-    - appraisal_report_type
-    - appraised_value
-    - are_facilities_complete
-    - census_tract
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-96
@@ -1948,17 +1613,7 @@ items:
   scope: cross_section
   expects: presence(date_report_signed) == true
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraisal_report_type
-    - appraiser_cert_expiration_date
-    - appraiser_cert_state
-    - appraiser_company_address
-    consequence_labels:
-    - appraiser_cert_expiration_date
-    - appraiser_cert_state
-    - appraiser_state_cert_number
-    - date_report_signed
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-G
@@ -2067,13 +1722,7 @@ items:
   scope: cross_section
   expects: presence(appraiser_state_cert_number)
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraiser_cert_state
-    - appraiser_state_cert_number
-    - did_analyze_contract
-    - is_pud_checked
-    consequence_labels: []
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-105
@@ -2126,6 +1775,7 @@ items:
   section: signature
   item_name: APPRAISED VALUE OF SUBJECT PROPERTY $
   bound_labels:
+  - appraised_value
   - market_value_opinion
   scope: cross_document
   expects: ''
@@ -2134,22 +1784,21 @@ items:
   bound_by: llm
   binder_confidence: 0.92
 - item_id: EQ-109
-  check_text: 'Name — AMC name under the LENDER/CLIENT is requied for all report.
-    | Triggers: If AMC name is missing reject as: 1. In the signature card, please
-    include the AMC name: Fastapp Appraisal Management Company.; If AMC name is different
-    or incorrect reject as : In the signature card, please update the AMC name: Fastapp
-    Appraisal Management Company.'
-  reject_text: null
+  check_text: Name — An AMC name under the LENDER/CLIENT is required for all reports.
+    Reject ONLY if no AMC name is present. Any AMC name present satisfies — do not
+    reject for a specific or differing name.
+  reject_text: In the signature card, please include the AMC name under Lender/Client.
   section: signature
   item_name: Name
   bound_labels:
-  - lender_name
+  - amc_name
   scope: subject
-  expects: lender_name == "Fastapp Appraisal Management Company"
+  expects: amc_name present — SATISFIED when any non-empty AMC name appears under
+    Lender/Client. Do NOT require or compare against any specific name.
   judgeable: text
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.9
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-110
   check_text: Company Name — Must match the Client Engagement letter (Lender/client
     name)
@@ -2157,14 +1806,14 @@ items:
   section: signature
   item_name: Company Name
   bound_labels:
-  - appraiser_company_name
   - lender_name
+  - engagement.lender_name
   scope: cross_document
-  expects: appraiser_company_name == lender_name
+  expects: lender_name == engagement.lender_name
   judgeable: needs_engagement
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.9
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-111
   check_text: Company Address — Must match the Client Engagement letter (Lender/client
     address)
@@ -2172,13 +1821,14 @@ items:
   section: signature
   item_name: Company Address
   bound_labels:
-  - appraiser_company_address
+  - lender_address
+  - engagement.lender_address
   scope: cross_document
-  expects: match(lender_address)
+  expects: lender_address == engagement.lender_address
   judgeable: needs_engagement
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.92
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-112
   check_text: Email Address — not required
   reject_text: null
@@ -2203,17 +1853,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - contract_analysis_comment
-    - mca_neighborhood_analysis_comment
-    - prior_sale_analysis_comment
-    - site_area
-    consequence_labels:
-    - appraised_value
-    - are_facilities_complete
-    - commercial_space_pct
-    - comp_count_present
+  conditional: null
   bound_by: llm
   binder_confidence: 0.2
 - item_id: EQ-114
@@ -2244,17 +1884,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - comp_N_is_listing
-    - comp_N_room_count_total
-    - comp_count_present
-    - land_use_total
-    consequence_labels:
-    - comp_count_present
-    - appraised_value
-    - comp_N_adjusted_sale_price
-    - comp_N_data_source
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-116
@@ -2266,26 +1896,29 @@ items:
   section: mc_1004
   item_name: Median Sale & List Price, DOM, Sale/List %
   bound_labels:
+  - mca_median_sale_price_prior_7_12
+  - mca_median_sale_price_prior_4_6
   - mca_median_sale_price_current_3
   - mca_median_list_price_prior_7_12
-  - mca_median_sale_dom_prior_7_12
+  - mca_median_list_price_prior_4_6
+  - mca_median_list_price_current_3
+  - mca_median_dom_prior_7_12
+  - mca_median_dom_prior_4_6
+  - mca_median_dom_current_3
+  - mca_median_list_dom_prior_7_12
+  - mca_median_list_dom_prior_4_6
+  - mca_median_list_dom_current_3
   - mca_median_sale_list_ratio_prior_7_12
-  scope: cross_section
-  expects: each bound field must be non‑empty (or "0"/"N/A" as appropriate)
+  - mca_median_sale_list_ratio_prior_4_6
+  - mca_median_sale_list_ratio_current_3
+  scope: subject
+  expects: SATISFIED when every bound field has ANY value. A currency ("$415,000"),
+    percent ("98%"), integer, "0", or "N/A" all count as filled. Do not require a
+    particular format. Only REVIEW if a listed field is genuinely blank/absent.
   judgeable: text
-  conditional:
-    condition_labels:
-    - mca_median_list_price_prior_7_12
-    - mca_median_sale_list_ratio_prior_7_12
-    - mca_median_sale_price_current_3
-    - mca_median_sale_price_prior_4_6
-    consequence_labels:
-    - appraised_value
-    - are_facilities_complete
-    - commercial_space_pct
-    - comp_count_present
-  bound_by: llm
-  binder_confidence: 0.6
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-117
   check_text: Overall Trend — All lightly shaded trends should be marked where there
     are at least 2 points of data provided in the Inventory analysis and Median sale
@@ -2297,20 +1930,13 @@ items:
   item_name: Overall Trend
   bound_labels:
   - mca_trend_median_sale_price
-  scope: cross_section
-  expects: count(comp_* present) >= 2
+  - mca_trend_total_sales
+  scope: subject
+  expects: mca_trend_median_sale_price present
   judgeable: text
-  conditional:
-    condition_labels:
-    - mca_trend_median_sale_price
-    - mca_trend_total_sales
-    consequence_labels:
-    - mca_trend_median_sale_price
-    - appraised_value
-    - mca_median_list_price_prior_7_12
-    - mca_median_sale_list_ratio_prior_7_12
-  bound_by: llm
-  binder_confidence: 0.6
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-118
   check_text: Commentary — Must be completed for each section and adequately explain
     the data provided above. Must be specific to the report and no canned commentary
@@ -2339,17 +1965,7 @@ items:
   scope: cross_section
   expects: project_name && project_phase && unit_number
   judgeable: text
-  conditional:
-    condition_labels:
-    - unit_number
-    - comp_N_project_name
-    - is_project_from_conversion
-    - mca_project_months_supply_current_3
-    consequence_labels:
-    - unit_number
-    - appraisal_subject_to
-    - appraised_value
-    - are_facilities_complete
+  conditional: null
   bound_by: llm
   binder_confidence: 0.6
 - item_id: EQ-120
@@ -2406,17 +2022,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraiser_state_cert_number
-    - appraiser_cert_expiration_date
-    - appraiser_cert_state
-    - supervisory_appraiser_cert_number
-    consequence_labels:
-    - prior_services_performed
-    - is_pud_checked
-    - is_seller_owner_of_record
-    - prior_sale_analysis_comment
+  conditional: null
   bound_by: llm
   binder_confidence: 0.3
 - item_id: EQ-124
@@ -2462,17 +2068,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels:
-    - photo_front
-    - photo_rear
-    - appraisal_subject_to
-    - is_subject_to_ground_rent
-    consequence_labels:
-    - photo_front
-    - photo_rear
-    - appraisal_subject_to
-    - contract_date
+  conditional: null
   bound_by: llm
   binder_confidence: 0.2
 - item_id: EQ-127
@@ -2577,23 +2173,16 @@ items:
   reject_text: null
   section: exhibits
   item_name: Appraisers License
-  bound_labels: []
-  scope: cross_section
-  expects: ''
+  bound_labels:
+  - appraiser_cert_expiration_date
+  - date_report_signed
+  - appraiser_cert_state
+  scope: subject
+  expects: appraiser_cert_expiration_date is after date_report_signed
   judgeable: text
-  conditional:
-    condition_labels:
-    - appraiser_cert_expiration_date
-    - appraiser_cert_state
-    - appraiser_company_address
-    - appraiser_company_name
-    consequence_labels:
-    - contract_date
-    - fha_case_number
-    - date_of_signature
-    - date_report_signed
-  bound_by: llm
-  binder_confidence: 0.2
+  conditional: null
+  bound_by: manual
+  binder_confidence: 0.95
 - item_id: EQ-135
   check_text: E & O Insurance — Is not required for every report, if not included,
     this is ok and will not need a revision.
@@ -2604,12 +2193,7 @@ items:
   scope: cross_section
   expects: ''
   judgeable: text
-  conditional:
-    condition_labels: []
-    consequence_labels:
-    - appraisal_report_type
-    - date_report_signed
-    - remaining_economic_life
+  conditional: null
   bound_by: llm
   binder_confidence: 0.2
 - item_id: EQ-136
@@ -2618,10 +2202,10 @@ items:
   section: exhibits
   item_name: UAD data set
   bound_labels:
-  - data_source
+  - uad_version
   scope: subject
-  expects: data_source == 'UAD'
+  expects: uad_version contains "UAD"
   judgeable: text
   conditional: null
-  bound_by: llm
+  bound_by: manual
   binder_confidence: 0.95

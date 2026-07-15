@@ -1,26 +1,36 @@
 """
-llm.client (lcl-1.0.0) — SHALqc.md §10 LLM subsystem.
+llm.client (lcl-2.0.0) — the LLM subsystem, single-provider (Together AI).
 
-One OpenAI-compatible chat client with:
-  * 2-key failover — Together AI key-1/key-2 round-robin (primary), Groq on
-    429 / 5xx / timeout (SHALqc.md §10 two-key failover).
-  * Redis content-hash cache — key = sha256(call_type + model + prompt_version +
-    payload), TTL from settings (72h per §17 PII). A cache HIT still emits an
-    LLMCall{cached: true} so usage counts stay honest (§10).
-  * telemetry — every call (hit or miss) appends an LLMCall record the report
-    can aggregate.
-  * temperature=0, JSON-only contract, one retry on invalid JSON, then a typed
-    failure the caller degrades on (never a crash — P6).
+2026-07-13: Groq deleted entirely (was a failover-on-429/5xx/timeout second
+provider). Its account tier's tokens-per-minute ceiling was far tighter than
+Together's own, so routing a Together slowdown to Groq just traded one
+failure mode for a worse-constrained one — confirmed directly from Groq's own
+error text (`tokens per minute (TPM): Limit 8000, Requested 15949`) once
+narrative packets started carrying real prose instead of empty/garbage
+values. Replaced with TogetherPool: a per-key token-bucket + in-flight
+governor that stops SENDING what a key's budget can't take, rather than
+reacting to a 429 after the fact.
 
-Provides `complete()` (raw structured call) plus the two protocol methods the
-rest of the system already expects:
-  * `ask(section, fields, page_text)` — the GapfillClient protocol
-    (extraction/llm_gapfill.py C1), and
-  * `classify(system, user, ...)` — used by the tier-2 judge (llm/judge.py).
+Retry policy (error-code only, never on timeout):
+  * 429 / 5xx / a connection-level transport error → retry, up to 2 times,
+    backoff 2s then 8s, against a (likely) different pool key.
+  * A genuine timeout means the call is dead — no retry. The caller's S-6
+    fallback (REVIEW `llm_unavailable`, packet attached) is the correct,
+    honest outcome; a second attempt at the same slow thing is not a fix.
 
-With NO keys configured the client is still constructed but `available` is
-False; callers pass it as None-equivalent so the engine degrades tier-2/3 rules
-to VERIFY `llm_unavailable` rather than calling out (SHALqc-CORE §4.0).
+Other pieces unchanged from lcl-1.0.0:
+  * Redis content-hash cache (file-cache fallback) — key = sha256(call_type +
+    model + prompt_version + payload), TTL from settings.
+  * telemetry — every call (hit or miss) appends an LLMCall record.
+  * temperature=0, JSON-only contract, one in-call retry on invalid JSON
+    (a repair nudge appended to the SAME call, distinct from the provider-
+    level retry above), then a typed failure the caller degrades on (P6).
+
+Provides `complete()` plus the two protocol methods the rest of the system
+already expects: `ask()` (GapfillClient protocol) and `classify()` (tier-2
+judge). With no key configured the client is still constructed but
+`available` is False; callers pass it as None-equivalent so the engine
+degrades tier-2/3 rules to VERIFY `llm_unavailable` (SHALqc-CORE §4.0).
 """
 
 from __future__ import annotations
@@ -29,22 +39,31 @@ import hashlib
 import json
 import logging
 import os
-import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from app.config import settings
+from app.llm.together_pool import TogetherPool, estimate_tokens
 
-__version__ = "lcl-1.0.0"
+__version__ = "lcl-2.0.0"
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 30.0
 PROMPT_VERSION = "v1"
+# gpt-oss-120b is a reasoning model — reasoning_effort=high (or provider-default
+# on some routes) burns 2-3x the tokens/latency on invisible chain-of-thought
+# before the JSON answer (measured: default ~15s/5KB reply, high ~40s/16KB
+# reply, for the exact same tiny judge packet). The judge's job is a
+# structured classification against an explicit rubric, not open-ended
+# reasoning — pin it low so most of every call's time goes into the answer,
+# not the thinking. 2026-07-13 perf investigation.
+_REASONING_EFFORT = "low"
+_RETRY_BACKOFFS_S = (2.0, 8.0)   # error-code retries only — see module docstring
+_POOL_ACQUIRE_TIMEOUT_S = 20.0
 
 # When Redis is not configured, responses are cached to this directory so every
 # LLM reply is persisted on disk (permanent — survives process exit) and re-runs
@@ -57,7 +76,7 @@ _FILE_CACHE_DIR = os.environ.get(
 
 @dataclass
 class LLMCall:
-    """Telemetry for one call — cache hits included (cached=True), per §10."""
+    """Telemetry for one call — cache hits included (cached=True)."""
     call_type: str
     provider: str
     model: str
@@ -65,6 +84,7 @@ class LLMCall:
     ok: bool = True
     ms: float = 0.0
     error: Optional[str] = None
+    retries: int = 0
 
 
 class LLMResult:
@@ -80,12 +100,29 @@ class LLMResult:
         return self.data is not None and self.call.ok
 
 
+def _is_reasoning_model(model: str) -> bool:
+    """Models that accept the `reasoning_effort` param. gpt-oss is the reasoning
+    model in use; qwq/o1-style also qualify. Non-reasoning models (gemma, plain
+    Qwen instruct, llama) must NOT receive it or Together returns 400."""
+    m = model.lower()
+    return "gpt-oss" in m or "qwq" in m or "o1" in m or "deepseek-r1" in m
+
+
+def _is_retryable(err: str) -> bool:
+    """429 / 5xx / connection-level transport error → retryable. A genuine
+    timeout (the call was sent and never came back in time) is deliberately
+    NOT retryable — see module docstring."""
+    return err.startswith("http_429") or err.startswith("http_5") or err.startswith("transport:")
+
+
 class LLMClient:
     def __init__(self) -> None:
         self._together_keys = list(settings.together_keys)
-        self._together_idx = 0
-        self._idx_lock = threading.Lock()
-        self._groq_key = settings.groq_key
+        self._pool = TogetherPool(
+            self._together_keys,
+            tpm_budget_per_key=settings.together_tpm_budget_per_key,
+            max_inflight_per_key=settings.together_max_inflight_per_key,
+        )
         self.telemetry: List[LLMCall] = []
         self._redis = self._init_redis()
         # File cache is the fallback whenever Redis is not active — it makes LLM
@@ -102,7 +139,7 @@ class LLMClient:
     # ------------------------------------------------------------------
     @property
     def available(self) -> bool:
-        return bool(self._together_keys or self._groq_key)
+        return bool(self._together_keys)
 
     def _init_redis(self):
         url = settings.redis_llm_cache_url
@@ -119,14 +156,6 @@ class LLMClient:
             return None
 
     # ------------------------------------------------------------------
-    def _next_together_key(self) -> Optional[str]:
-        if not self._together_keys:
-            return None
-        with self._idx_lock:
-            key = self._together_keys[self._together_idx % len(self._together_keys)]
-            self._together_idx += 1
-        return key
-
     def _cache_key(self, call_type: str, model: str, payload: str) -> str:
         h = hashlib.sha256(f"{call_type}|{model}|{PROMPT_VERSION}|{payload}".encode("utf-8")).hexdigest()
         return f"shalqc:llm:{h}"
@@ -172,11 +201,15 @@ class LLMClient:
 
     # ------------------------------------------------------------------
     def complete(self, call_type: str, system: str, user: str,
-                 max_tokens: int = 1024) -> LLMResult:
-        """One JSON-mode chat completion with cache + failover. Returns an
-        LLMResult whose .data is the parsed JSON reply (or None on failure)."""
+                 max_tokens: int = 1024, reasoning_effort: Optional[str] = None) -> LLMResult:
+        """One JSON-mode chat completion, governed by TogetherPool. Returns an
+        LLMResult whose .data is the parsed JSON reply (or None on failure).
+        `reasoning_effort` overrides the module default (low) — callers that
+        batch by kind (judge_v2's fact/cross_doc/narrative classes) can tune
+        it per class once the replay harness (tools/replay_harness.py) has
+        proven a lower effort doesn't flip any verdict."""
         payload_sig = f"{system}\n{user}"
-        model = settings.together_model if self._together_keys else settings.groq_model
+        model = settings.together_model
         cache_key = self._cache_key(call_type, model, payload_sig)
 
         cached = self._cache_get(cache_key)
@@ -185,71 +218,105 @@ class LLMClient:
             self.telemetry.append(call)
             return LLMResult(cached, call, raw=json.dumps(cached, ensure_ascii=False))
 
+        if not self._together_keys:
+            call = LLMCall(call_type=call_type, provider="none", model=model, ok=False,
+                           error="no_provider_configured")
+            self.telemetry.append(call)
+            return LLMResult(None, call)
+
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        estimated = estimate_tokens(system, user, max_tokens)
 
-        # provider order: each Together key, then Groq
-        attempts: List[tuple] = []
-        for _ in range(len(self._together_keys)):
-            key = self._next_together_key()
-            if key:
-                attempts.append(("together", settings.together_base_url, key, settings.together_model))
-        if self._groq_key:
-            attempts.append(("groq", settings.groq_base_url, self._groq_key, settings.groq_model))
-
-        last_err = "no_provider_configured"
-        for provider, url, key, model in attempts:
-            data, err, ms, raw = self._one_call(url, key, model, messages, max_tokens)
+        last_err = "pool_exhausted"
+        retries = 0
+        while True:
+            key = self._pool.acquire(estimated, timeout=_POOL_ACQUIRE_TIMEOUT_S)
+            if key is None:
+                last_err = "pool_exhausted"
+                break
+            try:
+                data, err, ms, raw = self._one_call(key, model, messages, max_tokens, reasoning_effort)
+            finally:
+                self._pool.release(key)
             if data is not None:
-                call = LLMCall(call_type=call_type, provider=provider, model=model, ok=True, ms=ms)
+                call = LLMCall(call_type=call_type, provider="together", model=model,
+                               ok=True, ms=ms, retries=retries)
                 self.telemetry.append(call)
                 self._cache_put(cache_key, data,
                                 meta={"call_type": call_type, "model": model,
                                       "system": system, "user": user})
                 return LLMResult(data, call, raw=raw)
             last_err = err
-            logger.warning("LLM %s failed on %s: %s", call_type, provider, err)
+            logger.warning("LLM %s failed: %s (retries=%d)", call_type, err, retries)
+            if not _is_retryable(err) or retries >= len(_RETRY_BACKOFFS_S):
+                break
+            time.sleep(_RETRY_BACKOFFS_S[retries])
+            retries += 1
 
-        call = LLMCall(call_type=call_type, provider="none", model=model, ok=False, error=last_err)
+        call = LLMCall(call_type=call_type, provider="none", model=model, ok=False,
+                       error=last_err, retries=retries)
         self.telemetry.append(call)
         return LLMResult(None, call)
 
-    def _one_call(self, url: str, key: str, model: str, messages: List[dict],
-                  max_tokens: int):
+    def _one_call(self, key: str, model: str, messages: List[dict], max_tokens: int,
+                  reasoning_effort: Optional[str] = None):
         body = {
             "model": model, "messages": messages, "temperature": 0,
             "max_tokens": max_tokens, "response_format": {"type": "json_object"},
         }
+        # reasoning_effort is a reasoning-model-only param — Together 400s if it's
+        # sent to a non-reasoning model (gemma/Qwen/…). Only attach it for models
+        # that accept it, so the same code path can A/B different models.
+        if _is_reasoning_model(model):
+            body["reasoning_effort"] = reasoning_effort or _REASONING_EFFORT
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        url = settings.together_base_url
         t0 = time.perf_counter()
         try:
-            resp = httpx.post(url, json=body, headers=headers, timeout=_TIMEOUT)
+            resp = httpx.post(url, json=body, headers=headers, timeout=settings.together_timeout_s)
+        except httpx.TimeoutException as exc:
+            # deliberately NOT prefixed "transport:" — _is_retryable must never
+            # retry this (module docstring: a timeout means the call is dead).
+            return None, f"timeout:{exc}", (time.perf_counter() - t0) * 1000, None
         except Exception as exc:
             return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000, None
         ms = (time.perf_counter() - t0) * 1000
-        if resp.status_code in (429,) or resp.status_code >= 500:
-            return None, f"http_{resp.status_code}", ms, None   # failover trigger
+        if resp.status_code == 429 or resp.status_code >= 500:
+            return None, f"http_{resp.status_code}", ms, None   # retry trigger
         if resp.status_code != 200:
-            return None, f"http_{resp.status_code}:{resp.text[:120]}", ms, None
+            return None, f"http_{resp.status_code}:{resp.text[:200]}", ms, None
         try:
-            content = resp.json()["choices"][0]["message"]["content"]
+            choice = resp.json()["choices"][0]
+            content = choice["message"]["content"]
+            finish = choice.get("finish_reason", "")
         except Exception as exc:
             return None, f"bad_envelope:{exc}", ms, None
         data = _parse_json(content)
         if data is None:
-            # one retry with a repair nudge appended (SHALqc-CORE §4.0)
+            # finish_reason distinguishes the two failure modes that both surface
+            # as invalid JSON: "length" = the reply was TRUNCATED (max_tokens too
+            # small for the batch, esp. with reasoning overhead) → the fix is more
+            # tokens / smaller batch, NOT a repair nudge; anything else = the model
+            # actually emitted non-JSON. 2026-07-13 judge JSON-failure investigation.
+            if finish == "length":
+                logger.warning("LLM truncated (finish_reason=length): content len=%d, max_tokens=%d",
+                               len(content or ""), max_tokens)
+            # one in-call repair retry (SHALqc-CORE §4.0) — distinct from the
+            # provider-level retry in complete(); same key, same slot.
             retry_messages = messages + [
                 {"role": "assistant", "content": content},
                 {"role": "user", "content": "Your reply was not valid JSON. Reply again with JSON only."},
             ]
             body["messages"] = retry_messages
             try:
-                resp2 = httpx.post(url, json=body, headers=headers, timeout=_TIMEOUT)
+                resp2 = httpx.post(url, json=body, headers=headers, timeout=settings.together_timeout_s)
                 content = resp2.json()["choices"][0]["message"]["content"]
                 data = _parse_json(content)
             except Exception:
                 data = None
         if data is None:
-            return None, "invalid_json_after_retry", ms, content
+            reason = "truncated_length" if finish == "length" else "invalid_json_after_retry"
+            return None, reason, ms, content
         return data, None, ms, content
 
     # ------------------------------------------------------------------

@@ -54,6 +54,30 @@ class ShalqcRoundTripRegressionTest {
     }
 
     @Test
+    void severityLandsInDetailsAndInformationalStaysOffQueue() throws Exception {
+        // A rejectable card carries its reject authority into the details JSON and
+        // stays in the reviewer queue.
+        ShalqcCard rej = om.readValue(
+                "{\"item_id\":\"EQ-X\",\"group\":\"please_verify\",\"status\":\"REVIEW\",\"severity\":\"rejectable\"}",
+                ShalqcCard.class);
+        QCRuleResult r = mapper.toRuleResult(rej);
+        assertThat(r.getDetails()).as("reject authority stored in details")
+                .contains("\"severity\":\"rejectable\"");
+        assertThat(r.getReviewRequired()).as("rejectable REVIEW stays in queue").isTrue();
+
+        // An informational card is demoted: off-queue regardless of its status word,
+        // and never BLOCKING — mirrors the Python severity gate.
+        ShalqcCard info = om.readValue(
+                "{\"item_id\":\"EQ-Y\",\"group\":\"informational\",\"status\":\"NOT_SATISFIED\",\"severity\":\"informational\"}",
+                ShalqcCard.class);
+        QCRuleResult ir = mapper.toRuleResult(info);
+        assertThat(ir.getDetails()).contains("\"severity\":\"informational\"");
+        assertThat(ir.getReviewRequired()).as("informational never in queue").isFalse();
+        assertThat(ir.getNeedsVerification()).isFalse();
+        assertThat(ir.getSeverity()).as("informational never blocking").isEqualTo("STANDARD");
+    }
+
+    @Test
     void roundTripMapsEveryCardAndReportsGaps() throws Exception {
         ShalqcResponse resp = load();
 

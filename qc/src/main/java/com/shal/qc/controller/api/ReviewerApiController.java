@@ -476,7 +476,13 @@ public class ReviewerApiController {
                 ruleMap.put("message",         rule.getMessage());
                 ruleMap.put("details",         rule.getDetails());
                 ruleMap.put("actionItem",      rule.getActionItem());
-                ruleMap.put("reviewRequired",  Boolean.TRUE.equals(rule.getReviewRequired()) || needsReviewerAction(rule.getStatus()));
+                // PART 1.1: card_group is the reviewer bucket; "informational" items
+                // carry no reject authority and must NEVER be forced into the queue by
+                // their status word — the severity gate demoted them upstream.
+                boolean informational = "informational".equals(rule.getCardGroup());
+                ruleMap.put("cardGroup",       rule.getCardGroup());
+                ruleMap.put("reviewRequired",  !informational
+                        && (Boolean.TRUE.equals(rule.getReviewRequired()) || needsReviewerAction(rule.getStatus())));
                 ruleMap.put("appraisalValue",  rule.getAppraisalValue());
                 ruleMap.put("engagementValue", rule.getEngagementValue());
                 ruleMap.put("confidence",      rule.getConfidenceScore());

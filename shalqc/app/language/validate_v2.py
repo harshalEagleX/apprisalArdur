@@ -202,7 +202,7 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
         judgeable=item.judgeable, guardrails=guardrails, decided_by="judge_v2",
         values=packet.raw_values(),
         bound_by=item.bound_by, binder_confidence=item.binder_confidence,
-        bound_labels=list(item.bound_labels),
+        bound_labels=list(item.bound_labels), severity=item.severity,
     )
 
 

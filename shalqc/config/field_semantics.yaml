@@ -64,7 +64,7 @@ fields:
   pud_info_complete:     {materiality: material, required_when: "is_pud == Yes"}
 
   # --- FHA/VA-only fields ---
-  remaining_economic_life: {materiality: material, required_when: "loan_type in [fha,va]"}
+  remaining_economic_life: {materiality: material, required_when: "loan_program in [fha,va]"}
 
   # --- prior-services detail: only when the appraiser marked "have performed" ---
   prior_services_comment: {materiality: material, required_when: "prior_services_flag == Yes"}

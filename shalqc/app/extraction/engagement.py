@@ -71,8 +71,9 @@ _LABELS: Dict[str, List[str]] = {
         "form", "product", "report type", "order type",
         "appraisal type", "form type", "product type",
     ],
-    "loan_type": [
+    "loan_program": [
         "loan type", "loan product", "financing type", "mortgage type",
+        "loan program",
     ],
     "assignment_type": [
         "intended use", "transaction type", "loan purpose",
@@ -93,6 +94,28 @@ _LABELS: Dict[str, List[str]] = {
     "appraiser_name": [
         "appraiser", "vendor", "appraiser name",
         "assigned appraiser", "appraisal company",
+    ],
+    # SHALqc-CORE — the appraiser's COMPANY is a distinct fact from the
+    # appraiser's own name above; without it, every "company name/address/
+    # phone/email must match the engagement letter" check had only the
+    # report-side value and no engagement-side counterpart to compare against
+    # (2026-07-13 dry-run cause #2 — ten needs_engagement packets were
+    # one-sided by construction, so REVIEW was the only possible verdict).
+    "appraiser_company_name": [
+        "vendor company name", "vendor company", "company name",
+        "appraiser company name", "appraisal company name",
+    ],
+    "appraiser_company_address": [
+        "vendor mailing address", "vendor address", "company address",
+        "appraiser company address", "appraisal company address",
+    ],
+    "appraiser_phone": [
+        "vendor phone", "vendor contact phone", "appraiser phone",
+        "appraiser contact phone",
+    ],
+    "appraiser_email": [
+        "vendor email", "vendor contact email", "appraiser email",
+        "appraiser contact email",
     ],
     "amc_reg_number": [
         "amc reg. number", "amc reg number", "amc registration",
@@ -333,6 +356,29 @@ def parse_address(raw: str) -> Dict[str, str]:
     return {k: v for k, v in out.items() if v}
 
 
+def _merge_wrapped_labels(lines: List[str], lookup_set: set) -> List[str]:
+    """Rejoin a label that PDF text extraction wrapped across two lines
+    ("Vendor Company" / "Name:") back into one line ("Vendor Company Name:")
+    BEFORE the label scan runs. Gated strictly on the merged text being a
+    label we actually recognize, so this can never corrupt unrelated wrapped
+    prose — it only ever repairs a label the scanner would otherwise miss
+    entirely (2026-07-13: this AMC's own engagement letter wraps "Vendor
+    Company Name:" and "Vendor Mailing Address:" exactly this way)."""
+    out: List[str] = []
+    i = 0
+    while i < len(lines):
+        cur = lines[i]
+        if cur.strip() and ":" not in cur and i + 1 < len(lines) and ":" in lines[i + 1]:
+            combined = f"{cur.strip()} {lines[i + 1].strip()}"
+            if _line_is_label(combined, lookup_set):
+                out.append(combined)
+                i += 2
+                continue
+        out.append(cur)
+        i += 1
+    return out
+
+
 def _loan_type_from(*texts: str) -> Optional[str]:
     blob = " ".join(t for t in texts if t).lower()
     for key in ("fha", "usda", "va", "conventional"):
@@ -351,7 +397,7 @@ def extract_engagement_fields(pdf_path, hints: Optional[Dict[str, List[str]]] = 
     doc = fitz.open(str(pdf_path))
     text = "\n".join(doc[i].get_text("text") for i in range(min(2, len(doc))))
     doc.close()
-    lines = text.splitlines()
+    lines = _merge_wrapped_labels(text.splitlines(), lookup_set)
 
     found: Dict[str, str] = {}
     i = 0
@@ -405,14 +451,20 @@ def extract_engagement_fields(pdf_path, hints: Optional[Dict[str, List[str]]] = 
                 found[canon] = value
         i = end + 1
 
-    if "loan_type" not in found:
-        lt = _loan_type_from(found.get("form_type", ""))
-        if lt:
-            found["loan_type"] = lt
+    # loan_program (FHA/VA/Conv) — engagement-only; derived from the form family
+    # when not labelled explicitly. This is the PROGRAM axis, distinct from the
+    # transaction PURPOSE below.
+    if "loan_program" not in found:
+        lp = _loan_type_from(found.get("form_type", ""))
+        if lp:
+            found["loan_program"] = lp
     if found.get("assignment_type"):
         a = found["assignment_type"].lower()
         found["assignment_type"] = ("Purchase" if "purchase" in a else
                                     "Refinance" if "refi" in a else found["assignment_type"])
+        # transaction_type is the PURPOSE axis (Purchase/Refinance) — carried under
+        # the vocabulary name the order-vs-report checks compare against.
+        found.setdefault("transaction_type", found["assignment_type"])
     return found
 
 

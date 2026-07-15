@@ -2,6 +2,7 @@ package com.shal.qc.service;
 
 import com.shal.qc.config.OcrServiceConfig;
 import com.shal.common.dto.python.PythonQCResponse;
+import com.shal.common.dto.shalqc.ShalqcResponse;
 import com.shal.common.util.TimelineLog;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.ObjectMapper;
@@ -551,6 +552,86 @@ public class PythonClientService {
     public int getLastRetryCount() { return lastRetryCount.get(); }
 
     /**
+     * SHALqc (Approach B) synchronous path: POST the same multipart order to the
+     * SHALqc service's {@code /qc/process} and deserialize its native
+     * OrderQCResponse ({@link ShalqcResponse}) — cards + coordinates +
+     * llm_interactions. Mirrors {@link #processQC} but returns the SHALqc contract
+     * instead of the legacy PythonQCResponse. Bounded retry; a 4xx (bad input) is
+     * not retried. The optional stage callback streams sub-progress the same way.
+     */
+    public ShalqcResponse processQCShalqc(Path appraisalPath, Path xmlPath,
+                                          Path engagementPath, Path contractPath,
+                                          QCModelConfig modelConfig, Consumer<PythonProgress> stageCallback,
+                                          Long batchId, Long batchFileId, Long qcResultId, String sourceHash,
+                                          String engagementStatus, String clientId, String amcCode) {
+        String url = config.getUrl() + "/qc/process";
+        QCModelConfig safeModelConfig = modelConfig != null ? modelConfig : QCModelConfig.defaults();
+        String progressToken = UUID.randomUUID().toString();
+        lastRetryCount.set(0);
+
+        if (!appraisalPath.toFile().exists()) {
+            throw new RuntimeException("Appraisal PDF not found on disk: " + appraisalPath);
+        }
+
+        MultiValueMap<String, Object> body =
+                buildShalqcBody(appraisalPath, xmlPath, engagementPath, contractPath, engagementStatus, amcCode);
+        body.add("progress_token", progressToken);
+        String correlationId = appendProcessingContext(body, batchId, batchFileId, qcResultId, sourceHash, safeModelConfig, clientId);
+        log.info("Calling SHALqc /qc/process: {} appraisal={} xml={} engagement={} contract={}",
+                url, appraisalPath.getFileName(),
+                xmlPath != null ? xmlPath.getFileName() : "none",
+                engagementPath != null ? engagementPath.getFileName() : "none",
+                contractPath != null ? contractPath.getFileName() : "none");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.set("X-Correlation-ID", correlationId);
+        if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+            headers.set("X-API-Key", config.getApiKey());
+        }
+        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+        AtomicBoolean stopPoller = new AtomicBoolean(false);
+        if (stageCallback != null) {
+            Thread poller = new Thread(() -> pollSubProgress(progressToken, stageCallback, stopPoller),
+                    "qc-shalqc-progress-" + progressToken.substring(0, 8));
+            poller.setDaemon(true);
+            poller.start();
+        }
+
+        int maxAttempts = Math.max(1, config.getRetryAttempts() + 1);
+        try {
+            RuntimeException last = null;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    ResponseEntity<ShalqcResponse> response = processRestTemplate.exchange(
+                            url, HttpMethod.POST, requestEntity, ShalqcResponse.class);
+                    ShalqcResponse result = response.getBody();
+                    if (result == null) {
+                        throw new RuntimeException("SHALqc service returned empty response body");
+                    }
+                    lastRetryCount.set(Math.max(0, attempt - 1));
+                    log.info("SHALqc QC completed: order={} cards={} summary={}",
+                            result.orderId(),
+                            result.cards() != null ? result.cards().size() : 0,
+                            result.summary());
+                    return result;
+                } catch (org.springframework.web.client.HttpClientErrorException e) {
+                    // 4xx = bad input (422 invalid PDF, 400 bad request); retrying won't help.
+                    log.error("SHALqc service rejected request ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());
+                    throw new RuntimeException("SHALqc rejected request: " + e.getStatusCode(), e);
+                } catch (RuntimeException e) {
+                    last = e;
+                    log.warn("SHALqc call attempt {}/{} failed: {}", attempt, maxAttempts, e.getMessage());
+                }
+            }
+            throw last != null ? last : new RuntimeException("SHALqc call failed after " + maxAttempts + " attempts");
+        } finally {
+            stopPoller.set(true);
+        }
+    }
+
+    /**
      * Proxy a reviewer field correction to Python's /corrections endpoint.
      * All corrections must flow through here (not directly to Python) so the Java
      * authorization layer is in the critical path for every reviewer write (VF-6).
@@ -585,6 +666,39 @@ public class PythonClientService {
             Path appraisalPath, Path engagementPath, Path contractPath,
             String engagementStatus, QCModelConfig cfg) {
         return buildBaseBody(appraisalPath, null, engagementPath, contractPath, engagementStatus, cfg);
+    }
+
+    /**
+     * SHALqc {@code /qc/process} Mode-A multipart body. Its file parts are named
+     * {@code appraisal/xml/engagement/contract} — NOT the ocr-service
+     * {@code file/xml_file/engagement_letter/contract_file} of {@link #buildBaseBody}
+     * (that name drift is exactly what a live run caught as a 400 "missing
+     * appraisal"). Only the appraisal is required; the rest are optional.
+     */
+    private MultiValueMap<String, Object> buildShalqcBody(
+            Path appraisalPath, Path xmlPath, Path engagementPath, Path contractPath,
+            String engagementStatus, String amcCode) {
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        java.io.File appraisalFile = Objects.requireNonNull(appraisalPath).toFile();
+        if (!appraisalFile.exists() || !appraisalFile.isFile()) {
+            throw new RuntimeException("Appraisal PDF not found on disk (path: " + appraisalPath + ").");
+        }
+        body.add("appraisal", new FileSystemResource(appraisalFile));
+        if (xmlPath != null && xmlPath.toFile().isFile())
+            body.add("xml", new FileSystemResource(xmlPath.toFile()));
+        if (engagementPath != null && engagementPath.toFile().isFile())
+            body.add("engagement", new FileSystemResource(engagementPath.toFile()));
+        if (contractPath != null && contractPath.toFile().isFile())
+            body.add("contract", new FileSystemResource(contractPath.toFile()));
+        body.add("use_llm", "true");
+        if (engagementStatus != null && !engagementStatus.isBlank())
+            body.add("engagement_status", engagementStatus);
+        // The AMC/client code tells shalqc which compiled bundle to load. Without
+        // it, shalqc can't resolve the AMC from a temp order dir and falls back to
+        // the generic _base catalog (empty `expects`, filler bindings → mass VERIFY).
+        if (amcCode != null && !amcCode.isBlank())
+            body.add("amc_code", amcCode);
+        return body;
     }
 
     private MultiValueMap<String, Object> buildBaseBody(

@@ -138,9 +138,9 @@ class QCContext:
     @property
     def loan_type(self) -> str:
         """conventional | fha | usda | va | unknown — engagement is authority."""
-        raw = (self.engagement.value("loan_type")
+        raw = (self.engagement.value("loan_program")
                or self.engagement.value("form_type")
-               or self.appraisal.value("loan_type") or "")
+               or self.appraisal.value("loan_program") or "")
         t = raw.lower()
         for key in ("fha", "usda", "va", "conventional"):
             if key in t:

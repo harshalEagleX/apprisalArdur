@@ -79,7 +79,7 @@ def main() -> int:
     client = None if args.no_llm else _get_client()
     if client is None and not args.no_llm:
         print("⚠ no LLM client available — bindings will be unbound/authored only. "
-              "Set TOGETHER/GROQ keys to run the real binder.")
+              "Set TOGETHER_API_KEY_1/2 to run the real binder.")
     prev = C.load_compiled(path) if path.exists() else None
     prev_snapshot = None
     if prev is not None:

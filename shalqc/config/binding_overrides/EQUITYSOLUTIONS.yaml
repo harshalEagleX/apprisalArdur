@@ -1,0 +1,166 @@
+# =============================================================================
+# EQUITYSOLUTIONS — human-verified binding overrides (bind-override-1.0.0)
+#
+# WHY THIS FILE EXISTS
+#   compile_checklist() binds each checklist item with an LLM binder whose output
+#   is non-deterministic and, for a handful of items, wrong (mis-bound labels,
+#   inverted rules, a hardcoded AMC name, cross-doc pairs it can't form). Editing
+#   the compiled compiled/<AMC>/<hash>.yaml by hand fixes them, but a
+#   `compile_amc.py --force` regenerates that file from the binder and WIPES the
+#   fixes. This file is the durable home for those fixes.
+#
+# HOW IT WORKS
+#   For any item_id listed here, _compile_item uses THIS binding verbatim and
+#   SKIPS the LLM binder entirely (bound_by: manual). Labels are trusted as-is —
+#   they are NOT filtered through the label dictionary — so cross-document refs
+#   ("engagement.lender_name") and newly-added canonical names ("utilities_typical",
+#   "amc_name", "uad_version", the mca_median_* matrix) survive. An optional
+#   check_text here overrides the AMC's verbatim text (used only where the AMC's
+#   own wording forces a false reject — see EQ-109).
+#
+#   Overrides are applied at compile time. They are intentionally NOT part of the
+#   checklist hash, so a `--force` recompile reproduces the SAME <hash>.yaml with
+#   these pins baked in. Add/edit here, then `compile_amc.py --force` to apply.
+#
+# PROVENANCE: 2026-07-14 tag-map rebind work. Each was verified per-item against
+# fixtures ESCA-0019968 + ESNV-0000885 with the Redis LLM cache warm (deterministic
+# judge). See memory project_shalqc_tagmap_rebind.
+# =============================================================================
+
+meta:
+  amc_code: EQUITYSOLUTIONS
+  version: bind-override-1.0.0
+
+overrides:
+  EQ-10:
+    bound_labels: [special_assessments, special_assessments_comment]
+    scope: subject
+    expects: special_assessments == "0" satisfies (no special assessment); only if
+      special_assessments > 0 must special_assessments_comment be non-empty
+    judgeable: text
+
+  EQ-34:
+    bound_labels: [utilities_typical]
+    scope: subject
+    expects: utilities_typical == True
+    judgeable: text
+
+  EQ-35:
+    bound_labels: [adverse_site_conditions, adverse_site_conditions_analysis_comment]
+    scope: subject
+    expects: adverse_site_conditions == False
+    judgeable: text
+
+  EQ-49:
+    bound_labels: [additional_features]
+    scope: subject
+    expects: additional_features is non-empty. The field only needs to be filled; a
+      "None", "None Specific.", "N/A" or similar statement DOES satisfy (that is the
+      required way to state there are no energy-efficient items). Do NOT require the
+      literal word "NONE".
+    judgeable: text
+
+  EQ-109:
+    bound_labels: [amc_name]
+    scope: subject
+    expects: amc_name present — SATISFIED when any non-empty AMC name appears under
+      Lender/Client. Do NOT require or compare against any specific name.
+    judgeable: text
+    check_text: Name — An AMC name under the LENDER/CLIENT is required for all reports.
+      Reject ONLY if no AMC name is present. Any AMC name present satisfies — do not
+      reject for a specific or differing name.
+
+  EQ-110:
+    bound_labels: [lender_name, engagement.lender_name]
+    scope: cross_document
+    expects: lender_name == engagement.lender_name
+    judgeable: needs_engagement
+
+  EQ-111:
+    bound_labels: [lender_address, engagement.lender_address]
+    scope: cross_document
+    expects: lender_address == engagement.lender_address
+    judgeable: needs_engagement
+
+  EQ-116:
+    bound_labels:
+    - mca_median_sale_price_prior_7_12
+    - mca_median_sale_price_prior_4_6
+    - mca_median_sale_price_current_3
+    - mca_median_list_price_prior_7_12
+    - mca_median_list_price_prior_4_6
+    - mca_median_list_price_current_3
+    - mca_median_dom_prior_7_12
+    - mca_median_dom_prior_4_6
+    - mca_median_dom_current_3
+    - mca_median_list_dom_prior_7_12
+    - mca_median_list_dom_prior_4_6
+    - mca_median_list_dom_current_3
+    - mca_median_sale_list_ratio_prior_7_12
+    - mca_median_sale_list_ratio_prior_4_6
+    - mca_median_sale_list_ratio_current_3
+    scope: subject
+    expects: SATISFIED when every bound field has ANY value. A currency ("$415,000"),
+      percent ("98%"), integer, "0", or "N/A" all count as filled. Do not require a
+      particular format. Only REVIEW if a listed field is genuinely blank/absent.
+    judgeable: text
+
+  EQ-117:
+    bound_labels: [mca_trend_median_sale_price, mca_trend_total_sales]
+    scope: subject
+    expects: mca_trend_median_sale_price present
+    judgeable: text
+
+  EQ-136:
+    bound_labels: [uad_version]
+    scope: subject
+    expects: uad_version contains "UAD"
+    judgeable: text
+
+  # ---------------------------------------------------------------------------
+  # 2026-07-14 — the 5 rejectable items tools/binder_guard.py proved have a broken
+  # binding (retired label / empty / wrong scope). BINDING ONLY: each fixes WHICH
+  # extracted values reach the judge; the rule stays in the AMC's check_text, which
+  # the judge reads. No logic, no expects executed. Verified against ESNV/ESTX/ESCA.
+  # ---------------------------------------------------------------------------
+  EQ-D:
+    # was bound to retired `loan_type`; the purpose axis is `transaction_type`.
+    bound_labels: [borrower_name, co_borrower_name, transaction_type, owner_of_public_record]
+    scope: cross_document
+    expects: borrower_name == engagement.borrower_name; co_borrower_name present;
+      if transaction_type == Refinance and owner_of_public_record != borrower_name then comment
+    judgeable: needs_engagement
+
+  EQ-59:
+    # was scope=unbound on subject concessions; the check is about the COMPS (reject
+    # text names "comp 1"). Bind each comp's concession + its financing adjustment.
+    bound_labels: [comp_N_concession_amount, comp_N_financing_adj, concessions_amount,
+                   has_financial_assistance]
+    scope: comps
+    expects: for each comp, if comp_N_concession_amount is a positive amount then a
+      comp_N_financing_adj must be present (a concession given must be adjusted)
+    judgeable: text
+
+  EQ-65:
+    # empty bindings — Design (Style)/attachment/stories are all extracted.
+    bound_labels: [design_style, dwelling_type, stories]
+    scope: subject
+    expects: design_style present (non-empty)
+    judgeable: text
+
+  EQ-72:
+    # empty bindings — heating + air_conditioning_type are now extracted (COOLING/
+    # HEATING), plus the comp HVAC row for the "at least 1 comp matches" clause.
+    bound_labels: [heating, air_conditioning_type, comp_N_heating_cooling]
+    scope: comps
+    expects: heating and air_conditioning_type both present; if the subject heating
+      source is FWA/FWBB/Radiant, at least one comp_N_heating_cooling should match
+    judgeable: text
+
+  EQ-134:
+    # empty bindings — the license data is in the XML; the expiration-vs-signed-date
+    # half is checkable (the "is a copy attached" half stays a manual visual check).
+    bound_labels: [appraiser_cert_expiration_date, date_report_signed, appraiser_cert_state]
+    scope: subject
+    expects: appraiser_cert_expiration_date is after date_report_signed
+    judgeable: text

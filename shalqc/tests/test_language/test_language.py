@@ -155,7 +155,7 @@ def test_visual_item_compiles_to_constant_never_packeted():
     assert item.judgeable == "visual" and item.scope == "visual"
     # judge_items must never build a packet for it (client=None would otherwise
     # fallback); it should be a precompiled visual card.
-    res, _ = judge_items([item], Sources.of(_fs()), _fs(), client=None)
+    res, _, _ = judge_items([item], Sources.of(_fs()), _fs(), client=None)
     jv = res["CAT-124"]
     assert jv.decided_by == "precompiled" and jv.card_group() == "manual_visual"
 
@@ -167,7 +167,7 @@ def test_no_llm_fallback_is_review_never_satisfied():
     fs = _fs(property_address="123 Main St")
     item = _item(item_id="S-1", bound_labels=["property_address"], scope="subject",
                  judgeable="text")
-    res, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
     jv = res["S-1"]
     assert jv.status == StatusV2.REVIEW
     assert jv.status != StatusV2.SATISFIED
@@ -177,7 +177,12 @@ def test_no_llm_fallback_is_review_never_satisfied():
 
 # ── AnnexB Part 2: cross-section conditionals ─────────────────────────────────
 
-def test_compiler_detects_conditional_and_binds_condition_consequence():
+def test_compiler_does_not_autogenerate_conditional_blocks():
+    # 2026-07-14: the compiler no longer hallucinates a condition/consequence graph
+    # from an "if … then …" sentence. The trigger stays in check_text (which the
+    # judge reads); a machine-readable gate is authored by hand in an override, not
+    # generated. This deletes the entire "condition label absent → CANNOT_EVALUATE"
+    # noise class at its source.
     from app.language.compiler import _compile_item
     row = {"item_id": "IMP-12", "section": "improvements", "check_type": "same_section",
            "check_text": ("If the actual age of the property exceeds 30 years, the "
@@ -185,10 +190,7 @@ def test_compiler_detects_conditional_and_binds_condition_consequence():
                           "age must be supported."),
            "sources": []}
     item = _compile_item(row, client=None)
-    assert item.scope == "cross_section"
-    assert item.conditional is not None
-    # age condition force-includes year_built so the runtime can derive age.
-    assert "year_built" in item.conditional["condition_labels"]
+    assert item.conditional is None
 
 
 def test_conditional_packet_carries_condition_block_and_derived_age():
@@ -218,7 +220,7 @@ def test_narrative_pointer_becomes_a3_review_not_judged():
     fs = _fs(neighborhood_boundaries="See attached addenda")
     item = _item(item_id="N-1", check_text="Neighborhood description must be specific",
                  bound_labels=["neighborhood_boundaries"], scope="narrative")
-    res, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
     jv = res["N-1"]
     assert jv.status == StatusV2.REVIEW
     assert "narrative_pointer" in jv.guardrails
@@ -230,7 +232,7 @@ def test_real_narrative_prose_is_not_flagged_a3():
     fs = _fs(neighborhood_boundaries="The subject neighborhood is bounded by " + "x" * 120)
     item = _item(item_id="N-2", check_text="Neighborhood description must be specific",
                  bound_labels=["neighborhood_boundaries"], scope="narrative")
-    res, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
     jv = res["N-2"]
     # real prose → not an A-3 card; with no LLM it is the normal S-6 fallback.
     assert "narrative_pointer" not in jv.guardrails
@@ -275,7 +277,7 @@ def test_empty_packet_is_forced_review():
     # a check bound to a comp attribute with NO comps present, subject scope so no
     # snapshot → empty packet (S-9).
     item = _item(item_id="E-1", bound_labels=["comp_N_gla"], scope="comps")
-    res, _ = judge_items([item], Sources.of(_fs()), _fs(), client=None)
+    res, _, _ = judge_items([item], Sources.of(_fs()), _fs(), client=None)
     jv = res["E-1"]
     assert jv.status == StatusV2.REVIEW
     assert "empty_packet" in jv.guardrails

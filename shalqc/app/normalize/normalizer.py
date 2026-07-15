@@ -388,3 +388,97 @@ def normalize(field_def, raw) -> Optional[str]:
 
 def compare(field_def, a, b, kind: Optional[str] = None) -> MatchResult:
     return normalizer.compare(field_def, a, b, kind=kind)
+
+
+# ── PART 1.2: cross-document value comparison (normalized, kind-aware) ────────
+# A field-def-free comparator for the judge-hint layer: it neutralizes the
+# formatting differences that were causing false rejects (a trailing comma, a
+# corporate "LP", ZIP+4, "Refinance Transaction" vs "Refinance") BEFORE deciding
+# match/review/mismatch. It NEVER auto-rejects — it feeds the LLM judge as a
+# trusted hint (hints.py). Extends the field-driven Normalizer.compare with the
+# phone/email/enum/form kinds the schema path doesn't model.
+_LOAN_ENUM = {
+    "purchase": "PURCHASE", "purchase transaction": "PURCHASE", "purch": "PURCHASE",
+    "sale": "PURCHASE", "sales": "PURCHASE",
+    "refinance": "REFINANCE", "refinance transaction": "REFINANCE", "refi": "REFINANCE",
+    "other": "OTHER",
+}
+_FORM_NUM_RX = re.compile(r"\b(1004c|1004d|1004|1073|1025|1007|2055|216)\b")
+
+
+def _digits(s: str) -> str:
+    return re.sub(r"\D", "", s or "")
+
+
+def match_band(a, b, kind: str = "generic") -> str:
+    """Normalized cross-document comparison → "match" | "review" | "mismatch".
+
+    `kind` ∈ {address, company, person, phone, email, enum, form, generic}. A
+    company whose only difference is a legal suffix (LP/LLC/…) bands "review",
+    never "mismatch" — a soft signal, not a reject (PART 1.2)."""
+    if a is None or b is None:
+        return "review"
+    sa, sb = str(a).strip(), str(b).strip()
+    if not sa or not sb:
+        return "review"
+
+    if kind == "phone":
+        da, db = _digits(sa)[-10:], _digits(sb)[-10:]
+        return "match" if da and da == db else "mismatch"
+    if kind == "email":
+        return "match" if sa.casefold() == sb.casefold() else "mismatch"
+    if kind == "enum":
+        ca = _LOAN_ENUM.get(_basic(sa), _basic(sa))
+        cb = _LOAN_ENUM.get(_basic(sb), _basic(sb))
+        return "match" if ca == cb else "mismatch"
+    if kind == "form":
+        fa, fb = _FORM_NUM_RX.search(sa.lower()), _FORM_NUM_RX.search(sb.lower())
+        return "match" if fa and fb and fa.group(1) == fb.group(1) else "mismatch"
+    if kind == "address":
+        return "match" if _address_tokens(sa) == _address_tokens(sb) else "review"
+    if kind in ("person", "name"):
+        return normalizer._match_name_containment(sa, sb).verdict
+    if kind == "company":
+        na, nb = normalizer._normalize_company(sa), normalizer._normalize_company(sb)
+        return "match" if na and na == nb else "review"
+    # generic / anything else → the field-driven comparator (jaro-winkler banded)
+    return normalizer.compare(None, sa, sb).verdict
+
+
+def canonicalize(value, kind: str = "generic") -> str:
+    """The CANONICAL comparison form of a value for a given kind — two values that
+    should be treated as equal reduce to the SAME string. Used to pre-normalize
+    cross-document values BEFORE they enter the judge packet, so a match is
+    byte-identical and the (nondeterministic) judge has no formatting difference to
+    reject on (PART: doctrine for policy, pre-normalization for comparison)."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    if kind == "phone":
+        return _digits(s)[-10:]
+    if kind == "email":
+        return s.casefold()
+    if kind == "enum":
+        return _LOAN_ENUM.get(_basic(s), _basic(s))
+    if kind == "form":
+        m = _FORM_NUM_RX.search(s.lower())
+        return m.group(1) if m else _basic(s)
+    if kind == "address":
+        return " ".join(sorted(_address_tokens(s)))
+    if kind in ("person", "name"):
+        return " ".join(sorted(normalizer._name_tokens(s)))
+    if kind == "company":
+        return normalizer._normalize_company(s)
+    return _basic(s)
+
+
+def _address_tokens(s: str) -> frozenset:
+    """USPS-suffix-expanded, punctuation-free token SET with ZIP+4 → first-5
+    (the AMC's own rule, EQ-C). Order-independent so 'city, ST zip' == 'city ST zip'.
+    ZIP+4 is collapsed on the RAW string first — normalization strips the hyphen,
+    which would otherwise split "28277-1234" into two tokens."""
+    s = re.sub(r"\b(\d{5})-\d{4}\b", r"\1", s or "")
+    n = normalizer._normalize_address(s)
+    return frozenset(t for t in n.split() if t)

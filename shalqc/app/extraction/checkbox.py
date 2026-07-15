@@ -87,6 +87,17 @@ _CHECKBOX_VALUE_TO_FIELD: Dict[str, Tuple[str, str]] = {
     "crawl space": ("foundation_type", "Crawl Space"),
     "full basement": ("foundation_type", "Full Basement"),
     "partial basement": ("foundation_type", "Partial Basement"),
+    # Heating/Cooling row (UAD checkbox vocabulary) — undiscovered previously,
+    # so a checked "FWA" box fell through to pdf_digital's label-proximity
+    # reader, which returned the row's UNCHECKED option words instead (the X
+    # precedes the option it marks; proximity-to-label alone can't tell which
+    # one is checked). 2026-07-13 dry-run cause #1.
+    "fwa": ("heating", "FWA"),
+    "hwbb": ("heating", "HWBB"),
+    "radiant": ("heating", "Radiant"),
+    "central air": ("cooling", "Central Air"),
+    "central": ("cooling", "Central Air"),
+    "individual": ("cooling", "Individual"),
 }
 
 _UTILITY_LEFT = {

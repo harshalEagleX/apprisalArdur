@@ -75,7 +75,7 @@ def _item_fields(item: CompiledItem) -> Dict[str, Any]:
     return {
         "item_name": item.item_name, "reject_text": item.reject_text,
         "bound_by": item.bound_by, "binder_confidence": item.binder_confidence,
-        "bound_labels": list(item.bound_labels),
+        "bound_labels": list(item.bound_labels), "severity": item.severity,
     }
 
 
@@ -185,10 +185,11 @@ def _interaction(item_id: str, packet: Optional[Packet], response: Optional[dict
 
 
 def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
-                client) -> Tuple[Dict[str, JudgeVerdict], List[Dict[str, Any]]]:
+                client) -> Tuple[Dict[str, JudgeVerdict], List[Dict[str, Any]], Dict[str, Any]]:
     """Bind→packet→judge→validate for a list of compiled items. Returns
-    (item_id → validated JudgeVerdict, list of stored LLM interactions). Visual +
-    fallback cards are included; every judged/failed item gets an interaction."""
+    (item_id → validated JudgeVerdict, list of stored LLM interactions, judge
+    timing ledger). Visual + fallback cards are included; every judged/failed
+    item gets an interaction."""
     results: Dict[str, JudgeVerdict] = {}
     interactions: List[Dict[str, Any]] = []
     packets: List[Packet] = []
@@ -218,7 +219,7 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
     for p in packets:
         by_section.setdefault(p.scope or "other", []).append(p)
 
-    verdicts, failed, metas = J.judge_all(client, by_section)
+    verdicts, failed, metas, judge_timing = J.judge_all(client, by_section)
     item_by_id = {it.item_id: it for it in items}
 
     for item_id, raw in verdicts.items():
@@ -246,7 +247,7 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
             interactions.append(rec)
             results[item_id] = jv
 
-    return results, interactions
+    return results, interactions, judge_timing
 
 
 def _card(jv: JudgeVerdict) -> Dict[str, Any]:
@@ -274,6 +275,7 @@ def _card(jv: JudgeVerdict) -> Dict[str, Any]:
         "bound_by": jv.bound_by,
         "binder_confidence": jv.binder_confidence,
         "bound_labels": jv.bound_labels,
+        "severity": jv.severity,
         "llm_interaction_id": jv.llm_interaction_id,
     }
 
@@ -306,23 +308,33 @@ def build_language_report(order_id: str, amc_code: str,
                           gaps: List[Dict[str, Any]],
                           degradations: Optional[List[str]] = None,
                           versions: Optional[Dict[str, Any]] = None,
-                          interactions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+                          interactions: Optional[List[Dict[str, Any]]] = None,
+                          timings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """§5: EVERY item → a reviewer card, grouped + severity-sorted; engine gaps go
     to the Ops tab (extraction_gaps), never the reviewer queue."""
     reviewer: List[JudgeVerdict] = []
+    informational: List[JudgeVerdict] = []
     ops: List[Dict[str, Any]] = list(gaps)
 
     for jv in results.values():
-        if jv.card_group() == "ops":
+        grp = jv.card_group()
+        if grp == "ops":
             ops.append({"item_id": jv.item_id, "label": None,
                         "raw": None, "reason": "cannot_evaluate_engine",
                         "check_text": jv.check_text})
+        elif grp == "informational":
+            # PART 1.1: no reject authority → kept for audit, never in the queue.
+            informational.append(jv)
         else:
             reviewer.append(jv)
 
     cards = [_card(jv) for jv in reviewer]
     cards.sort(key=lambda c: (CARD_ORDER.get(c["group"], 9), c["section"], c["item_id"]))
+    info_cards = [_card(jv) for jv in informational]
+    info_cards.sort(key=lambda c: (c["section"], c["item_id"]))
 
+    # counts reflect the REVIEWER queue only — informational items are excluded so
+    # the summary shows what a human must actually act on (PART 1.1).
     counts = {s.value: 0 for s in StatusV2}
     manual_visual = 0
     for jv in reviewer:
@@ -343,13 +355,16 @@ def build_language_report(order_id: str, amc_code: str,
             "cannot_evaluate": counts[StatusV2.CANNOT_EVALUATE.value],
             "manual_visual": manual_visual,
             "extraction_gaps": len(ops),
+            "informational": len(info_cards),
         },
         "cards": cards,
+        "informational_cards": info_cards,
         "extraction_gaps": ops,
         "llm_interactions": interactions or [],
         "location_metric": _location_metric(appraisal_fs),
         "degradations": degradations or [],
         "versions": versions or {},
+        "timings": timings or {},
     }
 
 
@@ -358,14 +373,44 @@ def run_language(order_id: str, amc_code: str, appraisal_fs, engagement_fs,
                  degradations: Optional[List[str]] = None,
                  versions: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Full language-mode judgment for one order → reviewer report."""
+    import time as _time
+
     src = Sources.of(appraisal_fs, engagement_fs, contract_fs)
-    results, interactions = judge_items(compiled_items, src, appraisal_fs, client)
+    t0 = _time.perf_counter()
+    results, interactions, judge_timing = judge_items(compiled_items, src, appraisal_fs, client)
+    judge_and_packet_s = _time.perf_counter() - t0
 
     # gaps: recompute over the packets we actually built (absent + engine-unread).
+    t1 = _time.perf_counter()
     packets = [build_packet(it, src) for it in compiled_items
                if it.judgeable != "visual" and it.scope != "visual"]
     gaps = _collect_gaps(packets, appraisal_fs)
+    packet_s = _time.perf_counter() - t1
+
+    # judge_and_packet_s includes packet-building inside judge_items (bind→
+    # packet→judge→validate is one pass) — judge_wall_s (from judge_all) is
+    # the LLM-only portion; the remainder is packet/bind/validate overhead.
+    timings = dict(judge_timing)
+    timings["packet_s"] = round(packet_s, 2)
+    timings["judge_and_packet_s"] = round(judge_and_packet_s, 2)
+
+    # 2026-07-13 perf work order §3: the ledger is a release gate, not just a
+    # debug tool — alert (log, for now; wire to real alerting when it exists)
+    # on the two signals that mean "speed regressed" or "provider trouble",
+    # rather than waiting to notice wall time crept up over a month.
+    wall = timings.get("judge_wall_s", 0.0)
+    slowest = timings.get("judge_slowest_call_s", 0.0)
+    if slowest and wall > 2 * slowest:
+        logger.warning(
+            "language.run %s: judge_wall_s=%.1f > 2x judge_slowest_call_s=%.1f — "
+            "concurrency/queueing regression (batches=%d, lanes may be saturated)",
+            order_id, wall, slowest, timings.get("batches", 0))
+    if timings.get("s6_count", 0) > 0:
+        logger.warning(
+            "language.run %s: %d item(s) fell back to llm_unavailable — provider trouble, "
+            "not extraction/binding (retries=%d)",
+            order_id, timings["s6_count"], timings.get("retries", 0))
 
     return build_language_report(order_id, amc_code, results, appraisal_fs, gaps,
                                  degradations=degradations, versions=versions,
-                                 interactions=interactions)
+                                 interactions=interactions, timings=timings)

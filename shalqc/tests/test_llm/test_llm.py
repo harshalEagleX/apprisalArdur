@@ -6,7 +6,10 @@ tier-2 wiring uses a fake client. One opt-in live smoke test hits the real
 provider only when SHALQC_LIVE_LLM=1.
 """
 
+import inspect
+import io
 import os
+import tokenize
 
 import pytest
 
@@ -123,14 +126,18 @@ def test_tier2_degrades_without_client():
     assert v.degraded_reason == "llm_unavailable"
 
 
-# ── client failover + cache (monkeypatched httpx) ───────────────────────────
+# ── client retry policy + cache (monkeypatched httpx) ───────────────────────
+# 2026-07-13: Groq deleted (single-provider Together AI now, governed by
+# TogetherPool). Retry policy is error-code only — 429/5xx/transport error
+# retries (against the pool, which may hand back a different key); a genuine
+# timeout does NOT retry (see app/llm/client.py module docstring for why).
 
-def test_client_failover_and_cache(monkeypatch):
+def test_client_retries_429_same_provider(monkeypatch):
     import app.llm.client as clientmod
 
     # force a known key config regardless of .env
     monkeypatch.setattr(clientmod.settings, "together_keys", ["k1", "k2"], raising=False)
-    monkeypatch.setattr(clientmod.settings, "groq_key", "gkey", raising=False)
+    c = clientmod.LLMClient()   # built AFTER the settings patch so its pool sees k1/k2
 
     calls = {"n": 0}
 
@@ -145,18 +152,20 @@ def test_client_failover_and_cache(monkeypatch):
 
     def fake_post(url, json=None, headers=None, timeout=None):
         calls["n"] += 1
-        # first Together key → 429 (failover trigger), everything after → 200
+        # first attempt → 429 (retry trigger), everything after → 200
         if calls["n"] == 1:
             return _Resp(429)
         return _Resp(200)
 
     monkeypatch.setattr(clientmod.httpx, "post", fake_post)
+    monkeypatch.setattr(clientmod, "_RETRY_BACKOFFS_S", (0.0, 0.0))  # no real sleep in tests
 
-    c = clientmod.LLMClient()
-    c._redis = None   # disable cache for the failover leg
-    res = c.complete("test", "sys", "user")
+    c._redis = None            # disable cache for the retry leg
+    c._file_cache_dir = None   # (and the on-disk fallback cache — persists across test runs)
+    res = c.complete("test_retry_429", "sys", "user")
     assert res.ok and res.data == {"ok": True}
-    assert calls["n"] >= 2                         # failed over past the 429
+    assert calls["n"] >= 2                         # retried past the 429
+    assert res.call.provider == "together"
     assert c.telemetry[-1].ok and c.telemetry[-1].cached is False
 
     # now prove the cache path emits cached=True telemetry
@@ -170,6 +179,62 @@ def test_client_failover_and_cache(monkeypatch):
     r2 = c.complete("test2", "sys", "user")        # hit → no new http call
     assert r2.ok and r2.call.cached is True
     assert calls["n"] == before                    # no extra provider call on hit
+
+
+def test_client_never_retries_on_timeout(monkeypatch):
+    """A genuine timeout is a dead call, not a retry trigger — the S-6
+    fallback (REVIEW llm_unavailable) is the correct, honest outcome."""
+    import httpx as real_httpx
+    import app.llm.client as clientmod
+
+    monkeypatch.setattr(clientmod.settings, "together_keys", ["k1"], raising=False)
+    c = clientmod.LLMClient()
+
+    calls = {"n": 0}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["n"] += 1
+        raise real_httpx.ReadTimeout("simulated timeout")
+
+    monkeypatch.setattr(clientmod.httpx, "post", fake_post)
+    c._redis = None
+    c._file_cache_dir = None
+    res = c.complete("test_no_retry_timeout", "sys", "user")
+    assert not res.ok
+    assert calls["n"] == 1                          # no retry on timeout
+    assert c.telemetry[-1].error.startswith("timeout:")
+
+
+def test_groq_fully_removed():
+    """Regression guard for the 2026-07-13 removal — no stub, no dead code
+    path, no config field. Explanatory comments/docstrings that reference why
+    Groq was removed are fine (this codebase's own convention, e.g. the
+    ocr-service-retired notes) — this checks for FUNCTIONAL remnants only:
+    real code tokens (identifiers/strings used as VALUES, not prose), via
+    tokenize so comments and docstrings are excluded properly."""
+    from app.config import Settings, settings
+    import app.llm.client as clientmod
+
+    assert not hasattr(settings, "groq_key")
+    assert not any("groq" in f.lower() for f in Settings.__dataclass_fields__)
+
+    source = inspect.getsource(clientmod)
+    tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+    live_code_tokens = [
+        tok.string for tok in tokens
+        if tok.type in (tokenize.NAME, tokenize.STRING) and not _is_docstring_like(tok, source)
+    ]
+    assert not any("groq" in t.lower() for t in live_code_tokens), \
+        "found a live (non-comment/docstring) groq reference in llm/client.py"
+
+
+def _is_docstring_like(tok, source: str) -> bool:
+    """A STRING token that's a module/function/class docstring (a bare string
+    expression, not assigned to anything) — tokenize alone can't tell, so
+    treat any multi-line triple-quoted string as prose, never a real value."""
+    if tok.type != tokenize.STRING:
+        return False
+    return tok.string.startswith(('"""', "'''"))
 
 
 # ── opt-in live smoke ───────────────────────────────────────────────────────

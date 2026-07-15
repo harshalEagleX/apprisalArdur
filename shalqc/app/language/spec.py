@@ -8,6 +8,7 @@ builder + judge. The runtime never re-binds; it reads these.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,22 @@ from typing import Any, Dict, List, Optional
 SCOPES = {"subject", "comps", "cross_document", "narrative", "visual", "unbound"}
 # judgeable vocabulary (§3 step 1).
 JUDGEABLE = {"text", "visual", "needs_engagement"}
+
+# PART 1.1 (over-checking fix): an item is REJECTABLE only when the AMC gave it
+# rejection authority — an authored reject_text, or explicit reject-language in the
+# check itself. Every other item is descriptive guidance (informational) that must
+# never reach the reviewer VERIFY/reject queue. Derived DYNAMICALLY from the
+# checklist text — no per-item, no per-AMC hardcoding.
+_REJECT_LANG_RX = re.compile(
+    r"\b(reject\s+as|reject\s+for|add\s+(?:a\s+)?rejection|then\s+hold|"
+    r"n/?a\s+not\s+allowed|not\s+allowed|place\s+on\s+hold)\b", re.I)
+
+
+def derive_severity(reject_text: Optional[str], check_text: str) -> str:
+    """"rejectable" iff the AMC gave this check reject authority, else "informational"."""
+    if (reject_text or "").strip():
+        return "rejectable"
+    return "rejectable" if _REJECT_LANG_RX.search(check_text or "") else "informational"
 
 
 @dataclass
@@ -39,6 +56,16 @@ class CompiledItem:
     bound_by: str = "heuristic"
     # AnnexB Part 1 Step 3/4: binder confidence; low/empty → REVIEW_NEEDED.
     binder_confidence: float = 1.0
+    # PART 1.1: "rejectable" (AMC gave this check reject authority) | "informational"
+    # (descriptive guidance — demoted from the reviewer queue). Left "" it is derived
+    # in __post_init__ from reject_text + check_text, so EVERY construction path (the
+    # compiler, from_yaml, a direct build in a test) gets the same dynamic answer; an
+    # explicit value (an override pin, or a stored bundle) is respected.
+    severity: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.severity:
+            self.severity = derive_severity(self.reject_text, self.check_text)
 
     @classmethod
     def from_yaml(cls, d: Dict[str, Any]) -> "CompiledItem":
@@ -55,6 +82,7 @@ class CompiledItem:
             conditional=d.get("conditional"),
             bound_by=d.get("bound_by", "heuristic") or "heuristic",
             binder_confidence=float(d.get("binder_confidence", 1.0) or 1.0),
+            severity=d.get("severity", "") or "",
         )
 
     def to_yaml(self) -> Dict[str, Any]:
@@ -66,6 +94,7 @@ class CompiledItem:
             "expects": self.expects, "judgeable": self.judgeable,
             "conditional": self.conditional,
             "bound_by": self.bound_by, "binder_confidence": self.binder_confidence,
+            "severity": self.severity,
         }
 
     @property

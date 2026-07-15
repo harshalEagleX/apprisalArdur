@@ -50,6 +50,29 @@ aliases:
 
   # --- subject prior sale ---
   subject_prior_sale_price: prior_sale_price_subject
+  prior_sale_date_subject: prior_sale_effective_date_subject
+
+  # --- 2026-07-13 audit (dry-run false-positive investigation): xml_extractor.py
+  # stores these under an internal working name that is not itself a schema
+  # canonical — the schema-recognized name the binder/checklist actually asks
+  # for was landing MISSING (falling through to a bad PDF label-proximity
+  # read) even though the XML value was sitting right there. See
+  # extraction_dumps/ESCA-0019968_..._full_dry_run.txt causes #1/#3.
+  condition_rating: subject_grid_condition_rating
+  quality_rating: subject_grid_quality_rating
+  date_of_signature: signature_date
+  date_report_signed: signature_date
+  did_analyze_contract: contract_analyzed
+  indicated_value_cost_approach: cost_approach_value
+  indicated_value_sca: final_value_sca
+  indicated_value_income_approach: income_approach_value
+  site_value_estimate: site_value
+  zoning_classification: zoning
+  is_pud_checked: is_pud
+  fema_flood_hazard: flood_zone_indicator
+  fema_flood_zone: flood_zone_id
+  sales_comparison_summary: sca_comment
+  report_form_number: form_type
 
 comp_suffix_aliases:
   quality: quality_rating
@@ -65,3 +88,5 @@ derive:
   housing_trends: housing_trends_present
   mca_total_sales: mca_total_sales_sum
   sales_count: mca_total_sales_sum
+  comp_count_present: comp_count_present
+  appraisal_report_type: appraisal_report_type_from_text

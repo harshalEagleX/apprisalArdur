@@ -41,7 +41,8 @@ document_types:
       - lender_name
       - lender_address
       - assignment_type
-      - loan_type
+      - transaction_type
+      - loan_program
 
   appraisal_report:
     description: "URAR UAD 1004 appraisal report (all pages)"
@@ -1244,7 +1245,7 @@ fields:
 
   utilities_electricity:
     canonical_name: utilities_electricity
-    data_type: boolean
+    data_type: string
     required: optional
     synonyms:
       - "Electricity"
@@ -1256,7 +1257,7 @@ fields:
 
   utilities_gas:
     canonical_name: utilities_gas
-    data_type: boolean
+    data_type: string
     required: optional
     synonyms:
       - "Gas"
@@ -1267,7 +1268,7 @@ fields:
 
   utilities_water:
     canonical_name: utilities_water
-    data_type: boolean
+    data_type: string
     required: optional
     synonyms:
       - "Water"
@@ -1278,7 +1279,7 @@ fields:
 
   utilities_sewer:
     canonical_name: utilities_sewer
-    data_type: boolean
+    data_type: string
     required: optional
     synonyms:
       - "Sewer"
@@ -1326,6 +1327,36 @@ fields:
       - "Effective FEMA Date"
       - "FEMA Map Effective Date"
       - "FIRM Effective Date"
+    source_authority: appraisal_report
+    sections: [site]
+
+  sales_history_researched:
+    canonical_name: sales_history_researched
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "I did research the sale or transfer history"
+      - "Sale History Researched"
+      - "Research Sale or Transfer History"
+    notes: >
+      The "I DID / DID NOT research the sale or transfer history" checkbox on the
+      1004. XML carries it as SalesHistoryResearchedIndicator (Y/N) on
+      SALES_COMPARISON/RESEARCH — a box STATE, not a value. Checks EQ-79/80 ask
+      whether it is marked; bind them here (not to prior_sale_date_subject).
+    source_authority: appraisal_report
+    sections: [prior_sales, sales_comparison]
+
+  fema_map_number:
+    canonical_name: fema_map_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "FEMA Map No"
+      - "FEMA Map Number"
+      - "FIRM Panel"
+      - "Map Panel Number"
+      - "NFIP Map Number"
+      - "Panel Number"
     source_authority: appraisal_report
     sections: [site]
 
@@ -1490,8 +1521,14 @@ fields:
       - "Heat Source"
       - "HVAC Heat"
       - "Heat"
+    allowed_values:
+      - "FWA, HWBB, Radiant, Other"
     source_authority: appraisal_report
     sections: [improvements]
+    notes: >
+      UAD checkbox vocabulary. A read that is the CONCATENATION of two or more
+      of these (e.g. the whole unmarked option list) is a checkbox-position
+      miss, not an answer — the generic plausibility gate rejects it.
 
   cooling:
     canonical_name: cooling
@@ -1505,6 +1542,8 @@ fields:
       - "AC"
       - "HVAC Cool"
       - "Central Air"
+    allowed_values:
+      - "Central Air, Individual, Other, None"
     source_authority: appraisal_report
     sections: [improvements]
 
@@ -1656,6 +1695,38 @@ fields:
     data_type: string
     required: optional
     synonyms: ["Verification Source(s)", "Verification Source", "Verified By"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_concession_amount:
+    canonical_name: comp_N_concession_amount
+    data_type: currency
+    required: optional
+    synonyms: ["Sale or Financing Concessions", "Concessions", "Seller Concessions"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_listing_status:
+    canonical_name: comp_N_listing_status
+    data_type: string
+    required: optional
+    synonyms: ["Listing Status", "Settled Sale", "Active Listing", "Sale/Listing"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_days_on_market:
+    canonical_name: comp_N_days_on_market
+    data_type: integer
+    required: optional
+    synonyms: ["DOM", "Days on Market", "Marketing Time"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_sale_type:
+    canonical_name: comp_N_sale_type
+    data_type: string
+    required: optional
+    synonyms: ["Sale Type", "Arms Length", "Non-Arms Length", "REO"]
     source_authority: appraisal_report
     sections: [sales_comparison]
 
@@ -1847,16 +1918,35 @@ fields:
   # SECTION: engagement_letter standalone fields
   # ===========================================================================
 
-  loan_type:
-    canonical_name: loan_type
+  # `loan_type` was RETIRED (2026-07-14): the AMC used "loan type" to mean two
+  # different things — the transaction PURPOSE (Purchase/Refinance) and the loan
+  # PROGRAM (FHA/Conv). One ambiguous name forced the binder to guess. Split into
+  # transaction_type + loan_program so the closed-vocabulary guard makes the binder
+  # disambiguate (the vague name no longer exists).
+  transaction_type:
+    canonical_name: transaction_type
+    data_type: enum
+    required: optional
+    allowed_values: ["Purchase", "Refinance", "Other"]
+    synonyms:
+      - "Transaction Type"
+      - "Loan Purpose"
+      - "Purpose of Appraisal"
+      - "Appraisal Purpose"
+      - "Assignment Type"
+    source_authority: appraisal_report
+    sections: [order, engagement_letter]
+
+  loan_program:
+    canonical_name: loan_program
     data_type: enum
     required: optional
     allowed_values: ["Conventional", "FHA", "VA", "USDA", "Other"]
     synonyms:
+      - "Loan Program"
       - "Loan Type"
       - "Type of Loan"
       - "Mortgage Type"
-      - "Loan Program"
       - "Financing Type"
       - "Product Type"
     source_authority: engagement_letter
@@ -2268,6 +2358,60 @@ fields:
       - "Individual AC"
     source_authority: appraisal_report
     sections: [condo_unit, improvements]
+
+  has_adu:
+    canonical_name: has_adu
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Accessory Unit"
+      - "ADU"
+      - "Accessory Dwelling Unit"
+      - "Additional Dwelling Unit"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  has_full_basement:
+    canonical_name: has_full_basement
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Full Basement"
+      - "Basement"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  has_partial_basement:
+    canonical_name: has_partial_basement
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Partial Basement"
+      - "Crawl Space/Partial Basement"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  basement_gla:
+    canonical_name: basement_gla
+    data_type: integer
+    required: optional
+    synonyms:
+      - "Basement Area"
+      - "Basement Square Feet"
+      - "Below Grade Area"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  basement_finish_pct:
+    canonical_name: basement_finish_pct
+    data_type: percent
+    required: optional
+    synonyms:
+      - "Basement Finish"
+      - "Finished Basement %"
+      - "Basement Finished Percent"
+    source_authority: appraisal_report
+    sections: [improvements]
 
   functional_utility:
     canonical_name: functional_utility
@@ -3103,6 +3247,25 @@ fields:
       - "USPAP Reporting Option"
     source_authority: appraisal_report
     sections: [uspap_addendum]
+
+  report_form_number:
+    canonical_name: report_form_number
+    data_type: string
+    required: optional
+    synonyms:
+      - "Form"
+      - "Report Form"
+      - "Form Number"
+      - "Product"
+      - "Uniform Residential Appraisal Report"
+    notes: >
+      The form family used (1004/1073/1025/1004C/2055/...) — NOT the same fact
+      as appraisal_report_type (USPAP reporting option: Appraisal Report vs
+      Restricted). XML carries this natively (AppraisalFormType); it had no
+      schema slot, so a "correct form for this assignment" check was binding
+      to appraisal_report_type instead (2026-07-13 dry-run cause #3).
+    source_authority: appraisal_report
+    sections: [uspap_addendum, subject]
 
   reasonable_exposure_time:
     canonical_name: reasonable_exposure_time

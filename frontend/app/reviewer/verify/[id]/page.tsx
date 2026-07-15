@@ -38,6 +38,24 @@ function CountBadge({ label, count, style }: { label: string; count: number; sty
   return <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${style}`}>{count} {label}</span>;
 }
 
+// Read-only row for an "informational" card: no reject authority, so no decision
+// controls — just enough context to eyeball it, with a click-to-locate affordance
+// consistent with the actionable queue rows.
+function InformationalRow({ rule, onSelect }: { rule: QCRuleResult; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      className="flex w-full flex-col gap-0.5 rounded-md border border-white/5 bg-[#0B0F14]/60 px-2.5 py-1.5 text-left transition-colors hover:border-white/10 hover:bg-white/[0.03]"
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-slate-600" />
+        <span className="truncate text-[11px] font-medium text-slate-300">{rule.ruleName || rule.ruleId}</span>
+      </div>
+      {rule.message && <span className="truncate pl-3 text-[10px] text-slate-600">{rule.message}</span>}
+    </button>
+  );
+}
+
 function RuleFocusOverlay({ focus, highlighting }: { focus: RuleFocus; highlighting: boolean }) {
   return (
     <div className={`pointer-events-none fixed left-3 top-3 z-50 max-w-[180px] rounded-md border px-2 py-1 text-[10px] shadow-lg transition-colors ${highlighting ? "bg-amber-300/95 border-amber-100 text-slate-950" : "bg-[#11161C]/95 border-white/10 text-slate-200 opacity-90"}`}>
@@ -247,13 +265,19 @@ export default function VerifyFilePage() {
     }), [documentMatches]);
   const activeDocumentUrl = activeDocument ? getPdfUrl(activeDocument.id) : undefined;
 
+  // SHALqc severity gate: "informational" rows carry no reject authority — they are
+  // kept OUT of the reviewer queue and shown in a separate collapsed tab, mirroring the
+  // Python reviewer report. Everything else is the actionable queue.
+  const informationalRules = rules.filter(r => r.cardGroup === "informational");
+  const queueRules = rules.filter(r => r.cardGroup !== "informational");
   const counts = {
-    total:  rules.length,
-    pass:   rules.filter(r => r.status === "pass" || r.status === "MANUAL_PASS").length,
-    fail:   rules.filter(r => r.status === "fail").length,
-    review: rules.filter(r => isReviewLikeStatus(r.status)).length,
+    total:  queueRules.length,
+    pass:   queueRules.filter(r => r.status === "pass" || r.status === "MANUAL_PASS").length,
+    fail:   queueRules.filter(r => r.status === "fail").length,
+    review: queueRules.filter(r => isReviewLikeStatus(r.status)).length,
+    informational: informationalRules.length,
   };
-  const filtered = rules.filter(r => {
+  const filtered = queueRules.filter(r => {
     if (filter === "attention") return r.status === "fail" || isReviewLikeStatus(r.status);
     if (filter === "fail")   return r.status === "fail";
     if (filter === "verify") return isReviewLikeStatus(r.status);
@@ -694,6 +718,9 @@ export default function VerifyFilePage() {
             <CountBadge label="Pass"         count={counts.pass}   style="text-green-400 bg-green-950/50 border-green-800/50" />
             <CountBadge label="Fail"         count={counts.fail}   style="text-red-400   bg-red-950/50   border-red-800/50" />
             <CountBadge label="Needs Review" count={counts.review} style="text-amber-400 bg-amber-950/50 border-amber-800/50" />
+            {counts.informational > 0 && (
+              <CountBadge label="Informational" count={counts.informational} style="text-slate-400 bg-slate-800/40 border-slate-700/50" />
+            )}
           </div>
           {progress && progress.totalToVerify > 0 && (
             <div className="hidden md:flex items-center gap-2.5 flex-shrink-0">
@@ -878,6 +905,22 @@ export default function VerifyFilePage() {
                   </Fragment>
                 );
               })}
+              {/* Items with no reject authority — demoted by the SHALqc severity gate,
+                  never part of the reviewer queue/sign-off. Collapsed by default so it
+                  never competes with actionable rows for attention. */}
+              {informationalRules.length > 0 && (
+                <details className="group mt-2 rounded-md border border-white/5">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-300">
+                    <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                    Informational ({informationalRules.length}) — no reject authority
+                  </summary>
+                  <div className="flex flex-col gap-1 px-2.5 pb-2">
+                    {informationalRules.map(rule => (
+                      <InformationalRow key={rule.id} rule={rule} onSelect={() => focusRule(rule)} />
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           </div>
         </div>

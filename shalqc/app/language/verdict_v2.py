@@ -51,6 +51,9 @@ CARD_ORDER = {
     "manual_visual": 2,
     "looks_good": 3,
     "not_applicable": 4,
+    # PART 1.1: informational items carry no rejection authority — they sort last
+    # and are pulled OUT of the reviewer queue entirely (see run.build_language_report).
+    "informational": 5,
 }
 
 
@@ -89,6 +92,9 @@ class JudgeVerdict:
     # (extraction failed to read a value the XML/PDF actually carries → Ops tab).
     # Only meaningful for CANNOT_EVALUATE.
     source: str = "report"
+    # PART 1.1: "rejectable" (AMC gave this check reject authority) | "informational"
+    # (descriptive guidance — its verdict never becomes a reviewer VERIFY/reject card).
+    severity: str = "informational"
     # "text" (LLM-judged) | "visual" (manual, never sent to LLM) | "unbound"
     judgeable: str = "text"
     guardrails: List[str] = field(default_factory=list)
@@ -97,9 +103,21 @@ class JudgeVerdict:
     # the slim packet's located values, so a fallback card is still reviewable.
     values: Dict[str, Any] = field(default_factory=dict)
 
+    # A verdict that would otherwise noise the reviewer queue but carries no reject
+    # authority: an informational item the judge could not clear (REVIEW /
+    # CANNOT_EVALUATE) or "recommended reject" it (NOT_SATISFIED — but with no
+    # reject_text there is nothing to reject on). PART 1.1: demote, never surface.
+    _NOISE_STATUSES = frozenset({
+        StatusV2.REVIEW, StatusV2.CANNOT_EVALUATE, StatusV2.NOT_SATISFIED})
+
     def card_group(self) -> str:
         if self.judgeable == "visual":
             return "manual_visual"
         if self.status == StatusV2.CANNOT_EVALUATE and self.source == "engine":
             return "ops"  # extraction_gaps, not a reviewer card
+        # PART 1.1: an informational item never produces a VERIFY/reject card. A
+        # SATISFIED/NOT_APPLICABLE informational item is harmless (looks_good /
+        # not_applicable); anything that would demand reviewer action is demoted.
+        if self.severity != "rejectable" and self.status in self._NOISE_STATUSES:
+            return "informational"
         return CARD_GROUP[self.status]

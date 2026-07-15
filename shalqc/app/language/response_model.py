@@ -80,6 +80,10 @@ class ReviewerCard(BaseModel):
     binder_confidence: float = 0.0
     bound_labels: List[str] = []
     llm_interaction_id: Optional[str] = None
+    # PART 1.1 reject-authority: "rejectable" (the AMC can reject on this check) |
+    # "informational" (descriptive guidance — demoted, never a reviewer VERIFY).
+    # The Java UI badges rejectable items and hides the informational bucket.
+    severity: str = "informational"
 
 
 class LLMInteractionRecord(BaseModel):
@@ -109,6 +113,9 @@ class OrderQCResponse(BaseModel):
     verdict_vocab: str = "v2"
     summary: Dict[str, Any] = {}
     cards: List[ReviewerCard] = []
+    # PART 1.1: items with no reject authority — demoted from the reviewer queue and
+    # carried here so the UI can show them in a separate, collapsed "informational" tab.
+    informational_cards: List[ReviewerCard] = []
     extraction_gaps: List[Dict[str, Any]] = []
     llm_interactions: List[LLMInteractionRecord] = []
     location_metric: Dict[str, Any] = {}

@@ -58,6 +58,11 @@ public class ShalqcResponseMapper {
 
     public QCRuleResult toRuleResult(ShalqcCard c) {
         String status = mapStatus(c.status());
+        // PART 1.1: an informational card has NO reject authority — it must never enter
+        // the reviewer queue. Python already demotes it (group="informational"); we
+        // mirror that here by clearing the review flags regardless of its status word.
+        boolean informational = "informational".equals(c.group())
+                || "informational".equalsIgnoreCase(c.severity());
         QCRuleResult r = new QCRuleResult();
         r.setRuleId(orElse(c.itemId(), "UNKNOWN_ITEM"));
         r.setRuleName(orElse(c.itemName(), orElse(c.itemId(), "UNKNOWN_ITEM")));
@@ -74,9 +79,11 @@ public class ShalqcResponseMapper {
         r.setVerifyQuestion(orElse(c.reviewerLine(), ""));
         r.setConfidenceScore(c.confidence() != null ? c.confidence() : 0.0d);
         r.setConfidenceTier(tier(c.confidence()));
-        r.setNeedsVerification(needsReview(status));
-        r.setReviewRequired(needsReview(status));
-        r.setSeverity("NOT_SATISFIED".equalsIgnoreCase(c.status()) ? "BLOCKING" : "STANDARD");
+        r.setNeedsVerification(!informational && needsReview(status));
+        r.setReviewRequired(!informational && needsReview(status));
+        // BLOCKING only when the AMC can actually reject on it (rejectable) AND the
+        // judge said NOT_SATISFIED; an informational item is never blocking.
+        r.setSeverity(!informational && "NOT_SATISFIED".equalsIgnoreCase(c.status()) ? "BLOCKING" : "STANDARD");
         r.setEvidence(writeJson(c.evidence(), "[]"));
         r.setHighlightedValues(writeJson(highlightValues(c), "[]"));
         r.setTargetField(firstLabel(c));
@@ -160,6 +167,9 @@ public class ShalqcResponseMapper {
         d.put("guardrails", c.guardrails() != null ? c.guardrails() : List.of());
         d.put("bound_labels", c.boundLabels() != null ? c.boundLabels() : List.of());
         d.put("values", c.values() != null ? c.values() : Map.of());
+        // reject authority (rejectable | informational) — the UI badges rejectable
+        // items; no first-class column so legacy rows/DDL are untouched.
+        d.put("severity", c.severity() != null ? c.severity() : "informational");
         return writeJson(d, "{}");
     }
 

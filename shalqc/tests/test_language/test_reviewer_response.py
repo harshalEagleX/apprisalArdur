@@ -41,7 +41,7 @@ class _FakeClient:
     def __init__(self, value_quote: str):
         self._quote = value_quote
 
-    def complete(self, call_type, system, user, max_tokens=3500):
+    def complete(self, call_type, system, user, max_tokens=3500, reasoning_effort=None):
         payload = json.loads(user)
         verdicts = []
         for p in payload["packets"]:
@@ -70,7 +70,7 @@ def _item() -> CompiledItem:
 def _run_one():
     fs = _fs_with_coords(property_rights="Leasehold")
     src = Sources.of(fs)
-    results, interactions = judge_items([_item()], src, fs, _FakeClient("Leasehold"))
+    results, interactions, _timing = judge_items([_item()], src, fs, _FakeClient("Leasehold"))
     report = build_language_report("ORD-1", "EQUITYSOLUTIONS", results, fs, gaps=[],
                                    interactions=interactions)
     return report
