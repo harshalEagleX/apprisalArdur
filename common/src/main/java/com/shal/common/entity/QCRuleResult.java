@@ -140,12 +140,10 @@ public class QCRuleResult {
     private String severity = "STANDARD"; // BLOCKING | STANDARD | ADVISORY
 
     /**
-     * Rule scope emitted by Python: "per_document" | "cross_document" | "semantic".
-     * Null for rows written before this column was added — ddl-auto=update adds
-     * the nullable column on first startup and existing rows stay null by default.
-     * ({@code @JsonIgnoreProperties(ignoreUnknown=true)} on {@link com.shal.common.dto.python.PythonRuleResult}
-     * is unrelated: it tolerates extra fields Python emits that Java hasn't mapped yet,
-     * not missing ones. A nullable Object field already deserializes to null on its own.)
+     * Rule scope emitted by Python: "per_document" | "cross_document" | "semantic"
+     * (mapped from a SHALqc card's {@code judgeable}). Null for rows written before
+     * this column was added — ddl-auto=update adds the nullable column on first
+     * startup and existing rows stay null by default.
      */
     @Column(name = "scope", length = 30)
     private String scope;

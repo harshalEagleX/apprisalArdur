@@ -2,7 +2,6 @@ package com.shal.qc.service;
 
 import com.shal.common.dto.shalqc.ShalqcResponse;
 import com.shal.common.dto.shalqc.ShalqcCard;
-import com.shal.common.dto.python.PythonRuleResult;
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,12 +19,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Regression coverage for the scope field round-trip and the needsVerification contract.
+ * Regression coverage for the scope field round-trip.
  *
- * - scope column persists correctly from syntheticResponse via persistShalqcResult  [Fix 6]
- * - PythonRuleResult.needsVerification() contract for all recognized statuses
+ * - scope column persists correctly from a synthetic ShalqcResponse via persistShalqcResult  [Fix 6]
  *
- * (Batch-status determination tests were removed with the batch QC path — QC is order-scoped.)
+ * (Batch-status determination tests were removed with the batch QC path — QC is order-scoped.
+ *  The old PythonRuleResult.needsVerification() unit tests were removed with that dead DTO.)
  * Uses the real Postgres DB (same as RerunGuardIntegrationTests).
  */
 @SpringBootTest
@@ -75,33 +74,6 @@ class BatchStatusDeterminationTest {
         }
     }
 
-    // ── (5) PythonRuleResult.needsVerification() — pure record method ─────────
-
-    @Test
-    void needsVerification_trueForAllReviewStatuses() {
-        for (String s : List.of("fail", "verify", "review", "extraction_failed",
-                "ocr_low_confidence", "system_error", "source_missing", "cross_doc_mismatch")) {
-            assertThat(rule(s, false).needsVerification())
-                    .as("status '%s' must require verification", s).isTrue();
-        }
-    }
-
-    @Test
-    void needsVerification_falseForNonActionableStatuses() {
-        for (String s : List.of("pass", "not_applicable", "skipped")) {
-            assertThat(rule(s, false).needsVerification())
-                    .as("status '%s' without reviewRequired=true must NOT require verification", s).isFalse();
-        }
-    }
-
-    @Test
-    void needsVerification_reviewRequiredFlagOverridesStatus() {
-        assertThat(rule("pass", true).needsVerification())
-                .as("reviewRequired=true overrides a pass status").isTrue();
-        assertThat(rule("not_applicable", true).needsVerification())
-                .as("reviewRequired=true overrides not_applicable").isTrue();
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /** Seed one batch+file+result. ids = [batchId, fileId, qcResultId] */
@@ -145,21 +117,6 @@ class BatchStatusDeterminationTest {
             clientRepository.findAll().stream().filter(c -> tag.equals(c.getCode()))
                     .forEach(clientRepository::delete);
         });
-    }
-
-    /** Minimal PythonRuleResult — 27 fields in record declaration order */
-    private static PythonRuleResult rule(String status, boolean reviewRequired) {
-        return new PythonRuleResult(
-                "R-1", "Test rule", "SUBJECT", status, "msg",
-                "STANDARD", null, null,           // severity, actionItem, details
-                null, null,                       // appraisalValue, engagementValue
-                0.9, null, null, null,            // confidence, summary, confidenceTier, highlightedValues
-                null, null,                       // extractedValue, expectedValue
-                null, null, null,                 // verifyQuestion, rejectionText, evidence
-                reviewRequired, null,             // reviewRequired, targetField
-                null, null, null, null, null,     // sourcePage, bboxX, bboxY, bboxW, bboxH
-                null                              // scope
-        );
     }
 
     /** Response with one rule of each scope value */
