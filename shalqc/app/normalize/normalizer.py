@@ -312,6 +312,56 @@ class Normalizer:
         return [t for t in s.split()
                 if (t in self._name_suffixes) or (t not in self._name_noise and len(t) > 1)]
 
+    # ── P5 / F3: person-aware name comparison ────────────────────────────────
+    def _name_set(self, text) -> frozenset:
+        """A multi-person name → a FLAT, DEDUPED token set with titles and
+        DYNAMICALLY-detected professional designations dropped. Flat (not per-person)
+        so a shared trailing surname works both ways: "David & Marissa Stiehl" and
+        "Marissa Stiehl and David Stiehl" reduce to the same {david, marissa, stiehl}.
+        No credential list is hardcoded — a designation is recognized by SHAPE (a 2-4
+        letter ALL-CAPS acronym trailing a normal-case name, e.g. "Eichler, MNAA"),
+        so a new/renamed credential needs no code or config change."""
+        raw = str(text or "")
+        drop = self._designation_tokens(raw)
+        toks = [t for t in re.sub(r"[^\w\s]", " ", raw.lower()).split()
+                if len(t) > 1 and t != "and"          # grammar connector, not a name part
+                and t not in self._name_noise and t not in drop]
+        return frozenset(toks)
+
+    def _designation_tokens(self, raw: str) -> set:
+        """The lowercased set of tokens in `raw` that are shaped like a professional
+        designation — a 2-4 char ALL-CAPS acronym — but only when the name also
+        carries normal-case tokens (so a fully-uppercased name isn't gutted)."""
+        words = re.findall(r"[A-Za-z]+", raw)
+        if not words:
+            return set()
+        if not any(not w.isupper() for w in words):
+            return set()   # whole name is uppercase — shape signal is unusable
+        return {w.lower() for w in words if w.isupper() and 2 <= len(w) <= 4}
+
+    def _match_persons(self, a, b) -> MatchResult:
+        """Order-insensitive multi-person match over flat token sets. Every token of
+        the SMALLER side must appear in the other (Jaro-Winkler per token); a missing
+        token that is only a generational suffix → review, any other → mismatch. The
+        smaller side is "required" so an extra credential/middle name never mismatches."""
+        sa, sb = self._name_set(a), self._name_set(b)
+        if not sa or not sb:
+            return MatchResult(0.0, "review", " ".join(sorted(sa)), " ".join(sorted(sb)))
+        required, candidate = (sa, sb) if len(sa) <= len(sb) else (sb, sa)
+        missing, suffix_only, scores = [], True, []
+        for t in required:
+            best = max((jaro_winkler(t, c) for c in candidate), default=0.0)
+            scores.append(best)
+            if best < self._match_th:
+                missing.append(t)
+                if t not in self._name_suffixes:
+                    suffix_only = False
+        score = round(sum(scores) / len(scores), 4)
+        na, nb = " ".join(sorted(sa)), " ".join(sorted(sb))
+        if not missing:
+            return MatchResult(score, "match", na, nb)
+        return MatchResult(score, "review" if suffix_only else "mismatch", na, nb)
+
 
 # ── module-level helpers (pure) ─────────────────────────────────────────────
 
@@ -437,7 +487,10 @@ def match_band(a, b, kind: str = "generic") -> str:
     if kind == "address":
         return "match" if _address_tokens(sa) == _address_tokens(sb) else "review"
     if kind in ("person", "name"):
-        return normalizer._match_name_containment(sa, sb).verdict
+        # P5 / F3: person-aware — splits multi-person names, strips designations,
+        # order-insensitive. Handles "David & Marissa Stiehl" vs "Marissa and David
+        # Stiehl" (match) and never lets a trailing credential read as a mismatch.
+        return normalizer._match_persons(sa, sb).verdict
     if kind == "company":
         na, nb = normalizer._normalize_company(sa), normalizer._normalize_company(sb)
         return "match" if na and na == nb else "review"
@@ -468,7 +521,10 @@ def canonicalize(value, kind: str = "generic") -> str:
     if kind == "address":
         return " ".join(sorted(_address_tokens(s)))
     if kind in ("person", "name"):
-        return " ".join(sorted(normalizer._name_tokens(s)))
+        # P5 / F3: canonical multi-person form — a flat, sorted, deduped token set
+        # with designations dropped. Two orderings of the same people (and a shared
+        # surname) reduce to the SAME string (byte-identical to the judge on a match).
+        return " ".join(sorted(normalizer._name_set(s)))
     if kind == "company":
         return normalizer._normalize_company(s)
     return _basic(s)

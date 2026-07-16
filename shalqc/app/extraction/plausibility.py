@@ -121,6 +121,34 @@ def _valid_appraiser_email(value: str, fields: Dict[str, ExtractedField]) -> boo
     return "@" in value and "." in value.split("@")[-1]
 
 
+# P2 / F2: a PERSON-name field ("2 PGS 102-104" bled in from the legal description)
+# must be name-shaped. Detected by field-name SHAPE (person parties only — NOT
+# company/lender/amc, which legitimately carry digits & suffixes), so a new party
+# field is covered automatically. High precision: a real name is mostly letters.
+_PERSON_NAME_FIELD_RX = re.compile(
+    r"(?:^|_)(borrower|co_borrower|owner|seller|buyer|appraiser_name|"
+    r"supervisory_appraiser_name|co_appraiser|contact_name|preparer)(?:_name)?$")
+
+
+def _looks_like_person_name_field(fname: str) -> bool:
+    return bool(_PERSON_NAME_FIELD_RX.search(fname))
+
+
+def _name_shaped(value: str) -> bool:
+    """A plausible person name: has an alphabetic token of length >=2 AND letters
+    are the majority of its non-space characters. Rejects legal-description / page
+    fragments ("2 PGS 102-104"), zips, and pure-digit bleed."""
+    v = value.strip()
+    if not v or _ZIP_RE.match(v) or _DIGITS_RE.match(v):
+        return False
+    non_space = [c for c in v if not c.isspace()]
+    if not non_space:
+        return False
+    alpha = sum(1 for c in non_space if c.isalpha())
+    has_word = any(len(t) >= 2 and t.isalpha() for t in re.split(r"[\s,]+", v))
+    return has_word and alpha / len(non_space) >= 0.5
+
+
 def _valid_contract_price(value: str, fields: Dict[str, ExtractedField]) -> bool:
     # A label-proximity read of a BLANK contract cell on a refinance bleeds in
     # adjacent glyphs ("$", "Is"). A real contract price is a dollar amount in
@@ -372,9 +400,41 @@ def _boolean_plausible(value: str) -> bool:
     return value.strip().lower().rstrip(".") in _BOOLEAN_TOKENS
 
 
+# P2 / F7: a printed FORM CAPTION uses the "(s)" pluralization artifact — "Report
+# data source(s) used, offering price(s), and date(s)" — that a real extracted value
+# never carries. Detected by shape (no caption list to maintain), so a reader that
+# grabbed the caption instead of the answer is suppressed → the field reads MISSING
+# and the check degrades to VERIFY/CANNOT_EVALUATE, never a garbage-value REVIEW.
+_CAPTION_ARTIFACT_RX = re.compile(r"[A-Za-z]\(s\)")
+
+
+def _caption_artifact(value: str) -> bool:
+    return bool(_CAPTION_ARTIFACT_RX.search(value))
+
+
+# P2 / F8: a grid DESCRIPTIVE cell that concatenated a whole grid ROW (subject +
+# comp columns) shows the same cell block repeated across columns —
+# "CvPor,CvPat CvPor,CvPat Prch/Patio/Deck 0 Prch/Patio/Deck 0". A single real cell
+# never repeats its own content. Detected by SHAPE (>=2 distinct content tokens each
+# appearing >=2x, >=4 tokens total), so a legit multi-word value ("Concrete Slab
+# Foundation") or a single repeated token ("Residential Residential") is never
+# touched. The proper fix is column-bbox anchoring (see
+# BBOX_PROVENANCE_REGISTRY_PLAN.md Phase 2); this is the safe interim guard.
+def _repeated_grid_cell(value: str) -> bool:
+    tokens = [t for t in re.split(r"\s+", value.strip()) if len(t) >= 3]
+    if len(tokens) < 4:
+        return False
+    from collections import Counter
+    repeated = [t for t, c in Counter(tokens).items() if c >= 2]
+    return len(repeated) >= 2
+
+
 def _string_plausible(value: str) -> bool:
     """Reject a value whose every token is a stopword ("of", "is", "or", a
-    label fragment with no content word) — never true for a real answer."""
+    label fragment with no content word), or that carries a form-caption "(s)"
+    artifact — never true for a real answer."""
+    if _caption_artifact(value):
+        return False
     tokens = [t for t in re.split(r"\s+", value.strip().lower()) if t]
     if not tokens:
         return False
@@ -414,8 +474,17 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             ok = _boolean_plausible(value)
             reason = "not a recognized yes/no/true/false token"
         elif fd.data_type == "string" and not fd._is_narrative:
-            ok = _string_plausible(value)
-            reason = "value is only stopwords/label-fragment text"
+            if _looks_like_person_name_field(fname):
+                ok = _name_shaped(value)
+                reason = "not name-shaped (legal-desc/page/digit fragment in a person-name field)"
+            elif _repeated_grid_cell(value):
+                # a value that repeats >=2 distinct blocks is a grid ROW that bled
+                # subject+comp cells into one field — never a single real cell.
+                ok = False
+                reason = "grid cell bleed (row/multi-cell concatenation)"
+            else:
+                ok = _string_plausible(value)
+                reason = "value is only stopwords/label-fragment text"
         if not ok:
             logger.info("Plausibility (generic) rejected %s='%s': %s", fname, value, reason)
             _suppress(ef, reason)

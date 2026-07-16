@@ -41,6 +41,60 @@ def _is_nullish(v: Any) -> bool:
         return False
 
 
+# P3(b) / F9: a comp that is an ACTIVE/PENDING listing (not a settled sale) carries
+# no settlement date by UAD convention — so a "sale date present for every comp"
+# check must EXEMPT it. Detected generically from listing_status / sale_type / the
+# sale_date marker itself, for any AMC, no per-item config.
+_LISTING_RX = re.compile(r"\b(active|pending|listing|under\s*contract|offered|for\s*sale)\b", re.I)
+_COMP_IDX_RX = re.compile(r"^comp_(\d+)_")
+
+
+def _listing_comps(values: Dict[str, Any]) -> List[int]:
+    """Indices of present comps that are listings (no settlement date expected)."""
+    idxs: set = set()
+    for lbl in values:
+        m = _COMP_IDX_RX.match(lbl)
+        if m:
+            idxs.add(int(m.group(1)))
+    out: List[int] = []
+    for i in sorted(idxs):
+        status = values.get(f"comp_{i}_listing_status")
+        sale_type = values.get(f"comp_{i}_sale_type")
+        sale_date = values.get(f"comp_{i}_sale_date")
+        blob = " ".join(str(x) for x in (status, sale_type, sale_date) if x)
+        if _LISTING_RX.search(blob):
+            out.append(i)
+    return out
+
+
+_NBHD_PRICE_RX = re.compile(r"(?:^|_)(price_low|price_high|predominant_price|median_price)$")
+
+
+def _price_scale_hint(values: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """F11: when neighborhood price fields (price_low/high/predominant/median) read
+    like $(000) — i.e. they are <10k while comp sale prices are >100k — surface the
+    ×1000 scaled dollar values so a "price range brackets the comps" check doesn't
+    see a spurious 1000x mismatch. Purely magnitude+shape inferred; fires only when
+    BOTH a small-magnitude price field AND dollar-scale comp prices are present."""
+    nbhd = {lbl: _num(values.get(lbl)) for lbl in values if _NBHD_PRICE_RX.search(lbl)}
+    nbhd = {k: v for k, v in nbhd.items() if v is not None and v > 0}
+    if not nbhd:
+        return None
+    comp_prices = [v for lbl in values if re.match(r"^comp_\d+_sale_price$", lbl)
+                   for v in (_num(values.get(lbl)),) if v is not None and v > 0]
+    if not comp_prices:
+        return None
+    max_nbhd = max(nbhd.values())
+    min_comp = min(comp_prices)
+    # neighborhood prices look like thousands (<10k) while comps are dollar-scale (>100k)
+    if max_nbhd < 10_000 and min_comp > 100_000:
+        scaled = {k: round(v * 1000.0, 2) for k, v in nbhd.items()}
+        return {"hint": "price_scale_000 (neighborhood prices are $(000); ×1000 shown to "
+                        "compare with comp sale prices)",
+                "value": scaled, "labels": list(nbhd.keys())}
+    return None
+
+
 def _xdoc_kind(label: str) -> str:
     """PART 1.2: the comparison kind for a cross-document label (its
     engagement./contract. prefix stripped), so match_band normalizes correctly."""
@@ -212,6 +266,22 @@ def compute_hints(values: Dict[str, Any], bound_labels: List[str],
     if nullish:
         hints.append({"hint": "nullish_values (present but $0/N/A/blank)",
                       "value": nullish, "labels": nullish})
+
+    # P3(b) / F9: comps that are active/pending listings carry no settlement date —
+    # a "sale date present for every comp" check must exempt them (UAD convention).
+    listings = _listing_comps(values)
+    if listings:
+        hints.append({"hint": "listing_comps (no settlement/sale date expected — UAD listing)",
+                      "value": listings,
+                      "labels": [f"comp_{i}_listing_status" for i in listings]})
+
+    # P8 / F11: the 1004MC neighborhood price columns are in $(000) per the URAR form,
+    # but comp sale prices are whole dollars — comparing 1450 to 1,260,000 is a false
+    # 1000x gap. Detected by SHAPE (price_low/high/predominant) + MAGNITUDE (looks like
+    # thousands next to dollar-scale comp prices), never a hardcoded label pin.
+    scale = _price_scale_hint(values)
+    if scale:
+        hints.append(scale)
 
     # PART 1.2: a NORMALIZED cross-document comparison, so a trailing comma, a
     # corporate suffix, ZIP+4, or "Refinance Transaction" vs "Refinance" can no

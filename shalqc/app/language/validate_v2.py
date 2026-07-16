@@ -46,9 +46,29 @@ def _reviewer_line_ok(text: str) -> bool:
     return bool(8 <= len(t) <= 240 and not _MARKDOWN.search(t))
 
 
+# §4 role contract: the LLM reports FINDINGS, it does not issue the reviewer's
+# DECISION or direct the appraiser. Any reviewer_line that tells the appraiser to
+# revise/correct/add a comment, or that pronounces a reject, is neutralized to the
+# system-composed finding line. The reject WORDING lives in the rule-authored
+# reject_text (surfaced only after the human clicks Confirm) — never LLM prose.
+_DIRECTIVE_RX = re.compile(
+    r"\b(recommend(?:s|ing)?\s+(?:a\s+)?reject|reject(?:s|ing|ion)?\b|"
+    r"revise|correct(?:s|ed|ion)?\b|resubmit|amend|"
+    r"add\s+(?:a\s+)?(?:comment|rejection|note)|provide\s+(?:a|the)|"
+    r"appraiser\s+(?:must|should|needs?\s+to)|must\s+be\s+corrected|"
+    r"please\s+(?:revise|correct|add|fix|provide)|fix\s+the)\b", re.I)
+
+
+def _has_directive(text: str) -> bool:
+    return bool(_DIRECTIVE_RX.search(text or ""))
+
+
 def _synth_line(status: StatusV2, expected: str, found: str) -> str:
     if status == StatusV2.NOT_SATISFIED:
-        base = f"Expected {expected or 'the check to be met'}; found {found or 'a discrepancy'}. Recommend reject or override."
+        # NEUTRAL finding — states expected vs found, leaves the decision to the
+        # reviewer (the card's reject_text carries the reject wording, used only
+        # after Confirm). No imperative, no "reject" pronounced by the LLM layer.
+        base = f"Expected {expected or 'the check to be met'}; found {found or 'a discrepancy'}. Please verify."
     elif status == StatusV2.SATISFIED:
         base = f"Checked: {found or 'the report data'} — looks satisfied."
     elif status == StatusV2.NOT_APPLICABLE:
@@ -189,8 +209,13 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
     if status != StatusV2.NOT_SATISFIED:
         suggest = None
 
+    # §4: neutralize a malformed OR a directive/verdict-issuing reviewer_line into
+    # the system-composed finding line — the LLM never gets to phrase the decision.
     if not _reviewer_line_ok(reviewer_line):
         reviewer_line = _synth_line(status, expected, found)
+    elif _has_directive(reviewer_line):
+        reviewer_line = _synth_line(status, expected, found)
+        guardrails.append("directive_language")
 
     return JudgeVerdict(
         item_id=item.item_id, status=status, check_text=item.check_text,

@@ -133,6 +133,35 @@ def test_bad_status_degrades_to_review():
     assert jv.status == StatusV2.REVIEW and "bad_status" in jv.guardrails
 
 
+# ── §4: the LLM reports findings, it never issues the reviewer's decision ──────
+
+def test_directive_reviewer_line_is_neutralized():
+    pkt = _packet_with({"comp_1_sale_price": "250000"}, hints=[
+        {"hint": "comp_count_present", "value": 4, "labels": []}], reject="only 4 comps")
+    raw = {"item_id": "XX-1", "status": "NOT_SATISFIED", "expected": "6 comparables",
+           "found": "4 comparables", "confidence": 0.9,
+           "reviewer_line": "The appraiser must revise the report and add a comment; recommend reject.",
+           "evidence": [{"label": "comp_1_sale_price", "quote": "250000"}]}
+    jv = validate(raw, pkt, _item())
+    assert "directive_language" in jv.guardrails
+    line = jv.reviewer_line.lower()
+    for banned in ("revise", "recommend reject", "add a comment", "must"):
+        assert banned not in line
+    assert "please verify" in line
+    # the reject authority still lives in the rule-authored wording, intact
+    assert jv.suggest_reject_wording == "only 4 comps"
+
+
+def test_neutral_finding_line_is_left_alone():
+    pkt = _packet_with({"comp_1_sale_price": "250000"})
+    raw = {"item_id": "XX-1", "status": "REVIEW", "expected": "6 comps", "found": "4",
+           "confidence": 0.5, "reviewer_line": "Expected 6 comparables; found 4. Please verify.",
+           "evidence": [{"label": "comp_1_sale_price", "quote": "250000"}]}
+    jv = validate(raw, pkt, _item())
+    assert "directive_language" not in jv.guardrails
+    assert jv.reviewer_line == "Expected 6 comparables; found 4. Please verify."
+
+
 # ── binder drift guard (§3) ───────────────────────────────────────────────────
 
 def test_binder_binds_only_known_labels():
@@ -203,6 +232,79 @@ def test_conditional_packet_carries_condition_block_and_derived_age():
     assert p.conditional and "year_built" in p.conditional["condition_labels"]
     age_hint = next(h for h in p.computed_hints if h["hint"] == "derived_age_from_year_built")
     assert age_hint["value"] == __import__("datetime").date.today().year - 1942
+
+
+# ── P3(a): deterministic trigger gate — condition absent → NA, no LLM call ─────
+
+def test_trigger_not_fired_gates_to_not_applicable_without_llm():
+    from app.language.run import judge_items
+    # condition label (fha_case_number) is ABSENT → the trigger provably did not
+    # fire → deterministic NOT_APPLICABLE, never sent to the (None) client.
+    fs = _fs(property_address="123 Main St")
+    item = _item(item_id="C-1", check_text="If FHA, the case number must appear.",
+                 bound_labels=[], scope="cross_section",
+                 conditional={"condition_labels": ["fha_case_number"],
+                              "consequence_labels": ["property_address"]})
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    jv = res["C-1"]
+    assert jv.status == StatusV2.NOT_APPLICABLE
+    assert jv.decided_by == "precompiled:trigger_gate"
+    assert "trigger_not_fired" in jv.guardrails
+
+
+def test_trigger_fired_when_condition_present_is_left_to_judge():
+    from app.language.run import judge_items
+    # condition label present with a real value → NOT gated; with client=None it
+    # falls back to llm_unavailable REVIEW (proves it was NOT deterministically NA'd).
+    fs = _fs(fha_case_number="123-4567890", property_address="123 Main St")
+    item = _item(item_id="C-2", check_text="If FHA, the case number must appear.",
+                 bound_labels=[], scope="cross_section",
+                 conditional={"condition_labels": ["fha_case_number"],
+                              "consequence_labels": ["property_address"]})
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    jv = res["C-2"]
+    assert jv.status == StatusV2.REVIEW
+    assert jv.decided_by != "precompiled:trigger_gate"
+
+
+# ── P3(b) / F9: listing comps carry no settlement date — hint exempts them ─────
+
+def test_listing_comp_hint_flags_active_pending_listings():
+    h = H.compute_hints(
+        {"comp_1_sale_price": "500000", "comp_1_listing_status": "Settled Sale",
+         "comp_2_sale_price": "0", "comp_2_listing_status": "Active Listing",
+         "comp_3_sale_price": "0", "comp_3_sale_type": "Pending"},
+        ["comp_1_sale_price", "comp_2_sale_price", "comp_3_sale_price"])
+    flagged = next((x for x in h if x["hint"].startswith("listing_comps")), None)
+    assert flagged is not None
+    assert flagged["value"] == [2, 3]        # comp 1 settled, comps 2 & 3 are listings
+
+
+def test_no_listing_hint_when_all_settled():
+    h = H.compute_hints(
+        {"comp_1_sale_price": "500000", "comp_1_listing_status": "Settled Sale"},
+        ["comp_1_sale_price"])
+    assert not any(x["hint"].startswith("listing_comps") for x in h)
+
+
+# ── P8 / F11: $(000) neighborhood price scaling ───────────────────────────────
+
+def test_price_scale_000_hint_fires_on_thousands_vs_dollars():
+    h = H.compute_hints(
+        {"price_low": "250", "price_high": "1450",
+         "comp_1_sale_price": "1260000", "comp_2_sale_price": "980000"},
+        ["price_low", "price_high", "comp_1_sale_price", "comp_2_sale_price"])
+    scale = next((x for x in h if x["hint"].startswith("price_scale_000")), None)
+    assert scale is not None
+    assert scale["value"]["price_high"] == 1450000.0
+    assert scale["value"]["price_low"] == 250000.0
+
+
+def test_price_scale_000_does_not_fire_when_already_dollars():
+    h = H.compute_hints(
+        {"price_low": "250000", "price_high": "1450000", "comp_1_sale_price": "1260000"},
+        ["price_low", "price_high", "comp_1_sale_price"])
+    assert not any(x["hint"].startswith("price_scale_000") for x in h)
 
 
 # ── AnnexB Part 3 Stage A: narrative pointer guard ────────────────────────────

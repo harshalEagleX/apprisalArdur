@@ -48,12 +48,19 @@ CARD_GROUP = {
 CARD_ORDER = {
     "recommended_reject": 0,
     "please_verify": 1,
-    "manual_visual": 2,
-    "looks_good": 3,
-    "not_applicable": 4,
+    # P7: a card the system could not judge (LLM unavailable / empty packet) is a
+    # SYSTEM-degradation item, not a property finding — sorted just below genuine
+    # verify items and rendered as its own section so it never pollutes the
+    # please_verify queue, while still counting toward `review` (order can't auto-pass).
+    "needs_data": 2,
+    "manual_visual": 3,
+    "looks_good": 4,
+    "not_applicable": 5,
     # PART 1.1: informational items carry no rejection authority — they sort last
     # and are pulled OUT of the reviewer queue entirely (see run.build_language_report).
-    "informational": 5,
+    "informational": 6,
+    # P6: unbindable checks — an admin/authoring backlog, also pulled OUT of the queue.
+    "unauthored": 7,
 }
 
 
@@ -120,4 +127,17 @@ class JudgeVerdict:
         # not_applicable); anything that would demand reviewer action is demoted.
         if self.severity != "rejectable" and self.status in self._NOISE_STATUSES:
             return "informational"
+        # P6: a rejectable check the binder never managed to bind to any field
+        # (bound_by="unbound", confidence 0) is a config/authoring gap, not a
+        # property finding — re-judging it will not help; a human must author the
+        # binding. Route it to the UNAUTHORED admin backlog (like ops/extraction_gaps),
+        # out of the reviewer queue — but only for noise statuses; a harmless
+        # SATISFIED/NOT_APPLICABLE unbound item stays where it is.
+        if self.bound_by == "unbound" and self.status in self._NOISE_STATUSES:
+            return "unauthored"
+        # P7: a rejectable item the system could not judge (LLM unavailable / empty
+        # packet) is a system-degradation card — its own group, kept in the queue and
+        # counted as review (blocks auto-pass) but never mixed into please_verify.
+        if (self.decided_by or "").startswith("fallback:"):
+            return "needs_data"
         return CARD_GROUP[self.status]

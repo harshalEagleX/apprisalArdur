@@ -52,3 +52,52 @@ def test_no_prose_present_yields_none():
     fs = _fs(some_number="123")
     pkt = build_packet(_item("neighborhood"), Sources.of(fs))
     assert pkt.narrative_text is None
+
+
+def _hint(pkt, name):
+    for h in pkt.computed_hints:
+        if h.get("hint") == name:
+            return h.get("value")
+    return None
+
+
+def test_runtime_context_current_year_always_injected():
+    """P4 (F6): every packet carries current_year so a tax/reference-year check
+    resolves deterministically instead of hedging to REVIEW."""
+    import datetime
+    fs = _fs(some_number="123")
+    pkt = build_packet(_item("subject", scope="subject", labels=["some_number"]),
+                       Sources.of(fs))
+    assert _hint(pkt, "current_year") == datetime.date.today().year
+
+
+def test_runtime_context_effective_year_when_present():
+    fs = _fs(effective_date="07/07/2026")
+    pkt = build_packet(_item("subject", scope="subject", labels=["effective_date"]),
+                       Sources.of(fs))
+    assert _hint(pkt, "effective_date_year") == 2026
+
+
+def test_runtime_context_no_effective_year_when_absent():
+    fs = _fs(some_number="123")
+    pkt = build_packet(_item("subject", scope="subject", labels=["some_number"]),
+                       Sources.of(fs))
+    assert _hint(pkt, "effective_date_year") is None
+
+
+# ── P1 / F5: the judge packet carries the RESOLVED value, never the raw slot ───
+
+def test_packet_value_is_resolved_not_raw_preresolution_slot():
+    """F5 guard: the judge context is built from the resolver output (ExtractedField
+    .value), NOT the verbatim `raw_value`. This is the single-source-of-truth
+    contract — a future change that fed the judge a pre-resolution slot would flip
+    this test. (The card's displayed values derive from the SAME packet, so the two
+    can never disagree the way the old two-pipeline architecture did.)"""
+    fs = ExtractedFieldSet()
+    fs.add(ExtractedField(canonical_name="location", value="Suburban",
+                          raw_value="Sub.", source=Source.XML, confidence=0.95, page=2))
+    pkt = build_packet(_item("neighborhood", scope="subject", labels=["location"]),
+                       Sources.of(fs))
+    entry = pkt.to_json()["values"]["location"]
+    assert entry["v"] == "Suburban"        # resolved value reaches the judge
+    assert entry["v"] != "Sub."            # never the raw pre-resolution slot

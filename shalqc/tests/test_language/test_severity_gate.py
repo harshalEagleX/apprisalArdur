@@ -69,6 +69,87 @@ def test_build_report_excludes_informational_from_the_queue():
     assert rep["summary"]["informational"] == 1
 
 
+# ── P7: system-degradation cards get their own group, still block auto-pass ───
+
+def _fallback_v(reason: str) -> JudgeVerdict:
+    return JudgeVerdict(item_id="i", status=StatusV2.REVIEW, check_text="c",
+                        section="s", severity="rejectable", judgeable="text",
+                        decided_by=f"fallback:{reason}")
+
+
+def test_llm_unavailable_card_is_needs_data_not_please_verify():
+    assert _fallback_v("llm_unavailable").card_group() == "needs_data"
+    assert _fallback_v("empty_packet").card_group() == "needs_data"
+
+
+def test_needs_data_still_counts_as_review_so_order_cannot_auto_pass():
+    rep = build_language_report(
+        "O", "AMC", {"a": _fallback_v("llm_unavailable"), "b": _v("rejectable")}, None, gaps=[])
+    # both remain in the reviewer queue (needs_data is NOT pulled out like ops/informational)
+    assert len(rep["cards"]) == 2
+    assert rep["summary"]["needs_data"] == 1
+    # still counted as review — the Java gate reads `review` and must block auto-pass
+    assert rep["summary"]["review"] == 1
+
+
+def test_informational_fallback_stays_demoted_not_needs_data():
+    # a fallback on an informational item carries no reject authority → still demoted
+    jv = JudgeVerdict(item_id="i", status=StatusV2.REVIEW, check_text="c", section="s",
+                      severity="informational", decided_by="fallback:llm_unavailable")
+    assert jv.card_group() == "informational"
+
+
+# ── P6: unbindable checks go to an admin backlog, out of the reviewer queue ────
+
+def _unbound_v(status=StatusV2.REVIEW) -> JudgeVerdict:
+    return JudgeVerdict(item_id="u", status=status, check_text="c", section="s",
+                        severity="rejectable", judgeable="text",
+                        bound_by="unbound", binder_confidence=0.0)
+
+
+def test_unbound_rejectable_review_is_unauthored():
+    assert _unbound_v(StatusV2.REVIEW).card_group() == "unauthored"
+    assert _unbound_v(StatusV2.NOT_SATISFIED).card_group() == "unauthored"
+
+
+def test_unbound_but_satisfied_is_harmless_not_unauthored():
+    # a SATISFIED/NA verdict on an unbound item is not queue noise — keep it
+    assert _unbound_v(StatusV2.SATISFIED).card_group() == "looks_good"
+    assert _unbound_v(StatusV2.NOT_APPLICABLE).card_group() == "not_applicable"
+
+
+def test_summary_counts_reconcile_no_double_count():
+    # P9 (F10): the five status counts sum to queue_items, and total_items counts
+    # every judged item (queue + informational + engine-cannot-evaluate) — so a
+    # report header can never contradict this summary.
+    ce_engine = JudgeVerdict(item_id="e", status=StatusV2.CANNOT_EVALUATE, check_text="c",
+                             section="s", severity="rejectable", source="engine")
+    results = {
+        "a": _v("rejectable", StatusV2.NOT_SATISFIED),   # queue
+        "b": _v("rejectable", StatusV2.REVIEW),          # queue
+        "i": _v("informational", StatusV2.REVIEW),       # informational (out of queue)
+        "e": ce_engine,                                  # engine CE → ops (out of queue)
+    }
+    rep = build_language_report("O", "AMC", results, None, gaps=[])
+    s = rep["summary"]
+    five = (s["satisfied"] + s["not_satisfied"] + s["review"]
+            + s["not_applicable"] + s["cannot_evaluate"])
+    assert five == s["queue_items"] == len(rep["cards"])
+    assert s["total_items"] == len(results)              # every judged item counted once
+
+
+def test_unbound_stays_in_reviewer_queue_and_blocks_auto_pass():
+    # user direction 2026-07-16: everything is reviewer-facing — no admin backlog.
+    # An unbound check stays IN the queue as its own group and still counts as review.
+    rep = build_language_report(
+        "O", "AMC", {"a": _v("rejectable"), "u": _unbound_v(StatusV2.REVIEW)}, None, gaps=[])
+    assert len(rep["cards"]) == 2                       # both bound + unbound reviewer-facing
+    groups = {c["item_id"]: c["group"] for c in rep["cards"]}
+    assert groups["u"] == "unauthored"
+    assert rep["summary"]["unauthored"] == 1
+    assert rep["summary"]["review"] == 1               # unbound REVIEW still blocks auto-pass
+
+
 # ── 1.2 normalized cross-document comparison ──────────────────────────────────
 
 def test_match_band_neutralizes_formatting():

@@ -33,17 +33,34 @@ logger = logging.getLogger(__name__)
 
 __version__ = "lang-run-1.0.0"
 
+# AUTO_PASS confidence floor: a rejectable item that came back SATISFIED below this
+# judge confidence should not let an order auto-complete without a human. Surfaced in
+# the summary; the Java roll-up applies it only when auto-pass is enabled.
+AUTO_PASS_CONF_FLOOR = 0.8
+
 
 # ── extraction-gap detection (S-1 / S-2) ──────────────────────────────────────
 
 def _extraction_gap(appraisal_fs, label: str):
-    """A bound label the engine SHOULD have read but didn't: the field exists but
-    was suppressed by plausibility (S-2) or read raw yet lost its value. Returns
-    (is_gap, raw_value) — a genuine 'report-missing' field is NOT a gap."""
+    """S-1: a bound label the engine SHOULD have read but didn't — the AUTHORITATIVE
+    XML carried the value yet it was suppressed by plausibility (S-2) or read raw and
+    nulled. Returns (is_gap, raw_value).
+
+    NOT a gap (so the Ops tab stays signal, not noise):
+      * the field was never extracted at all (`get()` is None) — a genuine
+        report-missing field;
+      * the lost value was a weak PDF/checkbox/acroform GUESS (source != xml) that
+        plausibility correctly rejected — that is the system working, and it is also
+        how a FEATURE-ABSENT field looks (no basement → "outside entry" checkbox never
+        truly set), which is NOT_PRESENT, not an engine miss.
+    """
     if appraisal_fs is None:
         return False, None
     ef = appraisal_fs.get(label)
     if ef is None:
+        return False, None
+    from app.extraction.result import Source
+    if getattr(ef, "source", None) not in (Source.XML, Source.XML.value):
         return False, None
     if getattr(ef, "suppressed", False):
         return True, ef.raw_value or ef.value
@@ -144,6 +161,46 @@ def _empty_packet(packet: Packet) -> bool:
             and not packet.section_snapshot)
 
 
+def _trigger_not_fired(packet: Packet) -> bool:
+    """P3: a DETERMINISTIC pre-gate for an authored `conditional` check. "Absence is
+    a value" (doctrine rule 8): if EVERY condition label is absent or nullish, the
+    trigger provably did NOT fire, so the check is NOT_APPLICABLE — decided in code,
+    never sent to the LLM (removes the per-order NA/REVIEW inconsistency the judge
+    produced on the same trigger). A single present, non-nullish condition value is
+    left to the judge (it may be value-conditioned, e.g. 'if Refinance')."""
+    if not packet.conditional:
+        return False
+    cond = packet.conditional.get("condition_labels") or []
+    if not cond:
+        return False
+    from app.language.hints import _is_nullish
+    for lbl in cond:
+        entry = packet.values.get(lbl)
+        if entry is None:
+            continue
+        v = entry.get("v")
+        if v in (None, "") or _is_nullish(v):
+            continue
+        return False   # a real condition value present → let the judge decide
+    return True        # all condition labels absent/nullish → trigger did not fire
+
+
+def _not_applicable_card(item: CompiledItem, packet: Packet) -> JudgeVerdict:
+    """P3: the deterministic NOT_APPLICABLE card for a trigger that did not fire —
+    packet values (with coordinates) ride along so the reviewer can still see why."""
+    evidence = _located_evidence(packet, {})
+    cond = ", ".join((packet.conditional or {}).get("condition_labels") or []) or "the trigger"
+    return JudgeVerdict(
+        item_id=item.item_id, status=StatusV2.NOT_APPLICABLE, check_text=item.check_text,
+        section=item.section, decided_by="precompiled:trigger_gate",
+        guardrails=["trigger_not_fired"], values=packet.raw_values(),
+        evidence=evidence, primary_location=_primary_location(evidence),
+        reviewer_line=(f"The condition that would make this check apply ({cond}) is not "
+                       "present in the report — not applicable.")[:240],
+        **_item_fields(item),
+    )
+
+
 def _classify_cannot_evaluate(jv: JudgeVerdict, packet: Packet, appraisal_fs) -> JudgeVerdict:
     """§5 / S-1: a CANNOT_EVALUATE is source=engine (Ops tab, never blames the
     appraiser) when the missing data is one the engine failed to read; else
@@ -203,6 +260,12 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
         if _empty_packet(packet):
             results[item.item_id] = _fallback_card(packet, "empty_packet", item)
             logger.warning("language.run: empty packet for %s (S-9)", item.item_id)
+            continue
+        # P3: deterministic trigger gate — an authored conditional whose condition
+        # labels are all absent/nullish provably did NOT fire → NOT_APPLICABLE in
+        # code, no LLM call (removes the per-order NA/REVIEW inconsistency).
+        if _trigger_not_fired(packet):
+            results[item.item_id] = _not_applicable_card(item, packet)
             continue
         # AnnexB Part 3 A-3: a narrative check whose only value is a pointer /
         # header-grab / truncation and no coherent prose anywhere → REVIEW card,
@@ -326,6 +389,11 @@ def build_language_report(order_id: str, amc_code: str,
             # PART 1.1: no reject authority → kept for audit, never in the queue.
             informational.append(jv)
         else:
+            # P6 (user direction 2026-07-16): EVERYTHING reviewer-facing — bound AND
+            # unbound. There is no admin who reviews the dictionary/checks; admins only
+            # set up the platform. So an "unauthored" (unbindable) check is NOT siphoned
+            # to a separate backlog — it stays in the reviewer queue as its own group
+            # (see verdict_v2.card_group) and still counts as review (blocks auto-pass).
             reviewer.append(jv)
 
     cards = [_card(jv) for jv in reviewer]
@@ -337,10 +405,31 @@ def build_language_report(order_id: str, amc_code: str,
     # the summary shows what a human must actually act on (PART 1.1).
     counts = {s.value: 0 for s in StatusV2}
     manual_visual = 0
+    # P7: system-degradation cards (LLM unavailable / empty packet) — surfaced as a
+    # distinct count so the reviewer/UI can section them off, though they remain in
+    # `review` above so the order still cannot auto-complete without a human.
+    needs_data = 0
+    # P6: unbindable checks stay IN the reviewer queue (counted as review) but are
+    # surfaced as their own count so the UI can section them as "weakly bound".
+    unauthored = 0
+    # AUTO_PASS confidence floor (Gap 1 fix): a SATISFIED on a REJECTABLE item decided
+    # with low judge confidence is exactly the false-SATISFIED that would auto-complete
+    # an order with zero human eyes. Surface the count so the Java roll-up can downgrade
+    # AUTO_PASS → TO_VERIFY when auto-pass is enabled. Non-rejectable/high-confidence
+    # passes do not arm the floor.
+    low_conf_rejectable_pass = 0
     for jv in reviewer:
         counts[jv.status.value] += 1
         if jv.judgeable == "visual":
             manual_visual += 1
+        grp = jv.card_group()
+        if grp == "needs_data":
+            needs_data += 1
+        elif grp == "unauthored":
+            unauthored += 1
+        if (jv.status == StatusV2.SATISFIED and jv.severity == "rejectable"
+                and (jv.confidence or 0.0) < AUTO_PASS_CONF_FLOOR):
+            low_conf_rejectable_pass += 1
 
     return {
         "order_id": order_id,
@@ -354,8 +443,20 @@ def build_language_report(order_id: str, amc_code: str,
             "not_applicable": counts[StatusV2.NOT_APPLICABLE.value],
             "cannot_evaluate": counts[StatusV2.CANNOT_EVALUATE.value],
             "manual_visual": manual_visual,
+            "needs_data": needs_data,
             "extraction_gaps": len(ops),
             "informational": len(info_cards),
+            "unauthored": unauthored,
+            "rejectable_satisfied_low_conf": low_conf_rejectable_pass,
+            # P9 (F10): a single authoritative, self-reconciling count so a report
+            # header and this summary can never disagree. INVARIANTS (asserted in
+            # tests): the five status counts above sum to `queue_items`; and
+            # `total_items` (every checklist item judged) == queue_items +
+            # informational + engine-cannot-evaluate items. The status counts are
+            # QUEUE-ONLY by design — a section header should quote `total_items`
+            # rather than re-derive its own "all checks" figure and disagree.
+            "queue_items": len(cards),
+            "total_items": len(results),
         },
         "cards": cards,
         "informational_cards": info_cards,

@@ -266,6 +266,13 @@ def build_packet(item: CompiledItem, src: Sources) -> Packet:
     if age is not None:
         computed.append({"hint": "derived_age_from_year_built", "value": age, "labels": ["year_built"]})
 
+    # P4 (F6): inject RUNTIME CONTEXT the judge cannot know from field values alone —
+    # today's year and the report's effective year. A "reference year present" /
+    # tax-year / "within the last N years" check was defaulting to REVIEW because the
+    # packet never told the judge what "current" is. These are deterministic facts,
+    # not report data, so they ride as computed_hints (trusted arithmetic, rule 4).
+    computed.extend(_runtime_context_hints(src.appraisal))
+
     conditional = None
     if item.conditional:
         conditional = {
@@ -317,6 +324,25 @@ def _stamp_compare_forms(values: Dict[str, Dict[str, Any]]) -> None:
             kind = H._xdoc_kind(lbl)
             values[lbl]["cmp"] = canonicalize(values[lbl].get("v"), kind)
             other["cmp"] = canonicalize(other.get("v"), kind)
+
+
+def _runtime_context_hints(appraisal: DocView) -> List[Dict[str, Any]]:
+    """P4 (F6): the current year (and the report's effective year, when present) as
+    trusted computed_hints. Lets a "reference year is provided / tax year is
+    current / within the last N years" check resolve deterministically instead of
+    hedging to REVIEW because the judge had no notion of 'now'."""
+    import datetime
+    hints: List[Dict[str, Any]] = [
+        {"hint": "current_year", "value": datetime.date.today().year, "labels": []},
+    ]
+    eff = appraisal.value("effective_date")
+    if eff:
+        from app.normalize import dates as _d
+        parsed = _d.parse_date(str(eff))
+        if parsed is not None:
+            hints.append({"hint": "effective_date_year", "value": parsed.year,
+                          "labels": ["effective_date"]})
+    return hints
 
 
 def _derived_age(appraisal: DocView) -> Optional[int]:

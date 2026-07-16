@@ -69,3 +69,77 @@ def test_gate_rewrites_value_in_place():
     ef = merged["assignment_type"]
     assert ef.found is True
     assert ef.value == "Purchase Transaction"
+
+
+# ── P2 / F7: form-caption "(s)" artifact is suppressed, never bound as a value ──
+
+def test_caption_artifact_detected():
+    from app.extraction.plausibility import _caption_artifact, _string_plausible
+    assert _caption_artifact("Report data source(s) used, offering price(s), and date(s)")
+    assert _caption_artifact("offering price(s)")
+    assert not _caption_artifact("Corelogic, GeoData")          # no (s) artifact
+    assert not _string_plausible("used, offering price(s),")    # caption fragment → implausible
+    assert _string_plausible("Corelogic, GeoData")             # a real data-source value survives
+
+
+def test_gate_suppresses_caption_bound_as_value():
+    # F7: a reader that grabbed the URAR caption into data_source is suppressed →
+    # the field reads MISSING (found=False), never a garbage-value REVIEW.
+    merged = {
+        "data_source": ExtractedField(
+            canonical_name="data_source", value="used, offering price(s), and date(s)",
+            raw_value="used, offering price(s), and date(s)",
+            source=Source.PDF_DIGITAL, confidence=0.6, page=2),
+    }
+    _generic_schema_gate(merged)
+    ef = merged["data_source"]
+    assert ef.found is False
+    assert ef.suppressed is True
+
+
+# ── P2 / F2: a legal-desc/page fragment bled into a person-name field is suppressed ──
+
+def test_name_shape_helpers():
+    from app.extraction.plausibility import _looks_like_person_name_field, _name_shaped
+    assert _looks_like_person_name_field("co_borrower_name")
+    assert _looks_like_person_name_field("borrower_name")
+    assert not _looks_like_person_name_field("lender_name")     # company, not a person
+    assert not _name_shaped("2 PGS 102-104")                    # legal-desc fragment
+    assert _name_shaped("Laura Brantley and Eric Brantley")     # real names survive
+    assert _name_shaped("O'Brien-Smith III")
+
+
+def test_gate_suppresses_legal_desc_fragment_in_name_field():
+    merged = {
+        "co_borrower_name": ExtractedField(
+            canonical_name="co_borrower_name", value="2 PGS 102-104",
+            raw_value="2 PGS 102-104", source=Source.PDF_DIGITAL, confidence=0.6, page=1),
+        "borrower_name": ExtractedField(
+            canonical_name="borrower_name", value="Laura Brantley and Eric Brantley",
+            raw_value="Laura Brantley and Eric Brantley", source=Source.XML, confidence=0.97, page=1),
+    }
+    _generic_schema_gate(merged)
+    assert merged["co_borrower_name"].found is False           # garbage suppressed → MISSING
+    assert merged["borrower_name"].found is True               # real name untouched
+
+
+# ── P2 / F8: grid cell-bleed (a row concatenated across columns) is suppressed ──
+
+def test_repeated_grid_cell_detector():
+    from app.extraction.plausibility import _repeated_grid_cell
+    assert _repeated_grid_cell("CvPor,CvPat CvPor,CvPat Prch/Patio/Deck 0 Prch/Patio/Deck 0")
+    assert not _repeated_grid_cell("Concrete Slab Foundation")   # legit multi-word
+    assert not _repeated_grid_cell("Residential Residential")    # single repeated token
+    assert not _repeated_grid_cell("Wood Brick Stone Vinyl")     # all distinct
+
+
+def test_gate_suppresses_grid_cell_bleed():
+    merged = {
+        "porch_patio_deck": ExtractedField(
+            canonical_name="porch_patio_deck",
+            value="CvPor,CvPat CvPor,CvPat Prch/Patio/Deck 0 Prch/Patio/Deck 0",
+            raw_value="CvPor,CvPat CvPor,CvPat Prch/Patio/Deck 0 Prch/Patio/Deck 0",
+            source=Source.PDF_DIGITAL, confidence=0.6, page=3),
+    }
+    _generic_schema_gate(merged)
+    assert merged["porch_patio_deck"].found is False           # row-bleed → MISSING, not garbage
