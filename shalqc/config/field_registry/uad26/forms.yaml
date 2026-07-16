@@ -1,0 +1,23 @@
+# UAD 2.6 form-applicability registry (L2 layer, version-namespaced).
+#
+# BBOX_PROVENANCE_REGISTRY_PLAN.md Phase 1. Keyed by (uad_version, form_type,
+# field_id) — this file is the `uad26` slice. Its job here: FORM-AWARE N/A. A
+# check whose bound labels are ALL absent on the detected form auto-N/As — the
+# REGISTRY (not the LLM) decides applicability, so one AMC ruleset runs across
+# whatever form arrives (architecture note §2 rule 2).
+#
+# SAFETY CONTRACT (this gate can wrongly N/A a valid check, which is a correctness
+# bug — worse than a false REVIEW — so the seed is deliberately tiny):
+#   * List a field under `absent_fields` ONLY when it is UNAMBIGUOUSLY not on that
+#     form. When unsure, leave it out — absence here means "unknown", never
+#     "exists". A 1-unit detached URAR (1004) legitimately CAN be a PUD with an
+#     HOA, so hoa_*/project_name are NOT listed (they can appear on a 1004).
+#   * Grow this per golden-set failure, never speculatively.
+version: "uad26-forms-0.1.0"
+
+forms:
+  "1004":
+    label: "URAR — 1-unit detached"
+    # a single detached dwelling has no condo/co-op unit identifier
+    absent_fields:
+      - unit_number

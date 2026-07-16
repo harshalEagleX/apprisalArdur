@@ -137,6 +137,16 @@ export const FindingRow = memo(function FindingRow({
   const sevTag = rule.severity ?? "STANDARD";
   const isBlockingVerify = isVerify && sevTag === "BLOCKING";
 
+  // SHALqc queue-noise grouping: a card the system could not auto-judge
+  // (needs_data) or could not bind to a field (unauthored) still needs a human,
+  // but is NOT a property finding — a small chip tells the reviewer that apart.
+  const groupTag =
+    rule.cardGroup === "needs_data"
+      ? { label: "Couldn't auto-judge", cls: "border-amber-500/30 bg-amber-950/40 text-amber-200" }
+      : rule.cardGroup === "unauthored"
+        ? { label: "Weakly bound", cls: "border-slate-500/30 bg-slate-800/50 text-slate-300" }
+        : null;
+
   // The collapsed one-liner: the backend-owned summary, falling back to the
   // status-appropriate text for legacy rows that predate the slim contract.
   const summaryText =
@@ -234,6 +244,15 @@ export const FindingRow = memo(function FindingRow({
         {!saving && (savedNow || (decision != null)) && (
           <span className="hidden sm:flex flex-shrink-0 items-center gap-0.5 text-[10px] text-green-300">
             <CheckCircle2 size={9} /> {savedNow ? "saved" : "saved earlier"}
+          </span>
+        )}
+
+        {groupTag && (
+          <span
+            className={`hidden md:inline-flex flex-shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${groupTag.cls}`}
+            title="This item still needs a human, but it is a system limitation, not a property finding."
+          >
+            {groupTag.label}
           </span>
         )}
 

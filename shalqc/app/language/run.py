@@ -185,6 +185,35 @@ def _trigger_not_fired(packet: Packet) -> bool:
     return True        # all condition labels absent/nullish → trigger did not fire
 
 
+def _form_not_applicable(item: CompiledItem, src: Sources) -> bool:
+    """Phase 1 form-aware N/A: True iff the detected form is KNOWN to the registry
+    AND every label this check binds to is registry-recorded as absent on that form
+    (e.g. a `unit_number` check on a 1-unit detached 1004). The registry decides
+    applicability, not the LLM. Fail-safe: unknown form, no labels, or any label not
+    positively-absent → False (never a guessed N/A)."""
+    from app.registry import registry
+    form_type = src.appraisal.value("form_type") if src.appraisal is not None else None
+    if not form_type or not registry.known_form(str(form_type)):
+        return False
+    labels = item.all_labels
+    if not labels:
+        return False
+    return all(registry.is_absent_on_form(lbl, str(form_type)) for lbl in labels)
+
+
+def _form_na_card(item: CompiledItem, form_type: str) -> JudgeVerdict:
+    """Deterministic NOT_APPLICABLE for a check whose field(s) do not exist on the
+    detected form — no packet, no LLM."""
+    return JudgeVerdict(
+        item_id=item.item_id, status=StatusV2.NOT_APPLICABLE, check_text=item.check_text,
+        section=item.section, decided_by="precompiled:form_gate",
+        guardrails=["field_absent_on_form"],
+        reviewer_line=(f"Not applicable on this form ({form_type}) — the field(s) this "
+                       "check needs do not exist on it.")[:240],
+        **_item_fields(item),
+    )
+
+
 def _not_applicable_card(item: CompiledItem, packet: Packet) -> JudgeVerdict:
     """P3: the deterministic NOT_APPLICABLE card for a trigger that did not fire —
     packet values (with coordinates) ride along so the reviewer can still see why."""
@@ -255,6 +284,11 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
     for item in items:
         if item.judgeable == "visual" or item.scope == "visual":
             results[item.item_id] = _visual_card(item)
+            continue
+        # Phase 1: form-aware N/A — a check whose field(s) don't exist on the
+        # detected form is decided by the registry, before any packet/LLM work.
+        if _form_not_applicable(item, src):
+            results[item.item_id] = _form_na_card(item, str(src.appraisal.value("form_type")))
             continue
         packet = build_packet(item, src)
         if _empty_packet(packet):
