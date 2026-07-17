@@ -39,7 +39,7 @@ from typing import Dict, Optional
 
 from app.extraction import checkbox, engagement, grid_extractor, pdf_digital, pdf_scanned, plausibility, xml_extractor
 from app.extraction.llm_gapfill import GapfillClient, gapfill
-from app.extraction.result import ExtractedField, ExtractedFieldSet
+from app.extraction.result import ExtractedField, ExtractedFieldSet, Source
 from app.extraction.schema import schema_loader as _default_schema_loader
 
 __version__ = "mrg-1.0.0"
@@ -61,6 +61,11 @@ def _light_normalize(value: str) -> str:
     return v
 
 
+def _is_xml(ef: ExtractedField) -> bool:
+    src = getattr(ef, "source", None)
+    return getattr(src, "value", src) == Source.XML.value
+
+
 def _merge_field(merged: Dict[str, ExtractedField], candidate: ExtractedField) -> None:
     """Highest-confidence witness wins; a materially different loser is kept
     as a conflict on the winner (P3) rather than discarded."""
@@ -72,6 +77,18 @@ def _merge_field(merged: Dict[str, ExtractedField], candidate: ExtractedField) -
     same_value = _light_normalize(str(existing.value or "")) == _light_normalize(str(candidate.value or ""))
     if same_value:
         return  # sources agree — nothing to record
+
+    # XML PRIORITY (user directive): the MISMO XML is the authoritative source — when
+    # one side is XML and the other is not, XML wins regardless of confidence (the
+    # loser is still kept as a conflict, never discarded, P3). This hardens the
+    # guarantee so no current/future extractor confidence can override XML.
+    existing_xml, candidate_xml = _is_xml(existing), _is_xml(candidate)
+    if existing_xml != candidate_xml:
+        winner, loser = (existing, candidate) if existing_xml else (candidate, existing)
+        winner.add_conflict(source=loser.source, value=str(loser.value),
+                            confidence=loser.confidence, page=loser.page, bbox=loser.bbox)
+        merged[candidate.canonical_name] = winner
+        return
 
     if candidate.confidence > existing.confidence:
         candidate.add_conflict(

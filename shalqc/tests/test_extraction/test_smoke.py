@@ -80,6 +80,22 @@ def test_merge_prefers_xml_and_retains_conflicts():
     assert any(c.source == Source.ENGAGEMENT for c in address.conflicts)
 
 
+def test_xml_wins_even_against_higher_confidence(  ):
+    """XML PRIORITY (user directive): the authoritative MISMO XML wins over any other
+    source regardless of confidence; the loser is kept as a conflict, never dropped."""
+    from app.extraction.merge import _merge_field
+    from app.extraction.result import ExtractedField
+    merged = {}
+    # a non-XML source lands first with HIGHER confidence than XML's fixed 0.97
+    _merge_field(merged, ExtractedField(canonical_name="city", value="Dallas",
+                                        source=Source.PDF_DIGITAL, confidence=0.99, page=1))
+    _merge_field(merged, ExtractedField(canonical_name="city", value="Humble",
+                                        source=Source.XML, confidence=0.97, page=2))
+    won = merged["city"]
+    assert won.source == Source.XML and won.value == "Humble"      # XML wins anyway
+    assert any(c.source == Source.PDF_DIGITAL and c.value == "Dallas" for c in won.conflicts)
+
+
 def test_merge_never_raises_on_a_missing_document():
     """P6 graceful degradation — a missing engagement letter must not crash
     the merge; the order simply proceeds without engagement-sourced fields."""

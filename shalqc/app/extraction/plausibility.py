@@ -454,6 +454,24 @@ def _repeated_grid_cell(value: str) -> bool:
     return len(tokens) >= 4 and sum(1 for c in counts.values() if c >= 2) >= 2
 
 
+# P2 (445 Sparrow, comps 2-6): a field can carry its OWN printed caption as the
+# value when the appraiser left the cell blank and the software emitted the label
+# ("Prch/Patio/Deck" for porch_patio_deck). Detected by matching the value against
+# the field's CANONICAL NAME only (never its value-like synonyms such as "Balcony"),
+# devoweled so an abbreviation ("Prch"≡"Porch") still matches — so a real value like
+# "2Balcony" (nowhere near "porch patio deck") is untouched. Source-agnostic: works
+# whether the caption came from the XML or the PDF grid.
+def _devowel(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", re.sub(r"[aeiou]", "", (s or "").lower()))
+
+
+def _caption_echo_of_field(canonical_name: str, value: str) -> bool:
+    base = re.sub(r"^(?:comp_\d+|subject_grid|prior_comp_\d+)_", "", canonical_name)
+    cap = _devowel(base.replace("_", " "))
+    val = _devowel(value)
+    return len(cap) >= 4 and val == cap
+
+
 def _string_plausible(value: str) -> bool:
     """Reject a value whose every token is a stopword ("of", "is", "or", a
     label fragment with no content word), or that carries a form-caption "(s)"
@@ -474,9 +492,18 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
         if not ef.found:
             continue
         fd = schema_loader.get_field(fname)
-        if fd is None:
-            continue
         value = str(ef.value)
+        if fd is None:
+            # comp_N_/subject-grid descriptive fields aren't registered by exact name
+            # (the schema keys the subject template only), so get_field misses them —
+            # yet they still carry values (e.g. XML comp_N_porch_patio_deck). Apply the
+            # source-agnostic, value-shape-only guards (caption echo of the field's own
+            # label; grid cell bleed) — both proven no-false-positive on the golden set.
+            if _caption_echo_of_field(fname, value) or _repeated_grid_cell(value):
+                logger.info("Plausibility (unschematized) rejected %s='%s'", fname, value)
+                _suppress(ef, "caption-echo/grid-bleed")
+                suppressed += 1
+            continue
         ok = True
         reason = ""
         if fd.allowed_values:
@@ -499,7 +526,10 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             ok = _boolean_plausible(value)
             reason = "not a recognized yes/no/true/false token"
         elif fd.data_type == "string" and not fd._is_narrative:
-            if _looks_like_person_name_field(fname):
+            if _caption_echo_of_field(fname, value):
+                ok = False
+                reason = "value is the field's own caption/label (blank cell placeholder)"
+            elif _looks_like_person_name_field(fname):
                 ok = _name_shaped(value)
                 reason = "not name-shaped (legal-desc/page/digit fragment in a person-name field)"
             elif _repeated_grid_cell(value):

@@ -140,6 +140,34 @@ def test_repeated_grid_cell_detector():
     assert not _repeated_grid_cell("Wood Brick Stone Vinyl")     # all distinct
 
 
+def test_caption_echo_of_field_detector():
+    from app.extraction.plausibility import _caption_echo_of_field as CE
+    # a field carrying its OWN label as the value (blank-cell placeholder), devoweled
+    assert CE("comp_2_porch_patio_deck", "Prch/Patio/Deck") is True   # Prch == Porch
+    assert CE("porch_patio_deck", "Porch/Patio/Deck") is True
+    assert CE("comp_1_porch_patio_deck", "CvPor,CvPat") is False      # real value
+    assert CE("comp_3_porch_patio_deck", "2Balcony") is False         # real value (order 11)
+    assert CE("comp_1_view", "B;Res;Mtn") is False
+    assert CE("comp_1_garage_carport", "3ga1gd6dw") is False
+
+
+def test_gate_suppresses_comp_caption_echo_even_when_unschematized():
+    # comp_N_porch_patio_deck is not registered by exact name in the schema; the
+    # caption-echo guard must still fire on it (445 Sparrow comps 2-6).
+    from app.extraction.plausibility import validate_fields
+    merged = {
+        "comp_2_porch_patio_deck": ExtractedField(
+            canonical_name="comp_2_porch_patio_deck", value="Prch/Patio/Deck",
+            raw_value="Prch/Patio/Deck", source=Source.XML, confidence=0.97, page=1),
+        "comp_1_porch_patio_deck": ExtractedField(
+            canonical_name="comp_1_porch_patio_deck", value="CvPor,CvPat",
+            raw_value="CvPor,CvPat", source=Source.XML, confidence=0.97, page=1),
+    }
+    validate_fields(merged)
+    assert merged["comp_2_porch_patio_deck"].found is False   # caption placeholder → MISSING
+    assert merged["comp_1_porch_patio_deck"].found is True    # real value survives
+
+
 def test_gate_suppresses_grid_cell_bleed():
     merged = {
         "porch_patio_deck": ExtractedField(
