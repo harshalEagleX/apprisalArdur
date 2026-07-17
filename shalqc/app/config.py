@@ -19,12 +19,28 @@ _ENV_PATH = Path(__file__).parent.parent / ".env"
 load_dotenv(_ENV_PATH)
 
 
+_TRUTHY = ("1", "true", "yes", "on")
+
+
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+def _flag(name: str, default: bool = False) -> bool:
+    raw = _env(name)
+    return raw.lower() in _TRUTHY if raw else default
+
+
 @dataclass
 class Settings:
+    # ── deploy posture ────────────────────────────────────────────────────────
+    # One source of truth for "is this a hardened deployment?", mirroring the Java
+    # side (app.deploy.strict / a "prod" profile). Everything that must fail-CLOSED
+    # in production (auth, signed-bundle gate) keys off `is_production` so there is
+    # no second place to forget. Local dev stays fail-OPEN with warnings.
+    app_env: str = field(default_factory=lambda: _env("APP_ENV", "dev"))
+    deploy_strict: bool = field(default_factory=lambda: _flag("APP_DEPLOY_STRICT"))
+
     # auth
     internal_api_key: str = field(default_factory=lambda: _env("INTERNAL_API_KEY"))
     # storage
@@ -50,8 +66,14 @@ class Settings:
     # TOGETHER_TPM_BUDGET_PER_KEY from your actual Together tier limit.
     together_tpm_budget_per_key: int = field(
         default_factory=lambda: int(_env("TOGETHER_TPM_BUDGET_PER_KEY", "60000") or 60000))
+    # 2026-07-17 measured on a real Together tier (5 golden orders): inflight=8 (× keys)
+    # exceeds the tier's request rate → 429s → retry backoffs that made a run BOTH
+    # slower AND lossier (ESGA 120s / 18 items fell back to needs_data) than a lower
+    # setting (inflight=2 → 22s / 0 fallbacks / +11 items judged). A high setting is
+    # counterproductive under 429-retry storms, so the default is conservative — raise
+    # TOGETHER_MAX_INFLIGHT_PER_KEY only if your tier's measured rate can take it.
     together_max_inflight_per_key: int = field(
-        default_factory=lambda: int(_env("TOGETHER_MAX_INFLIGHT_PER_KEY", "8") or 8))
+        default_factory=lambda: int(_env("TOGETHER_MAX_INFLIGHT_PER_KEY", "2") or 2))
     together_timeout_s: float = field(
         default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "45") or 45))
 
@@ -59,22 +81,45 @@ class Settings:
     llm_cache_ttl_hours: int = field(default_factory=lambda: int(_env("LLM_CACHE_TTL_HOURS", "72") or 72))
 
     # final_shalqccore.md §9: language|legacy judgment path. "language" runs the
-    # v1.0.69 language-driven judge (app/language/*); "legacy" keeps the rule
-    # engine. Both share extraction/locate/report; roll out flips this default.
-    judge_mode: str = field(default_factory=lambda: _env("JUDGE_MODE", "legacy") or "legacy")
+    # language-driven judge (app/language/*) and IS the product; "legacy" keeps the
+    # old rule engine only for the test/debug path. Defaults to language so a deploy
+    # that forgets JUDGE_MODE runs SHALqc, not the retired engine.
+    judge_mode: str = field(default_factory=lambda: _env("JUDGE_MODE", "language") or "language")
 
     # Step 1 sign-off gate: when true, the runtime refuses to run an AMC checklist
-    # whose compiled bundle is not status=active (approved). Off by default so a
-    # fresh environment still runs (with a loud degradation); flip on in prod so an
-    # unvalidated binding can never reach a live order.
-    require_signed_bundle: bool = field(
-        default_factory=lambda: _env("QC_REQUIRE_SIGNED_BUNDLE", "false").lower() in ("1", "true", "yes"))
+    # whose compiled bundle is not status=active (approved). Resolved in __post_init__
+    # so it defaults to ON in production (an unvalidated binding can never reach a live
+    # order) while a dev box still runs a draft bundle with a loud degradation.
+    # Explicit QC_REQUIRE_SIGNED_BUNDLE always wins.
+    require_signed_bundle: bool = False
+
+    @property
+    def is_production(self) -> bool:
+        """Hardened deployment: strict flag set OR a prod-ish APP_ENV. The single
+        switch every fail-closed guard reads."""
+        return self.deploy_strict or "prod" in self.app_env.lower()
 
     @property
     def llm_configured(self) -> bool:
         return bool(self.together_keys)
 
+    def production_problems(self) -> List[str]:
+        """Config that MUST be set for a hardened deployment (empty list = OK). Mirrors
+        the Java ProductionReadinessValidator so both services fail-closed the same way."""
+        problems: List[str] = []
+        if not self.internal_api_key:
+            problems.append("INTERNAL_API_KEY unset — API auth would be open (set it, or unset APP_DEPLOY_STRICT for dev).")
+        if not self.llm_configured:
+            problems.append("No TOGETHER_API_KEY_1/2 — the language judge cannot run.")
+        if self.judge_mode != "language":
+            problems.append(f"JUDGE_MODE='{self.judge_mode}' — production must run the language judge.")
+        return problems
+
     def __post_init__(self) -> None:
+        # Signed-bundle gate defaults to is_production; explicit env override wins.
+        raw = _env("QC_REQUIRE_SIGNED_BUNDLE")
+        self.require_signed_bundle = _flag("QC_REQUIRE_SIGNED_BUNDLE") if raw else self.is_production
+
         # Groq was deleted entirely 2026-07-13 (see the LLM block above) — a
         # stray GROQ_* var almost always means a stale deploy config or a
         # leftover local .env, not an intentional setting, since nothing reads
