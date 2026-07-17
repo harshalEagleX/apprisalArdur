@@ -52,21 +52,28 @@ def _v(sev: str, status=StatusV2.NOT_SATISFIED) -> JudgeVerdict:
                         severity=sev, judgeable="text")
 
 
-def test_informational_verdict_is_demoted_not_a_reviewer_card():
+def test_informational_actionable_verdicts_are_promoted_to_the_queue():
+    # user directive 2026-07-17: a FAILING/uncertain informational item is a real
+    # finding → promoted to its actionable group; only harmless SATISFIED/NA collapse.
     assert _v("rejectable").card_group() == "recommended_reject"
-    assert _v("informational").card_group() == "informational"
-    assert _v("informational", StatusV2.REVIEW).card_group() == "informational"
-    # a harmless SATISFIED informational item is not noise — stays looks_good
-    assert _v("informational", StatusV2.SATISFIED).card_group() == "looks_good"
+    assert _v("informational", StatusV2.NOT_SATISFIED).card_group() == "recommended_reject"
+    assert _v("informational", StatusV2.REVIEW).card_group() == "please_verify"
+    assert _v("informational", StatusV2.CANNOT_EVALUATE).card_group() == "please_verify"
+    # harmless informational verdicts collapse into the informational section
+    assert _v("informational", StatusV2.SATISFIED).card_group() == "informational"
+    assert _v("informational", StatusV2.NOT_APPLICABLE).card_group() == "informational"
 
 
-def test_build_report_excludes_informational_from_the_queue():
-    rep = build_language_report(
-        "O", "AMC", {"a": _v("rejectable"), "b": _v("informational")}, None, gaps=[])
-    assert len(rep["cards"]) == 1                      # only the rejectable item
-    assert len(rep["informational_cards"]) == 1
-    assert rep["summary"]["not_satisfied"] == 1        # counts reflect the queue only
-    assert rep["summary"]["informational"] == 1
+def test_build_report_promotes_failing_informational_keeps_harmless_collapsed():
+    rep = build_language_report("O", "AMC", {
+        "a": _v("rejectable", StatusV2.NOT_SATISFIED),          # queue
+        "b": _v("informational", StatusV2.REVIEW),             # PROMOTED → queue
+        "c": _v("informational", StatusV2.SATISFIED),          # collapsed
+    }, None, gaps=[])
+    assert len(rep["cards"]) == 2                      # rejectable + promoted informational
+    assert len(rep["informational_cards"]) == 1        # only the harmless SATISFIED one
+    assert rep["summary"]["not_satisfied"] == 1
+    assert rep["summary"]["review"] == 1               # promoted informational counts as review
 
 
 # ── P7: system-degradation cards get their own group, still block auto-pass ───
@@ -92,10 +99,17 @@ def test_needs_data_still_counts_as_review_so_order_cannot_auto_pass():
     assert rep["summary"]["review"] == 1
 
 
-def test_informational_fallback_stays_demoted_not_needs_data():
-    # a fallback on an informational item carries no reject authority → still demoted
+def test_informational_fallback_is_promoted_to_needs_data():
+    # 2026-07-17: a fallback (system couldn't judge) on an informational item is an
+    # actionable-status (REVIEW) item → promoted to needs_data, not hidden.
     jv = JudgeVerdict(item_id="i", status=StatusV2.REVIEW, check_text="c", section="s",
                       severity="informational", decided_by="fallback:llm_unavailable")
+    assert jv.card_group() == "needs_data"
+
+
+def test_harmless_informational_still_collapses():
+    jv = JudgeVerdict(item_id="i", status=StatusV2.SATISFIED, check_text="c", section="s",
+                      severity="informational")
     assert jv.card_group() == "informational"
 
 

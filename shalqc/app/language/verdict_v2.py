@@ -122,10 +122,13 @@ class JudgeVerdict:
             return "manual_visual"
         if self.status == StatusV2.CANNOT_EVALUATE and self.source == "engine":
             return "ops"  # extraction_gaps, not a reviewer card
-        # PART 1.1: an informational item never produces a VERIFY/reject card. A
-        # SATISFIED/NOT_APPLICABLE informational item is harmless (looks_good /
-        # not_applicable); anything that would demand reviewer action is demoted.
-        if self.severity != "rejectable" and self.status in self._NOISE_STATUSES:
+        # PART 1.1 + user directive 2026-07-17: an informational item (no AMC reject
+        # authority) that is HARMLESS — SATISFIED / NOT_APPLICABLE — collapses into the
+        # informational section. But one whose verdict is NOT_SATISFIED / REVIEW /
+        # CANNOT_EVALUATE is a REAL finding the reviewer must act on, so it is PROMOTED
+        # to its normal actionable group (please_verify / recommended_reject) rather
+        # than hidden — the reviewer sees every failing/uncertain check in the queue.
+        if self.severity != "rejectable" and self.status not in self._NOISE_STATUSES:
             return "informational"
         # P6: a rejectable check the binder never managed to bind to any field
         # (bound_by="unbound", confidence 0) is a config/authoring gap, not a

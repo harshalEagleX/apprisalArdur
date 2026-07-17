@@ -58,11 +58,14 @@ public class ShalqcResponseMapper {
 
     public QCRuleResult toRuleResult(ShalqcCard c) {
         String status = mapStatus(c.status());
-        // PART 1.1: an informational card has NO reject authority — it must never enter
-        // the reviewer queue. Python already demotes it (group="informational"); we
-        // mirror that here by clearing the review flags regardless of its status word.
-        boolean informational = "informational".equals(c.group())
-                || "informational".equalsIgnoreCase(c.severity());
+        // The Python card GROUP is authoritative for queue placement (2026-07-17): a
+        // harmless informational item (SATISFIED/NA) is grouped "informational" and
+        // stays off the queue, but a FAILING/uncertain informational item is PROMOTED
+        // by Python to an actionable group (please_verify/recommended_reject) so the
+        // reviewer must act on it. So key ONLY on the group here — NOT on severity,
+        // which would wrongly keep a promoted (severity=informational) card off-queue.
+        boolean informational = "informational".equals(c.group());
+        boolean rejectable = "rejectable".equalsIgnoreCase(c.severity());
         QCRuleResult r = new QCRuleResult();
         r.setRuleId(orElse(c.itemId(), "UNKNOWN_ITEM"));
         r.setRuleName(orElse(c.itemName(), orElse(c.itemId(), "UNKNOWN_ITEM")));
@@ -82,8 +85,9 @@ public class ShalqcResponseMapper {
         r.setNeedsVerification(!informational && needsReview(status));
         r.setReviewRequired(!informational && needsReview(status));
         // BLOCKING only when the AMC can actually reject on it (rejectable) AND the
-        // judge said NOT_SATISFIED; an informational item is never blocking.
-        r.setSeverity(!informational && "NOT_SATISFIED".equalsIgnoreCase(c.status()) ? "BLOCKING" : "STANDARD");
+        // judge said NOT_SATISFIED. A PROMOTED informational finding is actionable
+        // (reviewRequired above) but never BLOCKING — the AMC gave it no reject authority.
+        r.setSeverity(rejectable && "NOT_SATISFIED".equalsIgnoreCase(c.status()) ? "BLOCKING" : "STANDARD");
         r.setEvidence(writeJson(c.evidence(), "[]"));
         r.setHighlightedValues(writeJson(highlightValues(c), "[]"));
         r.setTargetField(firstLabel(c));
@@ -166,7 +170,24 @@ public class ShalqcResponseMapper {
         int notSatisfied = asInt(summary, "not_satisfied") + asInt(summary, "failed");
         if (review > 0)       return QCDecision.TO_VERIFY;
         if (notSatisfied > 0) return QCDecision.AUTO_FAIL;
+        // AUTO_PASS is the ONLY decision that reaches COMPLETED with zero human eyes.
+        // A profile may disable it (auto_pass_enabled=false) so an all-clear order still
+        // gets a reviewer — the safe default until judge determinism is proven. An absent
+        // flag means enabled (backward compatible with legacy-shaped summaries/tests).
+        if (!autoPassEnabled(summary)) return QCDecision.TO_VERIFY;
+        // Confidence floor: even when auto-pass is enabled, a low-confidence SATISFIED on
+        // a REJECTABLE item is the false-pass this whole review layer exists to catch —
+        // route the order to a human instead of auto-completing it.
+        if (asInt(summary, "rejectable_satisfied_low_conf") > 0) return QCDecision.TO_VERIFY;
         return QCDecision.AUTO_PASS;
+    }
+
+    /** Whether the AUTO_PASS decision is permitted for this order. Absent → true. */
+    private boolean autoPassEnabled(Map<String, Object> summary) {
+        Object v = summary.get("auto_pass_enabled");
+        if (v == null) return true;
+        if (v instanceof Boolean b) return b;
+        return !"false".equalsIgnoreCase(String.valueOf(v));
     }
 
     // Read v2 keys plus their legacy synonyms so a BLOCKED/legacy-shaped summary still
