@@ -127,8 +127,14 @@ def test_gate_suppresses_legal_desc_fragment_in_name_field():
 
 def test_repeated_grid_cell_detector():
     from app.extraction.plausibility import _repeated_grid_cell
+    # exact-repeat bleed (445 Sparrow) and NEAR-duplicate bleed (H8354/ESMI) — the
+    # latter repeats on shared stems (Porch/Patio/Deck) once we split on / and ,
     assert _repeated_grid_cell("CvPor,CvPat CvPor,CvPat Prch/Patio/Deck 0 Prch/Patio/Deck 0")
+    assert _repeated_grid_cell("Porch/Patio Porch/Deck 0 Porch/Pat/Deck 2,000 Porch/Patio")
     assert not _repeated_grid_cell("Concrete Slab Foundation")   # legit multi-word
+    assert not _repeated_grid_cell("Prch/Patio/Deck")           # legit single cell
+    assert not _repeated_grid_cell("Wood/Vinyl Siding")         # legit, slash-separated
+    assert not _repeated_grid_cell("Central Air, Central Heat") # one repeated token only
     assert not _repeated_grid_cell("Residential Residential")    # single repeated token
     assert not _repeated_grid_cell("Wood Brick Stone Vinyl")     # all distinct
 
@@ -143,3 +149,24 @@ def test_gate_suppresses_grid_cell_bleed():
     }
     _generic_schema_gate(merged)
     assert merged["porch_patio_deck"].found is False           # row-bleed → MISSING, not garbage
+
+
+# ── F7 residual (445 Sparrow): data-source names bled into mls_number ──────────
+
+def test_mls_number_rejects_provider_name_bleed():
+    from app.extraction.plausibility import _valid_mls_number
+    assert _valid_mls_number("Corelogic, GeoData,", {}) is False   # no digit + comma-list
+    assert _valid_mls_number("A12345", {}) is True                 # has a digit → id
+    assert _valid_mls_number("1260000", {}) is True
+    assert _valid_mls_number("Matrix", {}) is True                 # single token, allow (rare)
+
+
+def test_gate_suppresses_mls_provider_bleed():
+    from app.extraction.plausibility import validate_fields
+    merged = {
+        "mls_number": ExtractedField(
+            canonical_name="mls_number", value="Corelogic, GeoData,",
+            raw_value="Corelogic, GeoData,", source=Source.PDF_DIGITAL, confidence=0.6, page=2),
+    }
+    validate_fields(merged)
+    assert merged["mls_number"].found is False

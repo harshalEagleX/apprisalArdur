@@ -287,6 +287,22 @@ def test_no_listing_hint_when_all_settled():
     assert not any(x["hint"].startswith("listing_comps") for x in h)
 
 
+def test_listing_hint_uad_date_grammar_contract_only_is_exempt():
+    # 445 Sparrow (F9): comp 6 "c06/26" is contract-only (no settlement "s") →
+    # not settled → exempt; comp 7 "Active"; comps 1-5 settled ("s..;c..").
+    vals = {f"comp_{i}_sale_price": "1" for i in range(1, 8)}
+    vals.update({
+        "comp_1_sale_date": "s06/26;c05/26", "comp_2_sale_date": "s05/26;c02/26",
+        "comp_3_sale_date": "s06/26;c04/26", "comp_4_sale_date": "s01/26;c11/25",
+        "comp_5_sale_date": "s09/25;c08/25", "comp_6_sale_date": "c06/26",
+        "comp_7_sale_date": "Active",
+    })
+    h = H.compute_hints(vals, list(vals))
+    flagged = next((x for x in h if x["hint"].startswith("listing_comps")), None)
+    assert flagged is not None
+    assert flagged["value"] == [6, 7]        # only the not-settled comps
+
+
 # ── P8 / F11: $(000) neighborhood price scaling ───────────────────────────────
 
 def test_price_scale_000_hint_fires_on_thousands_vs_dollars():

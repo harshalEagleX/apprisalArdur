@@ -121,6 +121,19 @@ def _valid_appraiser_email(value: str, fields: Dict[str, ExtractedField]) -> boo
     return "@" in value and "." in value.split("@")[-1]
 
 
+def _valid_mls_number(value: str, fields: Dict[str, ExtractedField]) -> bool:
+    """F7 (445 Sparrow): the URAR data-source caption bleeds provider names into
+    mls_number ("Corelogic, GeoData,"). A real MLS number is an identifier — it has
+    a digit. A comma-separated list of alphabetic words with NO digit is caption/
+    data-source bleed, not an MLS id → suppress."""
+    v = value.strip()
+    if not v:
+        return False
+    if any(c.isdigit() for c in v):
+        return True                      # has a digit → a plausible identifier
+    return "," not in v                  # no digit AND a comma-list → bled provider names
+
+
 # P2 / F2: a PERSON-name field ("2 PGS 102-104" bled in from the legal description)
 # must be name-shaped. Detected by field-name SHAPE (person parties only — NOT
 # company/lender/amc, which legitimately carry digits & suffixes), so a new party
@@ -244,6 +257,7 @@ _FIELD_VALIDATORS: Dict[str, Callable[[str, Dict[str, ExtractedField]], bool]] =
     "contract_price":             _valid_contract_price,
     "contract_date":              _valid_contract_date,
     "concessions_amount":         _valid_concessions_amount,
+    "mls_number":                 _valid_mls_number,
 }
 
 for _pfx in ["subject_grid"] + [f"comp_{_i}" for _i in range(1, _MAX_COMPS + 1)]:
@@ -421,7 +435,11 @@ def _caption_artifact(value: str) -> bool:
 # touched. The proper fix is column-bbox anchoring (see
 # BBOX_PROVENANCE_REGISTRY_PLAN.md Phase 2); this is the safe interim guard.
 def _repeated_grid_cell(value: str) -> bool:
-    tokens = [t for t in re.split(r"\s+", value.strip()) if len(t) >= 3]
+    # split on / and , too, so NEAR-duplicate bleed fragments ("Porch/Patio
+    # Porch/Deck Porch/Pat/Deck") repeat on their shared stems (Porch/Patio/Deck)
+    # while a legit single cell ("Prch/Patio/Deck", "Concrete Slab Foundation")
+    # still has no repeated token. Verified on ESNV + ESMI (445 Sparrow / H8354).
+    tokens = [t for t in re.split(r"[\s/,]+", value.strip()) if len(t) >= 3]
     if len(tokens) < 4:
         return False
     from collections import Counter

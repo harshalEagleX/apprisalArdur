@@ -49,8 +49,28 @@ _LISTING_RX = re.compile(r"\b(active|pending|listing|under\s*contract|offered|fo
 _COMP_IDX_RX = re.compile(r"^comp_(\d+)_")
 
 
+# UAD date-of-sale grammar: a SETTLED sale carries an "s" component ("s06/26"); a
+# pending/contract carries only "c" ("c06/26"); an active listing shows "Active".
+# A comp with a contract component but NO settlement component has not closed →
+# no settlement date → exempt (this is F9's comp_6="c06/26", verified on 445 Sparrow).
+_UAD_SETTLED_RX = re.compile(r"s\d", re.I)
+_UAD_CONTRACT_RX = re.compile(r"c\d", re.I)
+
+
+def _no_settlement_date(sale_date: Any) -> bool:
+    sd = str(sale_date or "")
+    if not sd:
+        return False
+    # a contract-only date (has "c", lacks "s") → not settled
+    if _UAD_CONTRACT_RX.search(sd) and not _UAD_SETTLED_RX.search(sd):
+        return True
+    return False
+
+
 def _listing_comps(values: Dict[str, Any]) -> List[int]:
-    """Indices of present comps that are listings (no settlement date expected)."""
+    """Indices of present comps that are listings / not-yet-settled (no settlement
+    date expected). Detected from a listing WORD (Active/Pending/…) OR the UAD
+    date grammar (a contract-only "cMM/YY" with no settlement "sMM/YY")."""
     idxs: set = set()
     for lbl in values:
         m = _COMP_IDX_RX.match(lbl)
@@ -62,7 +82,7 @@ def _listing_comps(values: Dict[str, Any]) -> List[int]:
         sale_type = values.get(f"comp_{i}_sale_type")
         sale_date = values.get(f"comp_{i}_sale_date")
         blob = " ".join(str(x) for x in (status, sale_type, sale_date) if x)
-        if _LISTING_RX.search(blob):
+        if _LISTING_RX.search(blob) or _no_settlement_date(sale_date):
             out.append(i)
     return out
 
