@@ -18,7 +18,10 @@ vi.mock("next/server", () => ({
 }));
 vi.mock("@/lib/config", () => ({ JAVA: "http://java.test" }));
 
-import { middleware } from "./middleware";
+// This Next.js variant uses `proxy.ts` as the middleware file (the build shows it
+// as "Proxy (Middleware)"); it exports `proxy`. Alias it as `middleware` so the
+// rest of this contract test reads naturally.
+import { proxy as middleware } from "./proxy";
 
 type Resp = { kind: "next" } | { kind: "redirect"; location: string };
 
