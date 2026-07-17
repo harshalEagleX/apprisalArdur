@@ -129,9 +129,11 @@ def _valid_mls_number(value: str, fields: Dict[str, ExtractedField]) -> bool:
     v = value.strip()
     if not v:
         return False
-    if any(c.isdigit() for c in v):
-        return True                      # has a digit → a plausible identifier
-    return "," not in v                  # no digit AND a comma-list → bled provider names
+    # an MLS NUMBER is an identifier — it has a digit. Verified across 10 RANDOM
+    # orders: real ids ("57050211542", "#F10491575…", "#VALO2126558/LO") all carry
+    # digits, while the bleed ("results of", "General Row", "increased", "correct",
+    # "Corelogic, GeoData,") never does. No-digit → not an MLS number → suppress.
+    return any(c.isdigit() for c in v)
 
 
 # P2 / F2: a PERSON-name field ("2 PGS 102-104" bled in from the legal description)
@@ -440,11 +442,16 @@ def _repeated_grid_cell(value: str) -> bool:
     # while a legit single cell ("Prch/Patio/Deck", "Concrete Slab Foundation")
     # still has no repeated token. Verified on ESNV + ESMI (445 Sparrow / H8354).
     tokens = [t for t in re.split(r"[\s/,]+", value.strip()) if len(t) >= 3]
-    if len(tokens) < 4:
+    if len(tokens) < 3:
         return False
     from collections import Counter
-    repeated = [t for t, c in Counter(tokens).items() if c >= 2]
-    return len(repeated) >= 2
+    counts = Counter(tokens)
+    # a real cell never repeats the SAME token 3+ times ("2Balcony 2Balcony
+    # 2Balcony" = one value bled across comps), nor repeats 2+ DISTINCT tokens
+    # ("Porch/Patio Porch/Deck Porch/Pat/Deck"). Either shape → row bleed.
+    if any(c >= 3 for c in counts.values()):
+        return True
+    return len(tokens) >= 4 and sum(1 for c in counts.values() if c >= 2) >= 2
 
 
 def _string_plausible(value: str) -> bool:

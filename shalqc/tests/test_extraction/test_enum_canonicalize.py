@@ -131,6 +131,7 @@ def test_repeated_grid_cell_detector():
     # latter repeats on shared stems (Porch/Patio/Deck) once we split on / and ,
     assert _repeated_grid_cell("CvPor,CvPat CvPor,CvPat Prch/Patio/Deck 0 Prch/Patio/Deck 0")
     assert _repeated_grid_cell("Porch/Patio Porch/Deck 0 Porch/Pat/Deck 2,000 Porch/Patio")
+    assert _repeated_grid_cell("2Balcony 2Balcony 2Balcony")     # one token x3 = bled (order 11)
     assert not _repeated_grid_cell("Concrete Slab Foundation")   # legit multi-word
     assert not _repeated_grid_cell("Prch/Patio/Deck")           # legit single cell
     assert not _repeated_grid_cell("Wood/Vinyl Siding")         # legit, slash-separated
@@ -155,10 +156,12 @@ def test_gate_suppresses_grid_cell_bleed():
 
 def test_mls_number_rejects_provider_name_bleed():
     from app.extraction.plausibility import _valid_mls_number
-    assert _valid_mls_number("Corelogic, GeoData,", {}) is False   # no digit + comma-list
+    # verified across 10 RANDOM orders: an MLS number has a digit; the bleed never does
     assert _valid_mls_number("A12345", {}) is True                 # has a digit → id
-    assert _valid_mls_number("1260000", {}) is True
-    assert _valid_mls_number("Matrix", {}) is True                 # single token, allow (rare)
+    assert _valid_mls_number("#VALO2126558/LO", {}) is True
+    assert _valid_mls_number("57050211542", {}) is True
+    for bleed in ["Corelogic, GeoData,", "results of", "General Row", "increased", "correct"]:
+        assert _valid_mls_number(bleed, {}) is False               # no digit → not an id
 
 
 def test_gate_suppresses_mls_provider_bleed():
