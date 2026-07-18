@@ -71,6 +71,9 @@ def _item_from_override(row: Dict[str, Any], ov: Dict[str, Any]) -> CompiledItem
         item_id=row["item_id"],
         check_text=ov.get("check_text") or row["check_text"],
         reject_text=row.get("reject_text"),
+        reject_branches=list(ov.get("reject_branches") or row.get("reject_branches") or []),
+        hold=bool(ov.get("hold", row.get("hold", False))),
+        never_reject=bool(ov.get("never_reject", row.get("never_reject", False))),
         section=row.get("section", "other"),
         item_name=row.get("item_name", "") or row.get("item", "") or "",
         bound_labels=list(ov.get("bound_labels") or []),
@@ -115,6 +118,10 @@ def load_checklist(path: Path = _DEFAULT_CHECKLIST) -> List[Dict[str, Any]]:
                 "section": it.get("section") or _section_of(str(it.get("item_id", ""))),
                 "check_text": it["check_text"],
                 "reject_text": it.get("reject_text"),
+                # multi-reject model: per-trigger fail branches (native format only).
+                "reject_branches": list(it.get("reject_branches") or []),
+                "hold": bool(it.get("hold", False)),
+                "never_reject": bool(it.get("never_reject", False)),
                 "item_name": it.get("item") or it.get("item_name") or "",
                 "check_type": it.get("check_type", "presence"),
                 "sources": it.get("sources") or [],
@@ -138,7 +145,24 @@ def load_checklist(path: Path = _DEFAULT_CHECKLIST) -> List[Dict[str, Any]]:
             "check_type": it.get("check_type", "presence"),
             "sources": it.get("sources") or [],
         })
+    _resolve_reject_refs(rows)
     return rows
+
+
+def _resolve_reject_refs(rows: List[Dict[str, Any]]) -> None:
+    """Resolve `{ref: EQ-X}` branches to EQ-X's first branch/reject_text (the dedupe
+    map in the reject bank) so one authored text serves many items. Done in place."""
+    canonical: Dict[str, str] = {}
+    for r in rows:
+        br = r.get("reject_branches") or []
+        if br and (br[0].get("reject_text") or "").strip():
+            canonical[r["item_id"]] = br[0]["reject_text"]
+        elif (r.get("reject_text") or "").strip():
+            canonical[r["item_id"]] = r["reject_text"]
+    for r in rows:
+        for b in (r.get("reject_branches") or []):
+            if not (b.get("reject_text") or "").strip() and b.get("ref"):
+                b["reject_text"] = canonical.get(str(b["ref"]), "")
 
 
 def checklist_for(amc_code: str) -> Path:
@@ -258,6 +282,9 @@ def _compile_item(row: Dict[str, Any], client,
         item_id=row["item_id"], check_text=check_text,
         reject_text=row.get("reject_text"), section=row.get("section", "other"),
         item_name=row.get("item_name", "") or "",
+        reject_branches=list(row.get("reject_branches") or []),
+        hold=bool(row.get("hold", False)),
+        never_reject=bool(row.get("never_reject", False)),
     )
 
     # Visual → constant card, never the LLM (§3).
@@ -358,16 +385,34 @@ def _heuristic_conditional(check_text: str) -> Dict[str, List[str]]:
 
 
 def compile_checklist(amc_code: str, path: Optional[Path] = None,
-                      client=None, force: bool = False) -> List[CompiledItem]:
+                      client=None, force: bool = False,
+                      allow_active_overwrite: bool = False) -> List[CompiledItem]:
     """Compile (or load cached) the checklist for `amc_code`. The checklist is the
     per-AMC native file when present, else the default catalog. Cached by hash, so
     a second call is a file read; recompiles when the checklist/schema/prompt
-    change the hash. `client=None` → deterministic (source+heuristic) bindings."""
+    change the hash. `client=None` → deterministic (source+heuristic) bindings.
+
+    Anti-clobber guard: with `binding_overrides` retired, the signed bundle is the
+    ONLY home for its hand-tuned (`bound_by: manual`) bindings — a `--force` recompile
+    over the SAME hash regenerates every binding from the binder (or, with no client,
+    from heuristics) and downgrades status→draft, silently destroying that tuning and
+    breaking the runtime sign-off gate. So a force-overwrite of an *active* bundle is
+    refused unless the caller explicitly opts in via `allow_active_overwrite`. The
+    normal edit flow (edit source → new hash → new path) is never affected: it writes
+    a different file and leaves the active bundle untouched."""
     path = path or checklist_for(amc_code)
     chash = checklist_hash(path)
     out_path = _COMPILED_DIR / amc_code / f"{chash}.yaml"
     if out_path.exists() and not force:
         return load_compiled(out_path)
+    if out_path.exists() and force and not allow_active_overwrite \
+            and bundle_status(out_path) == STATUS_ACTIVE:
+        raise RuntimeError(
+            f"refusing to --force recompile the ACTIVE bundle {out_path.name} for "
+            f"{amc_code}: it holds hand-tuned bindings that a recompile would wipe "
+            f"(binding_overrides is retired). To edit bindings, edit the source "
+            f"checklist (a new hash writes a new bundle) or pass "
+            f"allow_active_overwrite=True if you truly intend to regenerate it.")
 
     rows = load_checklist(path)
     overrides = _load_overrides(amc_code)
