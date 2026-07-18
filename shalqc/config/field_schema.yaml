@@ -1266,6 +1266,16 @@ fields:
     source_authority: appraisal_report
     sections: [site]
 
+  street_ownership:
+    canonical_name: street_ownership
+    data_type: enum
+    required: optional
+    allowed_values: ["Public", "Private"]
+    synonyms: ["Street Ownership", "Street Public/Private", "Street Type"]
+    source_authority: appraisal_report
+    sections: [site]
+    notes: "Private → the maintenance-responsibility comment (EQ-32) is required."
+
   utilities_water:
     canonical_name: utilities_water
     data_type: string
@@ -1380,7 +1390,12 @@ fields:
     canonical_name: units_count
     data_type: enum
     required: optional
-    allowed_values: ["One", "One with Accessory Unit"]
+    # The 1004 URAR offers only One / One with Accessory Unit, but the 2-4 unit form
+    # (FNM1025) states LivingUnitCount 2-4. With a 1004-only vocabulary a legitimate
+    # "2" failed the enum gate and was SUPPRESSED, so every unit-count check read the
+    # field as absent on a multi-unit report. Two/Three/Four added so the shared
+    # schema covers the whole form family.
+    allowed_values: ["One", "One with Accessory Unit", "Two", "Three", "Four"]
     synonyms:
       - "Units"
       - "Number of Units"
@@ -1530,6 +1545,34 @@ fields:
       of these (e.g. the whole unmarked option list) is a checkbox-position
       miss, not an answer — the generic plausibility gate rejects it.
 
+  heating_description:
+    canonical_name: heating_description
+    data_type: string
+    required: optional
+    synonyms: ["Heating Description", "Heat Description"]
+    source_authority: appraisal_report
+    sections: [improvements]
+    notes: "The 'Other' free-text (e.g. 'Ductless/Wall'); a fixed-system name here IS a permanent heat source."
+
+  building_status:
+    canonical_name: building_status
+    data_type: string
+    required: optional
+    allowed_values: ["Existing", "Proposed", "UnderConstruction", "Under Construction"]
+    synonyms: ["Building Status", "Existing/Proposed/Under Construction"]
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  attic_indicator:
+    canonical_name: attic_indicator
+    data_type: enum
+    required: optional
+    allowed_values: ["Yes", "No"]
+    synonyms: ["Attic", "Attic Present"]
+    source_authority: appraisal_report
+    sections: [improvements]
+    notes: "'No' IS the None box marked (doctrine: a present value is the checked box)."
+
   cooling:
     canonical_name: cooling
     data_type: string
@@ -1652,6 +1695,59 @@ fields:
       - "# Comparables"
       - "Comps"
       - "Number of Sales"
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  # Top-of-grid researched ranges/counts (EQ-53/54/114/115). Distinct from the
+  # neighborhood _HOUSING range — these are the SALES and LISTINGS the appraiser
+  # researched. low < high; each comp's price should fall within the sales range.
+  comp_sales_range_low:
+    canonical_name: comp_sales_range_low
+    data_type: currency
+    required: optional
+    synonyms: ["Comparable Sales Price Range Low", "Sales Range Low"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_sales_range_high:
+    canonical_name: comp_sales_range_high
+    data_type: currency
+    required: optional
+    synonyms: ["Comparable Sales Price Range High", "Sales Range High"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_listings_range_low:
+    canonical_name: comp_listings_range_low
+    data_type: currency
+    required: optional
+    synonyms: ["Comparable Listings Price Range Low", "Listings Range Low"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_listings_range_high:
+    canonical_name: comp_listings_range_high
+    data_type: currency
+    required: optional
+    synonyms: ["Comparable Listings Price Range High", "Listings Range High"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_sales_researched_count:
+    canonical_name: comp_sales_researched_count
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 9999}
+    synonyms: ["Comparable Sales Researched", "# Sales Researched"]
+    source_authority: appraisal_report
+    sections: [sales_comparison]
+
+  comp_listings_researched_count:
+    canonical_name: comp_listings_researched_count
+    data_type: integer
+    required: optional
+    value_range: {min: 0, max: 9999}
+    synonyms: ["Comparable Listings Researched", "# Listings Researched"]
     source_authority: appraisal_report
     sections: [sales_comparison]
 
@@ -2390,6 +2486,40 @@ fields:
       - "Crawl Space/Partial Basement"
     source_authority: appraisal_report
     sections: [improvements]
+
+  # EQ-44/70 walkout-basement consistency (MISMO GSE attrs, not invented):
+  # if the subject basement has an Outside Entry/Exit, the grid basement line must
+  # read a walkout/walkup (GSEBasementExitType = WalkOut|WalkUp), never InteriorOnly.
+  basement_outside_entry:
+    canonical_name: basement_outside_entry
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Outside Entry/Exit"
+      - "Outside Entry"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  subject_basement_exit:
+    canonical_name: subject_basement_exit
+    data_type: enum
+    required: optional
+    allowed_values: ["WalkOut", "WalkUp", "InteriorOnly"]
+    synonyms:
+      - "Basement Exit"
+      - "Basement & Finished Rooms Below Grade"
+    source_authority: appraisal_report
+    sections: [improvements]
+
+  comp_N_basement_exit:
+    canonical_name: comp_N_basement_exit
+    data_type: enum
+    required: optional
+    allowed_values: ["WalkOut", "WalkUp", "InteriorOnly"]
+    synonyms:
+      - "Basement Exit"
+    source_authority: appraisal_report
+    sections: [sales_comparison]
 
   basement_gla:
     canonical_name: basement_gla

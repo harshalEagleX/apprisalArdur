@@ -14,6 +14,7 @@ optional section snapshot) — never the whole document (anti-injection, §4.1).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -70,6 +71,10 @@ class Packet:
     # summaries / addendum), attached to narrative-class packets so a text check
     # is judged on text, not on a numbers-only snapshot. label → prose.
     narrative_text: Optional[Dict[str, str]] = None
+    # Multi-reject model: per-trigger fail branches [{trigger, reject_text}]. The
+    # judge returns which branch fired; the fired branch's reject_text (with {slots}
+    # filled from packet values) is the rejection wording. Empty ⇒ single reject_text.
+    reject_branches: List[Dict[str, Any]] = field(default_factory=list)
 
     def raw_values(self) -> Dict[str, Any]:
         """label → scalar value, for the hint layer + grounding."""
@@ -106,6 +111,12 @@ class Packet:
             out["conditional"] = self.conditional
         if self.narrative_text:
             out["narrative_text"] = self.narrative_text
+        if self.reject_branches:
+            # send only branch_id + trigger + reject_text — the judge picks which fired.
+            out["reject_branches"] = [
+                {"branch_id": i, "trigger": b.get("trigger", ""),
+                 "reject_text": b.get("reject_text", "")}
+                for i, b in enumerate(self.reject_branches)]
         return out
 
 
@@ -198,13 +209,135 @@ def _snapshot(appraisal: DocView, section: Optional[str] = None) -> Dict[str, An
     return out
 
 
+# Vendors overflow every section's prose into ONE addendum blob, delimited by
+# section headers ("-:HIGHEST AND BEST USE:-" in ACI). Blind-capping that blob to
+# _PROSE_CAP hands the judge only its head (the boilerplate scope paragraph) and
+# hides the very comment a check asks for — ESMI-0049134's predominant-value
+# comment (EQ-21), legal-nonconforming explanation (EQ-30) and drive-by commentary
+# (EQ-127) all sat in later sections and read as "no comment found". So split the
+# blob on its headers and hand over only the block matching THIS check's section.
+_ADDENDUM_SECTION_RX = re.compile(r"-:\s*([^:]{3,70}?)\s*:-")
+
+# checklist section -> keywords that identify its addendum header. Matched by
+# substring on the lowercased header, so vendor wording variants still land.
+_ADDENDUM_HINTS: Dict[str, tuple] = {
+    "neighborhood":     ("market condition", "neighborhood"),
+    "site":             ("highest and best use", "zoning", "site"),
+    "improvements":     ("condition of the property", "improvement", "quality"),
+    "sales_comparison": ("comments on sales comparison", "sales comparison", "prior sales"),
+    "prior_sales":      ("prior sales", "sales comparison"),
+    "contract":         ("analysis of the sales contract", "sales contract", "contract"),
+    "reconciliation":   ("conditions of appraisal", "reconciliation"),
+    "cost":             ("cost approach",),
+    "subject":          ("listing history", "scope"),
+    "mc_1004":          ("market condition",),
+}
+
+# A check that asks for a comment/explanation needs the prose even when its scope
+# isn't narrative (EQ-21/EQ-30/EQ-127 are value/zoning/photo checks that hinge on a
+# written comment). Detected from the check's own words — no per-item hardcoding.
+_COMMENT_REQUIRING_RX = re.compile(
+    r"\b(comment(s|ary)?|explain(ed|ation)?|narrative|describ(e|ed|ption)|"
+    r"discuss(ed|ion)?|justif(y|ied|ication)|address(ed)?)\b", re.I)
+
+
+def _stitch_addendum(blob: str) -> Dict[str, str]:
+    """Split a delimited addendum blob into {HEADER: body}. Text before the first
+    header is kept under "" (the preamble) so nothing is lost."""
+    out: Dict[str, str] = {}
+    if not blob:
+        return out
+    parts = _ADDENDUM_SECTION_RX.split(blob)
+    out[""] = (parts[0] or "").strip()
+    for i in range(1, len(parts) - 1, 2):
+        header = (parts[i] or "").strip()
+        body = (parts[i + 1] or "").strip()
+        if header and body:
+            out[header] = (out.get(header, "") + "\n" + body).strip() if header in out else body
+    return out
+
+
+_TERM_RX = re.compile(r"[a-z]{5,}")
+_TERM_STOP = frozenset((
+    "which", "there", "their", "these", "those", "where", "while", "shall", "must",
+    "should", "would", "could", "provided", "present", "report", "appraisal",
+    "appraiser", "property", "subject", "value", "required", "requirement", "comment",
+    "commentary", "please", "verify", "section", "field", "blank",
+))
+
+
+def _terms(text: str) -> frozenset:
+    return frozenset(_TERM_RX.findall((text or "").lower())) - _TERM_STOP
+
+
+def _relevant_window(body: str, want: frozenset) -> str:
+    """A _PROSE_CAP-sized excerpt centred on the densest run of `want` terms, so a
+    long vendor block is quoted where it actually answers the check (not its head).
+    Snaps to sentence boundaries; returns the head when nothing matches."""
+    if len(body) <= _PROSE_CAP or not want:
+        return body[:_PROSE_CAP]
+    low = body.lower()
+    hits = sorted(p for t in want for p in (low.find(t),) if p >= 0)
+    if not hits:
+        return body[:_PROSE_CAP]
+    # centre on the median hit so a cluster of matches stays inside the window
+    centre = hits[len(hits) // 2]
+    start = max(0, centre - _PROSE_CAP // 2)
+    end = min(len(body), start + _PROSE_CAP)
+    start = max(0, end - _PROSE_CAP)
+    snippet = body[start:end]
+    if start:                                   # don't start mid-sentence
+        dot = snippet.find(". ")
+        if 0 <= dot < 200:
+            snippet = snippet[dot + 2:]
+    return snippet.strip()
+
+
+def _addendum_for_section(blob: str, section: Optional[str],
+                          check_text: Optional[str] = None) -> Optional[str]:
+    """The addendum block(s) relevant to this check. Header match on `section` first,
+    then a CONTENT match against the check's own distinctive words — appraisers file a
+    comment under whatever heading they like, so the text EQ-21 (predominant value) and
+    EQ-30 (legal non-conforming) need both sit under "COMMENTS ON SALES COMPARISON",
+    not under their own sections. Falls back to the preamble/head, so a blob with no
+    headers behaves exactly as before."""
+    sections = _stitch_addendum(blob)
+    if not sections:
+        return None
+    hints = _ADDENDUM_HINTS.get(section or "", ())
+    picked = [body for header, body in sections.items()
+              if header and any(h in header.lower() for h in hints)]
+    if check_text:
+        want = _terms(check_text)
+        scored = sorted(((len(want & _terms(body)), header, body)
+                         for header, body in sections.items() if header),
+                        key=lambda t: t[0], reverse=True)
+        # ≥2 shared distinctive words = this block is talking about the same thing
+        if scored and scored[0][0] >= 2:
+            # excerpt AROUND the match: these vendor blocks run for pages and the
+            # sentence a check needs is often near the end (EQ-30's legal
+            # non-conforming text tails a multi-page sales-comparison block), so a
+            # head-cap would truncate the very evidence we routed here for.
+            block = _relevant_window(scored[0][2], want)
+            if block not in picked:
+                picked.append(block)
+    if picked:
+        return "\n\n".join(picked)[:_PROSE_CAP]
+    return (sections.get("") or blob).strip()[:_PROSE_CAP] or None
+
+
 def _collect_narrative_text(appraisal: DocView, section: Optional[str],
-                            already: Dict[str, Any]) -> Optional[Dict[str, str]]:
+                            already: Dict[str, Any], check_text: Optional[str] = None,
+                            addendum_only: bool = False) -> Optional[Dict[str, str]]:
     """The section's captured prose (+ addendum overflow) for a narrative packet.
     Only PRESENT, non-empty fields are attached; anything already in the packet's
     `values` is skipped (no duplication). Returns None when there is no prose to
-    show — the judge then falls back to the section snapshot as before."""
-    wanted = list(_SECTION_PROSE.get(section or "", [])) + _GENERAL_PROSE
+    show — the judge then falls back to the section snapshot as before.
+
+    `addendum_only` trims the payload to the routed addendum block for the widened
+    (non-narrative) arm, so answering "is the comment there?" costs one block rather
+    than every prose field in the section."""
+    wanted = (list(_SECTION_PROSE.get(section or "", [])) if not addendum_only else []) + _GENERAL_PROSE
     out: Dict[str, str] = {}
     seen: set = set()
     for name in wanted:
@@ -217,7 +350,11 @@ def _collect_narrative_text(appraisal: DocView, section: Optional[str],
         text = str(v).strip()
         if not text:
             continue
-        out[name] = text[:_PROSE_CAP]
+        # the addendum is section+content routed, never blind-capped to its head
+        out[name] = (_addendum_for_section(text, section, check_text)
+                     if name == "addendum_text" else text[:_PROSE_CAP])
+        if not out[name]:
+            out.pop(name, None)
     return out or None
 
 
@@ -282,9 +419,17 @@ def build_packet(item: CompiledItem, src: Sources) -> Packet:
 
     snapshot = _snapshot(src.appraisal, item.section) if (item.scope == "unbound" or not labels) else None
 
-    # Row-3: hand narrative-class checks the real prose for their section.
-    narrative_text = (_collect_narrative_text(src.appraisal, item.section, values)
-                      if item.scope in _NARRATIVE_SCOPES else None)
+    # Row-3: hand narrative-class checks the real prose for their section — plus any
+    # check whose OWN text asks for a comment/explanation, whatever its scope. Without
+    # that second arm a value/zoning/photo check (EQ-21/EQ-30/EQ-127) is asked "is the
+    # required comment present?" while the prose carrying it is withheld, so the only
+    # honest answer is "not found" — a false reject against a report that DID comment.
+    _is_narrative = item.scope in _NARRATIVE_SCOPES
+    _asks_comment = bool(_COMMENT_REQUIRING_RX.search(item.check_text or "")
+                         or _COMMENT_REQUIRING_RX.search(item.expects or ""))
+    narrative_text = (_collect_narrative_text(
+        src.appraisal, item.section, values, check_text=item.check_text,
+        addendum_only=(not _is_narrative)) if (_is_narrative or _asks_comment) else None)
 
     # Pre-normalize cross-document comparison values (deterministic, upstream): for
     # every X that has an engagement./contract. counterpart, stamp both entries with
@@ -305,6 +450,7 @@ def build_packet(item: CompiledItem, src: Sources) -> Packet:
         values=values, absent_labels=absent, computed_hints=computed,
         section_snapshot=snapshot, source_notes=source_notes, scope=item.scope,
         conditional=conditional, narrative_text=narrative_text,
+        reject_branches=list(item.reject_branches or []),
     )
 
 

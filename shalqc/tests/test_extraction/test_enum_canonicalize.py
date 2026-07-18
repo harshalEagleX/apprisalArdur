@@ -37,9 +37,22 @@ def test_mismo_controlled_vocab_synonyms():
     assert _canonicalize_enum(_FD(["Arms-Length", "Non Arms-Length"]), "NonArmsLengthSale") == "Non Arms-Length"
 
 
+def test_zoning_and_foundation_mismo_synonyms():
+    # ESMI-0049134 (FNM1025, MISMO 2.6errata): these XML values were suppressed as
+    # implausible because their MISMO spelling isn't the UAD display form → EQ-30/EQ-44
+    # saw the field as absent and hedged to REVIEW.
+    zoning = _FD(["Legal", "Legal Non-Conforming", "No Zoning", "Illegal"])
+    assert _canonicalize_enum(zoning, "Nonconforming") == "Legal Non-Conforming"
+    assert _canonicalize_enum(zoning, "LegalNonconforming") == "Legal Non-Conforming"
+    foundation = _FD(["Concrete Slab", "Crawl Space", "Full Basement", "Partial Basement"])
+    assert _canonicalize_enum(foundation, "Basement") == "Full Basement"
+
+
 def test_synonym_never_fires_for_field_that_disallows_it():
     # a synonym target is returned ONLY if the field actually allows it
     assert _canonicalize_enum(_FD(["Det.", "Att."]), "Over75Percent") is None
+    # "Basement" must NOT be injected into a field that only lists slab/crawl
+    assert _canonicalize_enum(_FD(["Concrete Slab", "Crawl Space"]), "Basement") is None
 
 
 def test_exact_value_passes_through():

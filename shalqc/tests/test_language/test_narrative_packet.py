@@ -16,9 +16,10 @@ def _fs(**fields):
     return fs
 
 
-def _item(section, scope="cross_section", labels=None):
+def _item(section, scope="cross_section", labels=None,
+          check_text="commentary must support the selections"):
     return CompiledItem.from_yaml({
-        "item_id": "EQ-T", "check_text": "commentary must support the selections",
+        "item_id": "EQ-T", "check_text": check_text,
         "reject_text": None, "section": section, "item_name": "t",
         "bound_labels": labels or [], "scope": scope, "expects": "",
         "judgeable": "text", "conditional": None,
@@ -42,10 +43,26 @@ def test_prose_already_bound_is_not_duplicated():
     assert not (pkt.narrative_text or {}).get("sales_comparison_summary")
 
 
-def test_non_narrative_scope_gets_no_narrative_text():
+def test_non_narrative_scope_without_comment_ask_gets_no_narrative_text():
+    # bloat control: a plain value check outside a narrative scope still gets no prose
     fs = _fs(market_conditions_commentary="text")
-    pkt = build_packet(_item("neighborhood", scope="subject", labels=["x"]), Sources.of(fs))
+    pkt = build_packet(_item("neighborhood", scope="subject", labels=["x"],
+                             check_text="tax year must not be blank"), Sources.of(fs))
     assert pkt.narrative_text is None
+
+
+def test_non_narrative_scope_that_asks_for_a_comment_gets_prose():
+    # ESMI-0049134: EQ-21/EQ-30/EQ-127 are value/zoning/photo checks (non-narrative
+    # scope) that hinge on a written comment. Withholding the prose forced a false
+    # "no comment found" reject against a report that DID comment.
+    # the widened arm is addendum-only (token control): it answers "is the comment
+    # there?" from the routed addendum block, not from every prose field in the section.
+    fs = _fs(addendum_text="-:MARKET CONDITIONS:- Value exceeds predominant; explained here.")
+    pkt = build_packet(_item("neighborhood", scope="subject", labels=["x"],
+                             check_text="a comment is required when value exceeds predominant"),
+                       Sources.of(fs))
+    assert pkt.narrative_text is not None
+    assert "predominant" in pkt.narrative_text["addendum_text"]
 
 
 def test_no_prose_present_yields_none():
@@ -101,3 +118,25 @@ def test_packet_value_is_resolved_not_raw_preresolution_slot():
     entry = pkt.to_json()["values"]["location"]
     assert entry["v"] == "Suburban"        # resolved value reaches the judge
     assert entry["v"] != "Sub."            # never the raw pre-resolution slot
+
+
+# ── addendum stitching / section routing (ESMI-0049134) ──────────────────────
+
+def test_addendum_is_split_by_section_headers_and_routed():
+    from app.language.packet_v2 import _stitch_addendum, _addendum_for_section
+    blob = ("Scope of the Appraisal boilerplate. "
+            "-:MARKET CONDITIONS:- Market appears to have stabilized. "
+            "-:HIGHEST AND BEST USE:- Current use as a multi family home. "
+            "-:COMMENTS ON SALES COMPARISON:- Value slightly greater than predominant.")
+    secs = _stitch_addendum(blob)
+    assert "MARKET CONDITIONS" in secs and "HIGHEST AND BEST USE" in secs
+    # each checklist section gets ITS block, not the boilerplate head
+    assert "stabilized" in _addendum_for_section(blob, "neighborhood")
+    assert "multi family" in _addendum_for_section(blob, "site")
+    assert "predominant" in _addendum_for_section(blob, "sales_comparison")
+
+
+def test_addendum_without_headers_falls_back_to_head():
+    from app.language.packet_v2 import _addendum_for_section
+    blob = "One long unstructured addendum with no section markers at all."
+    assert "unstructured" in _addendum_for_section(blob, "site")

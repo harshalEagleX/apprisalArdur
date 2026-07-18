@@ -90,7 +90,11 @@ def _valid_real_estate_taxes(value: str, fields: Dict[str, ExtractedField]) -> b
     n = _num(value)
     if n is None:
         return False
-    return n >= 100
+    # The >=100 floor rejects PDF caption fragments ("1", "5"). But an EXACT 0 is a
+    # real, common answer — tax-exempt and land-bank parcels state $0.00 (verified
+    # ESMI-0049134: _TAX@_TotalTaxAmount="0", Detroit/Wayne County). Rejecting it made
+    # the taxes check read "blank" on a report that answered the question.
+    return n == 0 or n >= 100
 
 
 def _valid_total_rooms(value: str, fields: Dict[str, ExtractedField]) -> bool:
@@ -341,11 +345,21 @@ _MISMO_ENUM_SYNONYMS: Dict[str, str] = {
     # dwelling type
     "detached": "Det.", "attached": "Att.",
     "semidetached": "S-Det./End Unit", "semidetachedendunit": "S-Det./End Unit",
-    # units_count (MISMO carries the integer; schema enumerates the word)
-    "1": "One",
+    # units_count (MISMO carries the integer; schema enumerates the word). 2-4 cover
+    # the FNM1025 multi-unit form, whose LivingUnitCount is 2/3/4.
+    "1": "One", "2": "Two", "3": "Three", "4": "Four",
     # GSESaleType
     "armslengthsale": "Arms-Length", "nonarmslengthsale": "Non Arms-Length",
     "shortsale": "Short Sale", "reosale": "REO", "reo": "REO",
+    # GSEZoningComplianceType — MISMO "Nonconforming" ≡ UAD "Legal Non-Conforming"
+    # (ESMI-0049134: SITE._ZoningComplianceType="Nonconforming" was suppressed, so
+    # EQ-30 saw the field as absent). "LegalNonconforming" spelling covered too.
+    "nonconforming": "Legal Non-Conforming", "legalnonconforming": "Legal Non-Conforming",
+    # GSEFoundationType — MISMO packages basement as a single "Basement" token; the UAD
+    # form splits Full/Partial. Map to "Full Basement" (the dominant case, and either
+    # value satisfies EQ-44's "a basement checkbox is marked"); has_full_basement carries
+    # the finer distinction. Suppressed on ESMI-0049134 (FOUNDATION._Type="Basement").
+    "basement": "Full Basement",
 }
 
 
@@ -436,7 +450,17 @@ def _caption_artifact(value: str) -> bool:
 # Foundation") or a single repeated token ("Residential Residential") is never
 # touched. The proper fix is column-bbox anchoring (see
 # BBOX_PROVENANCE_REGISTRY_PLAN.md Phase 2); this is the safe interim guard.
+_GRID_CELL_MAX_CHARS = 300   # a 7-comp "Porch/Patio/Deck" bleed ≈ 120 chars; prose is 1000s
+
+
 def _repeated_grid_cell(value: str) -> bool:
+    # A grid cell — or its worst-case bleed across all comps — is SHORT: a handful of
+    # terse tokens. Free narrative (addendum_text, long comments) repeats common words
+    # by nature and is NEVER a grid cell; a length ceiling far above any real multi-comp
+    # bleed keeps prose from being nuked as row-bleed (ESMI-0049134: a 40 KB
+    # AppraisalAddendumText was suppressed here, punting ~12 narrative checks to REVIEW).
+    if len(value) > _GRID_CELL_MAX_CHARS:
+        return False
     # split on / and , too, so NEAR-duplicate bleed fragments ("Porch/Patio
     # Porch/Deck Porch/Pat/Deck") repeat on their shared stems (Porch/Patio/Deck)
     # while a legit single cell ("Prch/Patio/Deck", "Concrete Slab Foundation")
