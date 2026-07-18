@@ -76,6 +76,9 @@ def extract_xml(xml_path) -> ExtractedFieldSet:
     _extract_comp_grid(root, fields)
     _extract_forms(root, fields)
     _extract_subject_prior_sales(root, fields)
+    # LAST on purpose: the UAD extension layer only fills slots the base MISMO
+    # document left empty, so a base value is never overwritten by an extension.
+    _extract_uad_extensions(root, fields)
 
     for canonical, value in fields.items():
         if value is None:
@@ -188,6 +191,54 @@ def _extract_report(root: ET.Element, f: dict) -> None:
         f["report_title"] = _title
         f["appraisal_report_type"] = ("Restricted Appraisal Report"
                                       if "restrict" in _title.lower() else "Appraisal Report")
+    # USPAPReportDescription states the report option DIRECTLY and is present on 10 of
+    # 15 sample packets — a stronger source than deriving from the form title (which
+    # only some vendors emit). It also disproves "report type is PDF-only": the answer
+    # is in the XML on most packets.
+    # NOTE: vendors disagree about this attribute — a la mode writes the property
+    # ADDRESS into it ("3135 Great Oak St"), so it is only trusted when it actually
+    # names a USPAP report option. Anything else is ignored rather than stored under a
+    # name that implies a report type.
+    _uspap = report.get("USPAPReportDescription", "") or ""
+    _lo = _uspap.lower()
+    if "restrict" in _lo:
+        f["uspap_report_description"] = _uspap
+        f["appraisal_report_type"] = "Restricted Appraisal Report"
+    elif "appraisal report" in _lo:
+        f["uspap_report_description"] = _uspap
+        f["appraisal_report_type"] = "Appraisal Report"
+
+
+# ── UAD GSE extension sections ────────────────────────────────────────────────
+# Alongside base MISMO, 12 of 15 sample packets carry a parallel UAD layer shaped
+#   <X>_EXTENSION/<X>_EXTENSION_SECTION[@ExtensionSectionOrganizationName=
+#   'UNIFORM APPRAISAL DATASET']/<X>_EXTENSION_SECTION_DATA/<LEAF>@GSE*
+# holding the authoritative UAD answer. None of it was read. Harvested generically
+# (any depth, any section) via this attribute→canonical table, so onboarding a new
+# GSE attribute is one row rather than new traversal code. Base MISMO WINS: these
+# only fill slots the base document left empty.
+_GSE_EXT_FIELD: Dict[str, str] = {
+    "GSEBorrowerName":                    "borrower_name",
+    "GSEAssessorsParcelIdentifier":       "assessors_parcel_number",
+    "GSEEffectiveAgeDescription":         "effective_age",
+    "GSENeighborhoodBoundariesDescription": "neighborhood_boundaries",
+    "GSEPropertyTaxTotalTaxAmount":       "real_estate_taxes",
+    "GSENFIPFloodZoneIdentifier":         "fema_flood_zone",
+    "GSEFEMASpecialFloodHazardAreaIndicator": "fema_flood_hazard",
+    "GSEStoriesCount":                    "stories",
+    "GSEUpdateLastFifteenYearIndicator":  "updated_last_15_years",
+}
+
+
+def _extract_uad_extensions(root: ET.Element, f: dict) -> None:
+    for data in root.iter():
+        if not data.tag.split("}")[-1].endswith("_EXTENSION_SECTION_DATA"):
+            continue
+        for leaf in data.iter():
+            for attr, val in leaf.attrib.items():
+                key = _GSE_EXT_FIELD.get(attr.split("}")[-1])
+                if key and val and not f.get(key):
+                    f[key] = val
 
 
 def _extract_parties(root: ET.Element, f: dict) -> None:
@@ -443,6 +494,24 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         # AMENITY was never read at all. Fireplace/porch/deck/pool/fence live here on
         # every form family; without it fireplace_count fell to PDF grid-bleed
         # ("2 WoodStove(s) # 0 Driveway") and was suppressed.
+        # UAD CONDITION_DETAIL rows state whether each area was updated/remodeled and
+        # roughly when ("Kitchen / Remodeled / OneToFiveYearsAgo"). Present on 8/15
+        # packets and never read, so a condition/updates check had no update evidence.
+        _updates = []
+        for cd in struct.iter("CONDITION_DETAIL"):
+            _area = _a(cd, "GSEImprovementAreaType")
+            _desc = _a(cd, "GSEImprovementDescriptionType")
+            _when = _a(cd, "GSEEstimateYearOfImprovementType")
+            if _desc:
+                _updates.append(" ".join(p for p in (_area, _desc, _when) if p))
+        if _updates:
+            f["condition_comments"] = "; ".join(_updates)
+            if any("updat" in u.lower() or "remodel" in u.lower() for u in _updates):
+                f["updated"] = "Yes"
+        # Garage attached/detached (EQ-74) — stated on CAR_STORAGE itself, 7/15 packets.
+        _cstore = struct.find("CAR_STORAGE")
+        if _cstore is not None and _a(_cstore, "_AttachmentType"):
+            f["garage_type"] = _a(_cstore, "_AttachmentType")
         for am in struct.findall("AMENITY"):
             _t = _a(am, "_Type")
             _cnt, _desc = _a(am, "_Count"), _a(am, "_DetailedDescription")
@@ -515,6 +584,18 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         _hbu = _a(site, "HighestBestUseIndicator")
         if _hbu:
             f["highest_and_best_use"] = {"Y": "Yes", "N": "No"}.get(_hbu.strip().upper(), _hbu)
+        # Only the Y/N indicator was read; the appraiser's REASONING lives in
+        # HighestBestUseDescription (present on 12/15 packets). Feed it to the site
+        # prose slot the packet builder already looks for, so an H&BU/zoning check is
+        # judged on the stated rationale instead of a bare Yes.
+        _hbu_txt = _a(site, "HighestBestUseDescription")
+        _zone_txt = _a(site, "_ZoningClassificationDescription")
+        _site_prose = [t for t in (_hbu_txt, _zone_txt)
+                       if t and not _POINTER_RX.search(t)]
+        if _site_prose:
+            f["site_comments"] = "  ".join(_site_prose)
+        if _hbu_txt and not _POINTER_RX.search(_hbu_txt):
+            f["zoning_comments"] = _hbu_txt
         # Street ownership (EQ-32 private-street branch) — the marked
         # _OFF_SITE_IMPROVEMENT[Street]._OwnershipType (Public|Private). These hang
         # off PROPERTY (a sibling of SITE), so query from `prop`. Prefer the
@@ -834,6 +915,16 @@ def _extract_valuation_methods(root: ET.Element, f: dict) -> None:
         f["cost_approach_value"]       = _a(ca, "ValueIndicatedByCostApproachAmount")
         if f["cost_approach_value"]:
             f["indicated_value_cost_approach"] = f["cost_approach_value"]
+        # How the site value was derived (paired sales, extraction, …). EQ-92 asks for
+        # SUPPORT for the site-value opinion; unread, the check only ever saw the bare
+        # amount. Present on 12/15 packets. Routed to the cost prose slot.
+        _sv_comment = _a(ca, "SiteEstimatedValueComment")
+        if _sv_comment and not _POINTER_RX.search(_sv_comment):
+            f["site_value_comment"] = _sv_comment
+            f["cost_approach_comment"] = _sv_comment
+        _ca_comment = _a(ca, "_Comment")
+        if _ca_comment and not _POINTER_RX.search(_ca_comment) and not f.get("cost_approach_comment"):
+            f["cost_approach_comment"] = _ca_comment
         f["site_value"]                = _a(ca, "SiteEstimatedValueAmount")
         if f["site_value"]:
             f["site_value_estimate"] = f["site_value"]
@@ -1010,6 +1101,11 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     if _m:
         f[f"{pfx}_settlement_date"] = _m.group(1)
     _set(f"{pfx}_financing_adj",     "FinancingConcessions","_Amount")
+    # The financing row's DESCRIPTION carries the terms + concession figure
+    # ("Conv;0" = conventional, zero concessions). Only the _Amount was read, so a
+    # concessions check reported "no adjustment or zero entry found" while the grid
+    # plainly stated one.
+    _set(f"{pfx}_financing_concessions", "FinancingConcessions", "_Description")
     _set(f"{pfx}_location_rating",   "Location",           "_Description")
     _set(f"{pfx}_site_area",         "SiteArea",           "_Description")
     _set(f"{pfx}_site_size",         "SiteArea",           "_Description")

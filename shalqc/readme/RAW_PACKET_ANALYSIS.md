@@ -192,6 +192,53 @@ suppressions on that packet 47 → 31. Suite 248 pass.
 New reusable helper: `_POINTER_RX` — detects "See Attached Addendum"-class cells so
 a real narrative elsewhere can win the slot.
 
+## BATCH 2 (2026-07-18) — UAD GSE extension layer + narrative sources
+
+### The big one: an entire parallel UAD layer was being ignored
+12 of 15 packets carry, alongside base MISMO, a **UAD extension layer**:
+
+```
+<X>_EXTENSION / <X>_EXTENSION_SECTION[@ExtensionSectionOrganizationName=
+    'UNIFORM APPRAISAL DATASET'] / <X>_EXTENSION_SECTION_DATA / <LEAF> @GSE*
+```
+
+It holds the authoritative UAD answers and **none of it was read**. Now harvested by
+one generic function (`_extract_uad_extensions`) driven by a `GSE attribute →
+canonical` table, at any depth, for any section — onboarding a new GSE attribute is
+one table row, not new traversal code. Runs **last**, so base MISMO always wins and
+extensions only fill empty slots.
+
+| canonical | GSE source | populated |
+|---|---|---|
+| `borrower_name` | `BORROWER_NAME@GSEBorrowerName` | **15/15** |
+| `assessors_parcel_number` | `PARCEL_IDENTIFIER@GSEAssessorsParcelIdentifier` | **15/15** |
+| `effective_age` | `EFFECTIVE_AGE@GSEEffectiveAgeDescription` | **15/15** |
+| `neighborhood_boundaries` | `NEIGHBORHOOD_BOUNDARIES@GSENeighborhoodBoundariesDescription` | **15/15** |
+| `real_estate_taxes` | `PROPERTY_TAX_AMOUNT@GSEPropertyTaxTotalTaxAmount` | **15/15** |
+| `fema_flood_zone` / `fema_flood_hazard` | `FLOOD_ZONE_INFORMATION@GSE*` | **15/15** |
+| `stories` | `STRUCTURE_INFORMATION@GSEStoriesCount` | **15/15** |
+| `updated_last_15_years` | `OVERALL_CONDITION_RATING@GSEUpdateLastFifteenYearIndicator` | 12/15 |
+
+### Narrative + grid sources added
+| canonical | source | populated |
+|---|---|---|
+| `site_comments` / `zoning_comments` | `SITE@HighestBestUseDescription` + zoning desc (only the Y/N indicator was read) | 15/15, 10/15 |
+| `site_value_comment` / `cost_approach_comment` | `COST_ANALYSIS@SiteEstimatedValueComment` — EQ-92 asks for SUPPORT, only the amount was read | 12/15, 13/15 |
+| `condition_comments` / `updated` | `CONDITION_DETAIL@GSEImprovementAreaType/DescriptionType/EstimateYearOfImprovementType` | 13/15, 8/15 |
+| `garage_type` | `CAR_STORAGE@_AttachmentType` | 6/15 |
+| `comp_N_financing_concessions` | `SALE_PRICE_ADJUSTMENT[FinancingConcessions]@_Description` (`'Conv;0'` = the zero entry EQ-59 called absent; only `_Amount` was read) | **15/15** |
+
+### Vendor trap recorded
+`REPORT@USPAPReportDescription` is **not** reliably a report type — a la mode writes
+the property ADDRESS into it (`'3135 Great Oak St'`). It is therefore only trusted
+when the text actually names a USPAP option; otherwise ignored rather than stored
+under a misleading name. (It *does* carry the report option on other vendors, which
+still disproves "report type is PDF-only".)
+
+### Already fine — not extractor gaps
+`comp_N_verification_source` (`'RCMLS#…/DOM 0'`) was **already mapped**, so EQ-57's
+"data sources not MLS" is a *binding* issue, not extraction.
+
 ## STILL-UNMAPPED MISMO ATTRIBUTES (sweep across 15 packets)
 
 Attributes carrying real data that `xml_extractor` never references. Ranked by how
