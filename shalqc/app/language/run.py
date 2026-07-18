@@ -316,7 +316,12 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
     for p in packets:
         by_section.setdefault(p.scope or "other", []).append(p)
 
-    verdicts, failed, metas, judge_timing = J.judge_all(client, by_section)
+    # B3: self-consistency re-judges only decisive auto-outcomes when N>1 (default
+    # 1 = a single pass == plain judge_all, no extra cost). Contains gpt-oss-120b's
+    # run-to-run flips by forcing any non-unanimous auto-decision to REVIEW.
+    from app.config import settings
+    verdicts, failed, metas, judge_timing = J.judge_all_consistent(
+        client, by_section, n=settings.judge_self_consistency_n)
     item_by_id = {it.item_id: it for it in items}
 
     for item_id, raw in verdicts.items():

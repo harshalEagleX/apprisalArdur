@@ -197,7 +197,8 @@ RULES OF EVIDENCE:
     that treats a field's presence as a TRIGGER, treat these as ABSENT. The
     `nullish_values` hint lists exactly which present-looking labels are nullish
     (e.g. hoa_dues="$0" does NOT make "HOA dues present" true → PUD/HOA check is
-    NOT_APPLICABLE, never a reject).
+    NOT_APPLICABLE, never a reject). A label that is PRESENT but NOT in that hint is
+    a real value even if it reads 0 (e.g. a $0 grant-deed transfer price).
  4a) UNIT SCALE: when a `price_scale_000` hint is present, the neighborhood price
     fields are in $(000) — use the ×1000 scaled dollar values it provides when
     comparing them to comp sale prices; never flag the raw thousands-vs-dollars gap.
@@ -224,6 +225,19 @@ RULES OF EVIDENCE:
     exceeding, name comps 2 and 5. Never copy an example's literal identifiers into a
     verdict.
 
+ 13) REJECT BRANCHES (multi-reject). When the packet carries `reject_branches`, this
+    check has SEVERAL distinct fail conditions, each a {branch_id, trigger, reject_text}.
+    Decide WHICH ONE (if any) the packet values fire:
+      • exactly one trigger fires → NOT_SATISFIED; set `fired_branch` to that branch_id
+        and `suggest_reject_wording` to THAT branch's reject_text with every {slot}
+        placeholder filled from the packet's actual values (never the example figures
+        in check_text). Blank {slots} you cannot fill → leave the literal token.
+      • NO trigger fires → SATISFIED (the check passes; fired_branch=null). This is the
+        point of branches: enumerated fail-modes turn a vague check into a clean PASS.
+      • the check's precondition is absent (nothing to evaluate) → NOT_APPLICABLE.
+      • genuinely cannot tell which/whether a trigger fired → REVIEW, fired_branch=null.
+    Never invent a branch; use only the reject_branches given.
+
 REPLY SCHEMA:
 {"verdicts":[{
   "item_id": "<echo the item_id>",
@@ -232,7 +246,8 @@ REPLY SCHEMA:
   "found": "<verbatim values / counts from the packet>",
   "reviewer_line": "<one plain sentence, 8-240 chars>",
   "evidence": [{"label": "<packet label>", "quote": "<verbatim substring of that value>"}],
-  "suggest_reject_wording": "<reject_text with found values filled, or null>",
+  "fired_branch": <branch_id of the fired reject branch, or null>,
+  "suggest_reject_wording": "<the fired branch's reject_text (slots filled), or the single reject_text with found values filled, or null>",
   "confidence": 0.0
 }]}"""
 
@@ -265,15 +280,20 @@ def _batch_meta(section: str, res) -> Dict[str, object]:
     }
 
 
-def _judge_batch(client, section: str, packets: List, bclass: BatchClass
+def _judge_batch(client, section: str, packets: List, bclass: BatchClass,
+                 call_suffix: str = ""
                  ) -> Tuple[str, Optional[Dict[str, dict]], Dict[str, object]]:
     """One batched call over one section's packets. Returns (section, verdicts-by-
-    item_id | None, batch_meta). batch_meta always describes the call made."""
+    item_id | None, batch_meta). batch_meta always describes the call made.
+
+    `call_suffix` is appended to the cache-key call_type (NOT the model prompt) so a
+    self-consistency re-run (B3) draws a fresh sample instead of a cache hit, while
+    each sample stays individually cacheable for an idempotent order re-run."""
     payload = {"packets": [p.to_json() for p in packets]}
     # reasoning headroom is ADDED on top so the hidden chain-of-thought never
     # eats into the answer budget and truncates the JSON (see _REASONING_HEADROOM).
     max_tokens = _REASONING_HEADROOM + max(_MIN_TOKENS, bclass.tokens_per_item * len(packets))
-    res = client.complete(f"judge2:{PROMPT_VERSION}:{section}", _system(),
+    res = client.complete(f"judge2:{PROMPT_VERSION}:{section}{call_suffix}", _system(),
                           json.dumps(payload), max_tokens=max_tokens,
                           reasoning_effort=bclass.reasoning_effort)
     meta = _batch_meta(section, res)
@@ -303,12 +323,15 @@ def _normalize_reply(data: dict):
     return None
 
 
-def judge_all(client, packets_by_section: Dict[str, List]
+def judge_all(client, packets_by_section: Dict[str, List], call_suffix: str = ""
               ) -> Tuple[Dict[str, dict], List[str], Dict[str, dict], Dict[str, Any]]:
     """Judge every section concurrently. Returns (verdicts keyed by item_id,
     item_ids whose batch failed → caller applies the S-6 fallback, metas keyed
     by item_id → the batch call's audit metadata, and a timing/telemetry
-    ledger: {judge_wall_s, judge_slowest_call_s, batches, retries, s6_count})."""
+    ledger: {judge_wall_s, judge_slowest_call_s, batches, retries, s6_count}).
+
+    `call_suffix` (empty for the normal path) is forwarded to every batch's cache
+    key so a self-consistency pass (judge_all_consistent, B3) draws fresh samples."""
     t0 = time.perf_counter()
     if client is None or not getattr(client, "available", False):
         failed = [p.item_id for ps in packets_by_section.values() for p in ps]
@@ -353,7 +376,7 @@ def judge_all(client, packets_by_section: Dict[str, List]
                len(batches), min(_MAX_LANES, max(1, len(batches))))
     failed_chunks: List[tuple] = []
     with ThreadPoolExecutor(max_workers=min(_MAX_LANES, max(1, len(batches)))) as pool:
-        futures = {pool.submit(_judge_batch, client, sec, ps, batch_class_of[sec]): (sec, ps)
+        futures = {pool.submit(_judge_batch, client, sec, ps, batch_class_of[sec], call_suffix): (sec, ps)
                   for sec, ps in batches}
         for fut in as_completed(futures):
             sec, ps = futures[fut]
@@ -381,7 +404,7 @@ def judge_all(client, packets_by_section: Dict[str, List]
         with ThreadPoolExecutor(max_workers=min(_MAX_LANES, len(failed_chunks))) as pool:
             futures = {
                 pool.submit(_judge_batch, client, sec, ps,
-                           batch_class_of.get(sec, _BATCH_CLASSES["fact"])): (sec, ps)
+                           batch_class_of.get(sec, _BATCH_CLASSES["fact"]), call_suffix): (sec, ps)
                 for sec, ps in failed_chunks
             }
             for fut in as_completed(futures):
@@ -411,3 +434,85 @@ def judge_all(client, packets_by_section: Dict[str, List]
         "s6_count": len(still_failed),
     }
     return verdicts, still_failed, metas, timing
+
+
+# ── B3: N-way self-consistency over decisive verdicts ─────────────────────────
+
+# Only these auto-decide an order, so only these are worth a second opinion. A
+# REVIEW / CANNOT_EVALUATE / NOT_APPLICABLE already routes to a human (or is
+# benign), so re-judging it spends tokens for no decision-safety gain.
+_DECISIVE_STATUSES = {"SATISFIED", "NOT_SATISFIED"}
+
+
+def _unstable_reviewer_line(samples: List[str]) -> str:
+    """A self-contained 8–240 char reviewer line naming the disagreement, so the
+    downstream validator (8–240) passes and the reviewer sees WHY it's a verify."""
+    from collections import Counter
+    tally = ", ".join(f"{s}×{c}" for s, c in Counter(samples).most_common())
+    return f"Judge verdict was unstable across {len(samples)} runs ({tally}) — please verify."[:240]
+
+
+def judge_all_consistent(client, packets_by_section: Dict[str, List], n: int = 1
+                         ) -> Tuple[Dict[str, dict], List[str], Dict[str, dict], Dict[str, Any]]:
+    """`judge_all` with N-way self-consistency over DECISIVE verdicts (B3).
+
+    Pass 1 is a normal `judge_all`. When ``n > 1``, every item whose pass-1 status is
+    a decisive auto-outcome (SATISFIED/NOT_SATISFIED) is re-judged ``n-1`` more times
+    (distinct cache keys → fresh samples). An item that is NOT unanimous across its
+    samples is downgraded to REVIEW with a 'judge_unstable' note (confidence = the
+    agreement ratio) — a human confirms rather than trust a run-to-run coin flip.
+    Non-decisive verdicts, failed items, and items we could not re-sample are left
+    exactly as pass-1 returned them. Same 4-tuple as `judge_all`; `timing` gains
+    self_consistency_{n,checked,unstable}."""
+    verdicts, failed, metas, timing = judge_all(client, packets_by_section)
+    n = max(1, int(n or 1))
+    if n <= 1 or not verdicts:
+        return verdicts, failed, metas, timing
+
+    eligible = {iid for iid, v in verdicts.items()
+                if str((v or {}).get("status")) in _DECISIVE_STATUSES}
+    if not eligible:
+        timing.update(self_consistency_n=n, self_consistency_checked=0,
+                      self_consistency_unstable=0)
+        return verdicts, failed, metas, timing
+
+    subset = {sec: [p for p in ps if p.item_id in eligible]
+              for sec, ps in packets_by_section.items()}
+    subset = {sec: ps for sec, ps in subset.items() if ps}
+
+    # samples[iid] seeds with the pass-1 status; each extra pass appends its own.
+    samples: Dict[str, List[str]] = {
+        iid: [str(verdicts[iid].get("status"))] for iid in eligible}
+    for k in range(1, n):
+        v2, _f2, _m2, t2 = judge_all(client, subset, call_suffix=f":sc{k}")
+        for iid in eligible:
+            jr = v2.get(iid)
+            if jr is not None and jr.get("status"):
+                samples[iid].append(str(jr["status"]))
+        timing["judge_wall_s"] = round(
+            timing.get("judge_wall_s", 0.0) + t2.get("judge_wall_s", 0.0), 2)
+        timing["batches"] = timing.get("batches", 0) + t2.get("batches", 0)
+        timing["retries"] = timing.get("retries", 0) + t2.get("retries", 0)
+
+    unstable = 0
+    for iid in eligible:
+        obs = samples[iid]
+        if len(obs) < 2:                       # no second opinion → keep pass-1 as-is
+            continue
+        top = max(set(obs), key=obs.count)
+        if obs.count(top) == len(obs):         # unanimous → trust the auto-decision
+            verdicts[iid]["confidence"] = 1.0
+            continue
+        unstable += 1                          # flip-prone auto-decision → human check
+        v = verdicts[iid]
+        v["status"] = "REVIEW"
+        v["fired_branch"] = None
+        v["confidence"] = round(obs.count(top) / len(obs), 2)
+        v["judge_unstable"] = {"samples": obs, "majority": top}
+        v["reviewer_line"] = _unstable_reviewer_line(obs)
+
+    timing.update(self_consistency_n=n, self_consistency_checked=len(eligible),
+                  self_consistency_unstable=unstable)
+    logger.info("judge_v2: self-consistency n=%d checked=%d unstable→REVIEW=%d",
+               n, len(eligible), unstable)
+    return verdicts, failed, metas, timing

@@ -80,6 +80,16 @@ class Settings:
     llm_max_calls_per_order: int = field(default_factory=lambda: int(_env("LLM_MAX_CALLS_PER_ORDER", "28") or 28))
     llm_cache_ttl_hours: int = field(default_factory=lambda: int(_env("LLM_CACHE_TTL_HOURS", "72") or 72))
 
+    # Judge self-consistency (B3): gpt-oss-120b is non-deterministic even at temp 0
+    # (batched attention), so a borderline SATISFIED/NOT_SATISFIED can flip run-to-run
+    # and auto-decide an order wrongly. When N>1, decisive verdicts are re-judged N-1
+    # more times and any item that is NOT unanimous is downgraded to REVIEW (a human
+    # confirms rather than trust a coin-flip). Default 1 = OFF: no extra calls, no
+    # behavior change. Only decisive outcomes are re-run (REVIEW/CANNOT_EVALUATE already
+    # go to a human), so the cost is bounded to the auto-decided subset, not the order.
+    judge_self_consistency_n: int = field(
+        default_factory=lambda: max(1, int(_env("JUDGE_SELF_CONSISTENCY_N", "1") or 1)))
+
     # final_shalqccore.md §9: language|legacy judgment path. "language" runs the
     # language-driven judge (app/language/*) and IS the product; "legacy" keeps the
     # old rule engine only for the test/debug path. Defaults to language so a deploy
