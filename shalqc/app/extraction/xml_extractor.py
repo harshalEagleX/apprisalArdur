@@ -79,6 +79,8 @@ def extract_xml(xml_path) -> ExtractedFieldSet:
     # LAST on purpose: the UAD extension layer only fills slots the base MISMO
     # document left empty, so a base value is never overwritten by an extension.
     _extract_uad_extensions(root, fields)
+    # needs addendum_text, which _extract_forms populates above.
+    _listing_facts_from_addendum(fields)
 
     for canonical, value in fields.items():
         if value is None:
@@ -248,6 +250,41 @@ _GSE_EXT_FIELD: Dict[str, str] = {
 }
 
 
+def _parse_listing_facts(f: dict, text: str) -> None:
+    """EQ-13 binds list_date / list_price / mls_number / days_on_market. MISMO has no
+    attributes for them — vendors state them inside the listing prose ("...per
+    RCMLS#20261040169 dated 07/14/2026 in the amount of $269,000"), so the facts exist
+    but no slot held them. Anything not stated simply stays empty."""
+    if not text:
+        return
+    _dom = re.search(r"\bDOM\s+(\d+)", text, re.I)
+    if _dom:
+        f.setdefault("days_on_market", _dom.group(1))
+    _ld = re.search(r"(?:listed|dated)\s+(?:on\s+)?(\d{1,2}/\d{1,2}/\d{2,4})", text, re.I)
+    if _ld:
+        f.setdefault("list_date", _ld.group(1))
+    _lp = re.search(r"\$\s?([\d,]{3,})", text)
+    if _lp:
+        f.setdefault("list_price", _lp.group(1).replace(",", ""))
+    _mls = re.search(r"([A-Z]{0,6}MLS)\s*#?\s*([A-Z0-9\-]{5,})", text, re.I)
+    if _mls:
+        f.setdefault("mls_number", _mls.group(2))
+        f.setdefault("mls_name", _mls.group(1))
+
+
+def _listing_facts_from_addendum(f: dict) -> None:
+    """The listing cell is usually just "See Attached Addendum"; the real line lives in
+    the addendum's listing-history section. Runs AFTER _extract_forms, because that is
+    what populates addendum_text — parsing earlier silently found nothing."""
+    if f.get("list_date") and f.get("mls_number"):
+        return
+    _add = f.get("addendum_text") or ""
+    if not _add:
+        return
+    _m = re.search(r"-:\s*[^:]*LISTING HISTORY[^:]*:-(.{0,1200})", _add, re.I | re.S)
+    _parse_listing_facts(f, _m.group(1) if _m else "")
+
+
 def _extract_uad_extensions(root: ET.Element, f: dict) -> None:
     for data in root.iter():
         if not data.tag.split("}")[-1].endswith("_EXTENSION_SECTION_DATA"):
@@ -302,6 +339,17 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
     lender = parties.find("LENDER")
     if lender is not None:
         f["lender_name"] = _a(lender, "_UnparsedName")
+        # ACI names the AMC on LENDER/CONTACT_DETAIL (the lender is the actual lender,
+        # the contact is the ordering AMC — "Equity Solutions USA"). Without this,
+        # EQ-109's amc_name resolved only from MANAGEMENT_COMPANY, which this vendor
+        # does not emit, so the AMC-name check had nothing to compare at all.
+        _lcd = lender.find("CONTACT_DETAIL")
+        if _lcd is not None and _a(_lcd, "_Name"):
+            f.setdefault("lender_contact_name", _a(_lcd, "_Name"))
+            # EQ-109 only asks that SOME AMC name appears under Lender/Client. The
+            # contact under LENDER is exactly that name for this vendor, so it answers
+            # the check; MANAGEMENT_COMPANY (when present) still wins as the primary.
+            f.setdefault("amc_name", _a(_lcd, "_Name"))
         # lender/client address — MISMO carries it natively (layout-independent),
         # so prefer it over any PDF read. Use the unparsed address when present,
         # else assemble from the component attributes.
@@ -489,6 +537,9 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         for _t, _ind in _found:
             if _t == "Basement" and _ind == "Y":
                 f["has_full_basement"] = "Yes"
+                # an explicit negative, not silence: EQ-44/EQ-70 ask WHICH basement box
+                # is marked, and an absent partial flag read as "unanswered".
+                f.setdefault("has_partial_basement", "No")
             elif _t == "PartialBasement" and _ind == "Y":
                 f["has_partial_basement"] = "Yes"
         # EQ-44/70: the subject's Outside Entry/Exit checkbox. When Yes, the grid
@@ -610,6 +661,16 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         # keep a distinct name here so the two sources never clobber each other.
         "AdverseSiteConditions": "adverse_site_conditions_analysis",
     }
+    # EQ-51 asks "any physical deficiencies OR adverse conditions?" and binds the
+    # single name `adverse_conditions`, which no extractor emitted — the check had
+    # nothing to answer with even though BOTH underlying boxes are stated. Combine
+    # them: either one marked Yes answers the question Yes.
+    def _combine_adverse() -> None:
+        _pd, _asc = f.get("physical_deficiency"), f.get("adverse_site_conditions_analysis")
+        if _pd or _asc:
+            f.setdefault("adverse_conditions",
+                         "Yes" if "Yes" in (_pd, _asc) else "No")
+
     for pa in prop.findall("PROPERTY_ANALYSIS"):
         t = _a(pa, "_Type")
         comment = _a(pa, "_Comment")
@@ -624,6 +685,7 @@ def _extract_property(root: ET.Element, f: dict) -> None:
             # carry the narrative alongside the box state so a judge can read the "why"
             if comment:
                 f.setdefault(f"{ikey}_comment", comment)
+    _combine_adverse()
 
     site = prop.find("SITE")
     if site is not None:
@@ -840,16 +902,7 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         # them — vendors state them INSIDE this description ("The subject was listed on
         # 04/02/2026 for $135,000 ... MLS#20261040169"), so the facts exist but no slot
         # held them. Parsed out; anything not stated simply stays empty.
-        _hist = f["listing_history"] or ""
-        _ld = re.search(r"listed\s+(?:on\s+)?(\d{1,2}/\d{1,2}/\d{2,4})", _hist, re.I)
-        if _ld:
-            f["list_date"] = _ld.group(1)
-        _lp = re.search(r"\$\s?([\d,]{3,})", _hist)
-        if _lp:
-            f["list_price"] = _lp.group(1).replace(",", "")
-        _mls = re.search(r"(?:MLS|RCMLS)\s*#?\s*([A-Z0-9\-]{5,})", _hist, re.I)
-        if _mls:
-            f["mls_number"] = _mls.group(1)
+        _parse_listing_facts(f, f["listing_history"] or "")
 
     # Special assessments — the _TAX row carries a _TotalSpecialTaxAmount even
     # when it is "0" (a real answer, not a gap; EQ-10 only needs a comment when > 0).
@@ -1213,6 +1266,15 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     _set(f"{pfx}_garage",            "CarStorage",         "_Description")
     _set(f"{pfx}_garage_carport",    "CarStorage",         "_Description")
     _set(f"{pfx}_concessions",       "SalesConcessions",   "_Description")
+    # EQ-59 binds comp_N_concession_amount / comp_N_financing_adj. The grid states the
+    # concession in the SalesConcessions cell and the financing terms (incl. an explicit
+    # "0") in FinancingConcessions, so alias both names onto the cells that hold them —
+    # otherwise the check reads "no adjustment or zero entry" while the grid shows one.
+    _set(f"{pfx}_concession_amount", "SalesConcessions",   "_Description")
+    if not f.get(f"{pfx}_financing_adj"):
+        _set(f"{pfx}_financing_adj", "FinancingConcessions", "_Description")
+    # EQ-74 binds comp_N_garage_carport; the grid carries car storage on the Parking row.
+    _set(f"{pfx}_garage_carport",    "Parking",            "_Description")
     _set(f"{pfx}_heating_cooling",   "HeatingCooling",     "_Description")
     _set(f"{pfx}_functional_utility","FunctionalUtility",  "_Description")
     _set(f"{pfx}_porch_patio_deck",  "PorchDeck",          "_Description")

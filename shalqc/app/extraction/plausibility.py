@@ -360,6 +360,12 @@ _MISMO_ENUM_SYNONYMS: Dict[str, str] = {
     # value satisfies EQ-44's "a basement checkbox is marked"); has_full_basement carries
     # the finer distinction. Suppressed on ESMI-0049134 (FOUNDATION._Type="Basement").
     "basement": "Full Basement",
+    # GSEHeatingType / GSECoolingType — MISMO spells the system out, the UAD form uses
+    # the abbreviation. ESMI-0049134: HEATING@_Type="ForcedWarmAir" was suppressed, so
+    # the HVAC check saw no heating on a gas forced-air house.
+    "forcedwarmair": "FWA", "forcedairunit": "FWA", "forcedair": "FWA",
+    "hotwaterbaseboard": "HWBB", "hotwater": "HWBB", "baseboard": "HWBB",
+    "radiantheat": "Radiant",
 }
 
 
