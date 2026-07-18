@@ -217,6 +217,24 @@ def _extract_report(root: ET.Element, f: dict) -> None:
 # (any depth, any section) via this attribute→canonical table, so onboarding a new
 # GSE attribute is one row rather than new traversal code. Base MISMO WINS: these
 # only fill slots the base document left empty.
+# UAD "Materials/condition" rows — stated on 13-15 of 15 packets and previously read
+# only for a foundation fallback. The description checks bind these names directly.
+_EXTERIOR_FIELD: Dict[str, str] = {
+    "Walls":                "exterior_walls",
+    "RoofSurface":          "roof_surface",
+    "WindowType":           "window_type",
+    "GuttersAndDownspouts": "gutters_downspouts",
+    "WindowStormSash":      "storm_sash",
+    "WindowScreens":        "screens",
+}
+_INTERIOR_FIELD: Dict[str, str] = {
+    "Floors":           "floor_material",
+    "Walls":            "interior_walls",
+    "TrimAndFinish":    "trim_finish",
+    "BathroomFloors":   "bath_floor",
+    "BathroomWainscot": "bath_wainscot",
+}
+
 _GSE_EXT_FIELD: Dict[str, str] = {
     "GSEBorrowerName":                    "borrower_name",
     "GSEAssessorsParcelIdentifier":       "assessors_parcel_number",
@@ -303,6 +321,21 @@ def _extract_parties(root: ET.Element, f: dict) -> None:
         if "&" in raw_name:
             parts = [p.strip() for p in raw_name.split("&", 1)]
             f["co_borrower_name"] = parts[1]
+
+    # Owner of public record (EQ-1 / EQ-D) — stated on PROPERTY/_OWNER on all 15
+    # packets and never read, so the owner-vs-borrower check had no owner to compare.
+    _owner = root.find(".//PROPERTY/_OWNER")
+    if _owner is not None and _a(_owner, "_Name"):
+        f["owner_of_public_record"] = _a(_owner, "_Name")
+        if not f.get("owner_name"):
+            f["owner_name"] = _a(_owner, "_Name")
+
+    # Subject inspection date (14/15 packets) — distinct from the signature date and
+    # required by the inspection/effective-date checks.
+    for _insp in root.iter("INSPECTION"):
+        if _a(_insp, "AppraisalInspectionPropertyType") in ("", "Subject") and _a(_insp, "InspectionDate"):
+            f["inspection_date"] = _a(_insp, "InspectionDate")
+            break
 
     # Appraisal Management Company — MISMO carries it on MANAGEMENT_COMPANY
     # (not always under PARTIES, so search from root). Backs EQ-109, which asks
@@ -423,6 +456,18 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                 f["heating"] = _htype or _hdesc
             if _hdesc:
                 f["heating_description"] = _hdesc
+        # Exterior / interior materials. The UAD "Materials/condition" rows are stated
+        # here on every packet (15/15) and were never read, so the description checks
+        # that bind exterior_walls / floor_material / roof_surface had nothing to judge
+        # and hedged even though the report fills the whole block.
+        for feat in struct.findall("EXTERIOR_FEATURE"):
+            _key = _EXTERIOR_FIELD.get(_a(feat, "_Type"))
+            if _key and _a(feat, "_Description") and not f.get(_key):
+                f[_key] = _a(feat, "_Description")
+        for feat in struct.findall("INTERIOR_FEATURE"):
+            _key = _INTERIOR_FIELD.get(_a(feat, "_Type"))
+            if _key and _a(feat, "_ConditionDescription") and not f.get(_key):
+                f[_key] = _a(feat, "_ConditionDescription")
         # Foundation — FOUNDATION repeats once per checkbox; the MARKED one
         # (_ExistsIndicator='Y') carries the clean type (Slab / Basement). Prefer it
         # over the free-text EXTERIOR_FEATURE description ("Concrete/ave"). The same
@@ -525,6 +570,11 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                         "Deck": "deck", "Porch": "porch"}[_t]
                 if not f.get(_key):
                     f[_key] = _desc or ("Yes" if _exists else "")
+        # The UAD grid states porch/patio/deck as ONE cell; EQ-45/EQ-75 bind that
+        # combined name, which nothing populated. Build it from the amenity rows.
+        _ppd = [v for v in (f.get("porch"), f.get("deck")) if v and v.lower() != "none"]
+        if _ppd and not f.get("porch_patio_deck"):
+            f["porch_patio_deck"] = "/".join(_ppd)
         # total parking = sum of the subject's CAR_STORAGE_LOCATION spaces
         # (Garage + Carport + Driveway); scoped to THIS subject STRUCTURE so a
         # comp's storage can never leak in.
@@ -535,6 +585,9 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                 _spaces += int(n); _seen = True
         if _seen:
             f["parking_space_number"] = str(_spaces)
+            # EQ-45 binds `number_of_cars`; nothing populated it, so the car-storage
+            # line read as blank even though the spaces are stated per location.
+            f["number_of_cars"] = str(_spaces)
         sa = struct.find("STRUCTURE_ANALYSIS")
         if sa is not None:
             f["effective_age"] = _a(sa, "EffectiveAgeYearsCount")
@@ -702,6 +755,14 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                 f[key] = _a(lu, "_Percent")
             if t == "Other" and _a(lu, "_TypeOtherDescription"):
                 f["land_use_other_description"] = _a(lu, "_TypeOtherDescription")
+        # EQ-22 asks that the land-use percentages total 100. It binds `land_use_total`,
+        # which nothing computed, so the check could never do the arithmetic it names.
+        _lu_pcts = [_num_or_none(_a(lu, "_Percent"))
+                    for lu in nbhd.findall(".//_PRESENT_LAND_USE")]
+        _lu_pcts = [p for p in _lu_pcts if p is not None]
+        if _lu_pcts:
+            _tot = sum(_lu_pcts)
+            f["land_use_total"] = str(int(_tot)) if _tot == int(_tot) else str(_tot)
         housing = nbhd.find("_HOUSING")
         if housing is not None:
             # The URAR "One-Unit Housing" price columns are in $(000)s per the GSE UAD
@@ -743,6 +804,9 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         # and was suppressed, so a stated $10,000 concession read as absent.
         if f["concessions_amount"]:
             f["seller_concessions"] = f["concessions_amount"]
+            # EQ-18 binds `financial_assistance_amount`; nothing populated it, so the
+            # amount the contract states was invisible to the check.
+            f["financial_assistance_amount"] = f["concessions_amount"]
         # The contract's own data source (e.g. "PA/Assessor") — the EQ-17 owner/data
         # source check reported it missing while the attribute was populated.
         if _a(sc, "DataSourceDescription"):
@@ -1144,6 +1208,12 @@ def _extract_subject_prior_sales(root: ET.Element, f: dict) -> None:
         hps = _a(subject, "_HasPriorSalesIndicator")
         if hps:
             f["psh_research_flag"] = "Yes" if hps.strip().upper() == "Y" else "No"
+        # Some vendors state the research source on SUBJECT itself rather than on a
+        # child PRIOR_SALES row (ESMI-0049134: "Realcomp RCMLS/Wayne County Public
+        # Records"), so the child-only read above missed it entirely.
+        if _a(subject, "DataSourceDescription"):
+            f.setdefault("prior_sale_data_source_subject", _a(subject, "DataSourceDescription"))
+            f.setdefault("psh_data_source", _a(subject, "DataSourceDescription"))
         # the subject's own prior-sales record sits directly under SUBJECT
         sps = subject.find("PRIOR_SALES")
         if sps is not None:
@@ -1153,8 +1223,12 @@ def _extract_subject_prior_sales(root: ET.Element, f: dict) -> None:
                 f.setdefault("subject_prior_sale_price", _a(sps, "PropertySalesAmount"))
             if _a(sps, "DataSourceDescription"):
                 f.setdefault("psh_data_source", _a(sps, "DataSourceDescription"))
+                # EQ-84/EQ-85 bind the *_subject names, which nothing populated — the
+                # prior-sale source and its effective date were invisible to them.
+                f.setdefault("prior_sale_data_source_subject", _a(sps, "DataSourceDescription"))
             if _a(sps, "DataSourceEffectiveDate"):
                 f.setdefault("psh_data_source_date", _a(sps, "DataSourceEffectiveDate"))
+                f.setdefault("prior_sale_effective_date_subject", _a(sps, "DataSourceEffectiveDate"))
     # GSEPriorSaleComment / date as a secondary source
     for ps in root.iter("PRIOR_SALE"):
         if _a(ps, "GSEPriorSaleComment"):

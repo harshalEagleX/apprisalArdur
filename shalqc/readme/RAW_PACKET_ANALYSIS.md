@@ -239,6 +239,43 @@ still disproves "report type is PDF-only".)
 `comp_N_verification_source` (`'RCMLS#…/DOM 0'`) was **already mapped**, so EQ-57's
 "data sources not MLS" is a *binding* issue, not extraction.
 
+## BATCH 3 (2026-07-18) — driven by what the checklist actually binds
+
+Better targeting method: instead of mapping arbitrary MISMO attributes, extract every
+`bound_labels` entry from the compiled bundle (215 distinct labels) and find which are
+**never populated** across the 15 packets. That surfaces only gaps a real check feels.
+
+> Method note: `comp_N_*` are TEMPLATE labels that `packet_v2._expand` expands per
+> comp at packet time. Probing them literally reports false gaps — resolve to
+> `comp_1_*` before measuring.
+
+| canonical | source | populated |
+|---|---|---|
+| `exterior_walls`, `roof_surface`, `window_type`, `gutters_downspouts`, `storm_sash`, `screens` | `EXTERIOR_FEATURE@_Description` (table-driven) | 13-15/15 |
+| `floor_material`, `interior_walls`, `trim_finish`, `bath_floor`, `bath_wainscot` | `INTERIOR_FEATURE@_ConditionDescription` (table-driven) | 13-15/15 |
+| `owner_of_public_record` / `owner_name` | `PROPERTY/_OWNER@_Name` — EQ-1/EQ-D had **no owner to compare** | **15/15** |
+| `porch_patio_deck` | composed from `AMENITY[Porch]`+`[Deck]` (UAD states one combined cell) | **15/15** |
+| `financial_assistance_amount` | alias of `SalesConcessionAmount` — EQ-18 bound a name nothing filled | 8/15 |
+| `inspection_date` | `INSPECTION@InspectionDate` (subject) | 14/15 |
+| `number_of_cars` | sum of `CAR_STORAGE_LOCATION@ParkingSpacesCount` — EQ-45 | 15/15 |
+| `land_use_total` | **computed** sum of `_PRESENT_LAND_USE@_Percent` — EQ-22 asks the total be 100 but nothing did the arithmetic | 15/15 |
+| `prior_sale_data_source_subject` | `PRIOR_SALES@DataSourceDescription`, plus `RESEARCH/SUBJECT@DataSourceDescription` (some vendors put it on SUBJECT itself) | — |
+
+EQ-45 alone bound four of these (`exterior_walls`, `floor_material`, `porch_patio_deck`,
+`number_of_cars`) — none populated, which is why it reported "no amenity value found".
+
+### Coverage
+**Bound-label coverage: 199/215 (92%)**, up from 183/215. Remaining 16, honestly split:
+
+- **Not XML gaps (5)** — engagement-letter/PDF sourced: `engagement.lender_address`,
+  `engagement.lender_name`, `fha_case_number`, `loan_program`, `loan_type`.
+- **Genuinely PDF-only (2)**: `reasonable_exposure_time` (EQ-122),
+  `special_assessments_comment` (EQ-10).
+- **Real XML backlog (9)**: `comp_1_basement_gla` (EQ-70), `comp_1_has_prior_sales`
+  (EQ-81), `list_date`/`list_price`/`mls_number` (EQ-13),
+  `mca_active_listings_current_3` (EQ-113), `prior_sale_effective_date_subject`
+  (EQ-85), `project_phase`/`unit_number` (EQ-119, condo-only).
+
 ## STILL-UNMAPPED MISMO ATTRIBUTES (sweep across 15 packets)
 
 Attributes carrying real data that `xml_extractor` never references. Ranked by how
