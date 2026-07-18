@@ -162,6 +162,16 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
         guardrails.append("bad_status")
     status = StatusV2(raw_status)
 
+    # B3: a verdict the self-consistency pass found flip-prone is already downgraded
+    # to REVIEW upstream; stamp the reason as a guardrail so it stays visible/measurable
+    # on the card even when the reviewer_line is re-synthesized below (judge quality is
+    # tracked via guardrails, not prose).
+    _ju = raw.get("judge_unstable")
+    if isinstance(_ju, dict) and _ju.get("samples"):
+        from collections import Counter
+        _tally = ",".join(f"{s}x{c}" for s, c in Counter(_ju["samples"]).most_common())
+        guardrails.append(f"judge_unstable:{_tally}")
+
     expected = str(raw.get("expected", "") or "")[:400]
     found = str(raw.get("found", "") or "")[:400]
     reviewer_line = str(raw.get("reviewer_line", "") or "")
@@ -204,10 +214,35 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
                 status = StatusV2.REVIEW
                 guardrails.append("math_mismatch")
 
-    # suggested reject wording only survives on a NOT_SATISFIED.
+    # suggested reject wording only survives on a NOT_SATISFIED. Multi-reject: the
+    # judge's suggest_reject_wording IS the fired branch's reject_text with {slots}
+    # filled — prefer it; fall back to the single reject_text.
     suggest = raw.get("suggest_reject_wording") or item.reject_text or packet.reject_text
     if status != StatusV2.NOT_SATISFIED:
         suggest = None
+
+    # Multi-reject policy flags (reject bank):
+    #  never_reject (EQ-94/112/135, descriptive-only): can never be a hard reject —
+    #    cap a NOT_SATISFIED at REVIEW and drop the reject wording.
+    #  hold (EQ-30 illegal zoning / EQ-31 H&BU=No): a fired trigger means ESCALATE to
+    #    the AMC, NOT an appraiser reject — keep it actionable but emit no reject text.
+    if getattr(item, "never_reject", False) and status == StatusV2.NOT_SATISFIED:
+        status, suggest = StatusV2.REVIEW, None
+        guardrails.append("never_reject")
+    # hold escalation can be item-level (the WHOLE check escalates, e.g. EQ-31
+    # H&BU=No) OR branch-level (only ONE fail-mode escalates while the item's other
+    # branches reject normally, e.g. EQ-30 illegal-zoning among legal-nonconforming
+    # branches). Both mean: keep the finding actionable but emit no appraiser reject.
+    fb = raw.get("fired_branch")
+    branches = getattr(item, "reject_branches", None) or []
+    branch_hold = (isinstance(fb, int) and 0 <= fb < len(branches)
+                   and bool(branches[fb].get("hold")))
+    if (getattr(item, "hold", False) or branch_hold) and status == StatusV2.NOT_SATISFIED:
+        suggest = None
+        guardrails.append("hold_escalate")
+    # record which fail-branch fired (audit / provenance), if any.
+    if fb is not None and status == StatusV2.NOT_SATISFIED:
+        guardrails.append(f"branch:{fb}")
 
     # §4: neutralize a malformed OR a directive/verdict-issuing reviewer_line into
     # the system-composed finding line — the LLM never gets to phrase the decision.

@@ -133,6 +133,21 @@ def test_bad_status_degrades_to_review():
     assert jv.status == StatusV2.REVIEW and "bad_status" in jv.guardrails
 
 
+def test_judge_unstable_stamps_guardrail(monkeypatch):
+    # B3: a self-consistency downgrade carries judge_unstable → durable guardrail on
+    # the card even after the reviewer_line is re-synthesized for a REVIEW verdict.
+    pkt = _packet_with({"comp_1_gla": "1800"})
+    raw = {"item_id": "XX-1", "status": "REVIEW", "expected": "x", "found": "1800",
+           "reviewer_line": "Judge verdict was unstable across 3 runs — please verify.",
+           "evidence": [{"label": "comp_1_gla", "quote": "1800"}], "confidence": 0.67,
+           "judge_unstable": {"samples": ["SATISFIED", "REVIEW", "SATISFIED"],
+                              "majority": "SATISFIED"}}
+    jv = validate(raw, pkt, _item())
+    assert jv.status == StatusV2.REVIEW
+    assert any(g.startswith("judge_unstable:") for g in jv.guardrails)
+    assert "SATISFIEDx2" in "".join(jv.guardrails)
+
+
 # ── §4: the LLM reports findings, it never issues the reviewer's decision ──────
 
 def test_directive_reviewer_line_is_neutralized():
