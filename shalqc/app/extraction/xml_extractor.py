@@ -647,8 +647,11 @@ def _extract_property(root: ET.Element, f: dict) -> None:
                        if t and not _POINTER_RX.search(t)]
         if _site_prose:
             f["site_comments"] = "  ".join(_site_prose)
-        if _hbu_txt and not _POINTER_RX.search(_hbu_txt):
-            f["zoning_comments"] = _hbu_txt
+        # only a SEPARATE zoning note earns its own slot — when the H&BU text is all
+        # there is, site_comments already carries it and a second identical field just
+        # duplicates a value the reviewer would see twice.
+        if _zone_txt and _zone_txt != f.get("site_comments"):
+            f["zoning_comments"] = _zone_txt
         # Street ownership (EQ-32 private-street branch) — the marked
         # _OFF_SITE_IMPROVEMENT[Street]._OwnershipType (Public|Private). These hang
         # off PROPERTY (a sibling of SITE), so query from `prop`. Prefer the
@@ -833,6 +836,20 @@ def _extract_property(root: ET.Element, f: dict) -> None:
         _dom = re.search(r"\bDOM\s+(\d+)", f["listing_history"], re.I)
         if _dom:
             f["days_on_market"] = _dom.group(1)
+        # EQ-13 binds list_date / list_price / mls_number. MISMO has no attributes for
+        # them — vendors state them INSIDE this description ("The subject was listed on
+        # 04/02/2026 for $135,000 ... MLS#20261040169"), so the facts exist but no slot
+        # held them. Parsed out; anything not stated simply stays empty.
+        _hist = f["listing_history"] or ""
+        _ld = re.search(r"listed\s+(?:on\s+)?(\d{1,2}/\d{1,2}/\d{2,4})", _hist, re.I)
+        if _ld:
+            f["list_date"] = _ld.group(1)
+        _lp = re.search(r"\$\s?([\d,]{3,})", _hist)
+        if _lp:
+            f["list_price"] = _lp.group(1).replace(",", "")
+        _mls = re.search(r"(?:MLS|RCMLS)\s*#?\s*([A-Z0-9\-]{5,})", _hist, re.I)
+        if _mls:
+            f["mls_number"] = _mls.group(1)
 
     # Special assessments — the _TAX row carries a _TotalSpecialTaxAmount even
     # when it is "0" (a real answer, not a gap; EQ-10 only needs a comment when > 0).
@@ -901,6 +918,13 @@ def _extract_market_inventory(root: ET.Element, f: dict) -> None:
         trend = _a(mi, "_TrendType")
         if trend:
             f[f"mca_trend_{t}"] = trend
+    # NAME MISMATCH, not a data gap: the 1004MC "total listings" row IS the active
+    # listing count, and the checklist binds `mca_active_listings_*`. Without the
+    # alias EQ-113 asked for a number the grid already carried under another name.
+    for _rng in ("current_3", "prior_4_6", "prior_7_12"):
+        _v = f.get(f"mca_total_listings_{_rng}")
+        if _v and not f.get(f"mca_active_listings_{_rng}"):
+            f[f"mca_active_listings_{_rng}"] = _v
 
 
 def _extract_conditions(root: ET.Element, f: dict) -> None:
@@ -1193,6 +1217,9 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     _set(f"{pfx}_functional_utility","FunctionalUtility",  "_Description")
     _set(f"{pfx}_porch_patio_deck",  "PorchDeck",          "_Description")
     _set(f"{pfx}_basement",          "BasementArea",       "_Description")
+    # EQ-70 binds comp_N_basement_gla; the grid states the below-grade area in the
+    # SAME BasementArea cell ("0sf", "1340sf"), so alias rather than leave it blank.
+    _set(f"{pfx}_basement_gla",      "BasementArea",       "_Description")
     _set(f"{pfx}_energy_efficient",  "EnergyEfficient",    "_Description")
     # EQ-73: the LINE-ITEM energy-efficiency adjustment ($0 is an explicit "no
     # adjustment", tracked apart from an absent cell).
@@ -1214,6 +1241,19 @@ def _extract_subject_prior_sales(root: ET.Element, f: dict) -> None:
         if _a(subject, "DataSourceDescription"):
             f.setdefault("prior_sale_data_source_subject", _a(subject, "DataSourceDescription"))
             f.setdefault("psh_data_source", _a(subject, "DataSourceDescription"))
+        if _a(subject, "DataSourceEffectiveDate"):
+            f.setdefault("prior_sale_effective_date_subject", _a(subject, "DataSourceEffectiveDate"))
+
+    # RESEARCH/COMPARABLE states, once, whether the comps' prior-sale history was
+    # researched (EQ-81 binds comp_N_has_prior_sales). Stamp it on each comp that has
+    # a grid row so the per-comp check can read it; a comp's OWN PRIOR_SALES row, when
+    # present, is the stronger answer and is written by the grid extractor.
+    _res_comp = root.find(".//SALES_COMPARISON/RESEARCH/COMPARABLE")
+    if _res_comp is not None and _a(_res_comp, "_HasPriorSalesIndicator"):
+        _flag = "Yes" if _a(_res_comp, "_HasPriorSalesIndicator").strip().upper() == "Y" else "No"
+        for _i in range(1, 10):
+            if f.get(f"comp_{_i}_sale_price") and not f.get(f"comp_{_i}_has_prior_sales"):
+                f[f"comp_{_i}_has_prior_sales"] = _flag
         # the subject's own prior-sales record sits directly under SUBJECT
         sps = subject.find("PRIOR_SALES")
         if sps is not None:
