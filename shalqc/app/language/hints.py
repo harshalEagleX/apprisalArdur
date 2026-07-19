@@ -28,6 +28,15 @@ _NULLISH = frozenset({
     "", "0", "0.0", "0.00", "$0", "$0.00", "n/a", "na", "none", "--", "-", "0%", "tbd"})
 
 
+# A prior-sale / transfer AMOUNT of $0 is a LEGITIMATE value, not "missing": a
+# gift, inheritance, or grant-deed transfer between owners closes at $0 by UAD
+# convention (the appraiser states it and explains it in the prior-sale comment).
+# So these labels are exempted from the nullish "treat $0 as absent" rule — a
+# "price of prior sale is missing" check must not fire on an honest $0 transfer.
+# Generic canonical-label pattern (any AMC), never a per-item pin.
+_TRANSFER_AMOUNT_RX = re.compile(r"prior_sale_price|prior_transfer_price|_transfer_amount")
+
+
 def _is_nullish(v: Any) -> bool:
     if v is None:
         return True
@@ -282,7 +291,8 @@ def compute_hints(values: Dict[str, Any], bound_labels: List[str],
     # PART 1.3: present-looking values that are actually nullish ($0/N/A/blank).
     # The judge is told (doctrine) to treat these as NOT present for a presence
     # check — the fix for EQ-11 ("hoa_dues $0" was read as "HOA present").
-    nullish = [lbl for lbl in present if _is_nullish(values.get(lbl))]
+    nullish = [lbl for lbl in present
+               if _is_nullish(values.get(lbl)) and not _TRANSFER_AMOUNT_RX.search(lbl)]
     if nullish:
         hints.append({"hint": "nullish_values (present but $0/N/A/blank)",
                       "value": nullish, "labels": nullish})

@@ -21,6 +21,17 @@ __version__ = "ldr-1.0.0"
 
 logger = logging.getLogger(__name__)
 
+# Field-NAME tokens that mark a field as free prose rather than a short structured
+# string. Kept in sync with `_NARRATIVE_NAME` in app/language/narrative.py — the
+# two describe the same concept at different layers, and when they drifted apart
+# (`boundaries` present there, missing here) a correctly-extracted XML value was
+# suppressed as grid-bleed. tests/test_extraction/test_narrative_parity.py fails
+# if they diverge again.
+NARRATIVE_NAME_TOKENS = (
+    "comment", "description", "summary", "narrative", "commentary",
+    "analysis", "remarks", "explanation", "boundaries", "reconcil",
+)
+
 _SCHEMA_PATH = Path(__file__).parent.parent.parent / "config" / "field_schema.yaml"
 
 
@@ -42,6 +53,12 @@ class FieldDefinition:
     # Empty ⇒ inferred (see primary_source/secondary_source below).
     primary_source_override: str = ""
     secondary_source_override: str = ""
+    # What a real ANSWER to this field looks like, as a regex. Used by the
+    # document-wide narrative sweep (extraction/sweep.py) to pick the appraiser's
+    # actual value out of the prose it is wrapped in, and to skip the USPAP
+    # DEFINITION the form restates beside it. Optional — most fields have a
+    # structured reader and never need one.
+    value_pattern: str = ""
 
     @property
     def all_labels(self) -> List[str]:
@@ -53,12 +70,28 @@ class FieldDefinition:
     # other report field → XML (MISMO carries it natively at 0.97).
     @property
     def _is_narrative(self) -> bool:
+        """Is this field free PROSE (as opposed to a short structured string)?
+
+        Narrative fields are exempt from the shape guards in extraction/
+        plausibility.py — long multi-clause text is what they are SUPPOSED to
+        contain, so those guards read it as corruption.
+
+        2026-07-18: "boundaries" was missing here while app/language/narrative.py
+        (`_NARRATIVE_NAME`) already listed it — two lists of the same concept that
+        disagreed. The cost: `neighborhood_boundaries` on ESCA-0019968 was read
+        from the AUTHORITATIVE XML at 0.97 confidence, perfectly formed —
+        "Neighborhood boundaries are to the north by Dry Creek Rd, to the east by
+        the North Fork American River, to the south and to the west by Hwy-49." —
+        and then suppressed as "grid cell bleed (row/multi-cell concatenation)",
+        because a long value with several comma-separated clauses looks like a bled
+        grid row to a guard meant for short cells. EQ-23 "Boundaries" then hedged
+        on 5 of 7 orders over an answer we had already extracted correctly.
+        test_narrative_token_parity keeps the two lists aligned from now on.
+        """
         if self.data_type not in ("string", "string_list"):
             return False
         name = self.canonical_name.lower()
-        return any(k in name for k in (
-            "comment", "description", "summary", "narrative", "commentary",
-            "analysis", "remarks", "explanation"))
+        return any(k in name for k in NARRATIVE_NAME_TOKENS)
 
     @property
     def primary_source(self) -> str:
@@ -194,6 +227,7 @@ class SchemaLoader:
                 notes=defn.get("notes", ""),
                 primary_source_override=defn.get("primary_source", ""),
                 secondary_source_override=defn.get("secondary_source", ""),
+                value_pattern=defn.get("value_pattern", ""),
             )
             fields[canonical] = fdef
             alias_map[canonical.lower()] = canonical

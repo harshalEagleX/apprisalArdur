@@ -105,6 +105,14 @@ class JudgeVerdict:
     # "text" (LLM-judged) | "visual" (manual, never sent to LLM) | "unbound"
     judgeable: str = "text"
     guardrails: List[str] = field(default_factory=list)
+    # 2026-07-18 (user directive): a check can have BOTH a text/value aspect and a
+    # photo/sketch aspect — "verify condition rating matches the photos", "photos of
+    # all outbuildings are required". Forcing such a check wholly into `visual`
+    # would throw away a working automated check; leaving it wholly to the judge
+    # lets a machine assert something about an image it cannot see. So the text
+    # aspect is judged and reported as normal, and this flag rides alongside so the
+    # reviewer is also told to confirm the photos by eye.
+    photo_verification_required: bool = False
     # who rendered it: "judge_v2" | "precompiled" | "fallback:<reason>"
     decided_by: str = "judge_v2"
     # the slim packet's located values, so a fallback card is still reviewable.

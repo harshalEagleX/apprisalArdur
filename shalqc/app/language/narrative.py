@@ -48,7 +48,20 @@ def classify(text: str) -> str:
     if not t:
         return "empty"
     if _POINTER_RX.search(t):
-        return "pointer"
+        # 2026-07-18: a "pointer" is text that is ONLY a pointer — the value stands
+        # in place of the narrative. `.search()` matched ANYWHERE, so a complete
+        # narrative that merely ends with the appraiser's usual courtesy
+        # cross-reference ("…analyzed in the report. See attached addendum.") was
+        # classified as a pointer. A-3 then short-circuited the check BEFORE the
+        # judge and told the reviewer "I could not find the matching text" about
+        # 1093 characters sitting right in front of them. Measured on ESMD-0002883:
+        # sales_comparison_summary 1093 chars and market_conditions_commentary 264
+        # chars, both real prose — EQ-87/EQ-118/EQ-120 hedged on 12/15, 9/15, 9/15
+        # orders. Judge what remains once the cross-reference is removed: still
+        # substantial ⇒ it is prose that happens to cite an addendum.
+        residue = _POINTER_RX.sub(" ", t).strip(" .,;:—-\n\t")
+        if len(residue) < _MIN_PROSE:
+            return "pointer"
     if _HEADER_TOKENS.match(t) and len(t) < 60:
         return "header_grab"
     if len(t) < _MIN_PROSE and _TRUNCATION_TAIL.search(t):

@@ -22,6 +22,11 @@ routing_overrides: {}
 output:
   group_by: root_cause
   tone: reviewer_plain
+  # AUTO_PASS is the only order-level decision with ZERO human eyes. The judge is not
+  # yet proven deterministic, so an all-clear order is downgraded to TO_VERIFY (a human
+  # still signs off) until that work lands. Flip to true per-AMC to allow AUTO_PASS —
+  # ideally paired with a confidence floor on rejectable SATISFIED verdicts.
+  auto_pass_enabled: false
 
 # SHALqc-CORE §12: per-AMC engagement-letter label variance merges over the
 # extractor's built-in defaults. Empty here = use extraction/engagement.py's

@@ -180,6 +180,33 @@ def run_extraction(
     if suppressed:
         logger.info("merge: plausibility suppressed %d field(s)", suppressed)
 
+    # Step 8b: document-wide narrative sweep — deterministic last resort for fields
+    # that still have NO USABLE VALUE. Narrative lands wherever the appraiser put it
+    # (USPAP addendum, a certification page, loose commentary), so a section-scoped
+    # reader misses it entirely: EQ-122's exposure time was reported "absent" on 11
+    # of 15 orders while every report we checked states it plainly.
+    #
+    # MUST run AFTER plausibility. It first ran before it, keyed on "not in merged",
+    # and was therefore dead for exactly the case it exists to fix: a spatial reader
+    # had already put the label fragment "of" in the slot, so the field was not
+    # "missing", the sweep skipped it — and plausibility then suppressed the junk,
+    # leaving nothing behind. Missing must mean "no usable value" (`not ef.found`,
+    # which is False once suppressed), not "no key present".
+    from app.extraction.sweep import extract_sweep
+    still_missing = {fd.canonical_name for fd in schema.all_fields()
+                     if not getattr(merged.get(fd.canonical_name), "found", False)}
+    sweep_fs = _safe("sweep", extract_sweep, appraisal_pdf, schema, still_missing)
+    for _name, ef in sweep_fs:
+        if not ef.found:
+            continue
+        prior = merged.get(_name)
+        # a suppressed prior holds no usable value — the sweep's read replaces it
+        # outright rather than losing a confidence comparison to rejected junk.
+        if prior is None or not prior.found:
+            merged[_name] = ef
+        else:
+            _merge_field(merged, ef)
+
     # Step 9: XML overlay — already enforced by _merge_field's confidence-
     # priority rule (XML entered the bag first at 0.97 and wins every tie).
 

@@ -425,6 +425,26 @@ def _canonicalize_enum(fd, value: str) -> Optional[str]:
     return None
 
 
+def _uad_numeric_prefix(value: str) -> Optional[str]:
+    """The number from a UAD "<value>;<source>" cell — "7;Per Metrolist" → "7".
+
+    Only fires when the text BEFORE the first ';' is purely a number: "7;Per
+    Metrolist" and "120;MLS" qualify, "Fee Simple;Leasehold" does not, so an enum
+    or free-text cell is never silently reduced to a digit it happens to contain.
+    """
+    head = str(value or "").split(";", 1)[0].strip()
+    if not head:
+        return None
+    cleaned = head.replace(",", "").replace("$", "").replace("%", "").strip()
+    if not cleaned:
+        return None
+    try:
+        float(cleaned)
+    except ValueError:
+        return None
+    return head
+
+
 def _numeric_plausible(value: str) -> bool:
     return _num(value) is not None
 
@@ -459,6 +479,16 @@ def _caption_artifact(value: str) -> bool:
 _GRID_CELL_MAX_CHARS = 300   # a 7-comp "Porch/Patio/Deck" bleed ≈ 120 chars; prose is 1000s
 
 
+# English function words that recur in ANY sentence. A repeated content token is
+# evidence of a bled grid cell; a repeated "has"/"with"/"the" is evidence of prose.
+_PROSE_FUNCTION_WORDS = frozenset("""
+and are but for from has had have her his its not our out per she that the their
+them then there these they this those was were what when which who will with you
+your are can may off own too via able also been being both each into more most
+some such than that upon very well were will would about after over under while
+""".split())
+
+
 def _repeated_grid_cell(value: str) -> bool:
     # A grid cell — or its worst-case bleed across all comps — is SHORT: a handful of
     # terse tokens. Free narrative (addendum_text, long comments) repeats common words
@@ -474,8 +504,24 @@ def _repeated_grid_cell(value: str) -> bool:
     tokens = [t for t in re.split(r"[\s/,]+", value.strip()) if len(t) >= 3]
     if len(tokens) < 3:
         return False
+    # Count only CONTENT tokens. Grid bleed repeats the cell's own content
+    # ("Porch/Patio Porch/Deck", "Fee Simple Fee Simple", "2Balcony 2Balcony");
+    # ordinary English repeats FUNCTION words by nature, and counting those made
+    # this guard fire on genuine prose that sits under the length ceiling.
+    #
+    # 2026-07-19, third instance of this defect (after neighborhood_boundaries and
+    # conforms_to_neighborhood_comment): ESWA-0002168's additional_features —
+    # "Home is mostly in original condtion with little evidence of remodeling or
+    # updating over it's lifespan. Has detached garage. Has finished attic with two
+    # bedrooms." — is 157 chars, so the ceiling did not protect it, and "Has"×2 +
+    # "with"×2 satisfied the 2-distinct-repeats rule. EQ-49 then told the reviewer
+    # "Additional Features field is blank" about a filled field. Filtering function
+    # words fixes the CAUSE, so it no longer depends on the field being named
+    # narrative-ishly.
     from collections import Counter
-    counts = Counter(tokens)
+    counts = Counter(t for t in tokens if t.lower() not in _PROSE_FUNCTION_WORDS)
+    if not counts:
+        return False
     # a real cell never repeats the SAME token 3+ times ("2Balcony 2Balcony
     # 2Balcony" = one value bled across comps), nor repeats 2+ DISTINCT tokens
     # ("Porch/Patio Porch/Deck Porch/Pat/Deck"). Either shape → row bleed.
@@ -515,7 +561,7 @@ def _string_plausible(value: str) -> bool:
 
 
 def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
-    from app.extraction.schema import schema_loader
+    from app.extraction.schema import NARRATIVE_NAME_TOKENS, schema_loader
 
     suppressed = 0
     for fname, ef in list(merged.items()):
@@ -529,7 +575,23 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             # yet they still carry values (e.g. XML comp_N_porch_patio_deck). Apply the
             # source-agnostic, value-shape-only guards (caption echo of the field's own
             # label; grid cell bleed) — both proven no-false-positive on the golden set.
-            if _caption_echo_of_field(fname, value) or _repeated_grid_cell(value):
+            # The grid-bleed guard is for SHORT structured cells; multi-clause prose
+            # is what a narrative field is supposed to contain, so the guard reads a
+            # good comment as a bled row. The schematized branch already exempts
+            # narrative fields via `fd._is_narrative` — an UNSCHEMATIZED field
+            # deserves the same exemption, since the exemption follows the field's
+            # nature, not whether it happens to be registered in the schema.
+            #
+            # 2026-07-18: `conforms_to_neighborhood_comment` is not in the schema, so
+            # it fell here and was suppressed on 4 of 8 orders — every one read from
+            # the AUTHORITATIVE XML at 0.97 and every one real prose ("The subject
+            # property conforms well with the market area. No adverse conditions were
+            # noted."). Same defect as neighborhood_boundaries, one branch over.
+            # Caption-echo still applies: a narrative field echoing its own label IS
+            # a blank-cell placeholder.
+            narrative_name = any(k in fname.lower() for k in NARRATIVE_NAME_TOKENS)
+            if _caption_echo_of_field(fname, value) or (
+                    not narrative_name and _repeated_grid_cell(value)):
                 logger.info("Plausibility (unschematized) rejected %s='%s'", fname, value)
                 _suppress(ef, "caption-echo/grid-bleed")
                 suppressed += 1
@@ -550,6 +612,19 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
                 ok = False
             reason = f"not one of allowed_values={fd.allowed_values}"
         elif fd.data_type in _NUMERIC_TYPES:
+            # UAD writes "<value>;<source>" in a single cell ("7;Per Metrolist",
+            # "120;MLS"). Suppressing the whole thing as non-numeric threw away a
+            # number we had read correctly — EQ-13 "Subject Listed/Sold within 12
+            # Months" hedged on 7 of 7 orders because days_on_market="7;Per
+            # Metrolist" was discarded rather than parsed to 7. Rewrite to the
+            # numeric part, exactly as the enum branch canonicalizes rather than
+            # suppresses; the provenance is preserved in raw_value.
+            numeric = _uad_numeric_prefix(value)
+            if numeric is not None and not _numeric_plausible(value):
+                logger.info("Plausibility: parsed UAD value;source %s='%s' → '%s'",
+                            fname, value, numeric)
+                ef.value = numeric
+                value = numeric
             ok = _numeric_plausible(value)
             reason = f"not numeric (data_type={fd.data_type})"
         elif fd.data_type == "boolean":

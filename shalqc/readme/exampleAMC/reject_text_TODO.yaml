@@ -1,0 +1,754 @@
+# Items with NO reject_text in checklist_equitysolutions.yaml.
+# Fill `reject_text:` for the ones you want to make rejectable, then I'll
+# merge them back into the source checklist and recompile.
+# 117 items total. 'already_has_implicit_authority: true' = the check
+# text already contains reject language, so it's already treated as rejectable.
+amc: EQUITYSOLUTIONS
+items:
+- item_id: EQ-A
+  section: order
+  item: Form Type (Product)
+  check_text: Form Type (Product) — Report must be provided same as ordered
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-B
+  section: order
+  item: Transaction type
+  check_text: Transaction type — Loan type on order form match with Assignment Type
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-2
+  section: subject
+  item: Legal Description
+  check_text: Legal Description — This field should not be blank
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-3
+  section: subject
+  item: 'Assessor''s parcel #'
+  check_text: 'Assessor''s parcel # — This field should not be blank'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-4
+  section: subject
+  item: Tax Year
+  check_text: Tax Year — Must be latest or last 2 year (This field should not be blank)
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-5
+  section: subject
+  item: R.E. Taxes $
+  check_text: R.E. Taxes $ — Not allow in decimals (This field should not be blank)
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-7
+  section: subject
+  item: Map Reference
+  check_text: 'Map Reference — Provided by the appraiser and must be current | Triggers: IF Map Reference missing or blank'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-8
+  section: subject
+  item: Census Tract
+  check_text: 'Census Tract — Four digit then 2 Digit after decimal | Triggers: IF Census Tract missing or blank'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-12
+  section: subject
+  item: Property Rights Appraised
+  check_text: Property Rights Appraised — Only one checkbox mark is allow
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-14
+  section: contract
+  item: Did & Did Not box
+  check_text: 'Did & Did Not box — I did did not analyze the contract for sale for the subject purchase transaction. Explain the results of the analysis of the contract for sale or why the analysis was
+    not performed. | Triggers: If Assignment Type is for Re-finance then contract section must be blank.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-18
+  section: contract
+  item: Is there any financial assistance (loan charges, sale concessions, gift or downpayment assistance, etc.) to be paid by any party on behalf of the borrower?
+  check_text: 'Is there any financial assistance (loan charges, sale concessions, gift or downpayment assistance, etc.) to be paid by any party on behalf of the borrower? — Is there any financial assistance
+    (loan charges, sale concessions, gift or downpayment assistance, etc.) to be paid by any party on behalf of the borrower? check yes or no checkbox. | Triggers: If Yes, report the total dollar amount
+    and describe the items to be paid. ( check from Purchase Agreement); If no, then report the total dollar amount and describe the items to be paid shoule apply "0" check from Purchase agreement. | Trigger:
+    if concession is given but different from purchase agreement'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-19
+  section: neighborhood
+  item: Characteristcis & Housing Trends
+  check_text: 'Characteristcis & Housing Trends — Neighborhood Characteristics and One-Unit Housing Trends At least 1 box should be checked | Triggers: if checkbox is missing : reject as In the neighborhood
+    section checbox is missing for _____, please revise.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-21
+  section: neighborhood
+  item: Unit Housing Price and Age
+  check_text: Unit Housing Price and Age — Appraiser to provide and be aware of the high and low prices given. The unadjusted sales prices of the comparables used in the report must fall within the ranges
+    unless comps are not located within the neighborhood (comment required). Comment required if the Market value differs from Predominant by more than 10%, over or under improved and does it affect marketability?
+    Trend should match MC form or specific commentary is required.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-22
+  section: neighborhood
+  item: Present Land Use
+  check_text: Present Land Use — One-Unit Housing and Present Land Use %
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-23
+  section: neighborhood
+  item: Boundaries
+  check_text: 'Boundaries — Neighborhood Boundaries : all boundaries should be described | Triggers: If missing : reject as ____ boundary is missing under Neighborhood Boundries , please revise.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-24
+  section: neighborhood
+  item: Description
+  check_text: Description — Neighborhood description should be fill up
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-25
+  section: neighborhood
+  item: Market Conditions
+  check_text: Market Conditions — Appraiser to provide and be aware of what is written on the 1004MC form. Stating, "See 1004MC" is not acceptable.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-26
+  section: site
+  item: Dimentions, Area, Shape and View
+  check_text: Dimentions, Area, Shape and View — Dimentions, Area, Shape and View should be fill up
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-30
+  section: site
+  item: Zoning Classification, Description and Compliance
+  check_text: 'Zoning Classification, Description and Compliance — Zoning Compliance atleast one box should be checked. (legal, legal non-conferming and No zoning) | Triggers: If legal checked no comment
+    needed; if legal non-conferming or No zoning then add rejection:1. Zoning Compliance is marked on ’No Zoning’, please comment if the subject can be rebuilt if destroyed. | Trigger: If illigal is marked
+    Specific Zoning Classification and Zoning Description : should be fill up | Trigger: if blank then add rejection'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-31
+  section: site
+  item: Highest and Best Use
+  check_text: 'Highest and Best Use — Highest and Best use | Triggers: if no, then Hold'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-32
+  section: site
+  item: Utilities/Off‐Site Improvement Type
+  check_text: 'Utilities/Off‐Site Improvement Type — Utilities and Off-site Improvements - Type (Gas and Electricity checbok should be marked) | Triggers: if street is marked as private then add rejection'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-33
+  section: site
+  item: Flood Hazard Area
+  check_text: 'Flood Hazard Area — FEMA Special Flood Hazard Area | Triggers: If checkbox marked as YES'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-34
+  section: site
+  item: Utilities and Off‐site Improvements Typical
+  check_text: Utilities and Off‐site Improvements Typical — Are the utilities and off-site improvements typical for the market area? Yes or No checkbox should be marked
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-35
+  section: site
+  item: Adverse Site Conditions
+  check_text: 'Adverse Site Conditions — Are there any adverse site conditions or external factors (easements, encroachments, environmental conditions, land uses, etc.)? | Triggers: If Yes checbox is marked'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-36
+  section: improvements
+  item: General description should be fill up
+  check_text: 'General description should be fill up — if one unit checkbox marked then photos, sketch and sales grid should match | Triggers: if one with accesssory checkbox is marked then sales grid and
+    sketch should reflects ADU'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-38
+  section: improvements
+  item: '# of Stories'
+  check_text: '# of Stories — No. of floor except ground level.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-39
+  section: improvements
+  item: Type
+  check_text: 'Type — Existing Proposed Under construction | Trigger: If photo detected work is going on then this checkbox should be selected'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-40
+  section: improvements
+  item: 'Design (Style):'
+  check_text: 'Design (Style): — Structural build type'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-41
+  section: improvements
+  item: 'Year Built:'
+  check_text: 'Year Built: — The year that a building on the property was originally constructed.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-42
+  section: improvements
+  item: 'Effective Age (Yrs):'
+  check_text: 'Effective Age (Yrs): — Appearance of property'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-44
+  section: improvements
+  item: Foundation
+  check_text: 'Foundation — FOUNDATION checkbox is compulsory | Triggers: If Full basement or Partial Basement checbox is marked than basement area and Basement finished must be mentioned | Trigger: if
+    basement is marked as full or partial basement with Outside Entry/exit Evidence of Infestation, Dampness and Settlement | Trigger: if checkbox is marked check commentary for adversity'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-45
+  section: improvements
+  item: Exterior and Interior Description should
+  check_text: 'Exterior and Interior Description should be completed with Material and Condition. Amenities checkbox should be marked | Trigger: If improvement section shows Fireplace(s), Patio/Deck, Pool,
+    Woodstove(s), Fence or porch than sales grid should reflect the same. Car Storage | Trigger: if Car storage checkbox is for None then all area should be blank | Trigger: If Garage or carport is marked
+    then number of cars should be mentioned | Trigger: If Garage or carport marked then attach detach or built in should be checked (atleast 1 checkbox )'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-47
+  section: improvements
+  item: Appliances
+  check_text: Appliances — Note only built in items.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-48
+  section: improvements
+  item: ABOVE Grade Contains
+  check_text: ABOVE Grade Contains — Room/ Bedrooms/ Baths/ Sq Ft or GLA area should be fill up
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-49
+  section: improvements
+  item: Additional Features
+  check_text: Additional Features — Should list Energy efficient items if any. If none, state NONE.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-50
+  section: improvements
+  item: Condition of the Property
+  check_text: Condition of the Property — Describe the condition of the property (including needed repairs, deterioration, renovations, remodeling, etc.)
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-51
+  section: improvements
+  item: Adverse conditions
+  check_text: Adverse conditions — Are there any physical deficiencies or adverse conditions that affect the livability, soundness, or structural integrity of the property?
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-52
+  section: improvements
+  item: Does Property Conform to Neighborhood
+  check_text: Does Property Conform to Neighborhood — Does the property generally conform to the neighborhood (functional utility, style, condition, use, construction, etc.)?
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-53
+  section: sales_comparison
+  item: '# of COMPARABLE Properties Currently Offered'
+  check_text: '# of COMPARABLE Properties Currently Offered — Top of page should be fill up'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-54
+  section: sales_comparison
+  item: '# of COMPARABLE Sales w/in 12 Months'
+  check_text: '# of COMPARABLE Sales w/in 12 Months — MUST only include competing sales. Verify that the comparables provided fall within this range. Range must be consistent with the comparable sales provided
+    and match 1004MC form. Check also Predominant price ranges from page 1.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-55
+  section: sales_comparison
+  item: Address
+  check_text: 'Address — Subject''s and All comps address has to be reflected on sales grid | Triggers: if missing: reject as Please update property address on sales grid or location map so it reflects
+    as ____'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-56
+  section: sales_comparison
+  item: Proximity to Subject
+  check_text: Proximity to Subject — Must be provided as at least 0.01 miles and the proper direction, N, S, NW, NE, etc. Even if in the same complex. If blank, verify that the location Map is provided.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-57
+  section: sales_comparison
+  item: Data Sources
+  check_text: 'Data Sources — must have Specific MLS,the #, the MLS number/letters that apply. (i.e.. MISMLS#3546935;DOM12). DOM must be provided or Unk listed (commentary needed if unknown). | Triggers:
+    If missing : reject as Please have data source for ___ comp # under sales grid section.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-58
+  section: sales_comparison
+  item: Verification Sources
+  check_text: 'Verification Sources — At least 1 must be provided and the specific verification source must be reported in full | Triggers: If missing : reject as Please have verification source for ___
+    comp # under sales grid section.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-60
+  section: sales_comparison
+  item: Date of Sale/Time
+  check_text: 'Date of Sale/Time — S denotes sale date and C denotes closing date if the sale date (S) is prior to the closing date (C) reject as: Please verify whether the "Date of Sale/Time" for comp
+    # 1 is correct as sale date (s06/14) is prior to the contract date (c11/14)'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-61
+  section: sales_comparison
+  item: Location
+  check_text: 'Location — location must be one of N, B or A (refer site section) | Triggers: IF subject mentioned as (A - Adverse) then if any of the comps with (N - Neutral) than value must be reflect
+    in negative (-)'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-62
+  section: sales_comparison
+  item: Leasehold/Fee Simple
+  check_text: 'Leasehold/Fee Simple — Must be provided, if Leasehold, similar comps must be provided. | Triggers: If subject section shows Property Rights Appraised as fee simple then sales grid should
+    be the reflect same; If subject section is leasehold and any of the comp shows fee simple then adjustment should be reflected.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-63
+  section: sales_comparison
+  item: Site
+  check_text: Site — Sites with less than one acre must be provided in SF, sites of one acre or more must be provided in acreage.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-64
+  section: sales_comparison
+  item: View
+  check_text: View — If view is described as Beneficial (B) or Adverse (A) photo must be provided for the same.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-66
+  section: sales_comparison
+  item: Quality of Construction
+  check_text: Quality of Construction — Must be UAD Compliant, Q3, Q4, etc. Any difference from subject to comps NOT adjusted must have a 0 in grid adjustment field and commentary must be provided to address
+    no adjustment given.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-69
+  section: sales_comparison
+  item: Above Grade/Room count/ and GLA
+  check_text: Above Grade/Room count/ and GLA — Must be provided, verify all rooms and GLA match Sketch.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-70
+  section: sales_comparison
+  item: Basement & Finish/Rooms Below Grade
+  check_text: Basement & Finish/Rooms Below Grade — If Full basement or Partial Basement checbox is marked in the improvement section then basement area and Basement finished must be mentioned in two separate
+    line in the sales grid (ex. Basement & Finished Rooms Below Grade)
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-71
+  section: sales_comparison
+  item: Functional Utility
+  check_text: Functional Utility — must be provided as Standard, Average or Typical
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-72
+  section: sales_comparison
+  item: Heating/Cooling
+  check_text: 'Heating/Cooling — Both must be provided and match with improvement section. If heating source is FWBB or FWA or Radiant at least 1 comp should be the same feature. | Triggers: If cooling
+    source marked as "Other" reject as: Subject property has no permanent heat source, please provide comment any impact on marketability.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-73
+  section: sales_comparison
+  item: Energy Efficient Items
+  check_text: Energy Efficient Items — Energy Efficient items need to be described. Differences from subject to comp NOT adjusted must have a 0 in grid adjustment field.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-74
+  section: sales_comparison
+  item: Garage/Carport
+  check_text: 'Garage/Carport — If in the improvement section Garage is marked then sales grid reflect the garage with driveway (ex. 1ga2dw) | Triggers: If any of this is differnt with subject the adjustment
+    or 0 is required.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-75
+  section: sales_comparison
+  item: Porch/Patio/Deck
+  check_text: 'Porch/Patio/Deck — In the improvement section if porch, patio or deck marked then same must be reflected in the sales grid. | Triggers: If any of the amenities are differnt with subject the
+    adjustment or 0 is required.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-76
+  section: sales_comparison
+  item: Additional Fields for use
+  check_text: Additional Fields for use — Does not have to be provided but if used, the appraiser must place a label in the proper section.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-77
+  section: sales_comparison
+  item: Net Adjustment (total)
+  check_text: 'Net Adjustment (total) — The Net Adjustment is the total of all adjustments. The result can be a positive or negative number. In residential appraisal, net adjustments generally may not exceed
+    15% of the sale price of the comparable sale. | Triggers: If exceeds 15% reject as: Please address Comps 1, 3 and 4 exceeding 15% net adjustments.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-78
+  section: sales_comparison
+  item: Adjusted Sale Price of Comparables
+  check_text: Adjusted Sale Price of Comparables — The adjusted sale price reflects the market's reaction to differences between the subject and sales and provides a more accurate range of value for the
+    subject.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-79
+  section: prior_sales
+  item: Research the sale or transfer history of subject
+  check_text: Research the sale or transfer history of subject — In this section always I did research the sale or transfer history of the subject property and comparable sales must be marked.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-80
+  section: prior_sales
+  item: Subject Property 3 year sales or transfer history
+  check_text: 'Subject Property 3 year sales or transfer history — If subject sold/transferred in 36 months than "My research did reveal any prior sales or transfers of the subject property" box must be
+    marked | Triggers: If subject sold/transferred in 36 months but did nox box marked than reject as: Prior Sales: Please check “Did” box for subject prior sales or transfers because your data revealed
+    subject has been transferred within three years.; If sold in 36 months prior "Date of Prior Sale/Transfer and Price of Prior Sale/Transfer" must be included in the report.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-81
+  section: prior_sales
+  item: Comparables 12 month sales or transfer history
+  check_text: Comparables 12 month sales or transfer history — If comparable sold/transferred in 12 months than "My research did reveal any prior sales or transfers of the comparable sales for the year
+    prior to the date of sale of the comparable sale" box must be marked
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-82
+  section: prior_sales
+  item: Sales History Table
+  check_text: Sales History Table — Date of prior Sale/Transfer in mm/dd/yyyy format and if none, leave blank. Only most recent should be reported here, if there is more than 1, commentary must be provided.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-83
+  section: prior_sales
+  item: Price of Prior Sale/Transfer
+  check_text: Price of Prior Sale/Transfer — Figure of last sale or transfer must be provided here. Only the most recent figure should be reported here, if there is more than 1, commentary must be provided.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-84
+  section: prior_sales
+  item: Data Source(s)
+  check_text: 'Data Source(s) — Must be provided. If last sale is report in Public Record, Doc # must be provided. If MLS sale, MLS name must be provided along with MLS #. Must be provided even if no sale
+    or transfer is reported. Example: MFRMLS #T2321256'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-85
+  section: prior_sales
+  item: Effective Date of Data Source (s)
+  check_text: Effective Date of Data Source (s) — Should be the date of findings. Must be provided even if no sale or transfer is reported.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-86
+  section: prior_sales
+  item: Analysis of prior sales or transfers
+  check_text: Analysis of prior sales or transfers
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-87
+  section: prior_sales
+  item: Summary of Sales Comparison Approach
+  check_text: Summary of Sales Comparison Approach — Appraiser must discuss the comparables provided specifically. Address distant comparables, adjustments given or the lack of. Your opinion of value should
+    be bracketed by the unadjusted and adjusted sales prices. If unable to bracket, sufficient commentary must be provided.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-88
+  section: prior_sales
+  item: Indicated value by sales comparison
+  check_text: Indicated value by sales comparison — Must be provided and match the final value given.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-89
+  section: reconciliation
+  item: Indicated Value by Sales Comparison Appr
+  check_text: 'Indicated Value by Sales Comparison Approach value and as is value must be same | Triggers: If values are different reject as: In reconciliation section, Indicated Market Value does not match
+    with indicated value by Sales Comparison Approach. Please revise.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-91
+  section: reconciliation
+  item: 'Appraisal: As Is or Subject To'
+  check_text: 'Appraisal: As Is or Subject To — At least 1 box must be checked ""as is" or "subject to"'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-92
+  section: cost
+  item: Support for the Opinion of Site value
+  check_text: 'Support for the Opinion of Site value — Opinion Of Site Value is required in every report. | Triggers: If missing reject as : Please provide an Opinion of site value in the report.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-93
+  section: cost
+  item: Estimated Remaining Economic Life (HUD and VA only)
+  check_text: Estimated Remaining Economic Life (HUD and VA only) — Not less than 30 years
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-94
+  section: cost
+  item: INCOME APPROACH TO VALUE
+  check_text: INCOME APPROACH TO VALUE — If this section is blank than no need to add revision.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-95
+  section: pud
+  item: Is Developer/builder in control?
+  check_text: 'Is Developer/builder in control? — Should be completed for All PUD reports, check yes or no and Attached/Detached. | Triggers: If attached and yes checkbox is marked then all pud information
+    should be fill up'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-96
+  section: signature
+  item: Appraiser
+  check_text: 'Appraiser — All reports must be signed by certified Appraiser. | Triggers: If signature is missing reject as: 1. The Appraiser Signatures are missing throughout the report, please sign in
+    all the designated spaces.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-G
+  section: signature
+  item: Name
+  check_text: Name — Appraiser name should be match with engagement letter
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-97
+  section: signature
+  item: Company Name
+  check_text: Company Name — Should match the engagement letter
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-98
+  section: signature
+  item: Company Address
+  check_text: Company Address — Should match the engagement letter
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-99
+  section: signature
+  item: Telephone number
+  check_text: Telephone number — Should match the engagement letter
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-100
+  section: signature
+  item: Email Address
+  check_text: Email Address — Should match the engagement letter
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-101
+  section: signature
+  item: Date of Signature & Effective Date of Appraisal
+  check_text: Date of Signature & Effective Date of Appraisal — Date of Signature and Report Effective Date of Appraisal
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-103
+  section: signature
+  item: 'State Certification #'
+  check_text: 'State Certification # — State Certification # Expiration Date of Certification or License'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-104
+  section: signature
+  item: 'State License #'
+  check_text: 'State License # — Used if appraiser is State Licensed, verify product type can be completed by State Licensed appraiser. Must read as it does on ASC.gov.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-105
+  section: signature
+  item: State
+  check_text: State — Verify State is the state of subject property (some appraisers appraise in multiple states) State must match the appraiser's license state attached.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-106
+  section: signature
+  item: Expiration Date of Certification or License
+  check_text: Expiration Date of Certification or License — Verify valid date and matches attached License.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-107
+  section: signature
+  item: ADDRESS OF PROPERTY APPRAISED
+  check_text: ADDRESS OF PROPERTY APPRAISED — Subject property address same as engagement letter or Subject section
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-108
+  section: signature
+  item: APPRAISED VALUE OF SUBJECT PROPERTY $
+  check_text: APPRAISED VALUE OF SUBJECT PROPERTY $ — Should match with Reconciliation section
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-109
+  section: signature
+  item: Name
+  check_text: 'Name — AMC name under the LENDER/CLIENT is requied for all report. | Triggers: If AMC name is missing reject as: 1. In the signature card, please include the AMC name: Fastapp Appraisal Management
+    Company.; If AMC name is different or incorrect reject as : In the signature card, please update the AMC name: Fastapp Appraisal Management Company.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-110
+  section: signature
+  item: Company Name
+  check_text: Company Name — Must match the Client Engagement letter (Lender/client name)
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-111
+  section: signature
+  item: Company Address
+  check_text: Company Address — Must match the Client Engagement letter (Lender/client address)
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-112
+  section: signature
+  item: Email Address
+  check_text: Email Address — not required
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-113
+  section: mc_1004
+  item: Inventory Analysis
+  check_text: Inventory Analysis — All lightly shaded areas are required to be completed or a specific comment as to why they cannot be. Required blank spaces should be completed with a "0" if there are
+    none or N/A.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-114
+  section: mc_1004
+  item: 'Total # of Comparables Sales (Settled)'
+  check_text: 'Total # of Comparables Sales (Settled) — All fields must total to the data provided on the top of the sales grid for Comparables sales in the subject neighborhood.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-115
+  section: mc_1004
+  item: 'Total # of Comparable Active Listings'
+  check_text: 'Total # of Comparable Active Listings — If completed, all fields should match the information provided at the top of the sales grid for Comparable properties currently offered for sale. If
+    all fields not complete, the Current‐3 months must match the data given at the top of the sales grid.'
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-116
+  section: mc_1004
+  item: Median Sale & List Price, DOM, Sale/List %
+  check_text: Median Sale & List Price, DOM, Sale/List % — All lightly shaded areas are required to be completed or a specific comment as to why they cannot be. Required blank spaces should be completed
+    with a "0" if there are none or N/A. If dark shaded areas cannot be provided, N/A should be provided.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-117
+  section: mc_1004
+  item: Overall Trend
+  check_text: Overall Trend — All lightly shaded trends should be marked where there are at least 2 points of data provided in the Inventory analysis and Median sale & list price fields. If the median sale
+    price trend is declining or increasing, apply the appropriate market conditions adjustment to the sales based upon contract dates or explain why this is not applicable.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-118
+  section: mc_1004
+  item: Commentary
+  check_text: Commentary — Must be completed for each section and adequately explain the data provided above. Must be specific to the report and no canned commentary is acceptable.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-119
+  section: mc_1004
+  item: Condo/Co‐Op Projects
+  check_text: Condo/Co‐Op Projects — All lightly shaded areas must be completed if the subject is a Condo Co‐ Op and deal specifically with the subject's project.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-120
+  section: mc_1004
+  item: Commentary
+  check_text: Commentary — Must be completed for each section and adequately explain the data provided above. Must be specific to the report and no canned commentary is acceptable.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-121
+  section: uspap
+  item: Appraisal and report Identification
+  check_text: Appraisal and report Identification — Must be completed and only 2 choices should be available, Appraisal Report and Restricted Appraisal Report.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-122
+  section: uspap
+  item: Reasonable Exposure Time
+  check_text: Reasonable Exposure Time — Must be provided as a single point or range in time. (i.e. 90 or 30‐60) Additional commentary is suggested but not required.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-123
+  section: uspap
+  item: Additional Certifications
+  check_text: Additional Certifications — Must be provided, if the "I HAVE performed services" is checked, additional commentary is Required to state what those prior services are.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-124
+  section: exhibits
+  item: Subject Photo Pages
+  check_text: Subject Photo Pages — At a minimum, subject front, rear and street scene photos are required. Verify with client Engagement letter if additional side, street and address verification photos
+    are required. If any obsolescence is observed in photos, commentary must be provided.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-125
+  section: exhibits
+  item: Interior photos
+  check_text: Interior photos — Photos of all rooms (Kitchen, living room, dining room, family room, bedrooms and all baths) are required for all interior inspection reports. Photos of any deferred maintenance
+    must be provided. Photos must be labeled with the specific room name.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-126
+  section: exhibits
+  item: Additional Subject photos
+  check_text: Additional Subject photos — Photos of all outbuildings and special features (pools, etc.) are required. All outbuildings must have interior photos as well as photos of any deferred maintenance
+    for the subject. Photos of any exterior obsolescence should be provided. Photos containing people or interior personal pictures should be avoided if possible.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-127
+  section: exhibits
+  item: Comparable Photos
+  check_text: Comparable Photos — For Convential loans, MLS photos are acceptable, however, there should be commentary in the report that states that they did in fact drive by them.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-128
+  section: exhibits
+  item: Sketch
+  check_text: Sketch — Sketch must be located on the Floor plan Sketch page that is provided in the appraisal software. Must have all floors. Exterior dimension must be provided and all rooms must be labeled
+    and match the number of rooms reported in the sales grid. All outbuildings and garages or any other structure that contributes to value must be on the sketch with proper dimensions.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-129
+  section: exhibits
+  item: Area Calculations
+  check_text: Area Calculations — Must be provided, usually found at the bottom of the sketch page.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-130
+  section: exhibits
+  item: Aerial Map
+  check_text: 'Aerial Map — Aerial map must be provided. | Triggers: If missing reject as : Please Provide Aerial Map In the Report.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-131
+  section: exhibits
+  item: Location Map
+  check_text: Location Map — Location map must show the subject and all comparables with sufficient detail to identify their relative locations.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-132
+  section: exhibits
+  item: Plat Map
+  check_text: Plat Map — Is required if Site Dimensions can not be provided on page 1.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-133
+  section: exhibits
+  item: Flood Map
+  check_text: Flood Map — Is required if the subject is located in a Flood Zone.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-134
+  section: exhibits
+  item: Appraisers License
+  check_text: 'Appraisers License — Appraiser''s License copy must be included in the report. And must match information with signature page. | Triggers: If license is provided before the signature date
+    reject as: 1. Please provide an updated copy of your License, as the copy provided in the report has expired.'
+  already_has_implicit_authority: true
+  reject_text: ''
+- item_id: EQ-135
+  section: exhibits
+  item: E & O Insurance
+  check_text: E & O Insurance — Is not required for every report, if not included, this is ok and will not need a revision.
+  already_has_implicit_authority: false
+  reject_text: ''
+- item_id: EQ-136
+  section: exhibits
+  item: UAD data set
+  check_text: UAD data set
+  already_has_implicit_authority: false
+  reject_text: ''

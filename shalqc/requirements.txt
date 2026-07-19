@@ -30,6 +30,9 @@ opentelemetry-exporter-otlp-proto-http
 python-dotenv
 python-multipart
 
+# Observability
+prometheus-client
+
 # Tests
 pytest
 pytest-asyncio

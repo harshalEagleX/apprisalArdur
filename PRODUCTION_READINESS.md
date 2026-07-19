@@ -1,5 +1,13 @@
 # Production Readiness — Go-Live Runbook
 
+> **⚠ Partly superseded (2026-07-16).** This runbook predates the SHALqc rebuild: its
+> references to the `ocr-service`, **Groq**, `locust` in `ocr-service/requirements.txt`, and the
+> `PythonClientService`→OCR flow are **stale** — the QC service is now **SHALqc (Python FastAPI,
+> Together AI)**. For the current env/secrets/preflight see **[`DEPLOYMENT.md`](./DEPLOYMENT.md)**;
+> for the live gap ledger see **[`PRODUCTION_GAPS.md`](./PRODUCTION_GAPS.md)**. The **multi-node**
+> guidance below (§2 cross-node cancel/reconciler, §3 load-test method) is still valid; the
+> order-claim hardening (§2a) is now **done** (`claimForQcIfNotProcessing`).
+
 Status of the order-keyed QC work: **code-complete, tested, and pushed to `origin/demo`.**
 Java test suite is green (107 tests); the frontend `next build` passes; end-to-end order
 QC (single + concurrent) is verified on a single node.

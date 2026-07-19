@@ -236,9 +236,18 @@ _ADDENDUM_HINTS: Dict[str, tuple] = {
 # A check that asks for a comment/explanation needs the prose even when its scope
 # isn't narrative (EQ-21/EQ-30/EQ-127 are value/zoning/photo checks that hinge on a
 # written comment). Detected from the check's own words — no per-item hardcoding.
+# 2026-07-18: `describ(e|ed|ption)` could never match "description" — that word is
+# spelt descriP-tion, not descriB-tion, so the alternation only ever caught
+# "describe"/"described". Three checks whose language is explicitly about a
+# DESCRIPTION (EQ-2 Legal Description, EQ-22 Present Land Use, EQ-36 General
+# description) were therefore judged with no prose attached at all — asked whether
+# a description was provided while the text carrying it was withheld. EQ-22 alone
+# hedged on 6 of 15 orders. Also added summar(y|ise|ize) — a "summary of…" check is
+# a prose check by definition.
 _COMMENT_REQUIRING_RX = re.compile(
-    r"\b(comment(s|ary)?|explain(ed|ation)?|narrative|describ(e|ed|ption)|"
-    r"discuss(ed|ion)?|justif(y|ied|ication)|address(ed)?)\b", re.I)
+    r"\b(comment(s|ary)?|explain(ed|ation)?|narrative|descri(be|bed|ption|ptive)|"
+    r"discuss(ed|ion)?|justif(y|ied|ication)|address(ed)?|summar(y|ies|ise|ize|ised|ized))\b",
+    re.I)
 
 
 def _stitch_addendum(blob: str) -> Dict[str, str]:
@@ -358,6 +367,131 @@ def _collect_narrative_text(appraisal: DocView, section: Optional[str],
     return out or None
 
 
+# ── cross-document comparison detection + availability (2026-07-18) ───────────
+#
+# A check like EQ-107 ("Subject property address same as engagement letter") is
+# compiled scope=subject / judgeable=text, so the engagement side was never
+# attached — the judge was asked to compare against a document it had not been
+# given, and could only hedge to REVIEW. Detecting the intent from the check's
+# OWN WORDS fixes that for any AMC without pinning item ids.
+#
+# Both arms are required. A doc reference ALONE is far too broad: "Contract Price
+# & Date of Contract" mentions a contract but asks about the report's own contract
+# section, and treating it as a cross-document comparison would wrongly excuse it
+# whenever no contract PDF was supplied. Comparison language is what marks a check
+# as "report value vs other document's value".
+_DOC_REF_RX = re.compile(
+    r"engagement\s+letter|order\s+form|assignment\s+order|purchase\s+contract|sales?\s+contract",
+    re.I)
+_DOC_CMP_RX = re.compile(
+    r"\b(match(?:es|ing|ed)?|same\s+as|agree(?:s|ment)?\s+with|consistent\s+with"
+    r"|identical|correspond(?:s|ing)?\s+(?:to|with)|as\s+per|reflect(?:s|ed)?)\b", re.I)
+
+
+def _is_cross_doc_check(item: CompiledItem) -> bool:
+    """True when this check compares a report value against another supplied
+    document. Either an explicit compile-time signal, or the check text itself
+    both NAMES a document and asks for a MATCH."""
+    if item.scope == "cross_document" or item.judgeable == "needs_engagement":
+        return True
+    text = f"{item.check_text or ''} {item.expects or ''}"
+    return bool(_DOC_REF_RX.search(text) and _DOC_CMP_RX.search(text))
+
+
+# ── photo/visual aspect (2026-07-18, user directive) ─────────────────────────
+#
+# "if a check's language or any trigger asks for a photo or visual check, tell the
+# reviewer the photo must be checked manually; but if the check states photo AND
+# text, do the text part, report whatever it finds, and ALSO ask them to verify the
+# photo — some checks have multiple scope."
+#
+# Deliberately NOT including "map": EQ-7 "Map Reference" is a form FIELD (a map
+# reference number the appraiser types), and EQ-56's "Proximity to Subject" is a
+# numeric distance — both are machine-checkable and must not be pushed at a human.
+# The genuine map checks (EQ-130..133) are already compiled `judgeable=visual`.
+_PHOTO_ASPECT_RX = re.compile(r"\bphotos?\b|\bphotograph|\bsketch\b|\bimages?\b", re.I)
+
+
+def _has_photo_aspect(item: CompiledItem) -> bool:
+    """True when this check's own words involve a photo/sketch/image — including
+    when the reference sits only in a `Triggers:` clause (EQ-43 "if photo is
+    provided of attic…"). The judge still judges the text aspect; the reviewer is
+    additionally asked to confirm the image."""
+    return bool(_PHOTO_ASPECT_RX.search(f"{item.check_text or ''} {item.expects or ''}"))
+
+
+_ENGAGEMENT_REF_RX = re.compile(r"engagement\s+letter|order\s+form|assignment\s+order", re.I)
+_CONTRACT_REF_RX = re.compile(r"purchase\s+contract|sales?\s+contract", re.I)
+
+
+def _relevant_docs(item: CompiledItem) -> List[str]:
+    """Which comparison document(s) THIS check is actually about.
+
+    Emitting availability for every document is wrong and actively harmful: EQ-C
+    compares the address to the ENGAGEMENT LETTER, but a blanket "no purchase
+    contract was supplied" hint made the judge answer NOT_APPLICABLE citing the
+    contract — on an order whose engagement letter was present and matched. Only
+    the documents a check actually names can excuse it.
+    """
+    text = f"{item.check_text or ''} {item.expects or ''}"
+    docs = []
+    if _ENGAGEMENT_REF_RX.search(text) or item.judgeable == "needs_engagement":
+        docs.append("engagement")
+    if _CONTRACT_REF_RX.search(text):
+        docs.append("contract")
+    # scope=cross_document with no document named: fall back to the engagement
+    # letter, which is the order-form counterpart every AMC supplies.
+    return docs or ["engagement"]
+
+
+def _cross_doc_availability(src: Sources, labels: List[str],
+                            values: Dict[str, Dict[str, Any]],
+                            relevant: List[str]) -> List[Dict[str, Any]]:
+    """State plainly, per comparison document, whether this check CAN be decided.
+
+    2026-07-18 (engagement-comparison investigation). Doctrine rule 3 tells the
+    judge it cannot distinguish "the engine did not read it" from "the document
+    does not state it", so any absent counterpart forces a hedge to REVIEW. For
+    the engagement/contract side we DO know which it is, and withholding that
+    turned a structurally undecidable check into a permanent human task.
+
+    Measured over the 7 test orders: the engagement letter states the appraiser's
+    NAME in 6/6 cases but their phone/email in 0/6 — those letters carry only the
+    AMC's own letterhead contact (information@esusa.net / 248-579-9928) and the
+    borrower's. So "Telephone number — should match the engagement letter" can
+    never be satisfied by any extraction improvement: the datum is not in the
+    source document. A reviewer opening that card can do nothing a machine
+    cannot, which is precisely what NOT_APPLICABLE is for.
+    """
+    plain = [l for l in labels if not l.startswith(("engagement.", "contract."))]
+    if not plain:
+        return []
+    docs = [(src.engagement, "engagement", "engagement letter"),
+            (src.contract, "contract", "purchase contract")]
+    docs = [d for d in docs if d[1] in relevant]
+
+    # A label is unverifiable only when NO relevant document carries its
+    # counterpart — one absent or silent document must never excuse a check that
+    # another document can answer.
+    unstated = [l for l in plain
+                if not any(f"{p}.{l}" in values for _v, p, _h in docs)]
+    if not unstated:
+        return []
+
+    hints: List[Dict[str, Any]] = []
+    for doc_view, prefix, human in docs:
+        if doc_view is None or not doc_view.present:
+            hints.append({"hint": "cross_document_status", "labels": list(unstated),
+                          "value": {"document": prefix, "status": "not_supplied",
+                                    "detail": f"no {human} was supplied with this order"}})
+        else:
+            hints.append({"hint": "cross_document_status", "labels": list(unstated),
+                          "value": {"document": prefix, "status": "does_not_state",
+                                    "detail": (f"the {human} was read but does not state "
+                                               f"{', '.join(unstated)}")}})
+    return hints
+
+
 def build_packet(item: CompiledItem, src: Sources) -> Packet:
     """Assemble the slim §4.1 packet for one compiled item (AnnexB: conditional
     labels are carried too, so a cross-section check sees condition + consequence)."""
@@ -380,7 +514,8 @@ def build_packet(item: CompiledItem, src: Sources) -> Packet:
     # dry-run cause #2: ten needs_engagement packets carried only the appraisal
     # side, so the judge had no choice but REVIEW on a comparison it could
     # never have resolved either way).
-    if item.scope in ("cross_document",) or item.judgeable == "needs_engagement":
+    is_cross_doc = _is_cross_doc_check(item)
+    if is_cross_doc:
         for doc_view, prefix in ((src.engagement, "engagement"), (src.contract, "contract")):
             if doc_view is None:
                 continue
@@ -410,6 +545,21 @@ def build_packet(item: CompiledItem, src: Sources) -> Packet:
     # not report data, so they ride as computed_hints (trusted arithmetic, rule 4).
     computed.extend(_runtime_context_hints(src.appraisal))
 
+    # Tell a comparison check whether the other document can answer it at all —
+    # "not supplied" and "supplied but silent on this field" are both decidable
+    # facts, not the unreadable-vs-unstated ambiguity of doctrine rule 3.
+    if is_cross_doc:
+        computed.extend(_cross_doc_availability(src, labels, values,
+                                                _relevant_docs(item)))
+
+    # The photo aspect is a HUMAN task; tell the judge to stay off it rather than
+    # assert something about an image it was never shown.
+    if _has_photo_aspect(item):
+        computed.append({
+            "hint": "manual_photo_verification", "labels": [],
+            "value": {"detail": "this check also depends on photos/sketch that you "
+                                "cannot see; a human will verify those separately"}})
+
     conditional = None
     if item.conditional:
         conditional = {
@@ -435,7 +585,7 @@ def build_packet(item: CompiledItem, src: Sources) -> Packet:
     # every X that has an engagement./contract. counterpart, stamp both entries with
     # a canonical `cmp` form so a match is byte-identical to the judge. Kind is
     # inferred from the label name — general for any AMC, no per-item config.
-    if item.scope == "cross_document" or item.judgeable == "needs_engagement":
+    if is_cross_doc:
         _stamp_compare_forms(values)
 
     source_notes = {

@@ -131,6 +131,32 @@ def _fallback_card(packet: Packet, reason: str,
     )
 
 
+_PHOTO_NOTE = "Please also verify the photo(s)/sketch for this check manually."
+
+
+def _mark_photo_verification(jv: JudgeVerdict, item: CompiledItem) -> JudgeVerdict:
+    """Flag a judged card whose check ALSO depends on photos/sketch (user directive
+    2026-07-18).
+
+    A check can carry both scopes — "verify condition rating matches the photos",
+    "photos of all outbuildings are required". Forcing it wholly to `visual` throws
+    away a working automated check; leaving it wholly to the judge lets a machine
+    assert what an image shows. So the text aspect is judged and reported as
+    normal, and the reviewer is told, on the same card, to confirm the image by eye.
+    Already-visual items are untouched — their whole card is the instruction.
+    """
+    from app.language.packet_v2 import _has_photo_aspect
+
+    if item.judgeable == "visual" or not _has_photo_aspect(item):
+        return jv
+    jv.photo_verification_required = True
+    line = (jv.reviewer_line or "").strip()
+    if _PHOTO_NOTE.lower() not in line.lower():
+        # keep the card inside the validator's 8-240 char reviewer_line contract
+        jv.reviewer_line = f"{line} {_PHOTO_NOTE}".strip()[:240] if line else _PHOTO_NOTE
+    return jv
+
+
 def _narrative_pointer_card(item: CompiledItem, packet: Packet):
     """A-3: return a REVIEW card iff this is a narrative check whose narrative
     value(s) are all pointers/junk and none is usable prose. Otherwise None."""
@@ -331,6 +357,7 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
             continue
         jv = V.validate(raw, packet, item)
         jv = _classify_cannot_evaluate(jv, packet, appraisal_fs)
+        jv = _mark_photo_verification(jv, item)
         rec = _interaction(item_id, packet, raw, metas.get(item_id))
         jv.llm_interaction_id = rec["id"]
         interactions.append(rec)
@@ -372,6 +399,9 @@ def _card(jv: JudgeVerdict) -> Dict[str, Any]:
         "suggested_wording": jv.suggest_reject_wording,
         "confidence": jv.confidence,
         "judgeable": jv.judgeable,
+        # the check also depends on photos/sketch the judge cannot see — the
+        # reviewer confirms those by eye (reviewer_line carries the same note).
+        "photo_verification_required": jv.photo_verification_required,
         "guardrails": jv.guardrails,
         "decided_by": jv.decided_by,
         "bound_by": jv.bound_by,

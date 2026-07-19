@@ -271,7 +271,11 @@ export default function VerifyFilePage() {
   const informationalRules = rules.filter(r => r.cardGroup === "informational");
   const queueRules = rules.filter(r => r.cardGroup !== "informational");
   const counts = {
-    total:  queueRules.length,
+    // "All" must count EVERY AMC check the reviewer can see — the actionable queue
+    // PLUS the demoted informational items (which are AMC language too, shown in the
+    // collapsed section below). Counting only the queue made "All (108)" hide the 26
+    // informational checks and understate the full 134-item checklist.
+    total:  rules.length,
     pass:   queueRules.filter(r => r.status === "pass" || r.status === "MANUAL_PASS").length,
     fail:   queueRules.filter(r => r.status === "fail").length,
     review: queueRules.filter(r => isReviewLikeStatus(r.status)).length,
@@ -909,7 +913,11 @@ export default function VerifyFilePage() {
                   never part of the reviewer queue/sign-off. Collapsed by default so it
                   never competes with actionable rows for attention. */}
               {informationalRules.length > 0 && (
-                <details className="group mt-2 rounded-md border border-white/5">
+                // Auto-expanded on the "All" filter (key forces remount per filter) so a
+                // reviewer choosing "All" actually sees every AMC check; collapsed on the
+                // action-focused filters so it never competes with actionable rows.
+                <details key={filter} open={filter === "all" || undefined}
+                  className="group mt-2 rounded-md border border-white/5">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-300">
                     <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
                     Informational ({informationalRules.length}) — no reject authority

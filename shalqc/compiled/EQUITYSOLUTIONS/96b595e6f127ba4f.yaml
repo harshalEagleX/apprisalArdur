@@ -94,7 +94,7 @@ meta:
       check_text: Comparable Photos — For Convential loans, MLS photos are acceptable, however, there
         should be commentary in the report t
     verdict: review
-  approved_by: audit-fix-2026-07-18 (extractor+bindings+triggers; ESCA-verified)
+  approved_by: 'audit-fix-2026-07-18 (extractor+bindings+triggers; ESCA-verified); binding-audit-2026-07-18: EQ-87 +market_value_opinion (bracket check had no final value to bracket against), EQ-123 +prior_services_performed and EQ-126 +additional_features (both were bound to NOTHING -> empty packet -> forced REVIEW). validation_report below records the COMPILE run and still lists EQ-123/EQ-126 as unbound; these three are post-compile manual bindings (bound_by: manual).'
   approved_at: '2026-07-18T04:07:00Z'
 items:
 - item_id: EQ-A
@@ -1534,6 +1534,7 @@ items:
   item_name: Data Sources
   bound_labels:
   - comp_N_data_source
+  - comp_N_days_on_market
   scope: cross_section
   expects: comp_N_data_source present for each comparable
   judgeable: text
@@ -2281,12 +2282,13 @@ items:
   - comp_N_sale_price
   - comp_N_adjusted_sale_price
   - sales_comparison_summary
+  - market_value_opinion
   scope: cross_section
   expects: ''
   judgeable: text
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.6
+  bound_by: manual
+  binder_confidence: 0.9
   severity: null
   reject_branches:
   - trigger: final value not bracketed (unadjusted+adjusted), no comment
@@ -2302,6 +2304,7 @@ items:
   item_name: Indicated value by sales comparison
   bound_labels:
   - indicated_value_sca
+  - market_value_opinion
   scope: subject
   expects: present and equals market_value_opinion
   judgeable: text
@@ -3107,13 +3110,14 @@ items:
     review within the three-year period immediately preceding acceptance of this assignment.'
   section: uspap
   item_name: Additional Certifications
-  bound_labels: []
+  bound_labels:
+  - prior_services_performed
   scope: cross_section
   expects: ''
   judgeable: text
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.3
+  bound_by: manual
+  binder_confidence: 0.7
   severity: null
   reject_branches:
   - trigger: prior-services statement missing
@@ -3179,13 +3183,14 @@ items:
     section and sales grid. Please verify or comment if no value is given.
   section: exhibits
   item_name: Additional Subject photos
-  bound_labels: []
+  bound_labels:
+  - additional_features
   scope: cross_section
   expects: ''
   judgeable: text
   conditional: null
-  bound_by: llm
-  binder_confidence: 0.2
+  bound_by: manual
+  binder_confidence: 0.7
   severity: null
   reject_branches:
   - trigger: photographed feature not in improvements/grid

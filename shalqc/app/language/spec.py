@@ -27,8 +27,13 @@ _REJECT_LANG_RX = re.compile(
     r"n/?a\s+not\s+allowed|not\s+allowed|place\s+on\s+hold)\b", re.I)
 
 
-def derive_severity(reject_text: Optional[str], check_text: str) -> str:
-    """"rejectable" iff the AMC gave this check reject authority, else "informational"."""
+def derive_severity(reject_text: Optional[str], check_text: str,
+                    reject_branches: Optional[List[Dict[str, Any]]] = None) -> str:
+    """"rejectable" iff the AMC gave this check reject authority (an authored
+    reject_text, one or more reject_branches, or reject-language in the check),
+    else "informational"."""
+    if reject_branches:
+        return "rejectable"
     if (reject_text or "").strip():
         return "rejectable"
     return "rejectable" if _REJECT_LANG_RX.search(check_text or "") else "informational"
@@ -62,10 +67,21 @@ class CompiledItem:
     # compiler, from_yaml, a direct build in a test) gets the same dynamic answer; an
     # explicit value (an override pin, or a stored bundle) is respected.
     severity: str = ""
+    # Multi-reject model (2026-07-17): the AMC's reject language is per-TRIGGER, so a
+    # check carries a LIST of fail branches. Each branch: {trigger, reject_text}
+    # (a `ref` in the source is resolved to reject_text at compile time). The judge
+    # returns WHICH branch fired; none fired → SATISFIED. `{slots}` in reject_text are
+    # filled from packet values at runtime. Empty list ⇒ single-reject legacy path.
+    reject_branches: List[Dict[str, Any]] = field(default_factory=list)
+    # hold: a fired trigger means ESCALATE to the AMC (no reject emitted) — EQ-30
+    # illegal zoning, EQ-31 H&BU=No. never_reject: descriptive-only, always PASS/NA
+    # (EQ-94/112/135). Both are item-level policy flags from the reject bank.
+    hold: bool = False
+    never_reject: bool = False
 
     def __post_init__(self) -> None:
         if not self.severity:
-            self.severity = derive_severity(self.reject_text, self.check_text)
+            self.severity = derive_severity(self.reject_text, self.check_text, self.reject_branches)
 
     @classmethod
     def from_yaml(cls, d: Dict[str, Any]) -> "CompiledItem":
@@ -83,6 +99,9 @@ class CompiledItem:
             bound_by=d.get("bound_by", "heuristic") or "heuristic",
             binder_confidence=float(d.get("binder_confidence", 1.0) or 1.0),
             severity=d.get("severity", "") or "",
+            reject_branches=list(d.get("reject_branches") or []),
+            hold=bool(d.get("hold", False)),
+            never_reject=bool(d.get("never_reject", False)),
         )
 
     def to_yaml(self) -> Dict[str, Any]:
@@ -95,6 +114,8 @@ class CompiledItem:
             "conditional": self.conditional,
             "bound_by": self.bound_by, "binder_confidence": self.binder_confidence,
             "severity": self.severity,
+            "reject_branches": self.reject_branches,
+            "hold": self.hold, "never_reject": self.never_reject,
         }
 
     @property

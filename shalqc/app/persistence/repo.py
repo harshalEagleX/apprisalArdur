@@ -142,6 +142,11 @@ def save_run(order_id: str, amc_code: str, package_hash: str, fingerprint: str,
         s.add(Run(run_id=run_id, order_id=order_id, revision_no=revision_no,
                   package_hash=package_hash, fingerprint=fingerprint, amc_code=amc_code,
                   summary_json=report.get("summary", {}), report_json=report))
+        # Flush the parent order+run NOW so the FK targets physically exist before the
+        # child rows below. The bulk insertmany used for item_verdicts/llm_interactions
+        # otherwise raced ahead of the single Run insert on some backends, tripping
+        # item_verdicts_run_id_fkey ("run_id not present in runs").
+        s.flush()
 
         # Store the raw LLM exchanges FIRST (item_verdicts reference them).
         for it in report.get("llm_interactions", []):

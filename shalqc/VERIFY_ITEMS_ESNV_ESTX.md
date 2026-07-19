@@ -2,7 +2,6 @@
 
 AMC bundle: **EQUITYSOLUTIONS** (`3f9eafa82a7849f2.yaml`). Status VERIFY = the reviewer must eyeball it (shalqc REVIEW/CANNOT_EVALUATE → Java VERIFY). For each tag: what it checks, the AMC's verbatim check + rejection language, the fields it binds, the pass condition (`expects`) and any conditional, and what was found.
 
-
 ## ESNV-0000885 — 6901 Camp Fire Rd — 73 VERIFY items (qc_result 4)
 
 ### EQ-1 — Owner of Public record
@@ -88,15 +87,12 @@ AMC bundle: **EQUITYSOLUTIONS** (`3f9eafa82a7849f2.yaml`). Status VERIFY = the r
 
 - **Section:** SIGNATURE  |  **Scope:** cross_document  |  **Card group:** please_verify  |  **Bound by:** manual (conf 0.9)
 - **Check language:** Company Name — Must match the Client Engagement letter (Lender/client name)
-- **Rejection text:** _(none authored)_
+- **Rejection text:** _(none authored) 1_
 - **Bound labels:** lender_name, engagement.lender_name
 - **Condition (`expects`):** lender_name == engagement.lender_name
 - **Found (extracted):** lender_name="Cardinal Financial Company"; engagement.lender_name="Cardinal Financial Company, LP"  |  **Expected:** Company name must match the client engagement letter
 - **Resolved values:** lender_name=Cardinal Financial Company, engagement.lender_name=Cardinal Financial Company, LP
-- **Why VERIFY / reviewer line:** Lender name differs (missing ", LP") – recommend reject.
-
-### EQ-111 — Company Address
-
+- **Why VERIFY / reviewer line:** Lender name differs (missing ", LP") – recommend reject.EQ-111 — Company Address
 - **Section:** SIGNATURE  |  **Scope:** cross_document  |  **Card group:** please_verify  |  **Bound by:** manual (conf 0.92)
 - **Check language:** Company Address — Must match the Client Engagement letter (Lender/client address)
 - **Rejection text:** _(none authored)_
@@ -402,7 +398,7 @@ AMC bundle: **EQUITYSOLUTIONS** (`3f9eafa82a7849f2.yaml`). Status VERIFY = the r
 - **Resolved values:** price_high=565, price_low=290, predominant_price=420, appraised_value=432500, comp_1_adjusted_sale_price=420000, comp_2_adjusted_sale_price=432500
 - **Why VERIFY / reviewer line:** Expected unadjusted comparable prices within $290‑$565 and relevant comments, but those values/comments are missing; please verify.
 
-### EQ-3 — Assessor's parcel #
+### EQ-3 — Assessor's parcel
 
 - **Section:** SUBJECT  |  **Scope:** subject  |  **Card group:** please_verify  |  **Bound by:** llm (conf 0.96)
 - **Check language:** Assessor's parcel # — This field should not be blank
@@ -814,7 +810,6 @@ AMC bundle: **EQUITYSOLUTIONS** (`3f9eafa82a7849f2.yaml`). Status VERIFY = the r
 - **Found (extracted):** borrower_name: Alyssa M Smith & Kira M Smith; co_borrower_name: Kira M Smith; owner_of_public_record: Michael O Smith/Lee Ann Smith  |  **Expected:** Borrower name must match the Client Engagement Letter exactly; co‑borrower name must be present
 - **Resolved values:** borrower_name=Alyssa M Smith & Kira M Smith, co_borrower_name=Kira M Smith, owner_of_public_record=Michael O Smith/Lee Ann Smith
 - **Why VERIFY / reviewer line:** Expected Borrower name must match the Client Engagement Letter exactly; co‑borrower name must be present; found borrower_name: Alyssa M Smith & Kira M Smith; co_borrower_name: Kira M Smith; owner_of_public_record: Michael O Smith/Lee Ann Sm
-
 
 ## ESTX-0007568 — 7243 Foxtail Meadow Ct — 84 VERIFY items (qc_result 6)
 

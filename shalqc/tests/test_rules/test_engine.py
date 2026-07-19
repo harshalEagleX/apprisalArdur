@@ -103,7 +103,11 @@ def test_end_to_end_orchestrator_on_fixture():
     # the whole-order outcome: §4 normalization + §8 plausibility yield NO false
     # FAIL, and the report carries its version fingerprint (§12 DoD #5).
     from app.pipeline.orchestrator import run_qc
-    rep = run_qc(FIXTURE_DIR)
+    # Validates the deterministic LEGACY rule engine; judge_mode now defaults to
+    # "language" (the product path), so pin legacy for this rule-level assertion.
+    # persist=False avoids a G-3 cache hit from a prior language-mode run (the cache
+    # keys on package hash, not mode).
+    rep = run_qc(FIXTURE_DIR, mode="legacy", persist=False)
     assert rep["status"] == "OK"
     assert rep["summary"]["failed"] == 0
     assert "components" in rep["versions"]

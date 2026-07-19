@@ -27,6 +27,27 @@ public interface AppraisalTransactionRepository extends JpaRepository<AppraisalT
     @Query("UPDATE AppraisalTransaction t SET t.updatedAt = :now WHERE t.id = :id")
     int touchUpdatedAt(@Param("id") Long id, @Param("now") LocalDateTime now);
 
+    /**
+     * Atomic, cross-node claim of an order for QC — the order-grained analogue of
+     * {@link BatchRepository#markQcProcessingIfTriggerable}. Flips documentStatus to
+     * QC_PROCESSING in ONE conditional UPDATE iff it isn't already processing. Returns
+     * rows-affected: {@code 1} = this node won the claim, {@code 0} = another node holds it.
+     *
+     * <p>Replaces the read-then-write in {@code OrderStatusService.markProcessing}, whose
+     * only guard was the per-node in-memory {@code activeOrders} set — across nodes two
+     * instances could both read a non-processing status and both launch a QC run for the
+     * same order (double run). The DB row is now the single source of truth for the claim.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE AppraisalTransaction t
+        SET t.documentStatus = com.shal.common.entity.OrderDocumentStatus.QC_PROCESSING,
+            t.updatedAt = :now
+        WHERE t.id = :id
+          AND t.documentStatus <> com.shal.common.entity.OrderDocumentStatus.QC_PROCESSING
+        """)
+    int claimForQcIfNotProcessing(@Param("id") Long id, @Param("now") LocalDateTime now);
+
     /** Orders stranded in QC_PROCESSING (worker crash / JVM kill / timeout) past the cutoff.
      *  Order-grained analogue of {@code BatchRepository.findStuckInQcProcessing}. */
     @Query("""

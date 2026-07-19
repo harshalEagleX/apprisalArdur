@@ -1,0 +1,79 @@
+name: CI
+
+# Gate every PR to main (and pushes to demo/main) on the same checks we run by hand:
+# Java tests, the SHALqc Python suite, and the frontend build. Closes PRODUCTION_GAPS J2.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [demo, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java:
+    name: Java (mvn test)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shal
+          POSTGRES_PASSWORD: shal
+          POSTGRES_DB: shal_qc
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shal" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      # Integration tests (@SpringBootTest) hit Postgres; the Python OCR/judge is mocked.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/shal_qc
+      SPRING_DATASOURCE_USERNAME: shal
+      SPRING_DATASOURCE_PASSWORD: shal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: ./mvnw -B test
+
+  python:
+    name: SHALqc (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shalqc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: shalqc/requirements.txt
+      # camelot's PDF grid extraction shells out to Ghostscript; absent it degrades to
+      # the XML-authoritative path (a warning, not a failure), but install it for parity.
+      - run: sudo apt-get update && sudo apt-get install -y ghostscript
+      - run: pip install -r requirements.txt
+      # No LLM keys in CI → the judge degrades to REVIEW llm_unavailable by design; the
+      # suite is written to pass deterministically without a live provider.
+      - run: PYTHONPATH=. python -m pytest tests/ -q
+
+  frontend:
+    name: Frontend (next build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build

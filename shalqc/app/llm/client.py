@@ -11,12 +11,24 @@ values. Replaced with TogetherPool: a per-key token-bucket + in-flight
 governor that stops SENDING what a key's budget can't take, rather than
 reacting to a 429 after the fact.
 
-Retry policy (error-code only, never on timeout):
+Retry policy:
   * 429 / 5xx / a connection-level transport error → retry, up to 2 times,
     backoff 2s then 8s, against a (likely) different pool key.
-  * A genuine timeout means the call is dead — no retry. The caller's S-6
-    fallback (REVIEW `llm_unavailable`, packet attached) is the correct,
-    honest outcome; a second attempt at the same slow thing is not a fix.
+  * `pool_exhausted` → retry. This is LOCAL backpressure (our own token bucket
+    could not free budget in time), not a provider refusal — the request was
+    never sent. See _is_retryable.
+  * A timeout is still not retried HERE — repeating the same slow call at the
+    same size is not a fix. It is handled where the size can actually change:
+    judge_v2._split_for_retry halves the batch, and _call_timeout_s scales the
+    read budget by the tokens requested.
+
+2026-07-18 (unjudged-loss investigation) — 17% of item-judgements were coming
+back REVIEW `llm_unavailable`, read as provider trouble. Instrumenting a cold
+run showed ZERO provider errors: every loss was this module's own governor
+giving up (`pool_exhausted`) after reserving a max_tokens ceiling it never
+refunded. Fixes: refund the unused reservation (TogetherPool.release), retry
+local backpressure, wait long enough for a real queue to drain, and size the
+worker pool to the pool's actual capacity.
 
 Other pieces unchanged from lcl-1.0.0:
   * Redis content-hash cache (file-cache fallback) — key = sha256(call_type +
@@ -63,7 +75,13 @@ PROMPT_VERSION = "v1"
 # not the thinking. 2026-07-13 perf investigation.
 _REASONING_EFFORT = "low"
 _RETRY_BACKOFFS_S = (2.0, 8.0)   # error-code retries only — see module docstring
-_POOL_ACQUIRE_TIMEOUT_S = 20.0
+# How long a batch may WAIT for local token budget before giving up. 20s was far
+# shorter than the queue can legitimately take to drain: an order produces ~28
+# batches against 4 in-flight slots at a measured ~10s/call, so ~70s of honest
+# queueing is normal and the old window turned it into `pool_exhausted` →
+# REVIEW llm_unavailable. Waiting costs wall-clock; giving up costs a human a
+# card they cannot action. Wait.
+_POOL_ACQUIRE_TIMEOUT_S = float(os.environ.get("SHALQC_POOL_ACQUIRE_TIMEOUT_S", "90"))
 
 # When Redis is not configured, responses are cached to this directory so every
 # LLM reply is persisted on disk (permanent — survives process exit) and re-runs
@@ -111,8 +129,18 @@ def _is_reasoning_model(model: str) -> bool:
 def _is_retryable(err: str) -> bool:
     """429 / 5xx / connection-level transport error → retryable. A genuine
     timeout (the call was sent and never came back in time) is deliberately
-    NOT retryable — see module docstring."""
-    return err.startswith("http_429") or err.startswith("http_5") or err.startswith("transport:")
+    NOT retryable — see module docstring.
+
+    `pool_exhausted` is retryable too, and is the most important entry here:
+    it does NOT mean the provider refused anything. It means OUR OWN local
+    token-bucket could not free budget within the acquire window, i.e. the
+    request was never sent. Treating that as a dead call turned pure local
+    queueing into REVIEW `llm_unavailable` cards — 6 of 28 batches on a
+    measured ESNC-0006152 run, with zero provider errors of any kind. Local
+    backpressure is exactly the condition a retry is FOR.
+    """
+    return (err.startswith("http_429") or err.startswith("http_5")
+            or err.startswith("transport:") or err.startswith("pool_exhausted"))
 
 
 class LLMClient:
@@ -135,6 +163,20 @@ class LLMClient:
                 logger.info("LLM cache: file cache active (%s)", _FILE_CACHE_DIR)
             except Exception as exc:
                 logger.warning("LLM cache: file cache unavailable (%s)", exc)
+
+    def _record(self, call: "LLMCall") -> "LLMCall":
+        """Single choke point for every LLM call: append to telemetry AND emit the
+        Prometheus metric (call rate, cache-hit ratio, error rate — per provider/model).
+        Metrics never break a call — obs is no-op when prometheus_client is absent."""
+        self.telemetry.append(call)
+        try:
+            from app import observability as obs
+            obs.record_llm_call(call.provider, call.model, call.cached)
+            if not call.ok:
+                obs.record_llm_error(call.provider, call.error or "?")
+        except Exception:  # observability must never take down the judge
+            pass
+        return call
 
     # ------------------------------------------------------------------
     @property
@@ -215,13 +257,13 @@ class LLMClient:
         cached = self._cache_get(cache_key)
         if cached is not None:
             call = LLMCall(call_type=call_type, provider="cache", model=model, cached=True, ok=True)
-            self.telemetry.append(call)
+            self._record(call)
             return LLMResult(cached, call, raw=json.dumps(cached, ensure_ascii=False))
 
         if not self._together_keys:
             call = LLMCall(call_type=call_type, provider="none", model=model, ok=False,
                            error="no_provider_configured")
-            self.telemetry.append(call)
+            self._record(call)
             return LLMResult(None, call)
 
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -234,14 +276,21 @@ class LLMClient:
             if key is None:
                 last_err = "pool_exhausted"
                 break
+            used: Optional[float] = None
             try:
-                data, err, ms, raw = self._one_call(key, model, messages, max_tokens, reasoning_effort)
+                data, err, ms, raw, used = self._one_call(key, model, messages, max_tokens,
+                                                          reasoning_effort)
             finally:
-                self._pool.release(key)
+                # Refund the difference between the reserved ceiling and what the
+                # call actually cost, so the bucket throttles on real consumption
+                # rather than on a max_tokens ceiling nobody spent (see
+                # TogetherPool.release). `used=None` (transport error, no usage
+                # block) keeps the conservative full debit.
+                self._pool.release(key, reserved=estimated, actual=used)
             if data is not None:
                 call = LLMCall(call_type=call_type, provider="together", model=model,
                                ok=True, ms=ms, retries=retries)
-                self.telemetry.append(call)
+                self._record(call)
                 self._cache_put(cache_key, data,
                                 meta={"call_type": call_type, "model": model,
                                       "system": system, "user": user})
@@ -255,11 +304,15 @@ class LLMClient:
 
         call = LLMCall(call_type=call_type, provider="none", model=model, ok=False,
                        error=last_err, retries=retries)
-        self.telemetry.append(call)
+        self._record(call)
         return LLMResult(None, call)
 
     def _one_call(self, key: str, model: str, messages: List[dict], max_tokens: int,
                   reasoning_effort: Optional[str] = None):
+        """Returns (data, err, ms, raw, used_tokens). `used_tokens` is the
+        provider-reported total for this call (None when the response carried no
+        usage block) — TogetherPool.release() refunds the unused reservation
+        with it."""
         body = {
             "model": model, "messages": messages, "temperature": 0,
             "max_tokens": max_tokens, "response_format": {"type": "json_object"},
@@ -273,24 +326,26 @@ class LLMClient:
         url = settings.together_base_url
         t0 = time.perf_counter()
         try:
-            resp = httpx.post(url, json=body, headers=headers, timeout=settings.together_timeout_s)
+            resp = httpx.post(url, json=body, headers=headers, timeout=_call_timeout_s(max_tokens))
         except httpx.TimeoutException as exc:
             # deliberately NOT prefixed "transport:" — _is_retryable must never
             # retry this (module docstring: a timeout means the call is dead).
-            return None, f"timeout:{exc}", (time.perf_counter() - t0) * 1000, None
+            return None, f"timeout:{exc}", (time.perf_counter() - t0) * 1000, None, None
         except Exception as exc:
-            return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000, None
+            return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000, None, None
         ms = (time.perf_counter() - t0) * 1000
         if resp.status_code == 429 or resp.status_code >= 500:
-            return None, f"http_{resp.status_code}", ms, None   # retry trigger
+            return None, f"http_{resp.status_code}", ms, None, None   # retry trigger
         if resp.status_code != 200:
-            return None, f"http_{resp.status_code}:{resp.text[:200]}", ms, None
+            return None, f"http_{resp.status_code}:{resp.text[:200]}", ms, None, None
         try:
-            choice = resp.json()["choices"][0]
+            envelope = resp.json()
+            choice = envelope["choices"][0]
             content = choice["message"]["content"]
             finish = choice.get("finish_reason", "")
         except Exception as exc:
-            return None, f"bad_envelope:{exc}", ms, None
+            return None, f"bad_envelope:{exc}", ms, None, None
+        used = _usage_tokens(envelope)
         data = _parse_json(content)
         if data is None:
             # finish_reason distinguishes the two failure modes that both surface
@@ -309,15 +364,21 @@ class LLMClient:
             ]
             body["messages"] = retry_messages
             try:
-                resp2 = httpx.post(url, json=body, headers=headers, timeout=settings.together_timeout_s)
-                content = resp2.json()["choices"][0]["message"]["content"]
+                resp2 = httpx.post(url, json=body, headers=headers, timeout=_call_timeout_s(max_tokens))
+                envelope2 = resp2.json()
+                content = envelope2["choices"][0]["message"]["content"]
                 data = _parse_json(content)
+                # the repair nudge is a second billed call on the same slot — add
+                # its cost so the refund reflects what this acquisition really spent.
+                used2 = _usage_tokens(envelope2)
+                if used2 is not None:
+                    used = (used or 0.0) + used2
             except Exception:
                 data = None
         if data is None:
             reason = "truncated_length" if finish == "length" else "invalid_json_after_retry"
-            return None, reason, ms, content
-        return data, None, ms, content
+            return None, reason, ms, content, used
+        return data, None, ms, content, used
 
     # ------------------------------------------------------------------
     # GapfillClient protocol (extraction/llm_gapfill.py C1)
@@ -352,6 +413,34 @@ def get_client() -> Optional[LLMClient]:
     if _client is None:
         _client = LLMClient()
     return _client if _client.available else None
+
+
+def _call_timeout_s(max_tokens: int) -> float:
+    """Per-call read timeout, scaled by how much generation was actually asked for.
+
+    A flat ceiling is wrong in both directions: generous for a 1-item batch,
+    too tight for an 8-item one whose reply is 8x longer. gpt-oss-120b also
+    spends a variable, invisible reasoning budget before the JSON. Scaling off
+    max_tokens keeps small calls on a short leash while letting a big batch
+    finish, and the settings value acts as the FLOOR so existing deployments
+    never get a shorter timeout than they had.
+    """
+    return max(settings.together_timeout_s, 30.0 + max_tokens / 40.0)
+
+
+def _usage_tokens(envelope: dict) -> Optional[float]:
+    """Provider-reported total tokens for one call, or None when the response
+    carried no usage block (then the caller keeps the full conservative debit).
+    Falls back to prompt+completion when `total_tokens` is absent."""
+    usage = (envelope or {}).get("usage")
+    if not isinstance(usage, dict):
+        return None
+    total = usage.get("total_tokens")
+    if isinstance(total, (int, float)) and total > 0:
+        return float(total)
+    parts = [usage.get("prompt_tokens"), usage.get("completion_tokens")]
+    nums = [float(p) for p in parts if isinstance(p, (int, float))]
+    return sum(nums) if nums else None
 
 
 def _parse_json(text: str) -> Optional[dict]:

@@ -20,6 +20,17 @@ resolve:
   aliases: ["equity solutions", "equity solutions usa", "eqs"]
   order_id_prefixes: ["ES"]      # ESTX-…, ESCA-…, ESNV-… are Equity Solutions orders
 
+# EQ-109 "AMC name under Lender/Client". The compiled checklist item is currently
+# softened to "any non-empty AMC name satisfies" — because the AMC's own checklist
+# text hard-codes "Fastapp Appraisal Management Company", which is STALE boilerplate
+# from whoever authored the original checklist (this client's reports correctly read
+# "Equity Solutions, USA"). This is the dynamic home for the real expected name: when
+# the specific-name check is turned on, EQ-109 compares against expected_amc_name here
+# (fuzzy match) instead of any hard-coded name. OPEN QUESTION for the AMC: is "Fastapp"
+# in their checklist a mistake, or do they truly require that name? Until answered, the
+# rule stays presence-only so no honest report is falsely rejected.
+expected_amc_name: "Equity Solutions"
+
 rules:
   default: on
   off: []

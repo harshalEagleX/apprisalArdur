@@ -180,10 +180,17 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     revision_no = repo.next_revision_no(order.order_id) if persist else 0
     report["revision_no"] = revision_no
     if persist:
-        run_id = repo.save_run(order.order_id, profile.amc_code, order.package_hash or "",
-                               fp, revision_no, report)
-        if run_id:
-            report["run_id"] = run_id
+        # §16: persistence is a best-effort side-effect — a DB failure must degrade,
+        # never 5xx the QC result the caller (Java) is waiting on.
+        try:
+            run_id = repo.save_run(order.order_id, profile.amc_code, order.package_hash or "",
+                                   fp, revision_no, report)
+            if run_id:
+                report["run_id"] = run_id
+        except Exception as e:
+            logger.warning("run_qc %s: persistence failed (degraded, report still returned): %s",
+                           order.order_id, e)
+            report.setdefault("degradations", []).append(f"persistence_failed:{type(e).__name__}")
 
     logger.info("run_qc %s (rev %d): %s", order.order_id, revision_no, report["summary"])
     return report
@@ -217,9 +224,15 @@ def _run_language(order, profile, appraisal_fs, engagement_fs, contract_fs,
     versions = dict(report_versions(profile))
     versions.update({"judge_mode": "language", "binder_prompt": BINDER_PROMPT_VERSION,
                      "judge_prompt": JUDGE_V2, "packet_builder": "pkt-2.0.0"})
-    return run_language(order.order_id, profile.amc_code, appraisal_fs, engagement_fs,
-                        contract_fs, compiled, llm_client,
-                        degradations=degradations, versions=versions)
+    report = run_language(order.order_id, profile.amc_code, appraisal_fs, engagement_fs,
+                          contract_fs, compiled, llm_client,
+                          degradations=degradations, versions=versions)
+    # Surface the AUTO_PASS policy to the Java roll-up (decisionFrom): when false, an
+    # all-clear order is downgraded to TO_VERIFY so no order auto-completes with zero
+    # human eyes. Absent flag on the Java side = enabled (backward compatible).
+    out = getattr(profile, "output", None) or {}
+    report.setdefault("summary", {})["auto_pass_enabled"] = bool(out.get("auto_pass_enabled", True))
+    return report
 
 
 def _finalize(report: dict, order, profile, persist: bool, repo) -> dict:
@@ -229,13 +242,40 @@ def _finalize(report: dict, order, profile, persist: bool, repo) -> dict:
     revision_no = repo.next_revision_no(order.order_id) if persist else 0
     report["revision_no"] = revision_no
     if persist:
-        run_id = repo.save_run(order.order_id, profile.amc_code, order.package_hash or "",
-                               fp, revision_no, report)
-        if run_id:
-            report["run_id"] = run_id
+        # §16: persistence is best-effort — a DB failure degrades, never 5xx.
+        try:
+            run_id = repo.save_run(order.order_id, profile.amc_code, order.package_hash or "",
+                                   fp, revision_no, report)
+            if run_id:
+                report["run_id"] = run_id
+        except Exception as e:
+            logger.warning("run_qc %s: persistence failed (degraded, report still returned): %s",
+                           order.order_id, e)
+            report.setdefault("degradations", []).append(f"persistence_failed:{type(e).__name__}")
     logger.info("run_qc %s (rev %d, language): %s", order.order_id, revision_no,
                 report.get("summary"))
+    try:  # observability: per-order decision + latency (never breaks the run)
+        from app import observability as obs
+        s = report.get("summary", {})
+        obs.record_order(profile.amc_code, _decision_label(s),
+                         (report.get("timings") or {}).get("total_s"))
+    except Exception:
+        pass
     return report
+
+
+def _decision_label(s: dict) -> str:
+    """Coarse order decision for the metric label — mirrors the Java roll-up
+    precedence (BLOCKED → TO_VERIFY → AUTO_FAIL → AUTO_PASS)."""
+    if s.get("hold", 0) > 0:
+        return "BLOCKED"
+    if s.get("review", 0) + s.get("cannot_evaluate", 0) > 0:
+        return "TO_VERIFY"
+    if s.get("not_satisfied", 0) > 0:
+        return "AUTO_FAIL"
+    if not s.get("auto_pass_enabled", True) or s.get("rejectable_satisfied_low_conf", 0) > 0:
+        return "TO_VERIFY"
+    return "AUTO_PASS"
 
 
 def _safe_stage(name: str, degradations: List[str], fallback, fn):

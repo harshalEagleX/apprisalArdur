@@ -56,6 +56,21 @@ PROMPT_VERSION = "judge_v2"
 # tolerance, which TogetherPool now governs directly per-key anyway.
 _MAX_LANES = 10
 _MIN_TOKENS = 1024   # floor so a 1-item batch still gets a workable output budget
+
+
+def _lanes_for(client, n_batches: int) -> int:
+    """Worker count for a judge pass — bounded by what the pool can actually run.
+
+    2026-07-18 (unjudged-loss investigation): _MAX_LANES=10 was sized against
+    nothing in particular, while the real ceiling is keys × max_inflight_per_key
+    (2 × 2 = 4 on the measured config). The 6 surplus threads could not make a
+    call; they could only sit in `acquire()` until it expired and then report a
+    provider failure that never happened. Allowing a SMALL ready-queue on top of
+    capacity keeps a slot from idling between calls without creating a stampede
+    of threads doomed to starve.
+    """
+    cap = getattr(getattr(client, "_pool", None), "capacity", 0) or _MAX_LANES
+    return max(1, min(_MAX_LANES, cap * 2, max(1, n_batches)))
 # gpt-oss-120b is a REASONING model: even at reasoning_effort=low it spends a
 # VARIABLE 0-400+ tokens on hidden chain-of-thought BEFORE the JSON, inside the
 # same max_tokens budget. At the old 150 tok/item an 8-item batch capped at 1200,
@@ -181,6 +196,20 @@ RULES OF EVIDENCE:
         → judge the consequence_labels normally.
     ONLY when the trigger genuinely FIRED but a needed consequence value is
         unreadable → REVIEW. Never REVIEW merely because a condition label is absent.
+ 8a) IN-TEXT CONDITIONALS. A check often states its own condition in prose —
+    "if Leasehold, similar comps must be provided", "if the subject is in a flood
+    zone…", "for Purchase transactions…" — WITHOUT the packet carrying a formal
+    `conditional` block. Read the condition from check_text and resolve it from the
+    packet's own values FIRST:
+      • the values show the condition did NOT fire (e.g. property_rights is "Fee
+        Simple", so the Leasehold branch is irrelevant) → the consequence is moot.
+        Return SATISFIED when the check's baseline requirement is met, or
+        NOT_APPLICABLE when the whole check hinged on that branch. Do NOT hedge to
+        REVIEW over data the untriggered branch would have needed — you never
+        needed it. Name the value that settles it in `found`.
+      • the condition DID fire → judge the consequence normally.
+      • you genuinely cannot tell whether it fired → REVIEW.
+
  9) The packet carries extracted VALUES, not checkbox glyphs. A present value for a
     selection field IS that box marked: property_rights="Fee Simple" means the Fee
     Simple box is checked; location="Suburban" means that box is marked; a present
@@ -224,6 +253,42 @@ RULES OF EVIDENCE:
     the example says "Comps 1, 3 and 4" but this packet's comps 2 and 5 are the ones
     exceeding, name comps 2 and 5. Never copy an example's literal identifiers into a
     verdict.
+    This governs FORMAT and UNITS just as strongly as values. "(i.e. 90 or 30-60)",
+    "e.g. 3/15/2026", "such as C3" show ONE WAY of writing an acceptable answer —
+    they are never the required notation. When the report expresses the same fact in
+    an equivalent form — a different unit ("1 to 3 months", "6-12 weeks" where the
+    example wrote bare days), a spelled-out range ("ninety days"), another date or
+    currency format — the requirement IS MET. Judge the SUBSTANCE. Return
+    NOT_SATISFIED only when the substance is wrong or genuinely absent, NEVER because
+    the appraiser's notation differs from the example's. A reject over formatting is
+    always wrong.
+
+ 11a) PHOTOS ARE NOT YOURS TO JUDGE. When a `manual_photo_verification` hint is
+    present, this check depends partly on photos/sketch/images that are NOT in your
+    packet — you cannot see them and must never pretend otherwise:
+      • Judge ONLY the text/value part of the check from the packet, and report that
+        result normally (SATISFIED / NOT_SATISFIED / NOT_APPLICABLE as the values
+        warrant). A human confirms the image part separately, so do not hedge the
+        text part to REVIEW merely because photos exist.
+      • NEVER assert what a photo does or does not show, never claim a photo is
+        missing or present, and NEVER return NOT_SATISFIED on image grounds. If the
+        check's requirement is ENTIRELY about image content with nothing textual to
+        judge, return REVIEW and say the photos need manual inspection.
+      • Do not mention the photos in reviewer_line — the card carries its own
+        "verify the photos" note; repeating it just doubles the reviewer's reading.
+
+ 12a) CROSS-DOCUMENT AVAILABILITY. A `cross_document_status` hint is the trusted,
+    DISAMBIGUATED answer to "can this comparison be made at all?" — it overrides
+    rule 3's unreadable-vs-unstated caution for the labels it names:
+      • status="not_supplied"    → that document was never supplied with this order.
+      • status="does_not_state"  → the document WAS read and genuinely does not
+                                   state those fields.
+    In BOTH cases there is nothing to compare against and no human can resolve it
+    from the documents in hand, so the check is NOT_APPLICABLE — state the hint's
+    `detail` as your found. Do NOT return REVIEW (a reviewer would only re-confirm
+    the document is silent) and NEVER NOT_SATISFIED (a document that is absent or
+    silent is not evidence the report is wrong). Judge normally, as a real
+    comparison, whenever the counterpart value IS present.
 
  13) REJECT BRANCHES (multi-reject). When the packet carries `reject_branches`, this
     check has SEVERAL distinct fail conditions, each a {branch_id, trigger, reject_text}.
@@ -323,6 +388,29 @@ def _normalize_reply(data: dict):
     return None
 
 
+def _split_for_retry(failed_chunks: List[tuple]) -> List[tuple]:
+    """Halve every multi-item failed batch before retrying it.
+
+    2026-07-18 (unjudged-loss investigation): the retry used to resend the SAME
+    chunk at the SAME size. Once local pool starvation was fixed, the remaining
+    losses were read timeouts on the largest batches — the judge's p50 call was
+    9.5s while three batches clipped the ceiling exactly — so resending an
+    identical oversized call mostly bought a second timeout. Halving cuts the
+    answer budget and generation time for the retry, which targets the actual
+    cause. Single-item chunks (a per-item omission) are already minimal and pass
+    through untouched.
+    """
+    out: List[tuple] = []
+    for sec, ps in failed_chunks:
+        if len(ps) <= 1:
+            out.append((sec, ps))
+            continue
+        mid = (len(ps) + 1) // 2
+        out.append((sec, ps[:mid]))
+        out.append((sec, ps[mid:]))
+    return out
+
+
 def judge_all(client, packets_by_section: Dict[str, List], call_suffix: str = ""
               ) -> Tuple[Dict[str, dict], List[str], Dict[str, dict], Dict[str, Any]]:
     """Judge every section concurrently. Returns (verdicts keyed by item_id,
@@ -372,10 +460,10 @@ def judge_all(client, packets_by_section: Dict[str, List], call_suffix: str = ""
             (verdicts.__setitem__(p.item_id, jr) if jr is not None
              else failed_chunks.append((sec, [p])))        # per-item omission → retry that item
 
-    logger.info("judge_v2: %d batch(es) queued across %d lane(s)",
-               len(batches), min(_MAX_LANES, max(1, len(batches))))
+    lanes = _lanes_for(client, len(batches))
+    logger.info("judge_v2: %d batch(es) queued across %d lane(s)", len(batches), lanes)
     failed_chunks: List[tuple] = []
-    with ThreadPoolExecutor(max_workers=min(_MAX_LANES, max(1, len(batches)))) as pool:
+    with ThreadPoolExecutor(max_workers=lanes) as pool:
         futures = {pool.submit(_judge_batch, client, sec, ps, batch_class_of[sec], call_suffix): (sec, ps)
                   for sec, ps in batches}
         for fut in as_completed(futures):
@@ -401,11 +489,14 @@ def judge_all(client, packets_by_section: Dict[str, List], call_suffix: str = ""
     # llm_unavailable REVIEW (never a blind PASS).
     still_failed: List[str] = []
     if failed_chunks:
-        with ThreadPoolExecutor(max_workers=min(_MAX_LANES, len(failed_chunks))) as pool:
+        retry_chunks = _split_for_retry(failed_chunks)
+        logger.info("judge_v2: retrying %d failed batch(es) as %d smaller chunk(s)",
+                   len(failed_chunks), len(retry_chunks))
+        with ThreadPoolExecutor(max_workers=_lanes_for(client, len(retry_chunks))) as pool:
             futures = {
                 pool.submit(_judge_batch, client, sec, ps,
                            batch_class_of.get(sec, _BATCH_CLASSES["fact"]), call_suffix): (sec, ps)
-                for sec, ps in failed_chunks
+                for sec, ps in retry_chunks
             }
             for fut in as_completed(futures):
                 sec, ps = futures[fut]

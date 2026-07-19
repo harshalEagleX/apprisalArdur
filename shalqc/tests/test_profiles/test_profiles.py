@@ -22,12 +22,12 @@ def test_base_profile_loads():
     assert not p.is_fallback
 
 
-def test_amc001_deep_merges_over_base():
-    p = load_profile("AMC001")
-    assert p.amc_code == "AMC001"
+def test_equitysolutions_deep_merges_over_base():
+    p = load_profile("EQUITYSOLUTIONS")
+    assert p.amc_code == "EQUITYSOLUTIONS"
     assert not p.is_fallback
-    # AMC001-specific severity remap present; base thresholds still inherited
-    assert p.severity_overrides.get("S-5") == {"FAIL": "VERIFY"}
+    # EQUITYSOLUTIONS-specific severity remap present; base thresholds still inherited
+    assert p.severity_overrides.get("ST-6") == {"FAIL": "HOLD"}
     assert p.threshold("SCA-NET.net_adjustment_pct") == 15
 
 
@@ -39,17 +39,17 @@ def test_unknown_amc_falls_back_to_base_with_hold_flag():
 
 def test_severity_remap_changes_output():
     # SHALqc.md §12 DoD #3: flipping one severity line changes output, no restart.
-    verdicts = [Verdict(rule_id="S-5", status=Status.FAIL, section="subject")]
-    apply_severity(load_profile("AMC001"), verdicts)
-    assert verdicts[0].status == Status.VERIFY   # remapped by AMC001
-    assert "profile_remap:VERIFY" in (verdicts[0].degraded_reason or "")
+    verdicts = [Verdict(rule_id="ST-6", status=Status.FAIL, section="site")]
+    apply_severity(load_profile("EQUITYSOLUTIONS"), verdicts)
+    assert verdicts[0].status == Status.HOLD   # remapped by EQUITYSOLUTIONS
+    assert "profile_remap:HOLD" in (verdicts[0].degraded_reason or "")
 
-    verdicts2 = [Verdict(rule_id="S-5", status=Status.FAIL, section="subject")]
+    verdicts2 = [Verdict(rule_id="ST-6", status=Status.FAIL, section="site")]
     apply_severity(load_profile(None), verdicts2)
     assert verdicts2[0].status == Status.FAIL    # base does not remap
 
 
 def test_active_rules_respects_on_off():
-    p = load_profile("AMC001")
+    p = load_profile("EQUITYSOLUTIONS")
     ids = {r.rule_id for r in active_rules(p)}
     assert "S-1" in ids  # default on

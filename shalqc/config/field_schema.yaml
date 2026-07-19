@@ -3407,6 +3407,12 @@ fields:
       - "My opinion of a reasonable exposure time"
     source_authority: appraisal_report
     sections: [uspap_addendum]
+    # What a real ANSWER looks like, so the document-wide sweep (extraction/sweep.py)
+    # can pick the appraiser's duration out of the prose it is wrapped in — "…is
+    # deemed to be 0-90 days similar to the marketing time…", "The estimated
+    # exposure time is 6-12 weeks." — and never capture the USPAP DEFINITION the
+    # form restates right beside it. Config, not code: any AMC/field can declare one.
+    value_pattern: '\d+\s*(?:-|–|to|\+)?\s*\d*\s*(?:day|week|month|year)s?'
     notes: "E.g. '60 to 365 days' or '90 days'. String not integer."
 
   prior_services_performed:

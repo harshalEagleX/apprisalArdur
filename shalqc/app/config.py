@@ -72,10 +72,27 @@ class Settings:
     # setting (inflight=2 → 22s / 0 fallbacks / +11 items judged). A high setting is
     # counterproductive under 429-retry storms, so the default is conservative — raise
     # TOGETHER_MAX_INFLIGHT_PER_KEY only if your tier's measured rate can take it.
+    #
+    # 2026-07-18 RE-MEASURED after the TogetherPool refund fix, on the theory that
+    # the 2026-07-17 result was an artifact of a permanently-starved token bucket.
+    # It was not — the conclusion holds. Same order (ESGA-0005949), caching fully
+    # disabled, cold both ways:
+    #     inflight=2 (4 slots)  → 83.1s, s6=0
+    #     inflight=4 (8 slots)  → 92.4s, s6=0   ← SLOWER
+    # Provider per-key throughput is the ceiling, so extra in-flight requests buy
+    # contention rather than parallelism. Concurrency is NOT the latency lever here;
+    # more API KEYS (limits are per-key) or fewer/smaller judge calls are.
     together_max_inflight_per_key: int = field(
         default_factory=lambda: int(_env("TOGETHER_MAX_INFLIGHT_PER_KEY", "2") or 2))
+    # 2026-07-18 (unjudged-loss investigation): 45s was BELOW the real tail. On a
+    # cold ESNC-0006153 run the judge's p50 call was 9.5s but three batches sat at
+    # exactly 45.0s — clipped by this ceiling, not answered slowly — and each took
+    # its whole batch down to REVIEW llm_unavailable (8 items). The ceiling only
+    # binds on calls that are already slow, so raising it costs nothing on the
+    # 9.5s median and buys back the tail. `_call_timeout_s` in llm/client.py scales
+    # the effective per-call budget by the requested max_tokens on top of this.
     together_timeout_s: float = field(
-        default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "45") or 45))
+        default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "120") or 120))
 
     llm_max_calls_per_order: int = field(default_factory=lambda: int(_env("LLM_MAX_CALLS_PER_ORDER", "28") or 28))
     llm_cache_ttl_hours: int = field(default_factory=lambda: int(_env("LLM_CACHE_TTL_HOURS", "72") or 72))

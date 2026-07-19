@@ -73,6 +73,15 @@ def to_iso(raw) -> Optional[str]:
     return d.isoformat() if d else None
 
 
+def to_display(raw) -> Optional[str]:
+    """URAR display form (MM/DD/YYYY) for any accepted date, or None. MISMO stores
+    dates ISO, but the appraisal form (and the AMC checks that read it) use
+    MM/DD/YYYY — present the value the way the form does so a valid date is never
+    mistaken for a wrong-format entry. Generic: any date-typed value, any AMC."""
+    d = parse_date(raw)
+    return d.strftime("%m/%d/%Y") if d else None
+
+
 def year_of(raw) -> int:
     """First plausible 4-digit year in the text; 0 when none. Shared by the
     tax-year / year-built / effective-date arithmetic rules."""

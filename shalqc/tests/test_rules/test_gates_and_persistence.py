@@ -130,4 +130,4 @@ def test_persistence_graceful_without_db(monkeypatch):
     assert repo.available() is False
     assert repo.get_cached_run("O", "hash") is None      # safe no-op
     assert repo.next_revision_no("O") == 0
-    assert repo.save_run("O", "AMC001", "h", "fp", 0, {"summary": {}}) is None
+    assert repo.save_run("O", "EQUITYSOLUTIONS", "h", "fp", 0, {"summary": {}}) is None

@@ -18,8 +18,11 @@ pdfplumber pass ported from ocr-service/app/extraction/comp_grid_extractor.py.
 
 from __future__ import annotations
 
+import glob
 import logging
+import os
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -245,6 +248,47 @@ def _extract_grid_pdfplumber(pdf_path) -> Tuple[Dict[str, str], Dict[str, Dict]]
     return out, positions
 
 
+@lru_cache(maxsize=1)
+def _ghostscript_ready() -> bool:
+    """Is Camelot's `lattice` flavour actually usable in this environment?
+
+    2026-07-18: Camelot renders each page through Ghostscript, so without libgs
+    EVERY page of EVERY document failed — one WARNING per page (5-6 lines per
+    order, thousands across a batch) for work that could never succeed, while the
+    grid quietly ran on ONE witness instead of two. Probed once per process:
+    either the answer is yes and the arbitration witness works, or it is no and
+    we say so a single time and skip Camelot outright.
+
+    On macOS/Homebrew, libgs is installed but off the default loader path, so the
+    Cellar lib dir is added to DYLD_LIBRARY_PATH before probing — that alone turns
+    the second witness back on rather than merely silencing the complaint.
+    """
+    import ctypes.util
+
+    if ctypes.util.find_library("gs") is None:
+        for pattern in ("/opt/homebrew/Cellar/ghostscript/*/lib",
+                        "/usr/local/Cellar/ghostscript/*/lib",
+                        "/opt/homebrew/lib", "/usr/local/lib"):
+            for lib_dir in sorted(glob.glob(pattern), reverse=True):   # newest first
+                if glob.glob(os.path.join(lib_dir, "libgs.*")):
+                    prev = os.environ.get("DYLD_LIBRARY_PATH", "")
+                    os.environ["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{prev}" if prev else lib_dir
+                    break
+            else:
+                continue
+            break
+    try:
+        import ghostscript  # noqa: F401  — import itself resolves libgs
+        return True
+    except Exception as exc:
+        logger.warning(
+            "grid: Ghostscript/libgs unavailable (%s) — the Camelot lattice witness is "
+            "OFF, so comp-grid values come from pdfplumber alone with no cross-read "
+            "arbitration. Install it (macOS: `brew install ghostscript`) to restore "
+            "two-witness grid extraction. This is reported once per process.", exc)
+        return False
+
+
 def _find_grid_pages_camelot(pdf_path) -> List[int]:
     """Locate grid pages via pdfplumber text (Camelot has no text-search API)."""
     import pdfplumber
@@ -269,6 +313,8 @@ def _extract_grid_camelot(pdf_path) -> Dict[str, str]:
     a structurally independent read — exactly what arbitration needs.
     """
     out: Dict[str, str] = {}
+    if not _ghostscript_ready():      # logged once per process, not once per page
+        return out
     pages = _find_grid_pages_camelot(pdf_path)
     if not pages:
         return out

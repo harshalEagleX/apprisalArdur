@@ -1,0 +1,257 @@
+meta:
+  amc_code: _base
+  checklist_hash: ea02c54340699e4a
+  note: 'Human review: fix a binding (edit a label id) or confirm unbound. Never write
+    logic here.'
+  count: 12
+items:
+- item_id: C-3
+  check_text: 'Data Source(s) — Data Source(s) — Data source is compulsory | Triggers:
+    Is the property seller the owner of public record? if checkbox marked for yes
+    and data source is missing'
+  reject_text: Please provide data source for "Is the property seller the owner of
+    public record?" under contract section
+  section: contract
+  item_name: Data Source(s)
+  bound_labels:
+  - is_seller_owner_of_record
+  - owner_record_data_source
+  scope: subject
+  expects: if is_seller_owner_of_record == true then data_source must be non‑empty
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.65
+  severity: rejectable
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: N-1
+  check_text: 'Characteristcis & Housing Trends — Characteristcis & Housing Trends
+    — Neighborhood Characteristics and One-Unit Housing Trends At least 1 box should
+    be checked | Triggers: if checkbox is missing : reject as In the neighborhood
+    section checbox is missing for _____, please revise.'
+  reject_text: null
+  section: neighborhood
+  item_name: Characteristcis & Housing Trends
+  bound_labels:
+  - is_pud_checked
+  - comp_N_unit_number
+  scope: comps
+  expects: count(comp_* present) >= 1
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: rejectable
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: ST-6
+  check_text: Utilities and Off‐site Improvements Typical — Utilities and Off‐site
+    Improvements Typical — Are the utilities and off-site improvements typical for
+    the market area? Yes or No checkbox should be marked
+  reject_text: null
+  section: site
+  item_name: Utilities and Off‐site Improvements Typical
+  bound_labels:
+  - site_area
+  - site_area_unit
+  scope: subject
+  expects: checkbox marked Yes/No for typicality
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: SCA-10
+  check_text: 'Leasehold/Fee Simple — Leasehold/Fee Simple — Must be provided, if
+    Leasehold, similar comps must be provided. | Triggers: If subject section shows
+    Property Rights Appraised as fee simple then sales grid should be the reflect
+    same; If subject section is leasehold and any of the comp shows fee simple then
+    adjustment should be reflected.'
+  reject_text: null
+  section: sales_comparison
+  item_name: Leasehold/Fee Simple
+  bound_labels:
+  - appraised_value
+  - comp_count_present
+  scope: comps
+  expects: none
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: SCA-13
+  check_text: 'Design (Style) — Design (Style) — must be provided Attachment type,
+    # of stories and Design (style). | Triggers: If Design (style) is missing under
+    improvement section or sales grid'
+  reject_text: Please provide Design (style) under improvement and sales grid.
+  section: sales_comparison
+  item_name: Design (Style)
+  bound_labels:
+  - comp_count_present
+  - design_style
+  scope: comps
+  expects: ''
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.1
+  severity: rejectable
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: SCA-18
+  check_text: Basement & Finish/Rooms Below Grade — Basement & Finish/Rooms Below
+    Grade — If Full basement or Partial Basement checbox is marked in the improvement
+    section then basement area and Basement finished must be mentioned in two separate
+    line in the sales grid (ex. Basement & Finished Rooms Below Grade)
+  reject_text: null
+  section: sales_comparison
+  item_name: Basement & Finish/Rooms Below Grade
+  bound_labels:
+  - comp_count_present
+  - appraised_value
+  - comp_N_basement_gla
+  scope: comps
+  expects: presence of two separate lines for basement area and basement finished
+    in sales grid
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.6
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: SCA-21
+  check_text: Energy Efficient Items — Energy Efficient Items — Energy Efficient items
+    need to be described. Differences from subject to comp NOT adjusted must have
+    a 0 in grid adjustment field.
+  reject_text: null
+  section: sales_comparison
+  item_name: Energy Efficient Items
+  bound_labels:
+  - appraised_value
+  - comp_count_present
+  scope: comps
+  expects: none
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: PSH-1
+  check_text: Research the sale or transfer history of subject — Research the sale
+    or transfer history of subject — In this section always I did research the sale
+    or transfer history of the subject property and comparable sales must be marked.
+  reject_text: null
+  section: other
+  item_name: Research the sale or transfer history of subject
+  bound_labels:
+  - comp_count_present
+  - appraised_value
+  scope: comps
+  expects: ''
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: PSH-7
+  check_text: Effective Date of Data Source (s) — Effective Date of Data Source (s)
+    — Should be the date of findings. Must be provided even if no sale or transfer
+    is reported.
+  reject_text: null
+  section: other
+  item_name: Effective Date of Data Source (s)
+  bound_labels:
+  - prior_sale_data_source_subject
+  - prior_sale_effective_date_subject
+  - date_report_signed
+  scope: subject
+  expects: presence(date_report_signed)
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.6
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: CA-3
+  check_text: INCOME APPROACH TO VALUE — INCOME APPROACH TO VALUE — If this section
+    is blank than no need to add revision.
+  reject_text: null
+  section: cost
+  item_name: INCOME APPROACH TO VALUE
+  bound_labels:
+  - indicated_value_income_approach
+  - income_approach_monthly_rent
+  scope: subject
+  expects: no binding applicable
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: SIG-14
+  check_text: 'Name — Name — AMC name under the LENDER/CLIENT is requied for all report.
+    | Triggers: If AMC name is missing reject as: 1. In the signature card, please
+    include the AMC name: Fastapp Appraisal Management Company.; If AMC name is different
+    or incorrect reject as : In the signature card, please update the AMC name: Fastapp
+    Appraisal Management Company.'
+  reject_text: null
+  section: signature
+  item_name: Name
+  bound_labels:
+  - appraisal_report_type
+  - appraiser_company_name
+  scope: subject
+  expects: presence_of(AMC_name) under lender/client section
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.2
+  severity: rejectable
+  reject_branches: []
+  hold: false
+  never_reject: false
+- item_id: MCA-1
+  check_text: Inventory Analysis — Inventory Analysis — All lightly shaded areas are
+    required to be completed or a specific comment as to why they cannot be. Required
+    blank spaces should be completed with a "0" if there are none or N/A.
+  reject_text: null
+  section: other
+  item_name: Inventory Analysis
+  bound_labels:
+  - contract_analysis_comment
+  - mca_neighborhood_analysis_comment
+  - are_facilities_complete
+  scope: subject
+  expects: all required fields non-empty or marked N/A
+  judgeable: text
+  conditional: null
+  bound_by: llm
+  binder_confidence: 0.65
+  severity: informational
+  reject_branches: []
+  hold: false
+  never_reject: false

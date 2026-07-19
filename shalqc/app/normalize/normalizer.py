@@ -485,7 +485,7 @@ def match_band(a, b, kind: str = "generic") -> str:
         fa, fb = _FORM_NUM_RX.search(sa.lower()), _FORM_NUM_RX.search(sb.lower())
         return "match" if fa and fb and fa.group(1) == fb.group(1) else "mismatch"
     if kind == "address":
-        return "match" if _address_tokens(sa) == _address_tokens(sb) else "review"
+        return _address_band(sa, sb)
     if kind in ("person", "name"):
         # P5 / F3: person-aware — splits multi-person names, strips designations,
         # order-insensitive. Handles "David & Marissa Stiehl" vs "Marissa and David
@@ -528,6 +528,78 @@ def canonicalize(value, kind: str = "generic") -> str:
     if kind == "company":
         return normalizer._normalize_company(s)
     return _basic(s)
+
+
+# USPS "secondary address unit" designators (Pub. 28 §213). A suite/apt number
+# stated on one document and omitted on the other is NOT a different address.
+_UNIT_DESIGNATORS = frozenset({
+    "unit", "ste", "suite", "apt", "apartment", "rm", "room", "fl", "floor",
+    "bldg", "building", "lot", "trlr", "spc", "space", "dept", "no", "num"})
+_ZIP5_RX = re.compile(r"^\d{5}$")
+
+
+def _address_core(s: str) -> frozenset:
+    """Address tokens with the SECONDARY-UNIT component removed.
+
+    Works on the ORDERED token list (not the set) so a designator and the value
+    that follows it are dropped together — "suite 10" → drop both, leaving the
+    delivery address itself."""
+    s = re.sub(r"\b(\d{5})-\d{4}\b", r"\1", s or "")
+    s = re.sub(r"#\s*[\w-]+", " ", s)              # "#12" carries no other meaning
+    toks = [t for t in normalizer._normalize_address(s).split() if t]
+    out, skip = [], False
+    for i, t in enumerate(toks):
+        if skip:
+            skip = False
+            continue
+        if t in _UNIT_DESIGNATORS:
+            nxt = toks[i + 1] if i + 1 < len(toks) else None
+            # only swallow a SHORT following token (10, 200a, b) — never a word
+            # that happens to follow, e.g. "floor plan".
+            skip = bool(nxt and len(nxt) <= 4 and any(c.isdigit() for c in nxt))
+            continue
+        out.append(t)
+    return frozenset(out)
+
+
+def _plural_variant(a: str, b: str) -> bool:
+    """'spring' vs 'springs' — a city-name spelling variant, not a new place."""
+    lo, hi = sorted((a, b), key=len)
+    return len(hi) - len(lo) == 1 and hi[:-1] == lo and hi.endswith("s")
+
+
+def _address_band(sa: str, sb: str) -> str:
+    """"match" | "review" for two addresses (never "mismatch" — an address
+    difference is a soft signal a human resolves, never an auto-reject).
+
+    2026-07-18: exact token-set equality made EQ-98/EQ-111/EQ-F hedge on nearly
+    every order over differences that are not differences. Measured on
+    ESMD-0002883: the report says "3814 BEL PRE ROAD, SILVER SPRING, MD 20906"
+    and the engagement letter "3814 BEL PRE ROAD Suite 10, SILVER SPRINGS, MD
+    20906" — the same building, differing only by a suite number stated on one
+    document and a city spelling variant the ZIP already disambiguates.
+
+    Two escalating tests, both conservative:
+      1. token sets equal once the secondary unit is dropped → match;
+      2. same ZIP5 AND same street number AND every remaining difference is a
+         plural spelling variant → match. ZIP + primary number + street name is a
+         USPS delivery point, so this cannot merge two genuinely different
+         addresses; anything else still bands "review" for a human.
+    """
+    ca, cb = _address_core(sa), _address_core(sb)
+    if ca == cb:
+        return "match"
+
+    zips_a, zips_b = {t for t in ca if _ZIP5_RX.match(t)}, {t for t in cb if _ZIP5_RX.match(t)}
+    nums_a = {t for t in ca if t.isdigit() and not _ZIP5_RX.match(t)}
+    nums_b = {t for t in cb if t.isdigit() and not _ZIP5_RX.match(t)}
+    if not (zips_a and zips_a == zips_b and nums_a and nums_a == nums_b):
+        return "review"
+
+    only_a, only_b = sorted(ca - cb), sorted(cb - ca)
+    if len(only_a) != len(only_b):
+        return "review"
+    return "match" if all(_plural_variant(x, y) for x, y in zip(only_a, only_b)) else "review"
 
 
 def _address_tokens(s: str) -> frozenset:

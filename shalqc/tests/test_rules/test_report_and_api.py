@@ -51,11 +51,10 @@ def test_same_root_field_collapses_to_one_card():
 @pytest.mark.skipif(not FIXTURE_DIR.exists(), reason="fixture not present")
 def test_api_qc_process_end_to_end(monkeypatch):
     from fastapi.testclient import TestClient
-    monkeypatch.setenv("INTERNAL_API_KEY", "k")
-    # re-import main so the middleware picks up the key
-    import importlib
     import app.main as main
-    importlib.reload(main)
+    # The auth middleware reads the settings singleton (read once at boot in prod), so
+    # override it directly rather than via env+reload.
+    monkeypatch.setattr(main.settings, "internal_api_key", "k")
     c = TestClient(main.app)
 
     assert c.get("/live").status_code == 200
@@ -63,7 +62,12 @@ def test_api_qc_process_end_to_end(monkeypatch):
     assert c.get("/qc/rules").status_code == 401              # auth enforced
     h = {"X-API-Key": "k"}
     assert c.get("/qc/rules", headers=h).json()["count"] >= 18
-    r = c.post("/qc/process", json={"order_dir": str(FIXTURE_DIR)}, headers=h)
+    # This test validates the deterministic LEGACY rule engine (no LLM). The default
+    # judge_mode is now "language" (the product path, covered by tests/test_language),
+    # so pin legacy explicitly; persist:false avoids a G-3 cache hit from a prior
+    # language-mode run of the same fixture (cache keys on package hash, not mode).
+    r = c.post("/qc/process", headers=h,
+               json={"order_dir": str(FIXTURE_DIR), "mode": "legacy", "persist": False})
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "OK"

@@ -83,9 +83,13 @@ async def process(request: Request):
     if not order_path.exists():
         raise HTTPException(status_code=404, detail=f"order_dir not found: {order_dir}")
     # Production path uses the LLM (tier-2/3 + gap-fill); pass use_llm:false to
-    # run deterministic-only (tier-2/3 rules then degrade to VERIFY).
+    # run deterministic-only (tier-2/3 rules then degrade to VERIFY). `persist:false`
+    # runs without touching the run cache/DB (local/test — avoids a G-3 cache hit from
+    # a prior run of a different mode; the cache keys on package hash, not mode).
     mode = (body or {}).get("mode")   # None → settings.judge_mode
-    return run_qc(order_path, llm_client=_resolve_client((body or {}).get("use_llm", True)), mode=mode)
+    persist = bool((body or {}).get("persist", True))
+    return run_qc(order_path, llm_client=_resolve_client((body or {}).get("use_llm", True)),
+                  mode=mode, persist=persist)
 
 
 async def _order_dir_from_files(form) -> Path:

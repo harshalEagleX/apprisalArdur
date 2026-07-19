@@ -62,8 +62,10 @@ def test_non_override_item_untouched():
     assert item.bound_by != "manual"
 
 
-def test_equitysolutions_overrides_load():
-    ov = C._load_overrides("EQUITYSOLUTIONS")
-    assert "EQ-34" in ov and ov["EQ-34"]["bound_labels"] == ["utilities_typical"]
-    # a missing AMC returns empty, never raises
+def test_missing_override_file_returns_empty():
+    # The EQUITYSOLUTIONS override file was retired 2026-07-15 — its fixes now live
+    # directly in the compiled runtime bundle (compiled/EQUITYSOLUTIONS/<hash>.yaml),
+    # which is the single hand-maintained source for this client. With no override
+    # file present, the loader must return empty gracefully, never raise.
+    assert C._load_overrides("EQUITYSOLUTIONS") == {}
     assert C._load_overrides("NO_SUCH_AMC") == {}

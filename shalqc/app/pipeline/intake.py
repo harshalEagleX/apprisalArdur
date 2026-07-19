@@ -40,8 +40,26 @@ _UAD_MARKERS = (
     "sales comparison approach",
     "reconciliation",
 )
-_ENGAGEMENT_MARKERS = ("engagement letter", "order form", "assignment order", "appraisal order")
+_ENGAGEMENT_MARKERS = ("engagement letter", "order form", "assignment order", "appraisal order",
+                       "standards of engagement", "engagement instructions")
 _CONTRACT_MARKERS = ("purchase agreement", "sales contract", "purchase and sale agreement")
+
+# 2026-07-18: ESNC-0006152's 5-page EngagementLetter.pdf classified as "unknown"
+# — too long for the `pages <= 3` fallback, and its wording ("STANDARDS OF
+# ENGAGEMENT", "Standard Appraisal Engagement Instructions") matched none of the
+# phrase markers. The whole engagement comparison then degraded silently for that
+# order: every "must match the engagement letter" check had no counterpart to
+# compare against. Phrase markers alone are brittle because each AMC titles its
+# letter differently, so back them with a STRUCTURAL signal.
+#
+# Measured over all 18 PDFs in the 7 test orders: every engagement letter (7/7)
+# carries 9 of these order-form tokens, appraisal reports carry 5-7, and purchase
+# contracts 0-4 — cleanly separable. Only applied to PDFs shorter than an
+# appraisal report, so a long scanned report can never be captured by it.
+_ORDER_FORM_TOKENS = ("borrower", "lender", "loan number", "due date", "appraisal fee",
+                      "property address", "order id", "file number", "client",
+                      "inspection", "appraiser", "engagement")
+_ORDER_FORM_TOKEN_FLOOR = 6
 
 # ── §14 G-1 package-safety limits ───────────────────────────────────────────
 _MAX_PACKAGE_BYTES = 200 * 1024 * 1024   # 200 MB cap
@@ -198,6 +216,11 @@ def classify_file(path: Path) -> str:
         return "contract"
     if any(m in text for m in _ENGAGEMENT_MARKERS) or pages <= 3:
         return "engagement_letter"
+    # Structural fallback for a letter this AMC titles differently — a short PDF
+    # dense in order-form fields is an order form (see _ORDER_FORM_TOKENS).
+    if (pages < _APPRAISAL_MIN_PAGES
+            and sum(1 for t in _ORDER_FORM_TOKENS if t in text) >= _ORDER_FORM_TOKEN_FLOOR):
+        return "engagement_letter"
     # A long PDF without UAD markers is still most likely the appraisal
     # report (scanned reports may miss the text markers entirely) — never
     # silently drop the largest document in the package.
@@ -235,6 +258,28 @@ def _amc_from_letterhead(engagement_letter: Optional[Path]) -> Optional[str]:
     return m.group(1).upper() if m else None
 
 
+def _is_archive_artifact(path: Path) -> bool:
+    """Junk a macOS-created zip carries alongside the real documents.
+
+    2026-07-18: `__MACOSX/…/._445 Sparrow Way.pdf` (an AppleDouble resource fork,
+    a few KB of binary metadata) was being classified as a real document. It is
+    not a readable PDF, so `_pdf_page_count` returns 0, the `pages <= 3` rule
+    fires, and the junk file CLAIMED THE ENGAGEMENT-LETTER SLOT — the engagement
+    stage then failed to open it and every "must match the engagement letter"
+    check for that order silently lost its counterpart. Same failure class as the
+    ESNC-0006152 misclassification, from the opposite direction.
+
+    Also covers Windows `Thumbs.db` / `desktop.ini` and generic dotfiles, none of
+    which are ever order documents.
+    """
+    if "__MACOSX" in path.parts:
+        return True
+    name = path.name
+    return (name.startswith("._")            # AppleDouble resource fork
+            or name.startswith(".")          # any dotfile (.DS_Store, …)
+            or name.lower() in {"thumbs.db", "desktop.ini"})
+
+
 def assemble_order(order_dir) -> OrderDocuments:
     """Classify every file in `order_dir` as one order (§3.1.4: folder
     boundary = order boundary — never a filename stem)."""
@@ -248,6 +293,8 @@ def assemble_order(order_dir) -> OrderDocuments:
 
     for path in sorted(order_dir.rglob("*")):
         if not path.is_file() or path.name.startswith("manifest."):
+            continue
+        if _is_archive_artifact(path):
             continue
         kind = classify_file(path)
         if kind == "appraisal_pdf" and order.appraisal_pdf is None:

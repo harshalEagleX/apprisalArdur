@@ -27,7 +27,19 @@ from app.llm.grounding import is_grounded
 
 _MARKDOWN = re.compile(r"[*_`#]|\[.*?\]\(.*?\)")
 _NUM = re.compile(r"-?\d[\d,]*\.?\d*")
-_MISSING_WORDS = re.compile(r"\b(missing|absent|not present|no\s+\w+\s+present|none|blank|empty)\b", re.I)
+# The vocabulary of an ABSENCE claim — "the data isn't there" — as opposed to a
+# substantive finding ("28% exceeds the 25% limit"). Widened 2026-07-18: the old
+# pattern only caught "no <word> present", so real judge output like "no comment
+# field supplied" and "no corresponding grid entry is present" slipped through and
+# became appraiser-facing rejects. Deliberately does NOT include bare "does not
+# match" / "exceeds" / "outside" — those are contradictions between values we DID
+# read, which are genuine rejects.
+_ABSENCE_VERBS = r"(present|provided|supplied|given|found|stated|available|shown|listed|documented|entered|attached)"
+_MISSING_WORDS = re.compile(
+    r"\b(missing|absent|blank|empty|none|unavailable|unreadable|lack(s|ing)?"
+    rf"|no\s+(?:\w+\s+){{0,4}}{_ABSENCE_VERBS}"
+    rf"|not\s+(?:\w+\s+){{0,2}}{_ABSENCE_VERBS}"
+    r"|could\s+not\s+(?:be\s+)?(?:find|found|locate[d]?|read))\b", re.I)
 _CONF_FLOOR = 0.6
 
 
@@ -195,6 +207,18 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
     # every bound value, with the grounded LLM quote attached to its label.
     grounded_ev = _located_evidence(packet, quotes_by_label)
 
+    # never_reject is an ITEM-LEVEL policy — this check can never be a hard reject,
+    # whatever the evidence looks like — so it is settled BEFORE the degrade ladder
+    # reasons about reject quality. Ordering matters only for the audit label: once
+    # the widened absence guard (2026-07-18) started catching more NOT_SATISFIEDs,
+    # a never_reject item was being stamped `absent_data` instead of `never_reject`,
+    # which hides WHY the card can't reject. Same status either way.
+    if getattr(item, "never_reject", False) and status == StatusV2.NOT_SATISFIED:
+        status, suggest_override = StatusV2.REVIEW, True
+        guardrails.append("never_reject")
+    else:
+        suggest_override = False
+
     # --- the degrade ladder, only for the consequential NOT_SATISFIED ----------
     if status == StatusV2.NOT_SATISFIED:
         if not quotes_by_label:
@@ -221,14 +245,16 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
     if status != StatusV2.NOT_SATISFIED:
         suggest = None
 
-    # Multi-reject policy flags (reject bank):
-    #  never_reject (EQ-94/112/135, descriptive-only): can never be a hard reject —
-    #    cap a NOT_SATISFIED at REVIEW and drop the reject wording.
-    #  hold (EQ-30 illegal zoning / EQ-31 H&BU=No): a fired trigger means ESCALATE to
-    #    the AMC, NOT an appraiser reject — keep it actionable but emit no reject text.
-    if getattr(item, "never_reject", False) and status == StatusV2.NOT_SATISFIED:
-        status, suggest = StatusV2.REVIEW, None
-        guardrails.append("never_reject")
+    # never_reject, second half: the status was already capped to REVIEW above (it
+    # is an item-level policy, settled before the degrade ladder); here we drop the
+    # appraiser-facing reject wording that would otherwise ride along. The card
+    # still goes to the reviewer as a VERIFY — never_reject removes the ability to
+    # REJECT, it does not remove the finding.
+    if suggest_override:
+        suggest = None
+
+    # hold (EQ-30 illegal zoning / EQ-31 H&BU=No): a fired trigger means ESCALATE to
+    # the AMC, NOT an appraiser reject — keep it actionable but emit no reject text.
     # hold escalation can be item-level (the WHOLE check escalates, e.g. EQ-31
     # H&BU=No) OR branch-level (only ONE fail-mode escalates while the item's other
     # branches reject normally, e.g. EQ-30 illegal-zoning among legal-nonconforming
@@ -267,14 +293,27 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
 
 
 def _leans_on_absent(found: str, expected: str, packet: Packet) -> bool:
-    """Rule 3: a NOT_SATISFIED whose reasoning depends on an absent label is capped
-    at REVIEW — the engine can't tell 'absent from the report' from 'unread'."""
-    if not packet.absent_labels:
-        return False
+    """Rule 3: a NOT_SATISFIED whose reasoning depends on missing data is capped at
+    REVIEW — the engine cannot tell 'absent from the report' from 'never read'.
+
+    2026-07-18: this used to require `packet.absent_labels` to be non-empty, which
+    missed the commonest case — the judge rejecting over data that was never BOUND
+    at all, so it appears in no absent_labels list. Measured on the 7-order
+    baseline, rejects rose 3.7 → 5.1/order once previously-unjudged items started
+    being judged, and the repeat offenders were exactly this shape:
+        EQ-22  "land_use_other=5 (no comment field supplied)"      → NOT_SATISFIED
+        EQ-75  "Porch is marked ... but no corresponding grid
+                entry is present"                                  → NOT_SATISFIED
+    Neither is evidence the report is wrong; both are evidence we did not read
+    something. So the guard now keys on the CLAIM: any NOT_SATISFIED justified by
+    absence is capped at REVIEW, whether or not a bound label happens to be listed
+    absent. A human then confirms — which is the honest outcome, and far cheaper
+    than a false rejection sent back to an appraiser.
+    """
     text = f"{found} {expected}".lower()
     if _MISSING_WORDS.search(text):
         return True
-    for lbl in packet.absent_labels:
+    for lbl in (packet.absent_labels or []):
         if lbl.lower() in text or lbl.replace("_", " ").lower() in text:
             return True
     return False

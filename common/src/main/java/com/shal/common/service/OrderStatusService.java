@@ -9,6 +9,7 @@ import com.shal.common.entity.QCResult;
 import com.shal.common.repository.AppraisalTransactionRepository;
 import com.shal.common.repository.BatchFileRepository;
 import com.shal.common.repository.QCResultRepository;
+import com.shal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -69,12 +70,16 @@ public class OrderStatusService {
     @Transactional
     public boolean markProcessing(AppraisalTransaction order) {
         if (order == null || order.getId() == null) return false;
-        if (order.getDocumentStatus() == OrderDocumentStatus.QC_PROCESSING) {
+        // Atomic conditional UPDATE — the row is the cross-node source of truth for the
+        // claim (rows==1 → we won it; rows==0 → another node/thread already holds it).
+        // Replaces the old read-then-write, which double-ran the same order across nodes.
+        int rows = appraisalTransactionRepository.claimForQcIfNotProcessing(order.getId(), AppTime.now());
+        if (rows == 0) {
             log.debug("Order {} already QC_PROCESSING — rejecting duplicate claim", order.getTransactionRef());
             return false;
         }
+        // Reflect the committed transition on the in-memory entity for callers that keep using it.
         order.setDocumentStatus(OrderDocumentStatus.QC_PROCESSING);
-        appraisalTransactionRepository.save(order);
         return true;
     }
 
