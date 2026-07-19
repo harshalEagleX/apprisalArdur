@@ -818,14 +818,18 @@ public class ReviewerApiController {
         return ((Number) row[index]).longValue();
     }
 
-    private String normalizeStatus(String status) {
+    // package-private + static so the reviewer-facing decision logic below is
+    // directly testable. These are pure functions of their arguments (no instance
+    // state), and they decide what a reviewer is shown and whether they must act —
+    // the qc module sat at 0.3% coverage with none of it verified.
+    static String normalizeStatus(String status) {
         if (status == null || status.isBlank()) {
             return "verify";
         }
         return status.trim().toLowerCase();
     }
 
-    private boolean needsReviewerAction(String status) {
+    static boolean needsReviewerAction(String status) {
         String normalized = normalizeStatus(status);
         return "fail".equals(normalized)
                 || "verify".equals(normalized)
@@ -861,9 +865,12 @@ public class ReviewerApiController {
 
     /** Group rules in the reviewer UI by report section, derived from the rule id
      * prefix (S-1 -> SUBJECT, SCA-5 -> SALES_COMPARISON, FHA-2 -> FHA, ...). */
-    private String sectionForRule(String ruleId) {
-        if (ruleId == null) return "OTHER";
-        String id = ruleId.toUpperCase();
+    static String sectionForRule(String ruleId) {
+        // Blank as well as null: the id is engine-supplied, and an empty string fell
+        // through to id.charAt(0) below and threw StringIndexOutOfBounds, which would
+        // take out the whole queue view rather than filing one finding under OTHER.
+        if (ruleId == null || ruleId.isBlank()) return "OTHER";
+        String id = ruleId.trim().toUpperCase();
         if (id.startsWith("SCA")) return "SALES_COMPARISON";
         if (id.startsWith("SIG")) return "SIGNATURE";
         if (id.startsWith("ST")) return "SITE";
