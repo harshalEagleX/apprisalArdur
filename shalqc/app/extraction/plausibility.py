@@ -153,6 +153,18 @@ def _looks_like_person_name_field(fname: str) -> bool:
     return bool(_PERSON_NAME_FIELD_RX.search(fname))
 
 
+def _sentence_fragment(value: str) -> bool:
+    """A value sliced out of running prose rather than read from a cell.
+
+    Trailing clause punctuation is the tell: real names ("Sunset Villas", "MCA,
+    Inc.") do not end in a bare comma or semicolon — a comma there is always the
+    middle of a sentence the reader cut. Kept deliberately narrow (punctuation
+    shape only) so a legitimate name is never rejected for being short or lowercase.
+    """
+    v = (value or "").strip()
+    return bool(v) and v[-1] in ",;:"
+
+
 def _name_shaped(value: str) -> bool:
     """A plausible person name: has an alphabetic token of length >=2 AND letters
     are the majority of its non-space characters. Rejects legal-description / page
@@ -637,6 +649,16 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             elif _looks_like_person_name_field(fname):
                 ok = _name_shaped(value)
                 reason = "not name-shaped (legal-desc/page/digit fragment in a person-name field)"
+            elif fname.endswith("_name") and _sentence_fragment(value):
+                # 2026-07-19: ESWA-0002168 read project_name="work," off the form —
+                # a word sliced out of running prose. A NAME that trails a comma or
+                # semicolon is a fragment, never a name, and this one manufactured a
+                # phantom condo: EQ-119 ("complete the shaded areas IF the subject is
+                # a Condo/Co-Op") saw a populated project_name on a detached
+                # single-family and hedged. Shape-only and source-agnostic, so it
+                # holds for any AMC and any *_name field.
+                ok = False
+                reason = "name is a sentence fragment (trailing clause punctuation)"
             elif _repeated_grid_cell(value):
                 # a value that repeats >=2 distinct blocks is a grid ROW that bled
                 # subject+comp cells into one field — never a single real cell.

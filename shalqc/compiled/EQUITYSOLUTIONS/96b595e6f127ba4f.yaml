@@ -1654,6 +1654,7 @@ items:
   item_name: Leasehold/Fee Simple
   bound_labels:
   - property_rights
+  - comp_N_leasehold
   scope: cross_section
   expects: ''
   judgeable: text
@@ -3022,6 +3023,8 @@ items:
   - project_name
   - project_phase
   - unit_number
+  - dwelling_type
+  - is_pud_checked
   scope: cross_section
   expects: project_name && project_phase && unit_number
   judgeable: text

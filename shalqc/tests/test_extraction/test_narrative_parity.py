@@ -161,3 +161,37 @@ def test_real_grid_bleed_is_still_detected():
 def test_legitimate_single_cell_untouched():
     from app.extraction.plausibility import _repeated_grid_cell
     assert not _repeated_grid_cell("Concrete Slab Foundation")
+
+
+# ── a NAME must not be a slice of running prose ─────────────────────────────
+
+def test_name_field_rejects_a_sentence_fragment():
+    """2026-07-19: ESWA-0002168 read project_name="work," off the form — a word
+    sliced out of running prose. It manufactured a phantom condo: EQ-119
+    ("complete the shaded areas IF the subject is a Condo/Co-Op") saw a populated
+    project_name on a DETACHED single-family (dwelling_type='Det.',
+    is_pud_checked='No') and hedged."""
+    from app.extraction.plausibility import _sentence_fragment
+    assert _sentence_fragment("work,")
+    assert _sentence_fragment("estate work;")
+
+
+def test_real_names_with_internal_punctuation_survive():
+    """Narrow by design — a comma INSIDE a name is normal."""
+    from app.extraction.plausibility import _sentence_fragment
+    for name in ("Sunset Villas", "MCA, Inc.", "Gary N. James Appraiser",
+                 "Kastle River Appraisals", "N/A"):
+        assert not _sentence_fragment(name), name
+
+
+def test_project_name_fragment_is_suppressed_end_to_end():
+    from app.extraction.plausibility import validate_fields
+    from app.extraction.result import ExtractedField, Source
+
+    junk = ExtractedField(canonical_name="project_name", value="work,",
+                          source=Source.PDF_DIGITAL, confidence=0.9)
+    real = ExtractedField(canonical_name="appraiser_company_name", value="MCA, Inc.",
+                          source=Source.PDF_DIGITAL, confidence=0.9)
+    validate_fields({"project_name": junk, "appraiser_company_name": real})
+    assert junk.suppressed
+    assert not real.suppressed
