@@ -1,5 +1,6 @@
 package com.shal.common.entity;
 
+import com.shal.common.util.AppTime;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -44,7 +45,7 @@ public class AuditLog {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = AppTime.now();
     }
 
     // Getters and Setters

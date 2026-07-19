@@ -418,7 +418,7 @@ public class QCProcessingService {
             notif.put("status", String.valueOf(fresh.getDocumentStatus()));
             notif.put("totalFiles", pairs.size());
             notif.put("needsReview", toVerify > 0 || autoFail > 0);
-            notif.put("occurredAt", java.time.LocalDateTime.now().toString());
+            notif.put("occurredAt", AppTime.now().toString());
             notif.put("message", "QC complete for order \"" + fresh.getTransactionRef() + "\" → " + fresh.getDocumentStatus());
             realtimeEventPublisher.publish("/topic/admin/notifications", notif);
         } catch (Exception e) {

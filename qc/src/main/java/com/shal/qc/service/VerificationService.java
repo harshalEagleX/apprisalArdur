@@ -1,5 +1,6 @@
 package com.shal.qc.service;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.entity.*;
 import com.shal.common.repository.BatchRepository;
 import com.shal.common.repository.OperatorSessionRepository;
@@ -73,7 +74,7 @@ public class VerificationService {
         QCResult qcResult = qcResultRepository.findByIdForUpdate(qcResultId)
                 .orElseThrow(() -> new RuntimeException("QC Result not found: " + qcResultId));
         assertDocumentCurrent(qcResult);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = AppTime.now();
         User lockedBy = qcResult.getReviewLockedBy();
         boolean activeLock = lockedBy != null
                 && qcResult.getReviewLockExpiresAt() != null
@@ -138,7 +139,7 @@ public class VerificationService {
         QCResult qcResult = getForVerification(qcResultId);
         assertDocumentCurrent(qcResult);
         assertSessionOwnsQcResult(qcResult, sessionToken);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = AppTime.now();
         qcResult.setReviewLastActiveAt(now);
         qcResult.setReviewLockExpiresAt(now.plus(REVIEW_LOCK_TTL));
         return qcResultRepository.save(qcResult);
@@ -148,7 +149,7 @@ public class VerificationService {
     public void releaseReviewSession(@NonNull Long qcResultId, @NonNull String sessionToken) {
         QCResult qcResult = getForVerification(qcResultId);
         if (sessionToken.equals(qcResult.getReviewSessionToken())) {
-            qcResult.setReviewLockExpiresAt(LocalDateTime.now());
+            qcResult.setReviewLockExpiresAt(AppTime.now());
             qcResultRepository.save(qcResult);
             Batch batch = qcResult.getBatchFile() != null ? qcResult.getBatchFile().getBatch() : null;
             if (batch != null && batch.getStatus() == BatchStatus.IN_REVIEW && qcResult.getFinalDecision() == null) {
@@ -162,7 +163,7 @@ public class VerificationService {
 
     @Transactional
     public void markItemsPresented(@NonNull Long qcResultId, @NonNull String sessionToken) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = AppTime.now();
         List<QCRuleResult> items = qcRuleResultRepository.findPendingVerificationForQcResult(qcResultId);
         for (QCRuleResult item : items) {
             if (item.getFirstPresentedAt() == null) {
@@ -265,7 +266,7 @@ public class VerificationService {
         // originally failed. There is no override/second-approval step (removed).
         ruleResult.setReviewerVerified(passed);
         ruleResult.setReviewerComment(comment);
-        ruleResult.setVerifiedAt(LocalDateTime.now());
+        ruleResult.setVerifiedAt(AppTime.now());
         ruleResult.setStatus(passed ? "MANUAL_PASS" : "FAIL");
 
         ruleResult.setReviewSessionToken(sessionToken);
@@ -305,7 +306,7 @@ public class VerificationService {
 
         ruleResult.setReviewerVerified(accepted);
         ruleResult.setReviewerComment(comment);
-        ruleResult.setVerifiedAt(LocalDateTime.now());
+        ruleResult.setVerifiedAt(AppTime.now());
 
         qcRuleResultRepository.save(ruleResult);
         log.info("Rule {} verified: passed={}, comment={}", ruleResult.getRuleId(), accepted, comment);
@@ -352,7 +353,7 @@ public class VerificationService {
 
         qcResult.setFinalDecision(finalDecision);
         qcResult.setReviewedBy(reviewer);
-        qcResult.setReviewedAt(LocalDateTime.now());
+        qcResult.setReviewedAt(AppTime.now());
         qcResult.setReviewerNotes(overallNotes);
 
         QCResult saved = qcResultRepository.save(qcResult);
@@ -374,7 +375,7 @@ public class VerificationService {
         assertDocumentCurrent(qcResult);   // D2: never bulk-pass a superseded result
         List<QCRuleResult> items = getVerificationItems(qcResultId);
 
-        LocalDateTime verifiedAt = LocalDateTime.now();
+        LocalDateTime verifiedAt = AppTime.now();
         for (QCRuleResult item : items) {
             item.setReviewerVerified(true);
             item.setReviewerComment("Bulk passed");
@@ -384,7 +385,7 @@ public class VerificationService {
 
         qcResult.setFinalDecision(FinalDecision.PASS);
         qcResult.setReviewedBy(reviewer);
-        qcResult.setReviewedAt(LocalDateTime.now());
+        qcResult.setReviewedAt(AppTime.now());
         qcResult.setReviewerNotes(notes);
 
         QCResult saved = qcResultRepository.save(qcResult);
@@ -403,7 +404,7 @@ public class VerificationService {
 
         qcResult.setFinalDecision(FinalDecision.FAIL);
         qcResult.setReviewedBy(reviewer);
-        qcResult.setReviewedAt(LocalDateTime.now());
+        qcResult.setReviewedAt(AppTime.now());
         qcResult.setReviewerNotes(reason);
 
         QCResult saved = qcResultRepository.save(qcResult);
@@ -432,7 +433,7 @@ public class VerificationService {
 
         qcResult.setFinalDecision(anyFailed ? FinalDecision.FAIL : FinalDecision.PASS);
         qcResult.setReviewedBy(reviewer);
-        qcResult.setReviewedAt(LocalDateTime.now());
+        qcResult.setReviewedAt(AppTime.now());
         qcResult.setReviewerNotes(notes);
 
         QCResult saved = qcResultRepository.save(qcResult);
@@ -562,7 +563,7 @@ public class VerificationService {
 
     private void recordReviewerDecisionActivity(User reviewer, String originalStatus, String newStatus) {
         activeSession(reviewer).ifPresent(session -> {
-            session.setLastActiveAt(LocalDateTime.now());
+            session.setLastActiveAt(AppTime.now());
             session.setStatus(OperatorSession.Status.ACTIVE);
             if (!Objects.equals(normalizedStatus(originalStatus), normalizedStatus(newStatus))) {
                 session.setCorrectionsMade(Objects.requireNonNullElse(session.getCorrectionsMade(), 0) + 1);
@@ -573,7 +574,7 @@ public class VerificationService {
 
     private void touchOperatorSession(User reviewer) {
         activeSession(reviewer).ifPresent(session -> {
-            session.setLastActiveAt(LocalDateTime.now());
+            session.setLastActiveAt(AppTime.now());
             session.setStatus(OperatorSession.Status.ACTIVE);
             operatorSessionRepository.save(session);
         });
@@ -586,7 +587,7 @@ public class VerificationService {
                 processingMetricsRepository.save(metrics);
             });
             session.setFilesProcessed(Objects.requireNonNullElse(session.getFilesProcessed(), 0) + 1);
-            session.setLastActiveAt(LocalDateTime.now());
+            session.setLastActiveAt(AppTime.now());
             session.setStatus(OperatorSession.Status.ACTIVE);
             operatorSessionRepository.save(session);
         });
@@ -622,7 +623,7 @@ public class VerificationService {
         if (!sessionToken.equals(qcResult.getReviewSessionToken())) {
             throw new IllegalStateException("This review session is stale. Reload the report before saving decisions.");
         }
-        if (qcResult.getReviewLockExpiresAt() == null || qcResult.getReviewLockExpiresAt().isBefore(LocalDateTime.now())) {
+        if (qcResult.getReviewLockExpiresAt() == null || qcResult.getReviewLockExpiresAt().isBefore(AppTime.now())) {
             throw new IllegalStateException("This review session has timed out. Resume the report before saving decisions.");
         }
     }
@@ -665,7 +666,7 @@ public class VerificationService {
             long clientLatency = decisionLatencyMs == null ? 0L : decisionLatencyMs;
             long serverLatency = ruleResult.getFirstPresentedAt() == null
                     ? 0L
-                    : Duration.between(ruleResult.getFirstPresentedAt(), LocalDateTime.now()).toMillis();
+                    : Duration.between(ruleResult.getFirstPresentedAt(), AppTime.now()).toMillis();
             long latency = Math.max(clientLatency, serverLatency);
             if (latency < MIN_VERIFY_DECISION_MS) {
                 throw new IllegalStateException("Please review the referenced sections before saving this decision.");

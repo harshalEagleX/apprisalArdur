@@ -1,5 +1,6 @@
 package com.shal.user.service;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.dto.AuthenticationRequest;
 import com.shal.common.dto.RegisterRequest;
 import com.shal.common.entity.User;
@@ -55,7 +56,7 @@ public class AuthenticationService {
                                                 request.username(),
                                                 request.password()));
                 User user = repository.findByUsername(request.username()).orElseThrow();
-                user.setLastLoginAt(java.time.LocalDateTime.now());
+                user.setLastLoginAt(AppTime.now());
                 repository.save(Objects.requireNonNull(user));
                 return jwtUtils.generateToken(new UserPrincipal(Objects.requireNonNull(user)));
         }

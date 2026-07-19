@@ -1,5 +1,6 @@
 package com.shal.batch.service;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.entity.OperatorSession;
 import com.shal.common.entity.OperatorSession.Status;
 import com.shal.common.entity.User;
@@ -39,7 +40,7 @@ public class OperatorSessionService {
                 repo.findByUserIdAndStatus(user.getId(), Status.ACTIVE));
         previous.addAll(repo.findByUserIdAndStatus(user.getId(), Status.IDLE));
         for (OperatorSession prev : previous) {
-            prev.setEndedAt(LocalDateTime.now());
+            prev.setEndedAt(AppTime.now());
             prev.setStatus(Status.ENDED);
             updateActiveMinutes(prev);
             repo.save(prev);
@@ -61,7 +62,7 @@ public class OperatorSessionService {
     @Transactional
     public void endSession(String sessionToken) {
         repo.findBySessionToken(sessionToken).ifPresent(s -> {
-            s.setEndedAt(LocalDateTime.now());
+            s.setEndedAt(AppTime.now());
             s.setStatus(Status.ENDED);
             updateActiveMinutes(s);
             repo.save(s);
@@ -72,7 +73,7 @@ public class OperatorSessionService {
     @Transactional
     public void recordActivity(String sessionToken) {
         repo.findBySessionToken(sessionToken).ifPresent(s -> {
-            s.setLastActiveAt(LocalDateTime.now());
+            s.setLastActiveAt(AppTime.now());
             s.setStatus(Status.ACTIVE);
             repo.save(s);
         });
@@ -83,7 +84,7 @@ public class OperatorSessionService {
         repo.findBySessionToken(sessionToken).ifPresent(s -> {
             if (success) s.setFilesProcessed(s.getFilesProcessed() + 1);
             else         s.setFilesFailed(s.getFilesFailed() + 1);
-            s.setLastActiveAt(LocalDateTime.now());
+            s.setLastActiveAt(AppTime.now());
             repo.save(s);
         });
     }
@@ -106,7 +107,7 @@ public class OperatorSessionService {
     @Scheduled(fixedDelay = 300_000)
     @Transactional
     public void markIdleSessions() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(IDLE_TIMEOUT_MINUTES);
+        LocalDateTime threshold = AppTime.now().minusMinutes(IDLE_TIMEOUT_MINUTES);
         List<OperatorSession> active = repo.findAll().stream()
                 .filter(s -> s.getStatus() == Status.ACTIVE)
                 .filter(s -> s.getLastActiveAt() != null && s.getLastActiveAt().isBefore(threshold))

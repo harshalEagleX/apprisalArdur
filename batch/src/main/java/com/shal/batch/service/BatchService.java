@@ -1546,7 +1546,7 @@ public class BatchService {
             notif.put("parentBatchId", batch.getParentBatchId());
             notif.put("message",       "Batch \"" + batch.getParentBatchId() + "\" has been assigned to you for review.");
             notif.put("needsReview",   true);
-            notif.put("occurredAt",    java.time.LocalDateTime.now().toString());
+            notif.put("occurredAt",    AppTime.now().toString());
             realtimeEventPublisher.publish("/topic/reviewer/notifications", notif);
         } catch (Exception e) {
             log.debug("Failed to push assignment notification: {}", e.getMessage());

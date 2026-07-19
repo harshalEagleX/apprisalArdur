@@ -1,5 +1,6 @@
 package com.shal.common.entity;
 
+import com.shal.common.util.AppTime;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -61,7 +62,7 @@ public class OperatorSession {
 
     @PrePersist
     protected void onCreate() {
-        if (startedAt == null)  startedAt    = LocalDateTime.now();
+        if (startedAt == null)  startedAt    = AppTime.now();
         if (lastActiveAt == null) lastActiveAt = startedAt;
     }
 

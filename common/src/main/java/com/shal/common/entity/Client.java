@@ -1,5 +1,6 @@
 package com.shal.common.entity;
 
+import com.shal.common.util.AppTime;
 import jakarta.persistence.*;
 import org.hibernate.envers.Audited;
 import java.time.LocalDateTime;
@@ -43,13 +44,13 @@ public class Client {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = AppTime.now();
+        updatedAt = AppTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = AppTime.now();
     }
 
     // Getters and Setters

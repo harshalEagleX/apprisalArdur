@@ -53,7 +53,7 @@ jobs:
           echo "::endgroup::"
       - name: Upload surefire reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: surefire-reports
           path: '**/target/surefire-reports/**'

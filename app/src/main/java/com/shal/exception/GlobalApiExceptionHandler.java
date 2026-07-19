@@ -1,5 +1,6 @@
 package com.shal.exception;
 
+import com.shal.common.util.AppTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -119,7 +120,7 @@ public class GlobalApiExceptionHandler {
 
     private Map<String, Object> buildErrorBody(@NonNull HttpStatus status, String message) {
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("timestamp", AppTime.now().toString());
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
         body.put("message", message);

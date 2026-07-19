@@ -1,5 +1,6 @@
 package com.shal.service;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.entity.*;
 import com.shal.common.repository.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,7 +50,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'overview:' + #days")
     public Map<String, Object> getOverviewSnapshot(int days) {
-        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        LocalDateTime from = AppTime.now().minusDays(days);
         Map<String, Object> snap = new LinkedHashMap<>();
 
         long totalFiles = metricsRepo.countSince(from);
@@ -79,7 +80,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'ocr:' + #days")
     public Map<String, Object> getOcrInsights(int days) {
-        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        LocalDateTime from = AppTime.now().minusDays(days);
         Map<String, Object> data = new LinkedHashMap<>();
 
         data.put("avgAccuracy",     pctFraction(metricsRepo.avgOcrConfidenceSince(from)));
@@ -102,7 +103,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'ml:' + #days")
     public Map<String, Object> getMlInsights(int days) {
-        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        LocalDateTime from = AppTime.now().minusDays(days);
         Map<String, Object> data = new LinkedHashMap<>();
 
         data.put("avgRulePassRate", pct(metricsRepo.avgRulePassRateSince(from)));
@@ -138,7 +139,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'operators:' + #days")
     public Map<String, Object> getOperatorInsights(int days) {
-        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        LocalDateTime from = AppTime.now().minusDays(days);
         Map<String, Object> data = new LinkedHashMap<>();
 
         List<Object[]> rows = sessionRepo.aggregateByUserSince(from);
@@ -168,7 +169,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'trend:' + #days")
     public List<Map<String, Object>> getDailyTrend(int days) {
-        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        LocalDateTime from = AppTime.now().minusDays(days);
         List<Map<String, Object>> trend = new ArrayList<>();
         for (Object[] row : metricsRepo.dailyTrendSince(from)) {
             trend.add(Map.of(
@@ -185,7 +186,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'sla'")
     public Map<String, Object> getReviewSlaDashboard() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = AppTime.now();
         // SLA breach threshold (default 48h) and a critical escalation tier (SLA + 24h).
         // Both configurable via shal.sla.default-hours. QL-5: COUNT the totals; fetch
         // only the 50 rows actually shown — not two full entity lists just for size().
@@ -219,7 +220,7 @@ public class AnalyticsService {
 
     @Cacheable(cacheNames = "analytics", key = "'anomaly:' + #days")
     public Map<String, Object> getWeeklyAnomalyReport(int days) {
-        LocalDateTime from = LocalDateTime.now().minusDays(days);
+        LocalDateTime from = AppTime.now().minusDays(days);
         List<Object[]> latencyRows  = qcRuleResultRepo.averageDecisionLatencyByReviewerSince(from);
 
         // QL-4: one user fetch instead of findById per row.

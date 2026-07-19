@@ -179,7 +179,7 @@ public class TransactionService {
 
     private String buildRef(String amcCode, String orderNumber, int revision) {
         String base = normalize(amcCode) + "-" + normalize(orderNumber) + "-"
-                + LocalDateTime.now().toLocalDate().toString().replace("-", "");
+                + AppTime.now().toLocalDate().toString().replace("-", "");
         return revision == 0 ? base : base + "-r" + revision;
     }
 

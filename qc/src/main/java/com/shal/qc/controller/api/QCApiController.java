@@ -1,5 +1,6 @@
 package com.shal.qc.controller.api;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.entity.BatchFile;
 import com.shal.common.entity.BatchStatus;
 import com.shal.common.entity.DocumentMatch;
@@ -704,7 +705,7 @@ public class QCApiController {
         body.put("batchId", batch.getId());
         body.put("parentBatchId", batch.getParentBatchId());
         body.put("client", batch.getClient() != null ? batch.getClient().getName() : null);
-        body.put("exportedAt", java.time.LocalDateTime.now().toString());
+        body.put("exportedAt", AppTime.now().toString());
         body.put("summary", Map.of(
                 "documents", documents.size(),
                 "findings", totalFindings,

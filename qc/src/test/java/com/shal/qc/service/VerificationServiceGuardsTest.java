@@ -1,5 +1,6 @@
 package com.shal.qc.service;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.entity.BatchFile;
 import com.shal.common.entity.QCResult;
 import com.shal.common.entity.QCRuleResult;
@@ -73,7 +74,7 @@ class VerificationServiceGuardsTest {
         QCResult r = new QCResult();
         r.setId(1L);
         r.setReviewSessionToken(TOKEN);
-        r.setReviewLockExpiresAt(LocalDateTime.now().plusMinutes(30));
+        r.setReviewLockExpiresAt(AppTime.now().plusMinutes(30));
         return r;
     }
 
@@ -127,7 +128,7 @@ class VerificationServiceGuardsTest {
     @DisplayName("a decision on an EXPIRED lock is refused")
     void expiredLockRefused() {
         QCResult qc = liveResult();
-        qc.setReviewLockExpiresAt(LocalDateTime.now().minusMinutes(1));
+        qc.setReviewLockExpiresAt(AppTime.now().minusMinutes(1));
         QCRuleResult rr = ruleOn(qc, "pass");
         givenRule(rr);
         assertThatThrownBy(() -> save(rr, "PASS", TOKEN, 9_000L, true))
@@ -142,7 +143,7 @@ class VerificationServiceGuardsTest {
     void supersededResultBlocked() {
         QCResult qc = liveResult();
         qc.setBatchFile(new BatchFile());
-        qc.setSupersededAt(LocalDateTime.now().minusMinutes(5));
+        qc.setSupersededAt(AppTime.now().minusMinutes(5));
         QCRuleResult rr = ruleOn(qc, "pass");
         givenRule(rr);
         assertThatThrownBy(() -> save(rr, "PASS", TOKEN, 9_000L, true))
@@ -199,13 +200,13 @@ class VerificationServiceGuardsTest {
     @DisplayName("PASS applies MANUAL_PASS; FAIL applies FAIL")
     void decisionMapsToStatus() {
         QCRuleResult pass = ruleOn(liveResult(), "verify");
-        pass.setFirstPresentedAt(LocalDateTime.now().minusMinutes(1));
+        pass.setFirstPresentedAt(AppTime.now().minusMinutes(1));
         givenRule(pass);
         assertThat(save(pass, "PASS", TOKEN, 9_000L, true).getStatus()).isEqualTo("MANUAL_PASS");
 
         QCRuleResult fail = ruleOn(liveResult(), "verify");
         fail.setId(11L);
-        fail.setFirstPresentedAt(LocalDateTime.now().minusMinutes(1));
+        fail.setFirstPresentedAt(AppTime.now().minusMinutes(1));
         givenRule(fail);
         assertThat(save(fail, "FAIL", TOKEN, 9_000L, true).getStatus()).isEqualTo("FAIL");
     }
@@ -234,7 +235,7 @@ class VerificationServiceGuardsTest {
     @DisplayName("a VERIFY item decided faster than a human could read it is refused")
     void tooFastOnVerifyRefused() {
         QCRuleResult rr = ruleOn(liveResult(), "verify");
-        rr.setFirstPresentedAt(LocalDateTime.now());   // just presented
+        rr.setFirstPresentedAt(AppTime.now());   // just presented
         givenRule(rr);
         assertThatThrownBy(() -> save(rr, "PASS", TOKEN, 10L, true))
                 .isInstanceOf(IllegalStateException.class)
@@ -247,7 +248,7 @@ class VerificationServiceGuardsTest {
         // Client claims 0ms but the item has genuinely been on screen a while —
         // max(client, server) means the guard passes on real elapsed time.
         QCRuleResult rr = ruleOn(liveResult(), "verify");
-        rr.setFirstPresentedAt(LocalDateTime.now().minusMinutes(2));
+        rr.setFirstPresentedAt(AppTime.now().minusMinutes(2));
         givenRule(rr);
         assertThat(save(rr, "PASS", TOKEN, 0L, true)).isNotNull();
     }
@@ -257,7 +258,7 @@ class VerificationServiceGuardsTest {
     void blockingRequiresAcknowledgement() {
         QCRuleResult rr = ruleOn(liveResult(), "verify");
         rr.setSeverity("BLOCKING");
-        rr.setFirstPresentedAt(LocalDateTime.now().minusMinutes(1));
+        rr.setFirstPresentedAt(AppTime.now().minusMinutes(1));
         givenRule(rr);
         assertThatThrownBy(() -> save(rr, "PASS", TOKEN, 9_000L, false))
                 .isInstanceOf(IllegalStateException.class)
@@ -282,7 +283,7 @@ class VerificationServiceGuardsTest {
         QCRuleResult rr = ruleOn(liveResult(), "verify");
         rr.setReviewerVerified(Boolean.TRUE);
         rr.setReviewSessionToken("a-different-session");
-        rr.setFirstPresentedAt(LocalDateTime.now().minusMinutes(1));
+        rr.setFirstPresentedAt(AppTime.now().minusMinutes(1));
         givenRule(rr);
         assertThatThrownBy(() -> save(rr, "FAIL", TOKEN, 9_000L, true))
                 .isInstanceOf(IllegalStateException.class)

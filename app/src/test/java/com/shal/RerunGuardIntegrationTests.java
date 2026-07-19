@@ -1,5 +1,6 @@
 package com.shal;
 
+import com.shal.common.util.AppTime;
 import com.shal.common.dto.shalqc.ShalqcResponse;
 import com.shal.common.dto.shalqc.ShalqcCard;
 import com.shal.common.entity.*;
@@ -100,15 +101,15 @@ class RerunGuardIntegrationTests {
                 QCResult superseded = QCResult.builder()
                         .batchFile(file).qcDecision(QCDecision.TO_VERIFY).totalRules(3)
                         .build();
-                superseded.setProcessedAt(LocalDateTime.now().minusMinutes(10));
-                superseded.setSupersededAt(LocalDateTime.now().minusMinutes(1));
+                superseded.setProcessedAt(AppTime.now().minusMinutes(10));
+                superseded.setSupersededAt(AppTime.now().minusMinutes(1));
                 superseded = qcResultRepository.save(superseded);
 
                 // Current active run from the re-run (supersededAt IS NULL).
                 QCResult active = QCResult.builder()
                         .batchFile(file).qcDecision(QCDecision.TO_VERIFY).totalRules(3)
                         .build();
-                active.setProcessedAt(LocalDateTime.now());
+                active.setProcessedAt(AppTime.now());
                 active = qcResultRepository.save(active);
 
                 ids[0] = batch.getId();
@@ -187,12 +188,12 @@ class RerunGuardIntegrationTests {
                 QCResult prior = QCResult.builder()
                         .batchFile(file).qcDecision(QCDecision.TO_VERIFY).totalRules(2)
                         .build();
-                prior.setProcessedAt(LocalDateTime.now().minusMinutes(5));
+                prior.setProcessedAt(AppTime.now().minusMinutes(5));
                 prior.setReviewLockedBy(reviewerA);
                 prior.setReviewSessionToken(UUID.randomUUID().toString());
-                prior.setReviewStartedAt(LocalDateTime.now().minusMinutes(3));
-                prior.setReviewLastActiveAt(LocalDateTime.now().minusSeconds(20));
-                prior.setReviewLockExpiresAt(LocalDateTime.now().plusMinutes(10));
+                prior.setReviewStartedAt(AppTime.now().minusMinutes(3));
+                prior.setReviewLastActiveAt(AppTime.now().minusSeconds(20));
+                prior.setReviewLockExpiresAt(AppTime.now().plusMinutes(10));
                 prior = qcResultRepository.save(prior);
 
                 ids[0] = batch.getId();
@@ -216,7 +217,7 @@ class RerunGuardIntegrationTests {
             assertThat(active.getReviewLockedBy()).as("lock holder carried").isNotNull()
                     .extracting(User::getId).isEqualTo(ids[3]);
             assertThat(active.getReviewLockExpiresAt()).as("live lock carried")
-                    .isNotNull().isAfter(LocalDateTime.now());
+                    .isNotNull().isAfter(AppTime.now());
             assertThat(active.getReviewSessionToken()).as("session token NOT carried — fresh on reload").isNull();
 
             // The carried lock blocks a different reviewer ...
@@ -283,12 +284,12 @@ class RerunGuardIntegrationTests {
                     QCResult r = QCResult.builder()
                             .batchFile(file).qcDecision(QCDecision.TO_VERIFY).totalRules(2)
                             .build();
-                    r.setProcessedAt(LocalDateTime.now().minusMinutes(5));
+                    r.setProcessedAt(AppTime.now().minusMinutes(5));
                     // File 3 is already finalized by the reviewer — its decision must survive.
                     if (i == 3) {
                         r.setFinalDecision(FinalDecision.PASS);
                         r.setReviewedBy(reviewer);
-                        r.setReviewedAt(LocalDateTime.now().minusMinutes(2));
+                        r.setReviewedAt(AppTime.now().minusMinutes(2));
                     }
                     r = qcResultRepository.save(r);
                     fileIds[i] = file.getId();
@@ -364,8 +365,8 @@ class RerunGuardIntegrationTests {
                 ids[0] = batch.getId();
             });
 
-            int first = tx.execute(s -> batchRepository.markQcProcessingIfTriggerable(ids[0], LocalDateTime.now()));
-            int second = tx.execute(s -> batchRepository.markQcProcessingIfTriggerable(ids[0], LocalDateTime.now()));
+            int first = tx.execute(s -> batchRepository.markQcProcessingIfTriggerable(ids[0], AppTime.now()));
+            int second = tx.execute(s -> batchRepository.markQcProcessingIfTriggerable(ids[0], AppTime.now()));
 
             assertThat(first).as("first claim wins").isEqualTo(1);
             assertThat(second).as("second claim is rejected — already QC_PROCESSING").isEqualTo(0);
