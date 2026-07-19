@@ -452,7 +452,10 @@ public class FileMatchingService {
         }
     }
 
-    private static int scoreMatch(String appraisalKey, Set<String> appraisalTokens, String candidateKey, Set<String> candidateTokens) {
+    // package-private (not private) so the pairing logic below is directly
+    // testable: it decides WHICH engagement letter pairs with WHICH appraisal,
+    // and a wrong pairing silently QCs a report against another order's letter.
+    static int scoreMatch(String appraisalKey, Set<String> appraisalTokens, String candidateKey, Set<String> candidateTokens) {
         if (appraisalKey.isBlank() || candidateKey.isBlank()) {
             return 0;
         }
@@ -471,7 +474,7 @@ public class FileMatchingService {
         return sharesNumber && sharesName ? overlap.size() : 0;
     }
 
-    private static Set<String> matchTokens(String filename) {
+    static Set<String> matchTokens(String filename) {
         String normalized = normalizedMatchKey(filename);
         if (normalized.isBlank()) {
             return Set.of();
@@ -481,7 +484,7 @@ public class FileMatchingService {
                 .collect(Collectors.toSet());
     }
 
-    private static String normalizedMatchKey(String filename) {
+    static String normalizedMatchKey(String filename) {
         if (filename == null) {
             return "";
         }
