@@ -111,6 +111,37 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <!-- Coverage is measured on every `mvn test` so it cannot silently rot.
+                 Baseline when this was added (2026-07-19): 13.0% line coverage
+                 overall — common 21.9%, app 20.8%, user 4.8%, qc 0.3%. The qc module
+                 holds the reviewer-facing API and had effectively no tests at all,
+                 which is why this is wired in rather than run ad-hoc.
+                 No <check> goal yet: a hard threshold that fails the build is only
+                 useful once the number is respectable, otherwise it just forces
+                 people to disable it. Report first, gate later. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 
 </project>

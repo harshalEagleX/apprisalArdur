@@ -49,7 +49,11 @@ export function documentLabel(token: string): string {
 export function cleanRuleValue(v?: string | null): string | undefined {
   if (!v) return undefined;
   const trimmed = v.trim();
-  if (/^__NO_[A-Z0-9_]+?_VALUE__?$/.test(trimmed)) return undefined;
+  // `__?` required at least one trailing underscore, so the older bare
+  // `__NO_ENGAGEMENT_VALUE` form this function documents as handled actually
+  // slipped through and rendered the raw placeholder to the reviewer.
+  // `_{0,2}` accepts the bare, single- and double-underscore forms.
+  if (/^__NO_[A-Z0-9_]+?_VALUE_{0,2}$/.test(trimmed)) return undefined;
   return trimmed.length ? trimmed : undefined;
 }
 
