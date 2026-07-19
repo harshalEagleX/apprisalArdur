@@ -386,7 +386,7 @@ class RerunGuardIntegrationTests {
         ShalqcCard verify = new ShalqcCard(
                 "EQ-1", "please_verify", "SUBJECT", "REVIEW", "Test item", "check", "check",
                 "reject text", "please verify", "expected", "found", "please verify",
-                List.of(), null, Map.of(), null, 0.9, "text", List.of(), "judge_v2",
+                List.of(), null, Map.of(), null, 0.9, "text", false, List.of(), "judge_v2",
                 "llm", 0.9, List.of("field_a"), null, "rejectable");
         return new ShalqcResponse("ORD-test", "TEST", "OK", "v2",
                 Map.of("satisfied", 0, "not_satisfied", 0, "review", 1,

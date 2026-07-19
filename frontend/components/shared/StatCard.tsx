@@ -15,7 +15,7 @@ const COLORS = {
   amber:  "text-amber-200  bg-amber-950/30  border-amber-500/25",
   red:    "text-red-200    bg-red-950/30    border-red-500/25",
   indigo: "text-slate-200   bg-slate-950/30   border-slate-500/25",
-  slate:  "text-slate-200  bg-[#11161C]     border-white/10",
+  slate:  "text-slate-200  bg-surface     border-white/10",
 };
 
 export default function StatCard({ label, value, icon: Icon, color = "slate", loading }: StatCardProps) {

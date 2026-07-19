@@ -245,7 +245,7 @@ export default function DocStatDetailPage() {
         const pctT = Math.round(((data.llmThrottleWaitMs ?? 0) / total) * 100);
         const pctI = Math.round(((data.llmInferenceMs ?? 0) / total) * 100);
         const pctE = Math.round(((data.ruleEngineMs ?? 0) / total) * 100);
-        let tone = "border-white/10 bg-[#11161C]/60 text-slate-300";
+        let tone = "border-white/10 bg-surface/60 text-slate-300";
         let headline: string; let rec: string;
         if (pctT >= 30) {
           tone = "border-amber-500/30 bg-amber-950/20 text-amber-200";
@@ -276,7 +276,7 @@ export default function DocStatDetailPage() {
 
       {/* Before/after vs the run this superseded (same file re-QC'd) */}
       {compare?.previous && compare.delta && (
-        <div className="mb-6 rounded-xl border border-white/10 bg-[#11161C]/60 p-4">
+        <div className="mb-6 rounded-xl border border-white/10 bg-surface/60 p-4">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
             <ArrowUpDown size={15} className="text-indigo-300" /> Versus previous run
             <span className="text-[11px] font-normal text-slate-500">
@@ -295,7 +295,7 @@ export default function DocStatDetailPage() {
       {detailTab === "overview" && (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Pipeline stages */}
-          <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+          <section className="rounded-xl border border-white/10 bg-surface/60 p-5">
             <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
               <Layers size={15} className="text-indigo-300" /> Pipeline stages
             </h2>
@@ -311,7 +311,7 @@ export default function DocStatDetailPage() {
           </section>
 
           {/* QC sections */}
-          <section className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+          <section className="rounded-xl border border-white/10 bg-surface/60 p-5">
             <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
               <Gauge size={15} className="text-indigo-300" /> QC sections
             </h2>
@@ -327,7 +327,7 @@ export default function DocStatDetailPage() {
       )}
 
       {detailTab === "diagnostics" && (
-        <section className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
+        <section className="overflow-hidden rounded-xl border border-white/10 bg-surface/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
             <div>
               <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -344,13 +344,13 @@ export default function DocStatDetailPage() {
                 value={ruleSearch}
                 onChange={(e) => setRuleSearch(e.target.value)}
                 placeholder="Filter rules…"
-                className="h-8 w-56 rounded-md border border-white/10 bg-[#0c1014] pl-8 pr-2 text-xs text-white placeholder:text-slate-600 focus:border-indigo-500/40 focus:outline-none"
+                className="h-8 w-56 rounded-md border border-white/10 bg-sunken pl-8 pr-2 text-xs text-white placeholder:text-slate-600 focus:border-indigo-500/40 focus:outline-none"
               />
             </div>
           </div>
           <div className="max-h-[620px] overflow-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-[#11161C] text-[11px] uppercase tracking-wide text-slate-500">
+              <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-slate-500">
                 <tr className="border-b border-white/10">
                   <SortTh k="ruleId" sortKey={sortKey} onSort={toggleSort}>Rule</SortTh>
                   <th className="px-4 py-2.5 text-left font-medium">Name</th>
@@ -391,7 +391,7 @@ function DeltaCard({ label, d }: { label: string; d: { current: number; previous
   const tone = flat ? "text-slate-400" : faster ? "text-green-300" : "text-red-300";
   const sign = d.deltaMs > 0 ? "+" : "";
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0c1014] p-3">
+    <div className="rounded-lg border border-white/10 bg-sunken p-3">
       <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</div>
       <div className="text-base font-semibold tabular-nums text-white">{fmtMs(d.current)}</div>
       <div className={`text-[11px] tabular-nums ${tone}`}>
@@ -406,7 +406,7 @@ function HeadStat({ icon: Icon, label, value, hint, tone }: {
   label: string; value: string; hint: string; tone: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-4">
+    <div className="rounded-xl border border-white/10 bg-surface/60 p-4">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
         <Icon size={13} /> {label}
       </div>

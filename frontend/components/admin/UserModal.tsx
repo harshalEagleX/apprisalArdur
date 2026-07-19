@@ -77,7 +77,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative mx-4 w-full max-w-xl rounded-lg border border-white/10 bg-[#11161C] shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
+      <div className="relative mx-4 w-full max-w-xl rounded-lg border border-white/10 bg-surface shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
@@ -97,7 +97,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
             </div>
           )}
 
-          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <div className="mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Identity</h3>
             </div>
@@ -120,7 +120,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
           </section>
 
           {!isEdit && (
-            <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+            <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <Field label="Password" required error={fieldErrors.password}>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                 placeholder={`Min. ${passwordMinLength} characters`} required minLength={passwordMinLength} className={inputClass(fieldErrors.password)} />
@@ -128,7 +128,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
             </section>
           )}
 
-          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Role" required>
               <select value={role} onChange={e => setRole(e.target.value as "ADMIN" | "REVIEWER")} className={INPUT}>
@@ -152,7 +152,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
 
           <div className="flex gap-2 justify-end pt-1">
             <button type="button" onClick={onClose}
-              className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
+              className="rounded-md border border-white/10 bg-muted px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
               Cancel
             </button>
             <button type="submit" disabled={saving}
@@ -167,7 +167,7 @@ export default function UserModal({ open, user, onClose, onSaved }: Props) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30";
+const INPUT = "w-full rounded-md border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30";
 
 function inputClass(error?: string) {
   return `${INPUT} ${error ? "border-red-700 focus:ring-red-500 focus:border-red-600" : ""}`;

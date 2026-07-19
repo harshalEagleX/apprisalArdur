@@ -14,6 +14,7 @@ import os
 import pytest
 
 from app.config import Settings
+from tests.conftest import requires_testfiles
 
 
 # ── config posture ───────────────────────────────────────────────────────────
@@ -96,10 +97,16 @@ def test_loan_gated_items_are_needs_engagement():
 
 # ── basement WO/WU extraction (Gap 3) ────────────────────────────────────────
 
+@requires_testfiles
 def test_walkout_basement_extraction():
     from app.extraction.xml_extractor import extract_xml
+    # Absolute path: a relative "testfiles/..." only resolves when pytest happens to
+    # be invoked from shalqc/, so running the suite from the repo root made this fail
+    # with an IndexError rather than skip.
+    from tests.conftest import TESTFILES_DIR
+
     def load(o):
-        return extract_xml(glob.glob(f"testfiles/{o}/appraisal/*.[xX][mM][lL]")[0])
+        return extract_xml(glob.glob(str(TESTFILES_DIR / o / "appraisal" / "*.[xX][mM][lL]"))[0])
     esnv = load("ESNV-0000885")
     assert esnv.value("basement_outside_entry") == "Yes"
     assert esnv.value("subject_basement_exit") == "WalkOut"

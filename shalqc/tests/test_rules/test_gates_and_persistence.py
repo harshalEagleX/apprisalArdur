@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.persistence.repo import diff_findings
+from tests.conftest import HAVE_FIXTURE_DOCS, requires_fixture_docs
 
 
 # ── §14 G-1 package safety ──────────────────────────────────────────────────
@@ -49,7 +50,7 @@ _FOREIGN_XML = Path("/Users/eaglex/Documents/indevelopment/eaglex/SHAL/ocr-servi
                     "exttestfile/ESMI-0048528/apprisal/10735 Secor Rd.xml")
 
 
-@pytest.mark.skipif(not _FIX.exists(), reason="fixture not present")
+@requires_fixture_docs
 def test_g2_matching_xml_keeps_overlay():
     from app.pipeline.intake import OrderDocuments, apply_g2_xml_gate
     o = OrderDocuments(order_dir=_FIX, appraisal_pdf=_FIX / "7243 Foxtail Meadow Ct.pdf",
@@ -58,7 +59,7 @@ def test_g2_matching_xml_keeps_overlay():
     assert o.xml_overlay_disabled is False
 
 
-@pytest.mark.skipif(not (_FIX.exists() and _FOREIGN_XML.exists()),
+@pytest.mark.skipif(not (HAVE_FIXTURE_DOCS and _FOREIGN_XML.exists()),
                     reason="fixture or foreign XML not present")
 def test_g2_wrong_xml_disables_overlay():
     from app.pipeline.intake import OrderDocuments, apply_g2_xml_gate
@@ -106,9 +107,11 @@ def test_partial_failure_completes_with_degradation(monkeypatch):
     with degradations[] populated — never a raised 5xx (§16 / §20 DoD #8)."""
     import app.pipeline.orchestrator as orch
 
+    # The DIRECTORY exists in every checkout (the MISMO XML is tracked); only the
+    # PII PDFs are absent, and this test needs a real order to assemble.
     FIXTURE = Path(__file__).parent.parent / "fixtures" / "ESTX-0007568"
-    if not FIXTURE.exists():
-        pytest.skip("fixture not present")
+    if not HAVE_FIXTURE_DOCS:
+        pytest.skip("appraisal/engagement PDFs are PII and are not committed")
 
     def boom(**kwargs):
         raise RuntimeError("injected extraction failure")

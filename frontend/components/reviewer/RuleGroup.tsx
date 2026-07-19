@@ -42,7 +42,7 @@ export function RuleGroup({ ruleId, ruleName, count, fail, review, pass, default
         className="w-full flex items-center gap-2 px-3 py-2 text-left"
         aria-expanded={open}
       >
-        <span className="font-mono text-[10px] bg-[#0B0F14]/70 border border-white/10 px-1.5 py-0.5 rounded text-slate-400 flex-shrink-0">
+        <span className="font-mono text-[10px] bg-sunken/70 border border-white/10 px-1.5 py-0.5 rounded text-slate-400 flex-shrink-0">
           {ruleId}
         </span>
         <span className="text-xs font-medium text-slate-300 flex-1 min-w-0 truncate">

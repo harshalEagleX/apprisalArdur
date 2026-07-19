@@ -46,7 +46,7 @@ export default function DeviceGate({
           <h1 className="text-xl font-semibold leading-tight text-white">{title}</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">{message}</p>
 
-          <div className="mt-6 rounded-lg border border-white/10 bg-[#11161C]/95 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.3)]">
+          <div className="mt-6 rounded-lg border border-white/10 bg-surface/95 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.3)]">
             <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
               <Monitor size={15} className="text-slate-300" />
               Supported screens
@@ -72,7 +72,7 @@ export default function DeviceGate({
 
 function SupportRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-white/10 bg-[#161B22] px-3 py-2">
+    <div className="flex items-center justify-between gap-4 rounded-md border border-white/10 bg-muted px-3 py-2">
       <span>{label}</span>
       <span className="font-mono text-xs text-slate-500">{value}</span>
     </div>

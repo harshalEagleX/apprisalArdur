@@ -90,7 +90,7 @@ export default function AdminOverviewPage() {
           <Link href="/admin/batches" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(226,232,240,0.16)] transition-colors hover:bg-slate-500">
             <Upload size={14} /> Upload or run QC
           </Link>
-          <Link href="/admin/users" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white">
+          <Link href="/admin/users" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white">
             <Users size={14} /> Manage reviewers
           </Link>
         </div>
@@ -129,7 +129,7 @@ export default function AdminOverviewPage() {
         )}
       </div>
 
-      <div data-guide="admin-overview-workflow" className="mb-5 rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+      <div data-guide="admin-overview-workflow" className="mb-5 rounded-lg border border-white/10 bg-surface p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-200">Workflow visibility</h2>
@@ -155,7 +155,7 @@ export default function AdminOverviewPage() {
         </div>
 
         {/* Reviewer workload */}
-        <div data-guide="admin-overview-reviewers" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+        <div data-guide="admin-overview-reviewers" className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
             <div>
               <span className="text-sm font-medium text-slate-200">Reviewer workload</span>
@@ -191,7 +191,7 @@ export default function AdminOverviewPage() {
                     <div className="text-[11px] text-slate-500">{r.username}</div>
                   </div>
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <div className="h-1.5 min-w-20 flex-1 overflow-hidden rounded-full bg-[#0B0F14] sm:w-24 sm:flex-none">
+                    <div className="h-1.5 min-w-20 flex-1 overflow-hidden rounded-full bg-sunken sm:w-24 sm:flex-none">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{
@@ -255,7 +255,7 @@ function SystemSignal({ totalBatches, createdToday, latestActivity, clients }: {
   clients: number;
 }) {
   return (
-    <div className="h-full rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+    <div className="h-full rounded-lg border border-white/10 bg-surface p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
         <Activity size={15} className="text-slate-400" />
         System signals
@@ -272,7 +272,7 @@ function SystemSignal({ totalBatches, createdToday, latestActivity, clients }: {
 
 function MiniSignal({ label, value, icon: Icon }: { label: string; value: number | string; icon?: React.ComponentType<{ size?: number; className?: string }> }) {
   return (
-    <div className="min-w-0 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2">
+    <div className="min-w-0 rounded-md border border-white/10 bg-sunken/70 px-3 py-2">
       <div className="flex items-center gap-1.5 text-base font-semibold text-slate-100 tabular-nums">
         {Icon && <Icon size={13} className="text-slate-500" />}
         <span className="truncate">{value}</span>
@@ -296,7 +296,7 @@ function WorkflowStage({ label, value, href, tone }: {
     red: "hover:border-red-700 text-red-200",
   };
   return (
-    <Link href={href} className={`min-h-24 rounded-lg border border-white/10 bg-[#0B0F14]/60 px-3 py-3 transition-colors hover:bg-white/[0.03] ${styles[tone]}`}>
+    <Link href={href} className={`min-h-24 rounded-lg border border-white/10 bg-sunken/60 px-3 py-3 transition-colors hover:bg-white/[0.03] ${styles[tone]}`}>
       <div className="text-xl font-semibold tabular-nums">{value}</div>
       <div className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
     </Link>
@@ -313,7 +313,7 @@ function AttentionList({ loading, alerts }: { loading: boolean; alerts: Array<{
   icon: React.ComponentType<{ size?: number; className?: string }>;
 }> }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
         <div>
           <span className="text-sm font-medium text-slate-200">Attention areas</span>
@@ -355,7 +355,7 @@ function AttentionList({ loading, alerts }: { loading: boolean; alerts: Array<{
 
 function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBatches: Batch[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
         <div>
           <span className="text-sm font-medium text-slate-200">Recent activity</span>
@@ -392,7 +392,7 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-slate-300 truncate">{b.parentBatchId}</span>
                   {(b.fileCount ?? b.files?.length ?? 0) > 0 && (
-                    <span className="shrink-0 rounded bg-[#161B22] px-1.5 py-0.5 text-[10px] text-slate-500">
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-slate-500">
                       {b.fileCount ?? b.files?.length} file{(b.fileCount ?? b.files?.length ?? 0) === 1 ? "" : "s"}
                     </span>
                   )}

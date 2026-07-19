@@ -101,7 +101,7 @@ function renderSummary(summary: string, highlights?: string[] | null): React.Rea
   const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
   return summary.split(pattern).map((part, i) =>
     highlights.some(v => v.toLowerCase() === part.toLowerCase()) ? (
-      <span key={i} className="font-semibold text-[#d4a44c]">{part}</span>
+      <span key={i} className="font-semibold text-gold">{part}</span>
     ) : (
       <React.Fragment key={i}>{part}</React.Fragment>
     )
@@ -229,7 +229,7 @@ export const FindingRow = memo(function FindingRow({
           onSelect();
         }}
         aria-expanded={expanded}
-        className="flex min-h-[48px] w-full items-center gap-2.5 px-3 py-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-[#d4a44c]/40 rounded-[10px]"
+        className="flex min-h-[48px] w-full items-center gap-2.5 px-3 py-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-gold/40 rounded-[10px]"
       >
         <span className={`h-2 w-2 flex-shrink-0 rounded-full ${s.dot} ${s.glow}`} aria-hidden />
 
@@ -296,7 +296,7 @@ export const FindingRow = memo(function FindingRow({
                     ? "border-red-500/35 bg-red-950/45 text-red-200"
                     : slaUnderHour
                       ? "border-amber-500/30 bg-amber-950/35 text-amber-200"
-                      : "border-white/10 bg-[#0B0F14]/60 text-slate-400"
+                      : "border-white/10 bg-sunken/60 text-slate-400"
                 }`}
               >
                 {slaLabel}
@@ -311,7 +311,7 @@ export const FindingRow = memo(function FindingRow({
           {sources.length > 0 && (
             <div className={`grid gap-2 ${sources.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
               {sources.map((src, i) => (
-                <div key={i} className="rounded-lg border border-white/10 bg-[#11161C]/80 p-2.5">
+                <div key={i} className="rounded-lg border border-white/10 bg-surface/80 p-2.5">
                   <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
                     {src.comparable ? `${src.comparable} · ` : ""}
                     {documentLabel(src.document ?? "")}
@@ -349,7 +349,7 @@ export const FindingRow = memo(function FindingRow({
                 </div>
               )}
               {isBlockingVerify && (
-                <label className="flex items-start gap-2 text-[11px] text-slate-300 bg-[#0B0F14]/55 border border-white/10 rounded-lg px-2.5 py-2">
+                <label className="flex items-start gap-2 text-[11px] text-slate-300 bg-sunken/55 border border-white/10 rounded-lg px-2.5 py-2">
                   <input
                     type="checkbox"
                     checked={acknowledged}
@@ -402,7 +402,7 @@ export const FindingRow = memo(function FindingRow({
                     className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
                       decision === "PASS"
                         ? "bg-green-600 text-white"
-                        : "bg-[#161B22] hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
+                        : "bg-muted hover:bg-green-950/35 hover:text-green-200 text-slate-400 border border-white/10"
                     }`}
                   >
                     {saving ? spinnerSvg : <Check size={12} />} No issue
@@ -413,7 +413,7 @@ export const FindingRow = memo(function FindingRow({
                     className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
                       decision === "FAIL"
                         ? "bg-red-600 text-white"
-                        : "bg-[#161B22] hover:bg-red-950/35 hover:text-red-200 text-slate-400 border border-white/10"
+                        : "bg-muted hover:bg-red-950/35 hover:text-red-200 text-slate-400 border border-white/10"
                     }`}
                   >
                     {saving ? spinnerSvg : <X size={12} />} Issue found
@@ -431,7 +431,7 @@ export const FindingRow = memo(function FindingRow({
                     : "Add a comment (optional)…"
                 }
                 rows={2}
-                className="w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/55 px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 transition-colors focus:border-[#d4a44c]/40 focus:outline-none focus:ring-1 focus:ring-[#d4a44c]/25"
+                className="w-full resize-none rounded-md border border-white/10 bg-sunken/55 px-2.5 py-2 text-xs text-slate-300 placeholder-slate-600 transition-colors focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/25"
               />
               {decision && (
                 <div className="text-[10px] text-slate-600">

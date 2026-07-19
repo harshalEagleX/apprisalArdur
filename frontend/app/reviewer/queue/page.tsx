@@ -317,7 +317,7 @@ export default function ReviewerQueuePage() {
           <button
             onClick={() => loadQueue(true)}
             disabled={refreshing}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
           >
             <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
             Refresh
@@ -361,7 +361,7 @@ export default function ReviewerQueuePage() {
         <QueueStat icon={Archive} label="Completed by you" value={stats.submitted} tone="green" />
       </div>
 
-      <div data-guide="reviewer-queue-filters" className="mb-5 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+      <div data-guide="reviewer-queue-filters" className="mb-5 rounded-lg border border-white/10 bg-surface/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="relative flex-1 md:max-w-md">
             <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -370,7 +370,7 @@ export default function ReviewerQueuePage() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search file name, QC result, or decision..."
-              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+              className="h-9 w-full rounded-md border border-white/10 bg-sunken/70 pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
             />
             {query && (
               <button
@@ -418,7 +418,7 @@ export default function ReviewerQueuePage() {
         <PageSpinner label="Loading your queue…" />
       ) : items.length === 0 && !error ? (
         <div className="space-y-6">
-          <div className="rounded-lg border border-white/10 bg-[#11161C]">
+          <div className="rounded-lg border border-white/10 bg-surface">
             <EmptyState
               icon={CheckCircle2}
               title="Queue is clear"
@@ -429,7 +429,7 @@ export default function ReviewerQueuePage() {
         </div>
       ) : scoped.length === 0 && !error ? (
         <div className="space-y-6">
-          <div className="rounded-lg border border-white/10 bg-[#11161C]">
+          <div className="rounded-lg border border-white/10 bg-surface">
             <EmptyState
               icon={Search}
               title="No queue items match"
@@ -486,7 +486,7 @@ function SubmittedReviews({ items, returnTo }: { items: SubmittedReviewItem[]; r
         <Archive size={12} className="text-slate-400" />
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Completed by you</span>
       </div>
-      <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)] divide-y divide-white/10">
+      <div className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.2)] divide-y divide-white/10">
         {items.map(item => {
           const reviewedAt = item.reviewedAt
             ? new Date(item.reviewedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
@@ -501,7 +501,7 @@ function SubmittedReviews({ items, returnTo }: { items: SubmittedReviewItem[]; r
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-slate-200" title={filename}>{filename}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
                   <span className="text-[11px] text-slate-500">{reviewedAt}</span>
                   {item.finalDecision && (
                     <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${item.finalDecision === "PASS" ? "border-green-500/25 bg-green-950/30 text-green-300" : "border-red-500/25 bg-red-950/30 text-red-300"}`}>
@@ -517,7 +517,7 @@ function SubmittedReviews({ items, returnTo }: { items: SubmittedReviewItem[]; r
               </div>
               <a
                 href={`/reviewer/submitted/${item.id}?returnTo=${encodeURIComponent(returnTo)}`}
-                className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-500/40 hover:bg-white/[0.04]"
+                className="flex h-9 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-xs font-semibold text-slate-200 transition-colors hover:border-slate-500/40 hover:bg-white/[0.04]"
               >
                 View decisions <ChevronRight size={13} />
               </a>
@@ -553,7 +553,7 @@ function ReviewerNextAction({ item, returnTo }: { item?: QCResult; returnTo: str
           : "border-amber-500/25 bg-amber-950/25 text-amber-100 hover:border-amber-500/45"
       }`}
     >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-current/20 bg-[#0B0F14]/40">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-current/20 bg-sunken/40">
         {hasFailure ? <ShieldAlert size={20} /> : <PlayCircle size={20} />}
       </div>
       <div className="min-w-0 flex-1">
@@ -576,7 +576,7 @@ function QueueSignal({ icon: Icon, label, value }: {
   value: number | string;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#11161C] px-3 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+    <div className="rounded-lg border border-white/10 bg-surface px-3 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
       <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-100">
         <Icon size={14} className="text-slate-500" />
         <span className="truncate">{value}</span>
@@ -588,7 +588,7 @@ function QueueSignal({ icon: Icon, label, value }: {
 
 function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[]; selectedId: number | null; returnTo: string; onSelect: (id: number) => void }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-[11px] uppercase tracking-wide text-slate-500">
@@ -634,8 +634,8 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
                 <td className="min-w-0 max-w-[260px] px-3 py-2.5">
                   <div className="truncate font-medium text-slate-200" title={filename}>{filename}</div>
                   <div className="mt-0.5 flex items-center gap-1.5">
-                    <span className="rounded bg-[#161B22] px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
-                    {item.cacheHit && <span className="rounded bg-[#161B22] border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">cached</span>}
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-slate-500">QC #{item.id}</span>
+                    {item.cacheHit && <span className="rounded bg-muted border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">cached</span>}
                   </div>
                 </td>
 
@@ -653,7 +653,7 @@ function QueueList({ items, selectedId, returnTo, onSelect }: { items: QCResult[
                 <td className="px-3 py-2.5 text-center">
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-sm font-bold tabular-nums text-slate-400">{item.passedCount}</span>
-                    <div className="h-1 w-12 overflow-hidden rounded-full bg-[#0B0F14]">
+                    <div className="h-1 w-12 overflow-hidden rounded-full bg-sunken">
                       <div className="h-full rounded-full" style={{
                         width: `${passRate}%`,
                         background: passRate >= 80 ? "#22c55e" : passRate >= 50 ? "#f59e0b" : "#ef4444",
@@ -702,7 +702,7 @@ function QueueStat({ icon: Icon, label, value, tone }: {
   tone: "slate" | "red" | "amber" | "blue" | "green";
 }) {
   const styles = {
-    slate: "border-white/10 bg-[#11161C] text-slate-300",
+    slate: "border-white/10 bg-surface text-slate-300",
     red: "border-red-500/25 bg-red-950/25 text-red-200",
     amber: "border-amber-500/25 bg-amber-950/25 text-amber-200",
     blue: "border-slate-500/25 bg-slate-950/25 text-slate-200",

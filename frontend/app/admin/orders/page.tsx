@@ -27,7 +27,7 @@ function SummaryPill({ icon: Icon, label, value, tone }: {
   tone: "slate" | "amber" | "green" | "red";
 }) {
   const tones = {
-    slate: "border-white/10 bg-[#11161C] text-slate-300",
+    slate: "border-white/10 bg-surface text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
     red:   "border-red-900/50 bg-red-950/30 text-red-200",
@@ -271,7 +271,7 @@ export default function OrdersPage() {
           onClick={handleBackfill}
           disabled={backfillRunning}
           title="Link pre-existing files with no resolved order (one-time, safe to re-run)"
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
         >
           <History size={13} className={backfillRunning ? "animate-spin" : ""} />
           {backfillRunning ? "Reconciling…" : "Reconcile legacy files"}
@@ -285,29 +285,29 @@ export default function OrdersPage() {
         <SummaryPill icon={AlertCircle} label="Unmatched" value={stats.unmatched} tone="red" />
       </div>
 
-      <div className="mb-4 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+      <div className="mb-4 rounded-lg border border-white/10 bg-surface/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search by order ref or property address…"
-                className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
+                className="h-9 w-full rounded-md border border-white/10 bg-sunken/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
             </div>
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0); }}
-              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 sm:w-48"
+              className="h-9 w-full rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 sm:w-48"
               aria-label="Filter by document status">
               <option value="">All statuses</option>
               {statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
             </select>
             {(search || statusFilter) && (
               <button onClick={() => { setSearch(""); setStatusFilter(""); setPage(0); }}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white">
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white">
                 <XCircle size={13} /> Clear
               </button>
             )}
           </div>
-          <button onClick={() => load()} className="flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-400 transition-colors hover:text-white">
+          <button onClick={() => load()} className="flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-400 transition-colors hover:text-white">
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
@@ -316,7 +316,7 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-[#11161C]/95 px-3 py-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-surface/95 px-3 py-2">
         <span className="text-xs text-slate-400">
           {selectedIds.length > 0 ? `${selectedIds.length} selected` : "Select orders to run QC or assign a reviewer"}
         </span>
@@ -333,7 +333,7 @@ export default function OrdersPage() {
               value={assignReviewerId}
               onChange={e => setAssignReviewerId(e.target.value)}
               aria-label="Reviewer to assign"
-              className="h-8 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 text-sm text-slate-300 focus:border-slate-500/70 focus:outline-none"
+              className="h-8 rounded-md border border-white/10 bg-sunken/70 px-2 text-sm text-slate-300 focus:border-slate-500/70 focus:outline-none"
             >
               <option value="">Reviewer…</option>
               {reviewers.map(r => <option key={r.id} value={r.id}>{r.fullName || r.username}</option>)}
@@ -341,7 +341,7 @@ export default function OrdersPage() {
             <button
               onClick={handleAssignSelected}
               disabled={actionRunning || selectedIds.length === 0 || !assignReviewerId}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
             >
               <UserPlus size={13} /> Assign
             </button>
@@ -350,25 +350,25 @@ export default function OrdersPage() {
             onClick={handleAutoAssign}
             disabled={actionRunning}
             title="System balances unassigned orders across reviewers (only runs when clicked)"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
           >
             <Sparkles size={13} /> Auto-assign{selectedIds.length ? ` (${selectedIds.length})` : ""}
           </button>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+      <div className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
         <div className="data-scroll">
           <table className="w-full min-w-[1000px] text-sm">
             <thead>
-              <tr className="border-b border-white/10 bg-[#0B0F14]/80">
-                <th className="sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-left">
+              <tr className="border-b border-white/10 bg-sunken/80">
+                <th className="sticky top-0 z-10 bg-sunken px-4 py-3 text-left">
                   <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll}
                     aria-label="Select all orders on page"
                     className="h-3.5 w-3.5 cursor-pointer accent-indigo-500" />
                 </th>
                 {["Order", "Client", "Property", "Status", "Documents", "Reviewer", "Updated"].map(h => (
-                  <th key={h} className="sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">{h}</th>
+                  <th key={h} className="sticky top-0 z-10 bg-sunken px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -397,7 +397,7 @@ export default function OrdersPage() {
                       {o.transactionRef}
                     </Link>
                     {o.revisionNumber > 0 && (
-                      <span className="ml-2 rounded border border-white/10 bg-[#161B22] px-1.5 py-0.5 text-[10px] text-slate-500">rev {o.revisionNumber}</span>
+                      <span className="ml-2 rounded border border-white/10 bg-muted px-1.5 py-0.5 text-[10px] text-slate-500">rev {o.revisionNumber}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-400">{o.client?.name ?? "—"}</td>

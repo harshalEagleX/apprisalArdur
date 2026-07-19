@@ -45,7 +45,7 @@ function InformationalRow({ rule, onSelect }: { rule: QCRuleResult; onSelect: ()
   return (
     <button
       onClick={onSelect}
-      className="flex w-full flex-col gap-0.5 rounded-md border border-white/5 bg-[#0B0F14]/60 px-2.5 py-1.5 text-left transition-colors hover:border-white/10 hover:bg-white/[0.03]"
+      className="flex w-full flex-col gap-0.5 rounded-md border border-white/5 bg-sunken/60 px-2.5 py-1.5 text-left transition-colors hover:border-white/10 hover:bg-white/[0.03]"
     >
       <div className="flex items-center gap-1.5">
         <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-slate-600" />
@@ -58,7 +58,7 @@ function InformationalRow({ rule, onSelect }: { rule: QCRuleResult; onSelect: ()
 
 function RuleFocusOverlay({ focus, highlighting }: { focus: RuleFocus; highlighting: boolean }) {
   return (
-    <div className={`pointer-events-none fixed left-3 top-3 z-50 max-w-[180px] rounded-md border px-2 py-1 text-[10px] shadow-lg transition-colors ${highlighting ? "bg-amber-300/95 border-amber-100 text-slate-950" : "bg-[#11161C]/95 border-white/10 text-slate-200 opacity-90"}`}>
+    <div className={`pointer-events-none fixed left-3 top-3 z-50 max-w-[180px] rounded-md border px-2 py-1 text-[10px] shadow-lg transition-colors ${highlighting ? "bg-amber-300/95 border-amber-100 text-slate-950" : "bg-surface/95 border-white/10 text-slate-200 opacity-90"}`}>
       <div className="flex items-center gap-1 font-semibold leading-tight"><Crosshair size={10} /><span className="truncate">{focus.ruleId}</span></div>
       <div className="mt-0.5 leading-snug opacity-70">{focus.note}</div>
       {!focus.located && <div className="mt-0.5 leading-snug text-amber-300">Re-run QC after location extraction is available.</div>}
@@ -307,7 +307,7 @@ export default function VerifyFilePage() {
     ? "border-red-500/25 bg-red-950/45 text-red-200"
     : saveNotice?.tone === "success"
       ? "border-green-500/25 bg-green-950/45 text-green-200"
-      : "border-white/10 bg-[#11161C] text-slate-300";
+      : "border-white/10 bg-surface text-slate-300";
 
   useEffect(() => {
     if (filtered.length === 0) return;
@@ -707,7 +707,7 @@ export default function VerifyFilePage() {
         {/* Top bar */}
         <header
           data-guide="review-topbar"
-          className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-white/10 bg-[#11161C] px-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
+          className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-white/10 bg-surface px-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
         >
           {!focusMode && (
             <>
@@ -729,7 +729,7 @@ export default function VerifyFilePage() {
           {progress && progress.totalToVerify > 0 && (
             <div className="hidden md:flex items-center gap-2.5 flex-shrink-0">
               {/* Review progress is the hero status — wide bar + prominent count + "left" cue. */}
-              <div className="w-40 h-2 bg-[#0B0F14] rounded-full overflow-hidden">
+              <div className="w-40 h-2 bg-sunken rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${progress.pending === 0 ? "bg-green-500" : "bg-slate-400"}`}
                   style={{ width: `${reviewProgress}%` }}
@@ -748,13 +748,13 @@ export default function VerifyFilePage() {
               <span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-green-400" : "bg-slate-600"}`} title={realtimeConnected ? "Live updates connected" : "Live updates reconnecting"} />
             </div>
           )}
-          <div className={`hidden lg:flex h-8 min-w-[150px] items-center gap-1.5 rounded-md border px-2 text-[11px] ${saveNotice ? saveTone : offline ? "border-red-500/25 bg-red-950/40 text-red-200" : "border-white/10 bg-[#0B0F14]/70 text-slate-400"}`}>
+          <div className={`hidden lg:flex h-8 min-w-[150px] items-center gap-1.5 rounded-md border px-2 text-[11px] ${saveNotice ? saveTone : offline ? "border-red-500/25 bg-red-950/40 text-red-200" : "border-white/10 bg-sunken/70 text-slate-400"}`}>
             {offline ? <WifiOff size={12} /> : saveNotice?.tone === "success" ? <CheckCircle2 size={12} /> : <Cloud size={12} />}
             <span className="truncate">{saveNotice?.text ?? (offline ? "Saving paused" : realtimeConnected ? "Live save ready" : "REST save ready")}</span>
           </div>
           {nextPendingRule && (
             <button onClick={jumpToNextPending} aria-keyshortcuts="N"
-              className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
+              className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
               <ArrowDownCircle size={13} /> Next item
             </button>
           )}
@@ -763,7 +763,7 @@ export default function VerifyFilePage() {
             className={`hidden h-8 flex-shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold transition-colors sm:inline-flex ${
               focusMode
                 ? "border-green-500/25 bg-green-950/35 text-green-200 hover:bg-green-900/35"
-                : "border-white/10 bg-[#11161C] text-slate-300 hover:bg-white/[0.04] hover:text-white"
+                : "border-white/10 bg-surface text-slate-300 hover:bg-white/[0.04] hover:text-white"
             }`}
             title={focusMode ? "Exit focus mode" : "Enter focus mode"}>
             {focusMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
@@ -783,13 +783,13 @@ export default function VerifyFilePage() {
         <div className="flex flex-1 overflow-hidden">
           {/* PDF viewer */}
           <div data-guide="review-document" className="w-[55%] flex-shrink-0 border-r border-white/10 flex flex-col">
-            <div className="flex-shrink-0 border-b border-white/10 bg-[#11161C]/60 px-4 py-2 flex items-center gap-2">
+            <div className="flex-shrink-0 border-b border-white/10 bg-surface/60 px-4 py-2 flex items-center gap-2">
               <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <span className="text-xs text-slate-500 flex-shrink-0">Documents</span>
               <div className="flex items-center gap-1 overflow-x-auto">
                 {documents.map(doc => (
                   <button key={doc.id} onClick={() => { setActiveDocumentId(doc.id); setPageCount(null); setPdfError(false); setActiveFocus(null); setActivePage(1); }}
-                    className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${activeDocument?.id === doc.id ? "bg-slate-600/20 border-slate-500/40 text-slate-200" : "bg-[#0B0F14]/70 border-white/10 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"}`}>
+                    className={`h-7 px-2 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${activeDocument?.id === doc.id ? "bg-slate-600/20 border-slate-500/40 text-slate-200" : "bg-sunken/70 border-white/10 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"}`}>
                     {doc.fileType === "APPRAISAL" ? "Report" : doc.fileType === "ENGAGEMENT" ? "Order" : doc.fileType === "CONTRACT" ? "Contract" : "PDF"}
                   </button>
                 ))}
@@ -797,9 +797,9 @@ export default function VerifyFilePage() {
               {activeDocument && (
                 <div className="ml-auto flex items-center gap-1 text-[11px] text-slate-500">
                   {pageCount != null && <span className="mr-1 hidden font-mono text-slate-600 lg:inline">{activePage}/{pageCount}</span>}
-                  <button onClick={() => zoomBy(-ZOOM_STEP)} disabled={zoom <= ZOOM_MIN} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom out" aria-keyshortcuts="-"><ZoomOut size={13} /></button>
-                  <button onClick={() => setViewerZoom(1)} className="h-7 min-w-12 rounded-md border border-white/10 bg-[#0B0F14]/70 px-2 font-mono text-slate-400 hover:bg-white/[0.04] hover:text-white" title="Reset zoom" aria-keyshortcuts="0">{Math.round(zoom * 100)}%</button>
-                  <button onClick={() => zoomBy(ZOOM_STEP)} disabled={zoom >= ZOOM_MAX} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-[#0B0F14]/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom in" aria-keyshortcuts="+"><ZoomIn size={13} /></button>
+                  <button onClick={() => zoomBy(-ZOOM_STEP)} disabled={zoom <= ZOOM_MIN} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-sunken/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom out" aria-keyshortcuts="-"><ZoomOut size={13} /></button>
+                  <button onClick={() => setViewerZoom(1)} className="h-7 min-w-12 rounded-md border border-white/10 bg-sunken/70 px-2 font-mono text-slate-400 hover:bg-white/[0.04] hover:text-white" title="Reset zoom" aria-keyshortcuts="0">{Math.round(zoom * 100)}%</button>
+                  <button onClick={() => zoomBy(ZOOM_STEP)} disabled={zoom >= ZOOM_MAX} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-white/10 bg-sunken/70 text-slate-400 disabled:opacity-30 hover:bg-white/[0.04] hover:text-white" title="Zoom in" aria-keyshortcuts="+"><ZoomIn size={13} /></button>
                 </div>
               )}
             </div>
@@ -840,14 +840,14 @@ export default function VerifyFilePage() {
 
           {/* Rules panel */}
           <div data-guide="review-rules" className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-shrink-0 border-b border-white/10 bg-[#11161C]/60 px-3 py-2">
+            <div className="flex-shrink-0 border-b border-white/10 bg-surface/60 px-3 py-2">
               <div className="mb-2 flex items-center gap-2">
                 <div className="mr-2 hidden min-w-0 flex-1 lg:block">
                   <div className="text-xs font-medium text-slate-300">Decision checklist</div>
                   <div className="text-[11px] text-slate-600">{progress?.pending ? `${reviewedCount} of ${progress.totalToVerify} reviewed` : "Ready for sign-off"}</div>
                 </div>
                 <button onClick={jumpToNextPending} disabled={!nextPendingRule}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40" title="Next pending rule (N)">
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40" title="Next pending rule (N)">
                   <ArrowDownCircle size={13} /> Next item
                 </button>
               </div>
@@ -856,7 +856,7 @@ export default function VerifyFilePage() {
                   <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
                   <input ref={ruleSearchRef} value={ruleQuery} onChange={e => setRuleQuery(e.target.value)}
                     placeholder="Search rules..."
-                    className="h-7 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
+                    className="h-7 w-full rounded-md border border-white/10 bg-sunken/70 pl-7 pr-2 text-xs text-slate-200 placeholder-slate-600 focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
                 </div>
                 {FILTERS.map(f => (
                   <button key={f} onClick={() => { setFilter(f); setSelectedRuleId(null); }}
@@ -886,7 +886,7 @@ export default function VerifyFilePage() {
                 return (
                   <Fragment key={item.key}>
                     {showHeader && (
-                      <div className="sticky -top-3 z-10 -mx-3 mb-1 flex items-center justify-between border-y border-white/5 bg-[#0B0F14]/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur">
+                      <div className="sticky -top-3 z-10 -mx-3 mb-1 flex items-center justify-between border-y border-white/5 bg-sunken/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur">
                         <span>{sectionLabel(item.section)}</span>
                         <span className="font-normal normal-case text-slate-600">
                           {secRules.length} rules{need ? ` · ${need} need attention` : ""}

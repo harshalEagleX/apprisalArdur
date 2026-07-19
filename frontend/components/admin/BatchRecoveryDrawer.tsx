@@ -14,7 +14,7 @@ function RecoveryMetric({
   tone: "slate" | "amber" | "blue" | "green" | "red";
 }) {
   const tones = {
-    slate: "border-white/10 bg-[#0B0F14]/70 text-slate-300",
+    slate: "border-white/10 bg-sunken/70 text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     blue: "border-slate-900/50 bg-slate-950/30 text-slate-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
@@ -154,7 +154,7 @@ export function BatchRecoveryDrawer({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <aside
         ref={drawerRef}
-        className="relative flex h-full w-full max-w-lg flex-col border-l border-white/10 bg-[#0B0F14] shadow-[0_0_60px_rgba(0,0,0,0.5)]"
+        className="relative flex h-full w-full max-w-lg flex-col border-l border-white/10 bg-sunken shadow-[0_0_60px_rgba(0,0,0,0.5)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="batch-recovery-title"
@@ -206,7 +206,7 @@ export function BatchRecoveryDrawer({
             </p>
           </section>
 
-          <section className="mt-4 rounded-lg border border-white/10 bg-[#11161C]/80 p-4">
+          <section className="mt-4 rounded-lg border border-white/10 bg-surface/80 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Suggested recovery
             </h3>
@@ -220,7 +220,7 @@ export function BatchRecoveryDrawer({
             <button
               type="button"
               onClick={() => void copyBatchError(batch)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
             >
               <FileStack size={14} /> Copy error
             </button>
@@ -235,7 +235,7 @@ export function BatchRecoveryDrawer({
             )}
             <button
               onClick={onReupload}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
             >
               <Upload size={14} /> Upload replacement
             </button>

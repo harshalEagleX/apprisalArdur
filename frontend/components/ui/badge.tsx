@@ -11,7 +11,7 @@ const badgeVariants = cva(
         default:
           "border-slate-500/30 bg-slate-950/45 text-slate-200",
         secondary:
-          "border-white/10 bg-[#161B22] text-slate-300",
+          "border-white/10 bg-muted text-slate-300",
         success:
           "border-green-500/30 bg-green-950/45 text-green-200",
         warning:

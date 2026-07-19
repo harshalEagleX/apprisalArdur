@@ -207,7 +207,7 @@ export default function OrderDetailPage() {
 
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#161B22]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-muted">
             <ClipboardList size={18} className="text-slate-400" />
           </div>
           <div className="min-w-0">
@@ -234,7 +234,7 @@ export default function OrderDetailPage() {
               <Play size={12} /> Run QC
             </button>
           )}
-          <div className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-[#11161C] px-2"
+          <div className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-surface px-2"
                title={qcDone ? undefined : "This order can be assigned to a reviewer only after its QC is done."}>
             <UserPlus size={12} className="text-slate-500" />
             <select
@@ -255,7 +255,7 @@ export default function OrderDetailPage() {
               })}
             </select>
           </div>
-          <button onClick={() => load()} className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs text-slate-400 transition-colors hover:text-white">
+          <button onClick={() => load()} className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-xs text-slate-400 transition-colors hover:text-white">
             <RefreshCw size={12} /> Refresh
           </button>
           <button onClick={() => setConfirmDelete(true)} disabled={actionRunning || loading}
@@ -287,7 +287,7 @@ export default function OrderDetailPage() {
       )}
 
       {order?.activeQcResult && (
-        <div className="mb-6 rounded-xl border border-white/10 bg-[#11161C] p-4">
+        <div className="mb-6 rounded-xl border border-white/10 bg-surface p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active QC result</div>
             <Link href={`/qc-review?id=${order.activeQcResult.id}`} className="text-[11px] text-indigo-300 hover:text-indigo-200">
@@ -348,7 +348,7 @@ export default function OrderDetailPage() {
             ] as const).map(([type, label, required]) => {
               const doc = activeDocs.find(d => d.fileType === type);
               return (
-                <div key={type} className={`rounded-lg border p-3 ${doc ? "border-green-500/20 bg-green-950/10" : required ? "border-amber-500/20 bg-amber-950/10" : "border-white/[0.06] bg-[#0B0F14]/40"}`}>
+                <div key={type} className={`rounded-lg border p-3 ${doc ? "border-green-500/20 bg-green-950/10" : required ? "border-amber-500/20 bg-amber-950/10" : "border-white/[0.06] bg-sunken/40"}`}>
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                     {doc ? <Check size={12} className="text-green-400" /> : <Minus size={12} className={required ? "text-amber-400" : "text-slate-600"} />}
                     <span>{label}{!required ? " · optional" : ""}</span>
@@ -370,9 +370,9 @@ export default function OrderDetailPage() {
           <FileText size={13} /> Active documents
         </div>
         {loading ? (
-          <div className="rounded-xl border border-white/10 bg-[#11161C] p-4"><TableSkeleton rows={4} cols={4} /></div>
+          <div className="rounded-xl border border-white/10 bg-surface p-4"><TableSkeleton rows={4} cols={4} /></div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-surface">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-wide text-slate-600">
@@ -410,7 +410,7 @@ export default function OrderDetailPage() {
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <History size={13} /> Superseded / duplicate documents ({historicalDocs.length})
           </div>
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-surface">
             <table className="w-full text-sm">
               <tbody className="divide-y divide-white/[0.04]">
                 {historicalDocs.map(d => (
@@ -439,7 +439,7 @@ export default function OrderDetailPage() {
         <p className="mb-2 text-[12px] text-slate-500">
           Every upload event that touched this order — re-uploads under a different ZIP folder name link here instead of forking a new order.
         </p>
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C] divide-y divide-white/[0.04]">
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-surface divide-y divide-white/[0.04]">
           {(order?.batchHistory ?? []).map(b => (
             <Link key={b.id} href={`/admin/batches/${b.id}`} className="flex items-center justify-between px-5 py-3 text-sm transition-colors hover:bg-white/[0.025]">
               <span className="font-mono text-slate-200">{b.parentBatchId}</span>
@@ -460,7 +460,7 @@ export default function OrderDetailPage() {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={deleting ? undefined : () => setConfirmDelete(false)} />
-          <div className="relative w-full max-w-md rounded-lg border border-red-500/25 bg-[#11161C] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
+          <div className="relative w-full max-w-md rounded-lg border border-red-500/25 bg-surface p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-200">
               <AlertTriangle size={16} className="text-red-400" /> Delete this order permanently?
             </div>
@@ -472,7 +472,7 @@ export default function OrderDetailPage() {
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setConfirmDelete(false)} disabled={deleting}
-                className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40">
+                className="rounded-md border border-white/10 bg-muted px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40">
                 Cancel
               </button>
               <button onClick={handleDelete} disabled={deleting}

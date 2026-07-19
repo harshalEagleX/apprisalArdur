@@ -56,7 +56,7 @@ function ConfirmDialogContent({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
       <div
-        className="relative mx-4 w-full max-w-sm rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)]"
+        className="relative mx-4 w-full max-w-sm rounded-lg border border-white/10 bg-surface p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -79,7 +79,7 @@ function ConfirmDialogContent({
               value={typed}
               onChange={event => setTyped(event.target.value)}
               autoFocus
-              className="mt-2 h-9 w-full rounded-md border border-red-500/30 bg-[#0B0F14] px-3 font-mono text-sm text-red-50 placeholder:text-red-900/70 focus:outline-none focus:ring-2 focus:ring-red-500/35"
+              className="mt-2 h-9 w-full rounded-md border border-red-500/30 bg-sunken px-3 font-mono text-sm text-red-50 placeholder:text-red-900/70 focus:outline-none focus:ring-2 focus:ring-red-500/35"
               placeholder={confirmationText}
             />
           </div>

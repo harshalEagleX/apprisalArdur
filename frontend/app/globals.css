@@ -7,6 +7,12 @@
   --surface: #11161c;
   --surface-muted: #161b22;
   --surface-raised: #1b222b;
+  /* Inset/sunken panels (log wells, code blocks, table bodies) — sits BETWEEN the
+     page background and --surface. Was hardcoded as #0B0F14 at ~94 call sites. */
+  --surface-sunken: #0b0f14;
+  /* The one warm accent in an otherwise cool palette: emphasized values inside a
+     reviewer summary line. Was hardcoded as #d4a44c. */
+  --accent-gold: #d4a44c;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
   --grid-overlay: rgba(255, 255, 255, 0.032);
@@ -33,6 +39,13 @@
   --color-popover-foreground: var(--foreground);
   --color-muted: var(--surface-muted);
   --color-muted-foreground: #94a3b8;
+  /* Surfaces as first-class colour tokens, so panels are written `bg-surface`,
+     `bg-sunken`, `bg-raised` instead of a hardcoded hex repeated hundreds of
+     times. Opacity modifiers still work (`bg-surface/70`). */
+  --color-surface: var(--surface);
+  --color-sunken: var(--surface-sunken);
+  --color-raised: var(--surface-raised);
+  --color-gold: var(--accent-gold);
   --color-border: var(--border);
   --color-input: var(--border-strong);
   --color-ring: var(--ring);
@@ -48,26 +61,6 @@
   --color-warning: var(--accent-amber);
   --color-critical: var(--accent-red);
   --color-grid-overlay: var(--grid-overlay);
-
-  /* ── Readability floor for low-end panels ─────────────────────────────────
-   * Reviewers run 720p LCD/LED monitors where gamma is poor and dark greys
-   * collapse into the background. Measured against this app's own surfaces,
-   * Tailwind's stock slate-500/600 fail WCAG AA for body text — badly:
-   *
-   *   colour      app #05070a   surface #11161c   raised #1b222b
-   *   slate-500        4.24            3.82             3.37   (AA needs 4.5)
-   *   slate-600        2.66            2.40             2.12   ← near-invisible
-   *   slate-400        7.87            7.09             6.25   (fine)
-   *
-   * Those two steps carry ~477 usages (timestamps, counters, captions, helper
-   * text), so the fix belongs HERE, once, not at every call site — the class
-   * names keep their meaning and every existing `text-slate-500/600` becomes
-   * legible. The replacements stay clearly dimmer than slate-400, so the visual
-   * hierarchy the design relies on is preserved; they just clear 4.5:1 on the
-   * WORST surface. Verified: slate-500 5.10:1, slate-600 4.61:1 on raised.
-   * The theme itself is unchanged — same palette family, two steps lightened. */
-  --color-slate-500: #8293a8;
-  --color-slate-600: #7a8ba1;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -101,24 +94,64 @@
 }
 
 @layer utilities {
+  /* Map the stock slate surfaces onto this app's own tokens, so a panel written
+     `bg-slate-900` lands on --surface rather than Tailwind's blue-ish default. */
   .bg-slate-950 {
-    background-color: #05070a;
+    background-color: var(--background);
   }
 
   .bg-slate-900 {
-    background-color: #11161c;
+    background-color: var(--surface);
   }
 
   .bg-slate-800 {
-    background-color: #161b22;
+    background-color: var(--surface-muted);
   }
 
   .border-slate-800 {
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--border);
   }
 
   .border-slate-700 {
-    border-color: rgba(255, 255, 255, 0.14);
+    border-color: var(--border-strong);
+  }
+
+  /* ── Readability floor for low-end panels ────────────────────────────────
+   * Reviewers run everything from 720p LCD/LED up to 2.4K. On the cheap panels
+   * gamma is poor and dark greys collapse into the background. Measured against
+   * this app's own surfaces, Tailwind's stock dark slates fail WCAG AA body text
+   * (4.5:1) — badly:
+   *
+   *   colour      app #05070a   surface #11161c   raised #1b222b
+   *   slate-500        4.24            3.82             3.37
+   *   slate-600        2.66            2.40             2.12   ← near-invisible
+   *   slate-700        1.94            1.75             1.55   ← invisible
+   *   slate-400        7.87            7.09             6.25   (fine, untouched)
+   *
+   * Those three steps carry ~503 usages (timestamps, counters, captions, helper
+   * text), so the fix belongs here once rather than at every call site.
+   *
+   * Scoped to the TEXT utility only — deliberately NOT done by overriding
+   * --color-slate-500/600 in @theme, because that token also feeds bg-, border-
+   * and ring-, and doing so silently repainted 160 buttons, borders and focus
+   * rings. Text is the only thing with a contrast problem, so text is the only
+   * thing that changes. Hierarchy is preserved (400 > 500 > 600 > 700) and every
+   * value clears 4.5:1 on the WORST surface. */
+  .text-slate-500 {
+    color: #8293a8;
+  }
+
+  .text-slate-600 {
+    color: #7a8ba1;
+  }
+
+  /* Same value as slate-600 on purpose. To clear 4.5:1 on the raised surface a
+     grey has to be at least this light, so there is no room on this theme for a
+     fourth distinct muted step that is still legible. Nothing is lost: at its
+     stock #334155 this text sat at 1.55:1 — invisible, not "subtle". The 21 call
+     sites keep their class name and simply become readable. */
+  .text-slate-700 {
+    color: #7a8ba1;
   }
 }
 

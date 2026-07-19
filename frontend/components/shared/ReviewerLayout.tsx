@@ -117,7 +117,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
       {/* Top nav */}
       <header
         data-reviewer-shell-header="true"
-        className="sticky top-0 z-30 h-16 flex-shrink-0 border-b border-white/10 bg-[#11161C]/95 backdrop-blur flex items-center px-5 gap-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
+        className="sticky top-0 z-30 h-16 flex-shrink-0 border-b border-white/10 bg-surface/95 backdrop-blur flex items-center px-5 gap-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg border border-slate-500/25 bg-slate-600 flex items-center justify-center shadow-[0_0_22px_rgba(226,232,240,0.2)]">
@@ -142,14 +142,14 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
           <ReviewerNavLink href="/help" active={pathname === "/help"} icon={HelpCircle} label="Help" />
         </nav>
 
-        <div className="hidden min-w-0 items-center gap-2 rounded-md border border-white/10 bg-[#161B22]/70 px-2.5 py-1.5 text-[11px] text-slate-500 lg:flex">
+        <div className="hidden min-w-0 items-center gap-2 rounded-md border border-white/10 bg-muted/70 px-2.5 py-1.5 text-[11px] text-slate-500 lg:flex">
           <BrainCircuit size={13} className="shrink-0 text-slate-300" />
           <span className="truncate">Verify evidence. Save decisions. Sign off with traceability.</span>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
           <GuideButton tourId={guideId} steps={guideSteps} />
-          <span className="hidden text-[10px] bg-[#161B22] border border-white/10 text-slate-500 px-2 py-0.5 rounded font-mono uppercase tracking-wide sm:inline">
+          <span className="hidden text-[10px] bg-muted border border-white/10 text-slate-500 px-2 py-0.5 rounded font-mono uppercase tracking-wide sm:inline">
             Reviewer
           </span>
           {/* Notification bell — reviewer topic */}

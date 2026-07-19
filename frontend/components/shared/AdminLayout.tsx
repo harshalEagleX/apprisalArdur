@@ -273,7 +273,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar */}
       <aside
         data-guide="admin-sidebar"
-        className={`sticky top-0 h-screen flex-shrink-0 border-r border-white/10 bg-[#11161C]/95 shadow-[12px_0_36px_rgba(0,0,0,0.18)] backdrop-blur flex flex-col transition-all duration-200 ${narrow ? "w-14" : "w-[220px]"}`}
+        className={`sticky top-0 h-screen flex-shrink-0 border-r border-white/10 bg-surface/95 shadow-[12px_0_36px_rgba(0,0,0,0.18)] backdrop-blur flex flex-col transition-all duration-200 ${narrow ? "w-14" : "w-[220px]"}`}
       >
 
         {/* Logo + collapse toggle */}
@@ -322,18 +322,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button
             onClick={() => setPalette(true)}
             title="Global search (⌘K)"
-            className={`mb-2 flex w-full items-center gap-2 rounded-lg border border-white/10 bg-[#161B22]/80 px-3 py-2 text-[11px] text-slate-500 transition-colors hover:border-slate-500/40 hover:text-slate-300 ${narrow ? "justify-center px-2" : ""}`}
+            className={`mb-2 flex w-full items-center gap-2 rounded-lg border border-white/10 bg-muted/80 px-3 py-2 text-[11px] text-slate-500 transition-colors hover:border-slate-500/40 hover:text-slate-300 ${narrow ? "justify-center px-2" : ""}`}
           >
             <Search size={13} className="shrink-0 text-slate-400" />
             {!narrow && (
               <>
                 <span className="flex-1 text-left">Search…</span>
-                <kbd className="rounded border border-white/10 bg-[#0B0F14] px-1 text-[10px]">⌘K</kbd>
+                <kbd className="rounded border border-white/10 bg-sunken px-1 text-[10px]">⌘K</kbd>
               </>
             )}
           </button>
           {!narrow && (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-[#161B22]/80 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-muted/80 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
               <BrainCircuit size={13} className="shrink-0 text-slate-300" />
               <span>Operational decisions, reviewer load, and QC state.</span>
             </div>

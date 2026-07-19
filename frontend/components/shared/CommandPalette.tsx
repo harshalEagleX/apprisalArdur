@@ -133,7 +133,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     >
       {/* Panel */}
       <div
-        className="w-full max-w-xl overflow-hidden rounded-xl border border-white/10 bg-[#0f141a] shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
+        className="w-full max-w-xl overflow-hidden rounded-xl border border-white/10 bg-sunken shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
         onClick={e => e.stopPropagation()}
         onKeyDown={handleKey}
       >
@@ -155,7 +155,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               <X size={14} />
             </button>
           )}
-          <kbd className="hidden rounded border border-white/10 bg-[#161B22] px-1.5 py-0.5 text-[11px] text-slate-500 sm:inline">Esc</kbd>
+          <kbd className="hidden rounded border border-white/10 bg-muted px-1.5 py-0.5 text-[11px] text-slate-500 sm:inline">Esc</kbd>
         </div>
 
         {/* Results */}
@@ -187,7 +187,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                       <span className="block truncate text-sm font-medium">{r.label}</span>
                       {r.sub && <span className="block truncate text-[11px] text-slate-500">{r.sub}</span>}
                     </span>
-                    <span className="shrink-0 rounded bg-[#161B22] px-1.5 py-0.5 text-[10px] capitalize text-slate-600">{r.kind}</span>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] capitalize text-slate-600">{r.kind}</span>
                   </button>
                 </li>
               );
@@ -203,9 +203,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         )}
 
         <div className="flex items-center gap-4 border-t border-white/[0.06] px-4 py-2 text-[11px] text-slate-600">
-          <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-[#161B22] px-1 text-[10px]">↑↓</kbd> navigate</span>
-          <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-[#161B22] px-1 text-[10px]">↵</kbd> open</span>
-          <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-[#161B22] px-1 text-[10px]">Esc</kbd> close</span>
+          <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-muted px-1 text-[10px]">↑↓</kbd> navigate</span>
+          <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-muted px-1 text-[10px]">↵</kbd> open</span>
+          <span className="flex items-center gap-1"><kbd className="rounded border border-white/10 bg-muted px-1 text-[10px]">Esc</kbd> close</span>
         </div>
       </div>
     </div>

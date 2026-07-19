@@ -207,10 +207,10 @@ export default function AuditNodeDrawer({
   const total  = typeof node.meta.totalRules  === "number" ? node.meta.totalRules  : null;
 
   return (
-    <aside className="w-72 flex-shrink-0 border-l border-white/10 bg-[#0d1117] overflow-y-auto flex flex-col text-white">
+    <aside className="w-72 flex-shrink-0 border-l border-white/10 bg-sunken overflow-y-auto flex flex-col text-white">
 
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/10 sticky top-0 bg-[#0d1117] z-10">
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/10 sticky top-0 bg-sunken z-10">
         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
         <span className="text-xs font-semibold flex-1 truncate">
           {node.type.replace(/_/g, " ")}

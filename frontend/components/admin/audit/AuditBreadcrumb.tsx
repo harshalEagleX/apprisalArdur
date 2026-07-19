@@ -21,7 +21,7 @@ export default function AuditBreadcrumb({
   viewMode, selectedNode, nodeCount, edgeCount, onBack,
 }: Props) {
   return (
-    <div className="flex h-9 flex-shrink-0 items-center gap-1.5 border-b border-white/10 bg-[#0d1117] px-4 text-xs text-slate-500">
+    <div className="flex h-9 flex-shrink-0 items-center gap-1.5 border-b border-white/10 bg-sunken px-4 text-xs text-slate-500">
       <button
         onClick={onBack}
         className="hover:text-slate-200 transition-colors shrink-0"

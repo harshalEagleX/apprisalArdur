@@ -15,13 +15,14 @@ from app.extraction.result import Source
 from app.extraction.schema import schema_loader
 from app.extraction.xml_extractor import extract_xml
 from app.pipeline.intake import assemble_order
+from tests.conftest import HAVE_FIXTURE_DOCS, requires_fixture_docs
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "ESTX-0007568"
 XML_PATH = FIXTURE_DIR / "appraisal" / "7243 Foxtail Meadow Ct.xml"
 PDF_PATH = FIXTURE_DIR / "appraisal" / "7243 Foxtail Meadow Ct.pdf"
 ENGAGEMENT_PATH = FIXTURE_DIR / "engagement" / "EngagementLetter - 2026-07-09T203634.806.pdf"
 
-pytestmark = pytest.mark.skipif(not FIXTURE_DIR.exists(), reason="ESTX-0007568 fixture not present")
+pytestmark = requires_fixture_docs
 
 
 def test_schema_loads():

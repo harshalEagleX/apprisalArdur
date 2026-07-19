@@ -26,9 +26,9 @@ function StatCard({ label, value, sub, color = "text-slate-400", href }: {
       {sub && <div className="mt-1 text-xs text-slate-500">{sub}</div>}
     </>
   );
-  const className = "foundation-fade-in rounded-lg border border-white/10 bg-[#11161C]/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.24)] transition-colors";
+  const className = "foundation-fade-in rounded-lg border border-white/10 bg-surface/90 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.24)] transition-colors";
   return href ? (
-    <Link href={href} className={`${className} block hover:border-slate-500/35 hover:bg-[#161B22]`}>
+    <Link href={href} className={`${className} block hover:border-slate-500/35 hover:bg-muted`}>
       {content}
     </Link>
   ) : (
@@ -47,7 +47,7 @@ function Section({
   Icon: React.ComponentType<{ size?: number; className?: string }>;
 }) {
   return (
-    <div className="foundation-fade-in rounded-lg border border-white/10 bg-[#11161C]/85 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+    <div className="foundation-fade-in rounded-lg border border-white/10 bg-surface/85 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-slate-200">
         <Icon size={16} className="text-slate-400" />{title}
       </h2>
@@ -59,7 +59,7 @@ function Section({
 // ── Progress bar ──────────────────────────────────────────────────────────────
 function ProgressBar({ pct, color = "bg-slate-500" }: { pct: number; color?: string }) {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#0B0F14]">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-sunken">
       <div className={`${color} h-1.5 rounded-full transition-all duration-700`}
            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
@@ -116,7 +116,7 @@ export default function AnalyticsPage() {
   return (
     <div className="foundation-grid min-h-screen bg-slate-950 text-white">
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <header data-guide="analytics-header" className="border-b border-white/10 bg-[#11161C]/80 px-6 py-4 backdrop-blur">
+      <header data-guide="analytics-header" className="border-b border-white/10 bg-surface/80 px-6 py-4 backdrop-blur">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">Supervisor intelligence</div>
           <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -155,8 +155,8 @@ export default function AnalyticsPage() {
       ) : num("totalFilesProcessed") === 0 ? (
         // Educational empty-state instead of a wall of zeros that reads as "broken".
         <div className="mx-auto max-w-7xl p-6">
-          <div className="flex flex-col items-center justify-center rounded-lg border border-white/10 bg-[#11161C] px-6 py-16 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-[#161B22] text-slate-500 text-xl">📊</div>
+          <div className="flex flex-col items-center justify-center rounded-lg border border-white/10 bg-surface px-6 py-16 text-center">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-muted text-slate-500 text-xl">📊</div>
             <h2 className="text-lg font-semibold text-white">No processed files yet</h2>
             <p className="mt-1 max-w-md text-sm text-slate-500">
               Analytics populate once QC has run. Upload an appraisal batch and run QC — OCR
@@ -329,7 +329,7 @@ export default function AnalyticsPage() {
               ) : (
                 <div className="max-h-56 space-y-2 overflow-y-auto">
                   {overdueRows.slice(0, 8).map(item => (
-                    <div key={item.ruleResultId} className="rounded-lg border border-white/10 bg-[#0B0F14]/55 p-2.5 text-xs">
+                    <div key={item.ruleResultId} className="rounded-lg border border-white/10 bg-sunken/55 p-2.5 text-xs">
                       <div className="flex justify-between gap-2">
                         <span className="text-slate-200 font-medium">{item.ruleId} · {item.ruleName}</span>
                         <span className="text-slate-500">QC {String(item.qcResultId)}</span>
@@ -368,7 +368,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* ── Guidance banner ──────────────────────────────────────────────── */}
-          <div className="foundation-fade-in flex items-start gap-3 rounded-lg border border-white/10 bg-[#11161C]/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          <div className="foundation-fade-in flex items-start gap-3 rounded-lg border border-white/10 bg-surface/90 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
             <Lightbulb size={22} className="mt-0.5 text-slate-400 flex-shrink-0" />
             <div>
               <div className="text-sm font-medium text-slate-200 mb-1">How to read this dashboard</div>

@@ -38,7 +38,7 @@ export default function ClientDetailPage() {
       </nav>
 
       <div className="mb-5 flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-[#161B22] text-lg font-bold text-slate-300">
+        <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-muted text-lg font-bold text-slate-300">
           {c?.name ? c.name[0].toUpperCase() : <Building2 size={18} />}
         </span>
         <div>
@@ -46,7 +46,7 @@ export default function ClientDetailPage() {
           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
             <span className="font-mono">{c?.code ?? "—"}</span>
             {c?.status && (
-              <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${c.status === "ACTIVE" ? "border-green-500/25 bg-green-950/40 text-green-200" : "border-white/10 bg-[#161B22] text-slate-500"}`}>
+              <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${c.status === "ACTIVE" ? "border-green-500/25 bg-green-950/40 text-green-200" : "border-white/10 bg-muted text-slate-500"}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${c.status === "ACTIVE" ? "bg-green-400" : "bg-slate-500"}`} />{c.status}
               </span>
             )}
@@ -64,7 +64,7 @@ export default function ClientDetailPage() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Recent batches */}
-        <section className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C]">
+        <section className="overflow-hidden rounded-lg border border-white/10 bg-surface">
           <h2 className="flex items-center gap-2 border-b border-white/10 px-4 py-3 text-sm font-semibold text-slate-200">
             <Package size={14} className="text-slate-500" /> Recent batches
           </h2>
@@ -91,7 +91,7 @@ export default function ClientDetailPage() {
         </section>
 
         {/* Users */}
-        <section className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C]">
+        <section className="overflow-hidden rounded-lg border border-white/10 bg-surface">
           <h2 className="flex items-center gap-2 border-b border-white/10 px-4 py-3 text-sm font-semibold text-slate-200">
             <UsersIcon size={14} className="text-slate-500" /> Users
           </h2>
@@ -125,7 +125,7 @@ export default function ClientDetailPage() {
 
 function Stat({ label, value, tone = "text-white" }: { label: string; value: string | number; tone?: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#11161C] p-4">
+    <div className="rounded-lg border border-white/10 bg-surface p-4">
       <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{value}</div>
     </div>

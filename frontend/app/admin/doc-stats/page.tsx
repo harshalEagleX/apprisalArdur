@@ -114,13 +114,13 @@ function AppraisalsPanel() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by appraisal filename, client, or batch id…"
-            className="h-10 w-full rounded-lg border border-white/10 bg-[#11161C] pl-9 pr-3 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500/40 focus:outline-none"
+            className="h-10 w-full rounded-lg border border-white/10 bg-surface pl-9 pr-3 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500/40 focus:outline-none"
           />
         </div>
         <span className="text-xs text-slate-500 tabular-nums">{count} appraisal{count === 1 ? "" : "s"} measured</span>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-surface/60">
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} /></div>
         ) : rows.length === 0 ? (
@@ -198,12 +198,12 @@ function AppraisalsPanel() {
       {total > 1 && (
         <div className="mt-4 flex items-center justify-end gap-2">
           <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-            className="inline-flex h-8 items-center gap-1 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs text-slate-300 disabled:opacity-40 hover:border-white/20">
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-white/10 bg-surface px-3 text-xs text-slate-300 disabled:opacity-40 hover:border-white/20">
             <ChevronLeft size={14} /> Prev
           </button>
           <span className="text-xs text-slate-500 tabular-nums">Page {page + 1} of {total}</span>
           <button onClick={() => setPage((p) => Math.min(total - 1, p + 1))} disabled={page >= total - 1}
-            className="inline-flex h-8 items-center gap-1 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs text-slate-300 disabled:opacity-40 hover:border-white/20">
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-white/10 bg-surface px-3 text-xs text-slate-300 disabled:opacity-40 hover:border-white/20">
             Next <ChevronRight size={14} />
           </button>
         </div>
@@ -232,11 +232,11 @@ function BatchesPanel() {
     </td>
   );
 
-  if (loading) return <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-4"><TableSkeleton rows={6} cols={5} /></div>;
+  if (loading) return <div className="rounded-xl border border-white/10 bg-surface/60 p-4"><TableSkeleton rows={6} cols={5} /></div>;
   if (rows.length === 0) return <EmptyState icon={Boxes} title="No batches measured yet" description="Batch percentiles appear once QC has run on at least one batch." />;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-surface/60">
       <div className="border-b border-white/10 px-4 py-2.5 text-[11px] text-slate-500">
         Distribution across each batch&apos;s appraisals — median (p50) with the p95/p99 tail.
       </div>
@@ -304,7 +304,7 @@ function RankingPanel() {
   }, []);
   useEffect(() => { const t = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(t); }, [load]);
 
-  if (loading) return <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-4"><TableSkeleton rows={8} cols={6} /></div>;
+  if (loading) return <div className="rounded-xl border border-white/10 bg-surface/60 p-4"><TableSkeleton rows={8} cols={6} /></div>;
   if (rows.length === 0) return <EmptyState icon={ListOrdered} title="No rule timings yet" description="Cumulative rule ranking builds up as QC runs accumulate." />;
 
   const maxAvg = Math.max(...rows.map(r => r.avgMs), 1);
@@ -312,7 +312,7 @@ function RankingPanel() {
   const medCount  = rows.filter(r => r.avgMs >= 300 && r.avgMs < 1000).length;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]/60">
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-surface/60">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
         <span className="text-[11px] text-slate-500">
           Average evaluation time per rule across every measured run. LLM% = share of runs that called Groq.
@@ -406,7 +406,7 @@ function TrendPanel() {
   }, []);
   useEffect(() => { const t = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(t); }, [load]);
 
-  if (loading) return <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-4"><TableSkeleton rows={6} cols={3} /></div>;
+  if (loading) return <div className="rounded-xl border border-white/10 bg-surface/60 p-4"><TableSkeleton rows={6} cols={3} /></div>;
   if (rows.length === 0) return <EmptyState icon={TrendingUp} title="No runs to trend yet" description="The trend builds up as QC runs accumulate — re-run a batch to see if an optimization landed." />;
 
   // A line with 1–6 points isn't a trend — it reads as broken. Below 7 runs, show the
@@ -416,7 +416,7 @@ function TrendPanel() {
     const prev = rows.length >= 2 ? rows[rows.length - 2] : null;
     const pct = prev && prev.totalMs > 0 ? Math.round(((latest.totalMs - prev.totalMs) / prev.totalMs) * 100) : null;
     return (
-      <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+      <div className="rounded-xl border border-white/10 bg-surface/60 p-5">
         <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
           <TrendingUp size={15} className="text-indigo-300" /> Processing-time trend
         </h2>
@@ -424,18 +424,18 @@ function TrendPanel() {
           Only {rows.length} run{rows.length === 1 ? "" : "s"} recorded — a trend line needs at least 7. Showing latest vs previous instead.
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <div className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <div className="text-[11px] uppercase tracking-wide text-slate-500">Latest run</div>
             <div className="mt-1 text-lg font-semibold tabular-nums text-white">{(latest.totalMs / 1000).toFixed(1)}s</div>
           </div>
           {prev && (
-            <div className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+            <div className="rounded-lg border border-white/10 bg-sunken/50 p-3">
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Previous run</div>
               <div className="mt-1 text-lg font-semibold tabular-nums text-slate-300">{(prev.totalMs / 1000).toFixed(1)}s</div>
             </div>
           )}
           {pct != null && (
-            <div className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+            <div className="rounded-lg border border-white/10 bg-sunken/50 p-3">
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Change</div>
               <div className={`mt-1 text-lg font-semibold tabular-nums ${pct <= 0 ? "text-green-300" : "text-amber-300"}`}>
                 {pct > 0 ? "+" : ""}{pct}%
@@ -457,7 +457,7 @@ function TrendPanel() {
   }));
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#11161C]/60 p-5">
+    <div className="rounded-xl border border-white/10 bg-surface/60 p-5">
       <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
         <TrendingUp size={15} className="text-indigo-300" /> Processing-time trend
       </h2>

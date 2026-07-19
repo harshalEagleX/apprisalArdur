@@ -135,7 +135,7 @@ export default function SubmittedReviewPage() {
               <XCircle size={10} /> {failCount} Fail
             </span>
             {txType !== "UNKNOWN" && (
-              <span className="text-[11px] px-2 py-0.5 rounded border border-white/10 bg-[#11161C] text-slate-400">
+              <span className="text-[11px] px-2 py-0.5 rounded border border-white/10 bg-surface text-slate-400">
                 {txType}
               </span>
             )}
@@ -153,19 +153,19 @@ export default function SubmittedReviewPage() {
 
       {/* Closure summary — a clear "this review is done" recap, not just a log of questions. */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-white/10 bg-[#11161C] p-3">
+        <div className="rounded-lg border border-white/10 bg-surface p-3">
           <div className="text-[11px] uppercase tracking-wide text-slate-500">Rules reviewed</div>
           <div className="mt-1 text-lg font-semibold tabular-nums text-white">{reviewedRules.length}</div>
         </div>
-        <div className="rounded-lg border border-white/10 bg-[#11161C] p-3">
+        <div className="rounded-lg border border-white/10 bg-surface p-3">
           <div className="text-[11px] uppercase tracking-wide text-slate-500">Failures confirmed</div>
           <div className="mt-1 text-lg font-semibold tabular-nums text-red-300">{failCount}</div>
         </div>
-        <div className="rounded-lg border border-white/10 bg-[#11161C] p-3">
+        <div className="rounded-lg border border-white/10 bg-surface p-3">
           <div className="text-[11px] uppercase tracking-wide text-slate-500">Manual passes</div>
           <div className="mt-1 text-lg font-semibold tabular-nums text-amber-300">{manualPassCount}</div>
         </div>
-        <div className="rounded-lg border border-white/10 bg-[#11161C] p-3">
+        <div className="rounded-lg border border-white/10 bg-surface p-3">
           <div className="text-[11px] uppercase tracking-wide text-slate-500">Passed</div>
           <div className="mt-1 text-lg font-semibold tabular-nums text-green-300">{passCount}</div>
         </div>
@@ -183,7 +183,7 @@ export default function SubmittedReviewPage() {
             type="button"
             onClick={() => setQuestionsOpen(open => !open)}
             aria-expanded={questionsOpen}
-            className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#11161C] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+            className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-surface px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
           >
             <BookOpen size={14} className="text-slate-400" />
             <span className="flex-1 text-sm font-semibold text-white">
@@ -195,7 +195,7 @@ export default function SubmittedReviewPage() {
             />
           </button>
           {questionsOpen && (
-            <div className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] divide-y divide-white/10">
+            <div className="overflow-hidden rounded-lg border border-white/10 bg-surface divide-y divide-white/10">
               {reviewedRules.map(rule => (
                 <ReviewQuestionRow key={rule.id} rule={rule} />
               ))}
@@ -205,7 +205,7 @@ export default function SubmittedReviewPage() {
       )}
 
       {/* Re-review section */}
-      <div className="mb-6 rounded-lg border border-white/10 bg-[#11161C] p-4">
+      <div className="mb-6 rounded-lg border border-white/10 bg-surface p-4">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-amber-500/25 bg-amber-950/50">
             <RefreshCw size={15} className="text-amber-300" />
@@ -232,7 +232,7 @@ export default function SubmittedReviewPage() {
                 placeholder="Reason for re-review request (required)..."
                 rows={2}
                 autoFocus
-                className="w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                className="w-full resize-none rounded-md border border-white/10 bg-sunken/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
             )}
             <button
@@ -259,7 +259,7 @@ export default function SubmittedReviewPage() {
             </div>
             <button
               onClick={copyRejectionText}
-              className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+              className="flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
             >
               {copied ? <><CheckCircle2 size={11} /> Copied!</> : "Copy all"}
             </button>
@@ -306,10 +306,10 @@ function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: stri
   }
 
   return (
-    <div className="rounded-lg border border-red-500/20 bg-[#11161C] overflow-hidden">
+    <div className="rounded-lg border border-red-500/20 bg-surface overflow-hidden">
       {/* Rule header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-red-950/10">
-        <span className="font-mono text-[10px] bg-[#0B0F14]/70 border border-white/10 px-1.5 py-0.5 rounded text-slate-400">
+        <span className="font-mono text-[10px] bg-sunken/70 border border-white/10 px-1.5 py-0.5 rounded text-slate-400">
           {rule.ruleId}
         </span>
         <span className="text-xs font-medium text-slate-200 flex-1 min-w-0 truncate">
@@ -322,13 +322,13 @@ function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: stri
             </span>
           )}
           {page && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/10 bg-[#0B0F14]/70 text-slate-500 font-mono">
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/10 bg-sunken/70 text-slate-500 font-mono">
               p.{page}
             </span>
           )}
           <button
             onClick={copy}
-            className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-white/10 bg-[#0B0F14]/70 text-slate-500 hover:text-slate-300 transition-colors"
+            className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-white/10 bg-sunken/70 text-slate-500 hover:text-slate-300 transition-colors"
           >
             {copied ? <><CheckCircle2 size={9} /> Copied</> : <><FileText size={9} /> Copy</>}
           </button>
@@ -350,7 +350,7 @@ function RejectionBlock({ rule, language }: { rule: QCRuleResult; language: stri
               className={`grid gap-px bg-white/5 ${model.sources.length >= 2 ? "grid-cols-2" : "grid-cols-1"} ${model.headline ? "mt-2" : ""}`}
             >
               {model.sources.map((source, i) => (
-                <div key={`${source.document}-${i}`} className="px-3 py-2 bg-[#11161C]">
+                <div key={`${source.document}-${i}`} className="px-3 py-2 bg-surface">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
                     {source.label}
                   </div>
@@ -393,12 +393,12 @@ function ReviewQuestionRow({ rule }: { rule: QCRuleResult }) {
     ? "border-green-500/25 bg-green-950/30 text-green-300"
     : rule.reviewerVerified === false
       ? "border-red-500/25 bg-red-950/30 text-red-300"
-      : "border-white/10 bg-[#0B0F14]/70 text-slate-400";
+      : "border-white/10 bg-sunken/70 text-slate-400";
 
   return (
     <div className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-[#0B0F14]/70 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+        <span className="rounded bg-sunken/70 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
           {rule.ruleId}
         </span>
         <span className="min-w-0 flex-1 text-xs font-medium text-slate-200">{rule.ruleName}</span>

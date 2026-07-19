@@ -102,7 +102,7 @@ export default function UsersPage() {
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, username, or email…"
-            className="h-9 w-full rounded-md border border-white/10 bg-[#11161C] pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+            className="h-9 w-full rounded-md border border-white/10 bg-surface pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
           />
           {search && (
             <button
@@ -120,13 +120,13 @@ export default function UsersPage() {
       </div>
 
       {/* Table */}
-      <div data-guide="admin-users-table" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+      <div data-guide="admin-users-table" className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
         <div className="data-scroll">
         <table className="w-full min-w-[820px] text-sm">
           <thead>
-            <tr className="border-b border-white/10 bg-[#0B0F14]/80">
+            <tr className="border-b border-white/10 bg-sunken/80">
               {["User", "Role", "Client org", "Status", "Last login", "Added", ""].map(h => (
-                <th key={h} className={`sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${!h ? "w-32 text-right" : ""}`}>{h}</th>
+                <th key={h} className={`sticky top-0 z-10 bg-sunken px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${!h ? "w-32 text-right" : ""}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -154,7 +154,7 @@ export default function UsersPage() {
                   <div className="text-xs text-slate-500 mt-0.5">{u.username}{u.email ? ` · ${u.email}` : ""}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md border font-medium ${ROLE_STYLES[u.role] ?? "border-white/10 bg-[#161B22] text-slate-400"}`}>
+                  <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md border font-medium ${ROLE_STYLES[u.role] ?? "border-white/10 bg-muted text-slate-400"}`}>
                     {u.role === "ADMIN" ? "Admin" : "Reviewer"}
                   </span>
                 </td>

@@ -106,7 +106,7 @@ function RunDiff({ runId }: { runId: number }) {
   const noChange = added.length === 0 && removed.length === 0 && changed.length === 0;
 
   return (
-    <div className="mt-1 rounded-md border border-white/10 bg-[#0B0F14]/60 p-2.5">
+    <div className="mt-1 rounded-md border border-white/10 bg-sunken/60 p-2.5">
       {diff.ruleEngineChanged && (
         <div className="mb-2 flex items-center gap-1.5 rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1 text-[10px] text-amber-200">
           <RefreshCw size={10} />
@@ -179,7 +179,7 @@ function RunCard({ run, index }: { run: QCHistoryRun; index: number }) {
   const canDiff = run.rerunOfId != null;
 
   return (
-    <div className="rounded-md border border-white/10 bg-[#11161C]/70 p-2.5">
+    <div className="rounded-md border border-white/10 bg-surface/70 p-2.5">
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-semibold text-slate-300">Run #{index}</span>
         {run.isActive ? (
@@ -242,7 +242,7 @@ function FileHistory({ file, runs, onRerun, busy }: {
     return tb - ta;
   });
   return (
-    <section className="rounded-lg border border-white/10 bg-[#0B0F14]/40 p-3">
+    <section className="rounded-lg border border-white/10 bg-sunken/40 p-3">
       <div className="flex items-center gap-2">
         <FileStack size={13} className="text-slate-500" />
         <span className="truncate text-xs font-medium text-slate-200" title={file.filename}>{file.filename}</span>
@@ -395,7 +395,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <aside
         ref={drawerRef}
-        className="relative flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-[#0B0F14] shadow-[0_0_60px_rgba(0,0,0,0.5)]"
+        className="relative flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-sunken shadow-[0_0_60px_rgba(0,0,0,0.5)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="batch-history-title"
@@ -433,7 +433,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
           ) : files.length === 0 ? (
             <div className="text-sm text-slate-500">No documents found for this batch.</div>
           ) : totalRuns === 0 ? (
-            <div className="rounded-lg border border-white/10 bg-[#11161C]/60 p-4 text-sm text-slate-400">
+            <div className="rounded-lg border border-white/10 bg-surface/60 p-4 text-sm text-slate-400">
               This batch has no completed QC runs yet. Run QC, then re-run it to compare versions here.
             </div>
           ) : (
@@ -460,7 +460,7 @@ export function BatchHistoryDrawer({ batch, onClose }: BatchHistoryDrawerProps) 
               type="button"
               onClick={() => void handleExport("json")}
               disabled={downloading !== null}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
             >
               <Download size={14} className={downloading === "json" ? "animate-pulse" : ""} /> JSON
             </button>

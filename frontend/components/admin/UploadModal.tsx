@@ -189,7 +189,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={!uploading ? onClose : undefined} />
       <div
         ref={dialogRef}
-        className="relative mx-4 w-full max-w-lg rounded-lg border border-white/10 bg-[#11161C] shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none"
+        className="relative mx-4 w-full max-w-lg rounded-lg border border-white/10 bg-surface shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-dialog-title"
@@ -239,14 +239,14 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
           )}
 
           {/* Folder-structure guide — collapsed by default, subtle */}
-          <details className="group rounded-lg border border-white/[0.06] bg-[#0B0F14]/40">
+          <details className="group rounded-lg border border-white/[0.06] bg-sunken/40">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-[11px] text-slate-500 transition-colors hover:text-slate-300 [&::-webkit-details-marker]:hidden">
               <ChevronRight size={12} className="shrink-0 transition-transform group-open:rotate-90" />
               <span>How to organise your ZIP</span>
             </summary>
 
             <div className="space-y-2.5 px-3 pb-3 pt-0.5">
-              <pre className="overflow-x-auto rounded-md bg-[#11161C] p-2.5 text-[10.5px] leading-relaxed text-slate-400">{`Batch.zip
+              <pre className="overflow-x-auto rounded-md bg-surface p-2.5 text-[10.5px] leading-relaxed text-slate-400">{`Batch.zip
 └─ MAGU96793/          one folder per order (named by order id)
    ├─ appraisal/    MAGU96793.pdf + MAGU96793.xml
    ├─ contract/     (optional)
@@ -262,7 +262,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
           </details>
 
           {/* Client selector */}
-          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <div className="mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Batch owner</h3>
               <p className="mt-0.5 text-[11px] text-slate-600">This controls storage paths and client-level reporting.</p>
@@ -277,7 +277,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
           </section>
 
           {/* Drop zone */}
-          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <div className="mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Archive</h3>
               <p className="mt-0.5 text-[11px] text-slate-600">ZIP up to 256 MB (each file inside up to 50 MB). The backend validates the folder structure after upload.</p>
@@ -326,7 +326,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
                 <span>Uploading and validating…</span>
                 <span className="font-mono">{progress}%</span>
               </div>
-              <div className="h-1.5 bg-[#0B0F14] rounded-full overflow-hidden">
+              <div className="h-1.5 bg-sunken rounded-full overflow-hidden">
                 <div className="h-full bg-slate-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
               </div>
             </div>
@@ -334,7 +334,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 
           <div className="flex gap-2 justify-end pt-1">
             {!uploading && (
-              <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
+              <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-muted px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">
                 Cancel
               </button>
             )}
@@ -350,7 +350,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 disabled:opacity-50";
+const INPUT = "w-full rounded-md border border-white/10 bg-surface px-3 py-2 text-sm text-white transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 disabled:opacity-50";
 
 function FieldError({ children }: { children: React.ReactNode }) {
   return (

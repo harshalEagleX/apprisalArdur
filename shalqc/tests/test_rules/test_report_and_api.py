@@ -9,6 +9,7 @@ import pytest
 import app.rules  # register rules
 from app.report.builder import build_report
 from app.rules.verdict import Evidence, Status, Verdict
+from tests.conftest import HAVE_FIXTURE_DOCS, requires_fixture_docs
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "ESTX-0007568"
 
@@ -48,7 +49,7 @@ def test_same_root_field_collapses_to_one_card():
     assert rep["cards"][0]["status"] == "FAIL"     # most-severe wins the card
 
 
-@pytest.mark.skipif(not FIXTURE_DIR.exists(), reason="fixture not present")
+@requires_fixture_docs
 def test_api_qc_process_end_to_end(monkeypatch):
     from fastapi.testclient import TestClient
     import app.main as main

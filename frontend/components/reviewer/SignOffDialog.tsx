@@ -13,7 +13,7 @@ function SignOffStat({
 }) {
   return (
     <div
-      className={`rounded-lg border px-2.5 py-2 ${danger ? "border-red-500/25 bg-red-950/30 text-red-200" : "border-white/10 bg-[#0B0F14]/60 text-slate-200"}`}
+      className={`rounded-lg border px-2.5 py-2 ${danger ? "border-red-500/25 bg-red-950/30 text-red-200" : "border-white/10 bg-sunken/60 text-slate-200"}`}
     >
       <div className="text-base font-semibold tabular-nums">{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
@@ -94,7 +94,7 @@ export function SignOffDialog({
       />
       <div
         ref={dialogRef}
-        className="relative w-full max-w-sm rounded-lg border border-white/10 bg-[#11161C] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none"
+        className="relative w-full max-w-sm rounded-lg border border-white/10 bg-surface p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="signoff-dialog-title"
@@ -141,7 +141,7 @@ export function SignOffDialog({
           onChange={e => onNotesChange(e.target.value)}
           autoFocus
           rows={3}
-          className="mt-1.5 w-full resize-none rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+          className="mt-1.5 w-full resize-none rounded-md border border-white/10 bg-sunken/70 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
           placeholder="Summary for the completed review..."
         />
 
@@ -149,7 +149,7 @@ export function SignOffDialog({
           <button
             onClick={onCancel}
             disabled={submitting}
-            className="h-9 rounded-md border border-white/10 bg-[#161B22] px-4 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+            className="h-9 rounded-md border border-white/10 bg-muted px-4 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>

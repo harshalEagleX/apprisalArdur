@@ -234,7 +234,7 @@ class MatchConfidenceIntegrationTests {
         ShalqcCard pass = new ShalqcCard(
                 "S-1", "looks_good", "SUBJECT", "SATISFIED", "Subject", "check", "check",
                 null, "ok", "", "", "looks satisfied", List.of(), null, Map.of(),
-                null, 0.95, "text", List.of(), "judge_v2", "llm", 0.9,
+                null, 0.95, "text", false, List.of(), "judge_v2", "llm", 0.9,
                 List.of("subject_x"), null, "informational");
         return new ShalqcResponse("ORD-1", "TEST", "OK", "v2",
                 Map.of("satisfied", 1, "not_satisfied", 0, "review", 0,

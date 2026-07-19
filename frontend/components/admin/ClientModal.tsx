@@ -44,7 +44,7 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative mx-4 w-full max-w-md rounded-lg border border-white/10 bg-[#11161C] shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
+      <div className="relative mx-4 w-full max-w-md rounded-lg border border-white/10 bg-surface shadow-[0_22px_60px_rgba(0,0,0,0.46)]">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h2 className="text-sm font-semibold text-white">New client organisation</h2>
@@ -61,13 +61,13 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
               <span>{error}</span>
             </div>
           )}
-          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Organisation name <span className="text-red-400">*</span></label>
             <input value={name} onChange={e => setName(e.target.value)} required
               placeholder="Acme Lending" className={inputClass(fieldErrors.name)} />
             {fieldErrors.name && <FieldError>{fieldErrors.name}</FieldError>}
           </section>
-          <section className="rounded-lg border border-white/10 bg-[#0B0F14]/50 p-3">
+          <section className="rounded-lg border border-white/10 bg-sunken/50 p-3">
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Short code <span className="text-red-400">*</span></label>
             <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} required
               placeholder="ACME" maxLength={10} className={inputClass(fieldErrors.code)} />
@@ -75,7 +75,7 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
             {fieldErrors.code && <FieldError>{fieldErrors.code}</FieldError>}
           </section>
           <div className="flex gap-2 justify-end pt-1">
-            <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-[#161B22] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">Cancel</button>
+            <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-muted px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white">Cancel</button>
             <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-md border border-slate-400/30 bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-500 disabled:opacity-50">
               {saving && <Spinner size={13} />}
               {saving ? "Creating…" : "Create"}
@@ -87,7 +87,7 @@ export default function ClientModal({ open, onClose, onSaved }: Props) {
   );
 }
 
-const INPUT = "w-full rounded-md border border-white/10 bg-[#11161C] px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30";
+const INPUT = "w-full rounded-md border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30";
 
 function inputClass(error?: string) {
   return `${INPUT} ${error ? "border-red-700 focus:ring-red-500 focus:border-red-600" : ""}`;

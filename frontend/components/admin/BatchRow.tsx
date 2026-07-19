@@ -97,7 +97,7 @@ export const BatchRow = memo(function BatchRow({
             type="checkbox"
             checked={selected}
             onChange={e => onSelect(b.id, e.target.checked)}
-            className="h-4 w-4 rounded border-white/20 bg-[#11161C] accent-indigo-500 cursor-pointer"
+            className="h-4 w-4 rounded border-white/20 bg-surface accent-indigo-500 cursor-pointer"
             aria-label={`Select batch ${b.parentBatchId}`}
           />
         )}
@@ -146,7 +146,7 @@ export const BatchRow = memo(function BatchRow({
               </span>
               <span className="font-mono">{pct}%</span>
             </div>
-            <div className="w-32 h-1 bg-[#0B0F14] rounded-full overflow-hidden">
+            <div className="w-32 h-1 bg-sunken rounded-full overflow-hidden">
               <div
                 className="h-full bg-slate-500 rounded-full transition-all duration-500"
                 style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}

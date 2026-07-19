@@ -53,7 +53,7 @@ export default function ActivityMonitor() {
     return (
       <button
         onClick={() => setExpanded(true)}
-        className="foundation-fade-in fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-[#11161C]/95 px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.40)] backdrop-blur transition-colors hover:bg-[#161B22]"
+        className="foundation-fade-in fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-surface/95 px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.40)] backdrop-blur transition-colors hover:bg-muted"
         title="Show background activity"
       >
         <span className="relative flex h-2 w-2">
@@ -68,9 +68,9 @@ export default function ActivityMonitor() {
   }
 
   return (
-    <div className="foundation-fade-in fixed bottom-4 right-4 z-40 flex max-h-[min(70vh,30rem)] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_20px_55px_rgba(0,0,0,0.42)]">
+    <div className="foundation-fade-in fixed bottom-4 right-4 z-40 flex max-h-[min(70vh,30rem)] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_20px_55px_rgba(0,0,0,0.42)]">
       {/* Header */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/10 bg-[#11161C] px-3 py-2.5">
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/10 bg-surface px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Activity size={13} className="text-slate-300" />
           <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-300">
@@ -129,7 +129,7 @@ export default function ActivityMonitor() {
                 </button>
               </div>
               {/* Progress bar */}
-              <div className="h-1.5 overflow-hidden rounded-full bg-[#0B0F14]">
+              <div className="h-1.5 overflow-hidden rounded-full bg-sunken">
                 <div
                   className="h-full rounded-full bg-slate-500 transition-all duration-500"
                   style={{ width: `${pct}%` }}

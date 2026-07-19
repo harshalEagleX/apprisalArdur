@@ -93,7 +93,7 @@ function NotifCard({ n, onDismiss, onRead }: {
     >
       {/* unread dot — top-right corner */}
       {!n.read && (
-        <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-indigo-400 ring-2 ring-[#0f1114] ring-offset-0" />
+        <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-indigo-400 ring-2 ring-sunken ring-offset-0" />
       )}
 
       {/* icon badge */}
@@ -244,7 +244,7 @@ function NotificationDrawer({
         }}
         className="fixed right-0 top-0 bottom-0 z-[9999] flex w-[400px] flex-col
                    border-l border-white/[0.08]
-                   bg-[#0e1013]/75
+                   bg-sunken/75
                    shadow-[-24px_0_72px_rgba(0,0,0,0.65)]
                    backdrop-blur-[28px]"
       >

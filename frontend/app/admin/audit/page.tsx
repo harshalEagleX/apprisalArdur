@@ -230,7 +230,7 @@ export default function AdminAuditPage() {
             />
           ) : (
             /* ── Graph canvas ──────────────────────────────────────────── */
-            <div ref={containerRef} className="flex-1 relative bg-[#080C10] overflow-hidden">
+            <div ref={containerRef} className="flex-1 relative bg-background overflow-hidden">
               {error && <ErrorOverlay message={error} />}
               {loading && !error && <GraphSkeleton />}
 
@@ -320,7 +320,7 @@ export default function AdminAuditPage() {
               {/* Zoom button */}
               <button
                 onClick={() => graphRef.current?.zoomToFit?.(400)}
-                className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-[#11161C]/90 text-slate-400 hover:text-white hover:border-white/20 transition-colors"
+                className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-surface/90 text-slate-400 hover:text-white hover:border-white/20 transition-colors"
                 title="Fit to view"
               >
                 <Maximize2 size={13} />

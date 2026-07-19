@@ -64,7 +64,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={submit} className="rounded-lg border border-white/10 bg-[#11161C]/95 p-5 shadow-[0_22px_60px_rgba(0,0,0,0.34)] backdrop-blur">
+          <form onSubmit={submit} className="rounded-lg border border-white/10 bg-surface/95 p-5 shadow-[0_22px_60px_rgba(0,0,0,0.34)] backdrop-blur">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Username</label>
               <input
@@ -74,7 +74,7 @@ export default function LoginPage() {
                 placeholder="Enter username"
                 required
                 autoFocus
-                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+                className="h-10 w-full rounded-md border border-white/10 bg-muted px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
               />
             </div>
             <div className="mt-3">
@@ -85,7 +85,7 @@ export default function LoginPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Enter password"
                 required
-                className="h-10 w-full rounded-md border border-white/10 bg-[#161B22] px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+                className="h-10 w-full rounded-md border border-white/10 bg-muted px-3 text-sm text-white placeholder:text-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
               />
             </div>
             <button
@@ -112,7 +112,7 @@ function Signal({ icon: Icon, label, value }: {
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#11161C]/80 p-3">
+    <div className="rounded-lg border border-white/10 bg-surface/80 p-3">
       <Icon size={15} className="mb-2 text-slate-300" />
       <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">{label}</div>
       <div className="mt-1 text-xs text-slate-300">{value}</div>

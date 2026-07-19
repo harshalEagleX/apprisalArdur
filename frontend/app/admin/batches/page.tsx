@@ -51,7 +51,7 @@ function SummaryPill({ icon: Icon, label, value, tone }: {
   tone: "slate" | "blue" | "indigo" | "amber" | "green";
 }) {
   const tones = {
-    slate: "border-white/10 bg-[#11161C] text-slate-300",
+    slate: "border-white/10 bg-surface text-slate-300",
     blue:  "border-slate-900/50 bg-slate-950/30 text-slate-200",
     indigo:"border-slate-500/25 bg-slate-950/30 text-slate-200",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
@@ -71,7 +71,7 @@ function SummaryPill({ icon: Icon, label, value, tone }: {
 // ── Reconcile summary ─────────────────────────────────────────────────────────
 function RecoveryMetric({ label, value, tone }: { label: string; value: number | string; tone: "slate" | "amber" | "blue" | "green" | "red" }) {
   const tones = {
-    slate: "border-white/10 bg-[#0B0F14]/70 text-slate-300",
+    slate: "border-white/10 bg-sunken/70 text-slate-300",
     amber: "border-amber-900/50 bg-amber-950/30 text-amber-200",
     blue:  "border-slate-900/50 bg-slate-950/30 text-slate-200",
     green: "border-green-900/50 bg-green-950/30 text-green-200",
@@ -88,7 +88,7 @@ function RecoveryMetric({ label, value, tone }: { label: string; value: number |
 function ReconcileSummary({ result, onDismiss }: { result: ReconcileResult; onDismiss: () => void }) {
   const changed = result.retried + result.abandoned;
   return (
-    <div className="mb-4 rounded-lg border border-white/10 bg-[#11161C] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+    <div className="mb-4 rounded-lg border border-white/10 bg-surface p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${changed > 0 ? "border-amber-800/50 bg-amber-950/40 text-amber-300" : "border-green-800/50 bg-green-950/30 text-green-300"}`}>
           <RefreshCw size={14} />
@@ -353,7 +353,7 @@ export default function BatchesPage() {
         </div>
         <div data-guide="admin-batches-actions" className="flex flex-wrap items-center gap-2">
           <button onClick={handleReconcile} disabled={reconciling} title="Find and recover batches stuck in QC_PROCESSING"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white disabled:opacity-50">
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-sm text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.04] hover:text-white disabled:opacity-50">
             <RefreshCw size={13} className={reconciling ? "animate-spin" : ""} />
             Reconcile
           </button>
@@ -381,24 +381,24 @@ export default function BatchesPage() {
       </div>
 
       {/* Filters */}
-      <div data-guide="admin-batches-filters" className="mb-4 rounded-lg border border-white/10 bg-[#11161C]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+      <div data-guide="admin-batches-filters" className="mb-4 rounded-lg border border-white/10 bg-surface/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search all batches by ID or client…"
-                className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
+                className="h-9 w-full rounded-md border border-white/10 bg-sunken/70 pl-8 pr-3 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
             </div>
             <select value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(0); }}
-              className="h-9 w-full rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 sm:w-48"
+              className="h-9 w-full rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-300 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30 sm:w-48"
               aria-label="Filter by status">
               <option value="">All statuses</option>
               {statusOptions.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
             </select>
             {(search || statusFilter) && (
               <button onClick={() => { setSearch(""); setStatus(""); setPage(0); }}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#0B0F14]/70 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white">
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-sunken/70 px-3 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white">
                 <XCircle size={13} /> Clear
               </button>
             )}
@@ -408,7 +408,7 @@ export default function BatchesPage() {
           <span>Showing {batches.length} of {totalElements} matching row{totalElements === 1 ? "" : "s"} on page {page + 1}</span>
           <span className="hidden h-1 w-1 rounded-full bg-slate-700 sm:inline-block" />
           <span>{activeFilterLabel}</span>
-          {debouncedSearch && <span>Global search <span className="rounded border border-white/10 bg-[#161B22] px-1.5 py-0.5 font-mono text-slate-400">{debouncedSearch}</span></span>}
+          {debouncedSearch && <span>Global search <span className="rounded border border-white/10 bg-muted px-1.5 py-0.5 font-mono text-slate-400">{debouncedSearch}</span></span>}
         </div>
       </div>
 
@@ -439,13 +439,13 @@ export default function BatchesPage() {
       )}
 
       {/* Table */}
-      <div data-guide="admin-batches-table" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+      <div data-guide="admin-batches-table" className="overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
         <div className="data-scroll">
           <table className="w-full min-w-[1120px] text-sm">
             <thead>
-              <tr className="border-b border-white/10 bg-[#0B0F14]/80">
+              <tr className="border-b border-white/10 bg-sunken/80">
                 {/* Select-all checkbox */}
-                <th className="sticky top-0 z-10 w-10 bg-[#0B0F14] px-3 py-3">
+                <th className="sticky top-0 z-10 w-10 bg-sunken px-3 py-3">
                   <input
                     type="checkbox"
                     checked={batches.length > 0 && selectedIds.size === batches.length}
@@ -453,13 +453,13 @@ export default function BatchesPage() {
                       if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < batches.length;
                     }}
                     onChange={e => handleSelectAll(e.target.checked)}
-                    className="h-4 w-4 rounded border-white/20 bg-[#11161C] accent-indigo-500 cursor-pointer"
+                    className="h-4 w-4 rounded border-white/20 bg-surface accent-indigo-500 cursor-pointer"
                     aria-label="Select all batches"
                     disabled={batches.length === 0}
                   />
                 </th>
                 {["Batch", "Client", "Status", "Files", "Reviewer", "Date", "Actions"].map((h, i) => (
-                  <th key={h} className={`sticky top-0 z-10 bg-[#0B0F14] px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${i === 6 ? "text-right" : "text-left"}`}>{h}</th>
+                  <th key={h} className={`sticky top-0 z-10 bg-sunken px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ${i === 6 ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
               </tr>
             </thead>

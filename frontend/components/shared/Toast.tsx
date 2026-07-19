@@ -14,7 +14,7 @@ const COLORS = {
   success: "border-green-500/30 bg-green-950/70 text-green-200",
   error:   "border-red-500/30   bg-red-950/70   text-red-200",
   notice:  "border-amber-500/30 bg-amber-950/70 text-amber-200",
-  info:    "border-slate-500/25  bg-[#11161C]    text-slate-200",
+  info:    "border-slate-500/25  bg-surface    text-slate-200",
 };
 
 const ICON_COLORS = {

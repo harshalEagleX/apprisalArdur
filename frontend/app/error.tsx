@@ -11,7 +11,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
 
   return (
     <div className="foundation-grid flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-      <div className="foundation-fade-in max-w-md rounded-lg border border-white/10 bg-[#11161C]/90 p-8 text-center shadow-[0_20px_55px_rgba(0,0,0,0.36)]">
+      <div className="foundation-fade-in max-w-md rounded-lg border border-white/10 bg-surface/90 p-8 text-center shadow-[0_20px_55px_rgba(0,0,0,0.36)]">
         <AlertTriangle size={40} className="mx-auto mb-4 text-amber-400" />
         <h1 className="mb-2 text-2xl font-semibold tracking-normal">Something went wrong</h1>
         <p className="mb-2 text-sm text-slate-400">{error.message || "An unexpected error occurred."}</p>

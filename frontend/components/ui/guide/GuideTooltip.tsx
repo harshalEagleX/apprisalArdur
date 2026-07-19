@@ -104,7 +104,7 @@ export function GuideButton({
       data-guide="guide-launcher"
       type="button"
       onClick={() => start(tourId, steps, { force: true })}
-      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-[#161B22]/70 text-sm font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-100 ${
+      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-muted/70 text-sm font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-100 ${
         compact ? "w-8 px-0" : "px-2.5"
       }`}
       title="Open guided tour"
@@ -185,13 +185,13 @@ function TooltipOverlay() {
 
       {/* Highlight ring around target */}
       {pos.found && (
-        <div className="fixed z-[90] rounded-lg ring-2 ring-slate-300/90 ring-offset-2 ring-offset-[#05070a] pointer-events-none transition-all shadow-[0_0_34px_rgba(226,232,240,0.18)]"
+        <div className="fixed z-[90] rounded-lg ring-2 ring-slate-300/90 ring-offset-2 ring-offset-background pointer-events-none transition-all shadow-[0_0_34px_rgba(226,232,240,0.18)]"
              style={{ top: pos.top - 5, left: pos.left - 5, width: pos.w + 10, height: pos.h + 10 }} />
       )}
 
       {/* Tooltip card */}
       <div ref={tooltipRef}
-           className="foundation-fade-in fixed z-[100] w-[21rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-500/30 bg-[#0B0F14] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+           className="foundation-fade-in fixed z-[100] w-[21rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-500/30 bg-sunken p-4 shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
            style={{
              top: Math.max(8, Math.min(tipTop, window.innerHeight - 340)),
              left: Math.max(8, Math.min(tipLeft, window.innerWidth - 352)),
@@ -212,7 +212,7 @@ function TooltipOverlay() {
         <p className="mb-3 text-xs leading-relaxed text-slate-400">{step.body}</p>
 
         {step.flow && step.flow.length > 0 && (
-          <div className="mb-3 rounded-md border border-white/10 bg-[#11161C]/80 p-3">
+          <div className="mb-3 rounded-md border border-white/10 bg-surface/80 p-3">
             <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               <CornerDownRight size={11} />
               Operator flow
@@ -220,7 +220,7 @@ function TooltipOverlay() {
             <div className="flex flex-wrap items-center gap-1.5">
               {step.flow.map((item, i) => (
                 <div key={`${item}-${i}`} className="flex items-center gap-1.5">
-                  <span className="rounded border border-white/10 bg-[#0B0F14] px-1.5 py-0.5 text-[10px] font-medium text-slate-300">{item}</span>
+                  <span className="rounded border border-white/10 bg-sunken px-1.5 py-0.5 text-[10px] font-medium text-slate-300">{item}</span>
                   {i < step.flow!.length - 1 && <ArrowRight size={11} className="text-slate-600" />}
                 </div>
               ))}
@@ -229,7 +229,7 @@ function TooltipOverlay() {
         )}
 
         {step.shortcut && (
-          <div className="mb-3 flex items-start gap-2 rounded-md border border-white/10 bg-[#11161C]/60 px-3 py-2 text-[11px] text-slate-400">
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-white/10 bg-surface/60 px-3 py-2 text-[11px] text-slate-400">
             <Keyboard size={13} className="mt-0.5 shrink-0 text-slate-500" />
             <span>{step.shortcut}</span>
           </div>
@@ -240,7 +240,7 @@ function TooltipOverlay() {
         )}
 
         {!pos.found && (
-          <p className="mb-3 rounded-md border border-white/10 bg-[#11161C]/70 px-3 py-2 text-[11px] text-slate-500">
+          <p className="mb-3 rounded-md border border-white/10 bg-surface/70 px-3 py-2 text-[11px] text-slate-500">
             This area is not visible on the current screen. Continue the guide or open the matching page from navigation.
           </p>
         )}

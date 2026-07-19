@@ -16,6 +16,7 @@ from app.rules.context import QCContext
 from app.rules.engine import run_rules
 from app.rules.registry import all_rules
 from app.rules.verdict import Status
+from tests.conftest import HAVE_FIXTURE_DOCS, requires_fixture_docs
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "ESTX-0007568"
 
@@ -96,7 +97,7 @@ def test_genuine_mismatch_fails_at_high_confidence():
     assert v.status == Status.FAIL
 
 
-@pytest.mark.skipif(not FIXTURE_DIR.exists(), reason="fixture not present")
+@requires_fixture_docs
 def test_end_to_end_orchestrator_on_fixture():
     # run_qc now returns the reviewer report (report.builder shape). The rule-
     # level status assertions live in the synthetic tests above; here we assert

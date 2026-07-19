@@ -53,8 +53,8 @@ function FileHistoryDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
-      <div className="flex h-full w-full max-w-[520px] flex-col overflow-y-auto bg-[#0E1318] shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0E1318] px-5 py-3.5">
+      <div className="flex h-full w-full max-w-[520px] flex-col overflow-y-auto bg-sunken shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-sunken px-5 py-3.5">
           <div className="flex items-center gap-2">
             <History size={15} className="text-slate-400" />
             <span className="text-sm font-semibold text-white">File History</span>
@@ -71,7 +71,7 @@ function FileHistoryDrawer({
         ) : !data ? null : (
           <div className="flex-1 p-5 space-y-5">
             {/* File info */}
-            <div className="rounded-lg border border-white/10 bg-[#11161C] px-4 py-3">
+            <div className="rounded-lg border border-white/10 bg-surface px-4 py-3">
               <div className="text-sm font-medium text-white">{data.filename}</div>
               <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
                 <span>{data.fileType}</span>
@@ -112,7 +112,7 @@ function FileHistoryDrawer({
 
             {/* Active QC result */}
             {qc && qc.finalDecision !== "FAIL" && (
-              <div className="rounded-lg border border-white/10 bg-[#11161C] px-4 py-3">
+              <div className="rounded-lg border border-white/10 bg-surface px-4 py-3">
                 <div className="text-xs font-semibold text-slate-400 mb-2">Active QC result</div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={qc.finalDecision ?? qc.qcDecision ?? ""} size="xs" />
@@ -134,7 +134,7 @@ function FileHistoryDrawer({
                 <div className="mb-2 text-xs font-semibold text-slate-400">QC runs ({runs.length})</div>
                 <div className="space-y-1.5">
                   {runs.map((run, i) => (
-                    <div key={run.id} className={`rounded-md border px-3 py-2 text-[11px] ${run.isActive ? "border-indigo-500/25 bg-indigo-950/20" : "border-white/[0.06] bg-[#0B0F14]"}`}>
+                    <div key={run.id} className={`rounded-md border px-3 py-2 text-[11px] ${run.isActive ? "border-indigo-500/25 bg-indigo-950/20" : "border-white/[0.06] bg-sunken"}`}>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-300">Run #{runs.length - i}</span>
                         <StatusBadge status={run.finalDecision ?? run.qcDecision ?? ""} size="xs" />
@@ -162,7 +162,7 @@ function FileHistoryDrawer({
                 <div className="relative border-l border-white/10 pl-4 space-y-3">
                   {data.events.map(e => (
                     <div key={e.id} className="relative">
-                      <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-slate-700 ring-2 ring-[#0E1318]" />
+                      <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-slate-700 ring-2 ring-sunken" />
                       <div className="text-[11px] text-slate-400">{e.eventType.replace(/_/g, " ")}</div>
                       {e.outcome && <div className="text-[10px] text-slate-600">{e.outcome}</div>}
                       {e.occurredAt && (
@@ -221,8 +221,8 @@ function AssignDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
-      <div className="flex h-full w-full max-w-[460px] flex-col bg-[#0E1318] shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0E1318] px-5 py-3.5">
+      <div className="flex h-full w-full max-w-[460px] flex-col bg-sunken shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-sunken px-5 py-3.5">
           <div className="flex items-center gap-2">
             <Link2 size={15} className="text-orange-400" />
             <span className="text-sm font-semibold text-white">Assign to Appraisal</span>
@@ -245,14 +245,14 @@ function AssignDrawer({
               Select appraisal to link this file to
             </label>
             {appraisals.length === 0 ? (
-              <div className="rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-[12px] text-slate-500">
+              <div className="rounded-md border border-white/10 bg-sunken px-3 py-2 text-[12px] text-slate-500">
                 No appraisals found in this batch.
               </div>
             ) : (
               <select
                 value={selected}
                 onChange={e => { setSelected(e.target.value === "" ? "" : Number(e.target.value)); setMismatch(null); }}
-                className="w-full rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-sm text-slate-200 focus:border-orange-500/50 focus:outline-none"
+                className="w-full rounded-md border border-white/10 bg-sunken px-3 py-2 text-sm text-slate-200 focus:border-orange-500/50 focus:outline-none"
               >
                 <option value="">— choose an appraisal —</option>
                 {appraisals.map(a => (
@@ -271,7 +271,7 @@ function AssignDrawer({
             </div>
           )}
 
-          <div className="rounded-md border border-white/[0.06] bg-[#0B0F14] px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
+          <div className="rounded-md border border-white/[0.06] bg-sunken px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
             After assigning, click <strong className="text-slate-400">Re-QC</strong> on the appraisal row to re-run quality checks with this document included.
           </div>
         </div>
@@ -296,7 +296,7 @@ function AssignDrawer({
           )}
           <button
             onClick={onClose}
-            className="rounded-md border border-white/10 bg-[#11161C] px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
+            className="rounded-md border border-white/10 bg-surface px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
           >
             Cancel
           </button>
@@ -345,8 +345,8 @@ function ReclassifyDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
-      <div className="flex h-full w-full max-w-[420px] flex-col bg-[#0E1318] shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0E1318] px-5 py-3.5">
+      <div className="flex h-full w-full max-w-[420px] flex-col bg-sunken shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-sunken px-5 py-3.5">
           <div className="flex items-center gap-2">
             <RotateCcw size={14} className="text-slate-400" />
             <span className="text-sm font-semibold text-white">Reclassify File</span>
@@ -357,7 +357,7 @@ function ReclassifyDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          <div className="rounded-lg border border-white/10 bg-[#11161C] px-4 py-3">
+          <div className="rounded-lg border border-white/10 bg-surface px-4 py-3">
             <div className="text-sm font-medium text-white truncate">{file.filename}</div>
             <div className="mt-0.5 text-[11px] text-slate-500">
               Current type: <span className="text-slate-300">{fileTypeLabel(file.fileType)}</span>
@@ -369,7 +369,7 @@ function ReclassifyDrawer({
             <select
               value={selected}
               onChange={e => setSelected(e.target.value)}
-              className="w-full rounded-md border border-white/10 bg-[#0B0F14] px-3 py-2 text-sm text-slate-200 focus:border-indigo-500/50 focus:outline-none"
+              className="w-full rounded-md border border-white/10 bg-sunken px-3 py-2 text-sm text-slate-200 focus:border-indigo-500/50 focus:outline-none"
             >
               <option value="">— choose a type —</option>
               {RECLASSIFY_OPTIONS.filter(o => o.value !== file.fileType).map(o => (
@@ -378,7 +378,7 @@ function ReclassifyDrawer({
             </select>
           </div>
 
-          <div className="rounded-md border border-white/[0.06] bg-[#0B0F14] px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
+          <div className="rounded-md border border-white/[0.06] bg-sunken px-3 py-2.5 text-[11px] text-slate-500 leading-relaxed">
             Use this when intake misclassified a file — most commonly a MISMO XML uploaded outside the <code className="text-slate-400">appraisal/</code> folder that was tagged as Contract. After reclassifying, run Re-QC.
           </div>
         </div>
@@ -393,7 +393,7 @@ function ReclassifyDrawer({
           </button>
           <button
             onClick={onClose}
-            className="rounded-md border border-white/10 bg-[#11161C] px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
+            className="rounded-md border border-white/10 bg-surface px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white"
           >
             Cancel
           </button>
@@ -453,7 +453,7 @@ function PropertySetSection({
   const supporting = set.files.filter(f => f.fileType !== "APPRAISAL");
 
   return (
-    <div className={`overflow-hidden rounded-xl border bg-[#11161C] ${isUnlinkedPool ? "border-orange-500/25" : "border-white/10"}`}>
+    <div className={`overflow-hidden rounded-xl border bg-surface ${isUnlinkedPool ? "border-orange-500/25" : "border-white/10"}`}>
       {/* Set header */}
       <div className={`flex w-full items-center justify-between border-b px-5 py-3 text-left ${isUnlinkedPool ? "border-orange-500/15 bg-orange-950/10" : "border-white/10"}`}>
         <button
@@ -466,7 +466,7 @@ function PropertySetSection({
           <span className="font-medium text-white">
             {isUnlinkedPool ? `Unlinked documents${set.setName ? ` — "${set.setName}"` : ""}` : (set.setName ?? "All files")}
           </span>
-          <span className="rounded-full border border-white/10 bg-[#0B0F14] px-2 py-0.5 text-[10px] text-slate-500">
+          <span className="rounded-full border border-white/10 bg-sunken px-2 py-0.5 text-[10px] text-slate-500">
             {set.fileCount} file{set.fileCount !== 1 ? "s" : ""}
           </span>
           {set.errorCount > 0 && (
@@ -605,7 +605,7 @@ function PropertySetSection({
                         <button
                           onClick={() => onReclassify(f)}
                           title="Change document type"
-                          className="inline-flex h-7 items-center gap-1 rounded border border-white/10 bg-[#0B0F14] px-2 text-[11px] text-slate-500 transition-colors hover:text-slate-200"
+                          className="inline-flex h-7 items-center gap-1 rounded border border-white/10 bg-sunken px-2 text-[11px] text-slate-500 transition-colors hover:text-slate-200"
                         >
                           <RotateCcw size={10} /> Reclassify
                         </button>
@@ -626,7 +626,7 @@ function PropertySetSection({
                       <button
                         onClick={() => onHistory(f.id)}
                         title="View file history"
-                        className="inline-flex h-7 items-center gap-1 rounded border border-white/10 bg-[#0B0F14] px-2 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white"
+                        className="inline-flex h-7 items-center gap-1 rounded border border-white/10 bg-sunken px-2 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white"
                       >
                         <History size={10} /> History
                       </button>
@@ -634,7 +634,7 @@ function PropertySetSection({
                       {qc && (
                         <Link
                           href={`/qc-review?id=${qc.id}`}
-                          className="inline-flex h-7 items-center rounded border border-white/10 bg-[#0B0F14] px-2 text-[11px] text-slate-400 transition-colors hover:text-indigo-300"
+                          className="inline-flex h-7 items-center rounded border border-white/10 bg-sunken px-2 text-[11px] text-slate-400 transition-colors hover:text-indigo-300"
                         >
                           Rules ↗
                         </Link>
@@ -741,7 +741,7 @@ export default function BatchDetailPage() {
 
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#161B22]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-muted">
             <Package size={18} className="text-slate-400" />
           </div>
           <div className="min-w-0">
@@ -780,7 +780,7 @@ export default function BatchDetailPage() {
           {batch?.status && <StatusBadge status={batch.status} />}
           <button
             onClick={() => load()}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-[#11161C] px-3 text-xs text-slate-400 transition-colors hover:text-white"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-surface px-3 text-xs text-slate-400 transition-colors hover:text-white"
           >
             <RefreshCw size={12} /> Refresh
           </button>
@@ -840,11 +840,11 @@ export default function BatchDetailPage() {
 
       {/* File sections */}
       {loading ? (
-        <div className="rounded-xl border border-white/10 bg-[#11161C] p-4">
+        <div className="rounded-xl border border-white/10 bg-surface p-4">
           <TableSkeleton rows={6} cols={5} />
         </div>
       ) : files.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-[#11161C]">
+        <div className="rounded-xl border border-white/10 bg-surface">
           <EmptyState icon={FileText} title="No files" description="This batch has no attached files." />
         </div>
       ) : isMultiSet && propertySets.length > 0 ? (
@@ -952,7 +952,7 @@ function Stat({ label, value, icon: Icon, tone = "text-white" }: {
   tone?: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-[#11161C] p-4">
+    <div className="rounded-xl border border-white/10 bg-surface p-4">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
         <Icon size={13} /> {label}
       </div>

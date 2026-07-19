@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 export default function BatchOrderViewToggle({ active }: { active: "batch" | "order" }) {
   const router = useRouter();
   return (
-    <div className="inline-flex items-center rounded-full border border-white/10 bg-[#0B0F14]/70 p-1 text-xs">
+    <div className="inline-flex items-center rounded-full border border-white/10 bg-sunken/70 p-1 text-xs">
       <button
         onClick={() => router.push("/admin/batches")}
         className={`rounded-full px-3 py-1.5 font-medium transition-colors ${

@@ -62,7 +62,7 @@ export default function ClientsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search clients by name, code, or status..."
-            className="h-9 w-full rounded-md border border-white/10 bg-[#11161C] pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+            className="h-9 w-full rounded-md border border-white/10 bg-surface pl-8 pr-9 text-sm text-white placeholder-slate-600 transition-colors focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-white/[0.04] hover:text-slate-300" aria-label="Clear search">
@@ -79,7 +79,7 @@ export default function ClientsPage() {
           {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
       ) : clients.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-[#11161C]">
+        <div className="rounded-lg border border-white/10 bg-surface">
           <EmptyState
             icon={Building2}
             title="No client organisations"
@@ -93,7 +93,7 @@ export default function ClientsPage() {
           />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-[#11161C]">
+        <div className="rounded-lg border border-white/10 bg-surface">
           <EmptyState
             icon={Search}
             title="No clients match"
@@ -103,7 +103,7 @@ export default function ClientsPage() {
         </div>
       ) : (
         // Dense table over a sparse card grid: scans better and scales to many tenants.
-        <div data-guide="admin-clients-grid" className="overflow-hidden rounded-lg border border-white/10 bg-[#11161C]">
+        <div data-guide="admin-clients-grid" className="overflow-hidden rounded-lg border border-white/10 bg-surface">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-left text-[11px] uppercase tracking-wide text-slate-500">
@@ -122,7 +122,7 @@ export default function ClientsPage() {
                 <tr key={c.id} className="transition-colors hover:bg-white/[0.03]">
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2.5">
-                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/10 bg-[#161B22] text-xs font-bold text-slate-300">
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/10 bg-muted text-xs font-bold text-slate-300">
                         {c.name[0].toUpperCase()}
                       </span>
                       <Link href={`/admin/clients/${c.id}`} className="font-medium text-slate-200 transition-colors hover:text-white hover:underline">{c.name}</Link>
@@ -133,7 +133,7 @@ export default function ClientsPage() {
                     <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${
                       c.status === "ACTIVE"
                         ? "bg-green-950/40 border-green-500/25 text-green-200"
-                        : "bg-[#161B22] border-white/10 text-slate-500"
+                        : "bg-muted border-white/10 text-slate-500"
                     }`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${c.status === "ACTIVE" ? "bg-green-400" : "bg-slate-500"}`} />
                       {c.status ?? "Active"}
@@ -176,7 +176,7 @@ function ClientSummary({ icon: Icon, label, value, tone }: {
 }) {
   const styles = tone === "green"
     ? "border-green-500/25 bg-green-950/30 text-green-200"
-    : "border-white/10 bg-[#11161C] text-slate-300";
+    : "border-white/10 bg-surface text-slate-300";
   return (
     <div className={`flex h-9 items-center gap-2 rounded-lg border px-3 ${styles}`}>
       <Icon size={14} className="opacity-80" />

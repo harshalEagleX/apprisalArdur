@@ -96,9 +96,9 @@ export default function AuditListView({
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#080C10]">
+    <div className="flex-1 flex flex-col overflow-hidden bg-background">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-white/8 bg-[#0d1117]">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-white/8 bg-sunken">
         <span className="text-[11px] text-slate-500 tabular-nums">
           {sorted.length.toLocaleString()} / {nodes.length.toLocaleString()} nodes
         </span>
@@ -107,7 +107,7 @@ export default function AuditListView({
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="bg-[#161b22] border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-slate-300 outline-none"
+            className="bg-muted border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-slate-300 outline-none"
           >
             <option value="">All</option>
             {types.map(t => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
@@ -118,7 +118,7 @@ export default function AuditListView({
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-[#0d1117] z-10">
+          <thead className="sticky top-0 bg-sunken z-10">
             <tr className="text-[10px] text-slate-600 uppercase tracking-wider">
               <th className="text-left px-4 py-2 w-8">&nbsp;</th>
               <th

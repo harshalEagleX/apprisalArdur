@@ -75,7 +75,7 @@ export function Dialog({
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         className={cn(
-          "relative w-full max-w-lg rounded-lg border border-white/10 bg-[#11161C] p-5 text-slate-100 shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none",
+          "relative w-full max-w-lg rounded-lg border border-white/10 bg-surface p-5 text-slate-100 shadow-[0_22px_60px_rgba(0,0,0,0.46)] focus:outline-none",
           className
         )}
       >

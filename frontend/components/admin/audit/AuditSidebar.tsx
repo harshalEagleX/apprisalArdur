@@ -60,7 +60,7 @@ export default function AuditSidebar({
   };
 
   return (
-    <aside className="w-64 flex-shrink-0 flex flex-col border-r border-white/10 bg-[#0d1117] overflow-y-auto">
+    <aside className="w-64 flex-shrink-0 flex flex-col border-r border-white/10 bg-sunken overflow-y-auto">
 
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/10">
@@ -89,7 +89,7 @@ export default function AuditSidebar({
             onChange={e => onSearchChange(e.target.value)}
             onKeyDown={e => e.key === "Enter" && onSearch()}
             placeholder="Batch ID, subject address, file, reviewer, client…"
-            className="w-full bg-[#161b22] border border-white/10 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-300 placeholder-slate-600 outline-none focus:border-indigo-500/60 transition-colors"
+            className="w-full bg-muted border border-white/10 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-300 placeholder-slate-600 outline-none focus:border-indigo-500/60 transition-colors"
           />
           {search && (
             <button onClick={onClear} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
@@ -120,7 +120,7 @@ export default function AuditSidebar({
               className={`flex flex-col items-center gap-0.5 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
                 viewMode === mode
                   ? "bg-indigo-600 text-white"
-                  : "bg-[#161b22] text-slate-400 hover:text-white border border-white/8"
+                  : "bg-muted text-slate-400 hover:text-white border border-white/8"
               }`}
             >
               <Icon size={11} />
@@ -147,7 +147,7 @@ export default function AuditSidebar({
               <button
                 key={b.id}
                 onClick={() => onSelectBatch(b.id)}
-                className="w-full text-left px-2 py-1.5 rounded text-[11px] bg-[#161b22] hover:bg-white/5 text-slate-300 border border-white/5 flex items-center gap-1.5 overflow-hidden"
+                className="w-full text-left px-2 py-1.5 rounded text-[11px] bg-muted hover:bg-white/5 text-slate-300 border border-white/5 flex items-center gap-1.5 overflow-hidden"
               >
                 <GitBranch size={9} className="text-indigo-400 flex-shrink-0" />
                 <span className="font-medium truncate">{b.parentBatchId}</span>
@@ -177,7 +177,7 @@ export default function AuditSidebar({
               <select
                 value={filterStatus}
                 onChange={e => onFilterStatus(e.target.value)}
-                className="w-full bg-[#161b22] border border-white/10 rounded px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-indigo-500/50"
+                className="w-full bg-muted border border-white/10 rounded px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-indigo-500/50"
               >
                 <option value="">All statuses</option>
                 {["UPLOADED","QC_PROCESSING","REVIEW_PENDING","IN_REVIEW","COMPLETED","ERROR"].map(s => (
@@ -194,7 +194,7 @@ export default function AuditSidebar({
               </button>
               <button
                 onClick={onClear}
-                className="py-1 px-2 rounded bg-[#161b22] border border-white/10 text-xs text-slate-400 hover:text-white transition-colors"
+                className="py-1 px-2 rounded bg-muted border border-white/10 text-xs text-slate-400 hover:text-white transition-colors"
               >
                 Reset
               </button>

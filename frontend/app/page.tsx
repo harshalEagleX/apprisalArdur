@@ -19,11 +19,11 @@ export default function RootPage() {
     <main className="foundation-grid relative min-h-screen overflow-hidden bg-slate-950 px-6 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(226,232,240,0.04),transparent_32%),linear-gradient(to_bottom,rgba(5,7,10,0.72),rgba(5,7,10,0.86))]" />
       <div className="relative flex min-h-screen items-center justify-center">
-        <div className="w-full max-w-sm rounded-lg border border-white/10 bg-[#11161C]/95 p-6 text-center shadow-[0_22px_60px_rgba(0,0,0,0.36)] backdrop-blur">
+        <div className="w-full max-w-sm rounded-lg border border-white/10 bg-surface/95 p-6 text-center shadow-[0_22px_60px_rgba(0,0,0,0.36)] backdrop-blur">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-slate-500/25 bg-slate-950/35 shadow-[0_0_28px_rgba(226,232,240,0.18)]">
             <ShieldCheck size={21} className="text-slate-300" />
           </div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-[#161B22] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             <BrainCircuit size={11} />
             Session intelligence
           </div>

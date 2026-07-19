@@ -22,7 +22,7 @@ function PasswordInput({ label, value, onChange, required }: {
           value={value}
           onChange={e => onChange(e.target.value)}
           required={required}
-          className="h-10 w-full rounded-lg border border-white/10 bg-[#0B0F14]/70 pl-3.5 pr-10 text-sm text-white placeholder-slate-600 transition focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+          className="h-10 w-full rounded-lg border border-white/10 bg-sunken/70 pl-3.5 pr-10 text-sm text-white placeholder-slate-600 transition focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
         />
         <button
           type="button"
@@ -43,7 +43,7 @@ function Card({ title, icon: Icon, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]">
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-surface">
       <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-3.5">
         <Icon size={15} className="shrink-0 text-slate-400" />
         <h2 className="text-sm font-semibold text-white">{title}</h2>
@@ -142,10 +142,10 @@ export default function ReviewerProfilePage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left: identity */}
         <div className="space-y-5 lg:col-span-1">
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#11161C]">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-surface">
             <div className="flex flex-col items-center px-6 py-8 text-center">
               {loading ? <Skeleton className="h-20 w-20 rounded-full" /> : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-[#161B22] text-3xl font-bold text-slate-200">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-muted text-3xl font-bold text-slate-200">
                   {initial}
                 </div>
               )}
@@ -214,13 +214,13 @@ export default function ReviewerProfilePage() {
                     <label className="mb-1.5 block text-sm font-medium text-slate-300">Full name</label>
                     <input type="text" value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))}
                       placeholder="Your display name"
-                      className="h-10 w-full rounded-lg border border-white/10 bg-[#0B0F14]/70 px-3.5 text-sm text-white placeholder-slate-600 transition focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
+                      className="h-10 w-full rounded-lg border border-white/10 bg-sunken/70 px-3.5 text-sm text-white placeholder-slate-600 transition focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-slate-300">Email address</label>
                     <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
                       placeholder="you@example.com"
-                      className="h-10 w-full rounded-lg border border-white/10 bg-[#0B0F14]/70 px-3.5 text-sm text-white placeholder-slate-600 transition focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
+                      className="h-10 w-full rounded-lg border border-white/10 bg-sunken/70 px-3.5 text-sm text-white placeholder-slate-600 transition focus:border-slate-500/70 focus:outline-none focus:ring-2 focus:ring-slate-500/30" />
                   </div>
                 </div>
                 <PrimaryBtn loading={editSaving} label="Save changes" loadingLabel="Saving…" />
@@ -255,8 +255,8 @@ export default function ReviewerProfilePage() {
                 { key: "assigned",  label: "Batch assigned to me",    sub: "When admin assigns a batch for your review" },
                 { key: "reassign",  label: "Re-review notifications",  sub: "When a batch is re-assigned or updated" },
               ].map(item => (
-                <label key={item.key} className="flex cursor-pointer items-center gap-4 rounded-lg border border-white/[0.06] bg-[#0B0F14]/50 px-4 py-3.5 transition hover:border-white/10">
-                  <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-white/20 bg-[#11161C] accent-indigo-500" />
+                <label key={item.key} className="flex cursor-pointer items-center gap-4 rounded-lg border border-white/[0.06] bg-sunken/50 px-4 py-3.5 transition hover:border-white/10">
+                  <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-white/20 bg-surface accent-indigo-500" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-slate-200">{item.label}</div>
                     <div className="mt-0.5 text-xs text-slate-500">{item.sub}</div>

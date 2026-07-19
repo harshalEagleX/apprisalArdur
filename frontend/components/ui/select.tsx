@@ -117,7 +117,7 @@ export function Select({
           setOpen(next => !next)
         }}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-md border bg-[#11161C] px-3 text-left text-sm text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/45 disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-10 w-full items-center justify-between gap-2 rounded-md border bg-surface px-3 text-left text-sm text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/45 disabled:cursor-not-allowed disabled:opacity-50",
           invalid
             ? "border-red-500/70 focus-visible:ring-red-500/35"
             : "border-white/10 hover:border-white/16"
@@ -130,7 +130,7 @@ export function Select({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-lg border border-white/10 bg-[#11161C] shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
+        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-lg border border-white/10 bg-surface shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
           <div className="flex items-center gap-2 border-b border-white/10 px-2.5 py-2">
             <Search size={13} className="text-slate-600" />
             <input

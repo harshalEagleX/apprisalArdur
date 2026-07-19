@@ -135,7 +135,7 @@ class BatchStatusDeterminationTest {
     private static ShalqcCard scopedCard(String itemId, String scope) {
         return new ShalqcCard(itemId, "looks_good", "SUBJECT", "SATISFIED", "Test rule",
                 "check", "check", null, "ok", "", "", "ok", List.of(), null, Map.of(),
-                null, 0.9, scope, List.of(), "judge_v2", "llm", 0.9, List.of("f"), null,
+                null, 0.9, scope, false, List.of(), "judge_v2", "llm", 0.9, List.of("f"), null,
                 "informational");
     }
 

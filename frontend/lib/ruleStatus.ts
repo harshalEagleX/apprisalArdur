@@ -34,8 +34,8 @@ export const STATUS_STYLE: Record<string, StatusStyle> = {
 
 export const SEV_STYLE: Record<string, string> = {
   BLOCKING: "bg-red-950/50 border-red-500/25 text-red-200",
-  STANDARD: "bg-[#161B22] border-white/10 text-slate-400",
-  ADVISORY: "bg-[#161B22]/70 border-white/10 text-slate-500",
+  STANDARD: "bg-muted border-white/10 text-slate-400",
+  ADVISORY: "bg-muted/70 border-white/10 text-slate-500",
 };
 
 /**
