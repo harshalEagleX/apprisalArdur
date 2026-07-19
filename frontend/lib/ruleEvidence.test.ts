@@ -19,8 +19,16 @@ import {
 } from "@/lib/ruleEvidence";
 import type { QCRuleResult } from "@/lib/api";
 
-/** Minimal rule; every field the module reads is overridable. */
-function rule(over: Partial<QCRuleResult> = {}): QCRuleResult {
+/**
+ * Minimal rule; every field the module reads is overridable.
+ *
+ * `evidence` is typed loosely on purpose: parseEvidence accepts THREE shapes at
+ * runtime — a structured array, legacy "doc: value (95%)" strings, and a
+ * JSON-string blob — and the tests must be able to feed all three.
+ */
+type RuleOverrides = Partial<Omit<QCRuleResult, "evidence">> & { evidence?: unknown };
+
+function rule(over: RuleOverrides = {}): QCRuleResult {
   return {
     id: 1,
     ruleId: "S-1",
@@ -29,7 +37,7 @@ function rule(over: Partial<QCRuleResult> = {}): QCRuleResult {
     message: "mismatch",
     reviewRequired: true,
     ...over,
-  } as QCRuleResult;
+  } as unknown as QCRuleResult;
 }
 
 // ── documentLabel ───────────────────────────────────────────────────────────
@@ -128,7 +136,7 @@ describe("parseEvidence — structured entries", () => {
   it("reads the full structured shape", () => {
     const [s] = parseEvidence(rule({
       evidence: [{ document: "appraisal", value: "1,850", comparable: "Comp 1",
-                   confidence: 0.9, page: 3, method: "xml" }] as never,
+                   confidence: 0.9, page: 3, method: "xml" }],
     }));
     expect(s).toMatchObject({
       document: "appraisal", label: "Appraisal report", value: "1,850",
@@ -137,14 +145,14 @@ describe("parseEvidence — structured entries", () => {
   });
 
   it("coerces a non-string value rather than dropping it", () => {
-    const [s] = parseEvidence(rule({ evidence: [{ document: "appraisal", value: 1850 }] as never }));
+    const [s] = parseEvidence(rule({ evidence: [{ document: "appraisal", value: 1850 }] }));
     expect(s.value).toBe("1850");
   });
 
   it("drops an entry with no document or no value", () => {
-    expect(parseEvidence(rule({ evidence: [{ value: "x" }] as never }))).toEqual([]);
-    expect(parseEvidence(rule({ evidence: [{ document: "appraisal" }] as never }))).toEqual([]);
-    expect(parseEvidence(rule({ evidence: [null, 42, true] as never }))).toEqual([]);
+    expect(parseEvidence(rule({ evidence: [{ value: "x" }] }))).toEqual([]);
+    expect(parseEvidence(rule({ evidence: [{ document: "appraisal" }] }))).toEqual([]);
+    expect(parseEvidence(rule({ evidence: [null, 42, true] }))).toEqual([]);
   });
 
   it("parses evidence delivered as a JSON string blob (legacy rows)", () => {
@@ -163,7 +171,8 @@ describe("parseEvidence — structured entries", () => {
 describe("parseEvidence — de-duplication", () => {
   it("collapses identical repeated evidence", () => {
     const out = parseEvidence(rule({
-      evidence: ["appraisal: 123 Main St (95%)", "appraisal: 123 Main St (95%)"],
+      evidence: ["appraisal: 123 Main St (95%)",
+                 "appraisal: 123 Main St (95%)"],
     }));
     expect(out).toHaveLength(1);
   });
@@ -175,7 +184,7 @@ describe("parseEvidence — de-duplication", () => {
       evidence: [
         { document: "appraisal", value: "6000 sf", comparable: "Comp 1" },
         { document: "appraisal", value: "6000 sf", comparable: "Comp 2" },
-      ] as never,
+      ],
     }));
     expect(out).toHaveLength(2);
   });
@@ -256,7 +265,7 @@ describe("buildEvidenceModel", () => {
       evidence: [
         { document: "appraisal", value: "1,850", comparable: "Comp 1" },
         { document: "appraisal", value: "2,140", comparable: "Comp 2" },
-      ] as never,
+      ],
     }));
     expect(m.mode).toBe("compare");
     expect(m.headline).toContain("within");
