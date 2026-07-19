@@ -1180,6 +1180,11 @@ export interface QCRuleResult {
   acknowledgedReferences?: boolean;
   verifiedAt?: string | null;
   severity?: string;
+  // The text verdict on this finding stands on its own, but the check ALSO rests on
+  // photos/sketch the engine cannot see — the reviewer must confirm the image by eye.
+  // Distinct from cardGroup === "manual_visual", which is a wholly manual card with
+  // no text verdict at all.
+  photoVerificationRequired?: boolean;
   // Slim finding contract — backend-owned, generated at QC eval time. The collapsed
   // reviewer row renders from these instead of deriving a one-liner client-side.
   summary?: string | null;

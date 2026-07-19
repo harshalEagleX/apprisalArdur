@@ -99,6 +99,27 @@ class ShalqcRoundTripRegressionTest {
     }
 
     @Test
+    void photoVerificationFlagSurvivesTheRoundTripAndStaysNullWhenAbsent() throws Exception {
+        // A check with BOTH a text and a photo aspect: the text verdict stands, and
+        // the reviewer is additionally told to confirm the image by eye. The flag has
+        // to reach the UI or that instruction is silently lost.
+        ShalqcCard withPhoto = om.readValue(
+                "{\"item_id\":\"EQ-68\",\"group\":\"please_verify\",\"status\":\"SATISFIED\","
+                        + "\"photo_verification_required\":true}",
+                ShalqcCard.class);
+        assertThat(mapper.toRuleResult(withPhoto).getPhotoVerificationRequired())
+                .as("photo flag reaches the reviewer row").isTrue();
+
+        // A card from an older Python build has no such key. It must stay NULL
+        // ("unknown"), never silently read as "no photo needed" — hence Boolean.
+        ShalqcCard legacy = om.readValue(
+                "{\"item_id\":\"EQ-1\",\"group\":\"please_verify\",\"status\":\"REVIEW\"}",
+                ShalqcCard.class);
+        assertThat(mapper.toRuleResult(legacy).getPhotoVerificationRequired())
+                .as("absent key stays null, not false").isNull();
+    }
+
+    @Test
     void roundTripMapsEveryCardAndReportsGaps() throws Exception {
         ShalqcResponse resp = load();
 
@@ -188,6 +209,7 @@ class ShalqcRoundTripRegressionTest {
         fieldHomes.put("llm_interaction_id", "llmInteractionId ✓");
         fieldHomes.put("check_text / description", "checkText column ✓");
         fieldHomes.put("guardrails", "details json ✓");
+        fieldHomes.put("photo_verification_required", "photoVerificationRequired column ✓ (→ UI photo chip)");
         fieldHomes.put("bound_labels (full list)", "details json ✓ (first also in targetField)");
         fieldHomes.put("values (label→value map)", "details json ✓ (evidence also carries located values)");
         fieldHomes.put("headline", "folded into message fallback");

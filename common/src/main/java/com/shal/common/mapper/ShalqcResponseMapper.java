@@ -100,6 +100,9 @@ public class ShalqcResponseMapper {
         r.setBinderConfidence(c.binderConfidence());
         r.setLlmInteractionId(c.llmInteractionId());
         r.setScope(c.judgeable());
+        // Boolean, not boolean: a card from an older Python build has no such key and
+        // must stay null ("unknown") rather than silently read as "no photo needed".
+        r.setPhotoVerificationRequired(c.photoVerificationRequired());
 
         // coordinates for the document auto-scroll
         applyLocation(r, c.primaryLocation());

@@ -198,6 +198,16 @@ public class QCRuleResult {
     @Column(name = "llm_interaction_id", length = 40)
     private String llmInteractionId;
 
+    /**
+     * The check also depends on photos/sketch the judge cannot see, so its text
+     * verdict stands but a human must confirm the image by eye. Distinct from
+     * {@code scope == "visual"}, which is a WHOLLY manual card carrying no text
+     * verdict at all. Null for rows written before this column existed —
+     * ddl-auto=update adds the nullable column on first startup.
+     */
+    @Column(name = "photo_verification_required")
+    private Boolean photoVerificationRequired;
+
     public QCRuleResult() {
     }
 
@@ -508,6 +518,11 @@ public class QCRuleResult {
 
     public String getScope() { return scope; }
     public void setScope(String scope) { this.scope = scope; }
+
+    public Boolean getPhotoVerificationRequired() { return photoVerificationRequired; }
+    public void setPhotoVerificationRequired(Boolean photoVerificationRequired) {
+        this.photoVerificationRequired = photoVerificationRequired;
+    }
 
     public String getTargetField() {
         return targetField;

@@ -36,6 +36,11 @@ public record ShalqcCard(
         @JsonProperty("suggested_wording") String suggestedWording,
         Double confidence,
         String judgeable,
+        // The check ALSO depends on photos/sketch the judge cannot see, so its text
+        // verdict stands but a human must confirm the image (SHALqc run._card).
+        // Distinct from judgeable="visual", which is a WHOLLY manual card: this one
+        // carries a real text verdict AND the photo note.
+        @JsonProperty("photo_verification_required") Boolean photoVerificationRequired,
         List<String> guardrails,
         @JsonProperty("decided_by") String decidedBy,
         @JsonProperty("bound_by")   String boundBy,

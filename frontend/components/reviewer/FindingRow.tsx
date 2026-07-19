@@ -7,6 +7,7 @@ import {
   X,
   Save,
   CheckCircle2,
+  Camera,
 } from "lucide-react";
 import type { QCRuleResult, RuleDetail } from "@/lib/api";
 import { getRuleDetail } from "@/lib/api";
@@ -256,6 +257,18 @@ export const FindingRow = memo(function FindingRow({
           </span>
         )}
 
+        {/* The verdict beside this is real and stands on its own; the check ALSO
+            depends on photos the engine cannot see. Icon-only here to keep the
+            48px row uncluttered — the expanded panel spells it out. */}
+        {rule.photoVerificationRequired && (
+          <span
+            className="hidden sm:inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-sky-500/30 bg-sky-950/40 px-2 py-0.5 text-[11px] font-medium text-sky-200"
+            title="Check the photos/sketch by eye — the automated verdict covers only the text part of this check."
+          >
+            <Camera size={10} aria-hidden /> Photo
+          </span>
+        )}
+
         <span
           className={`hidden sm:inline-flex flex-shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${s.chip}`}
         >
@@ -312,6 +325,19 @@ export const FindingRow = memo(function FindingRow({
           {/* Plain-language explanation — one short paragraph, no "Reasoning:" prefix. */}
           {explanation && explanation.trim() && (
             <p className="text-xs leading-relaxed text-slate-400">{explanation}</p>
+          )}
+
+          {/* Spelled out on expand: the reviewer is about to accept or reject, and
+              must know the verdict above covers only what the engine could READ. */}
+          {rule.photoVerificationRequired && (
+            <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-950/25 px-2.5 py-2">
+              <Camera size={13} className="mt-0.5 flex-shrink-0 text-sky-300" aria-hidden />
+              <p className="text-xs leading-relaxed text-sky-100">
+                This check also depends on photos or the sketch, which the automated
+                review cannot see. The result above covers the written values only —
+                please confirm the images before you decide.
+              </p>
+            </div>
           )}
 
           {/* Decision controls — ported from RuleCard so the review flow is unchanged. */}

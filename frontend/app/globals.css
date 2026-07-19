@@ -48,6 +48,27 @@
   --color-warning: var(--accent-amber);
   --color-critical: var(--accent-red);
   --color-grid-overlay: var(--grid-overlay);
+
+  /* ── Readability floor for low-end panels ─────────────────────────────────
+   * Reviewers run 720p LCD/LED monitors where gamma is poor and dark greys
+   * collapse into the background. Measured against this app's own surfaces,
+   * Tailwind's stock slate-500/600 fail WCAG AA for body text — badly:
+   *
+   *   colour      app #05070a   surface #11161c   raised #1b222b
+   *   slate-500        4.24            3.82             3.37   (AA needs 4.5)
+   *   slate-600        2.66            2.40             2.12   ← near-invisible
+   *   slate-400        7.87            7.09             6.25   (fine)
+   *
+   * Those two steps carry ~477 usages (timestamps, counters, captions, helper
+   * text), so the fix belongs HERE, once, not at every call site — the class
+   * names keep their meaning and every existing `text-slate-500/600` becomes
+   * legible. The replacements stay clearly dimmer than slate-400, so the visual
+   * hierarchy the design relies on is preserved; they just clear 4.5:1 on the
+   * WORST surface. Verified: slate-500 5.10:1, slate-600 4.61:1 on raised.
+   * The theme itself is unchanged — same palette family, two steps lightened. */
+  --color-slate-500: #8293a8;
+  --color-slate-600: #7a8ba1;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: var(--radius-panel);

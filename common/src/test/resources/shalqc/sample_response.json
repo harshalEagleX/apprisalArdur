@@ -4,124 +4,342 @@
   "status": "OK",
   "verdict_vocab": "v2",
   "summary": {
-    "satisfied": 1, "not_satisfied": 1, "review": 1,
-    "not_applicable": 1, "cannot_evaluate": 0, "manual_visual": 1, "extraction_gaps": 0
+    "satisfied": 1,
+    "not_satisfied": 1,
+    "review": 1,
+    "not_applicable": 1,
+    "cannot_evaluate": 0,
+    "manual_visual": 1,
+    "extraction_gaps": 0
   },
   "cards": [
     {
-      "item_id": "EQ-B", "group": "recommended_reject", "section": "order",
-      "status": "NOT_SATISFIED", "item_name": "Transaction type",
+      "item_id": "EQ-B",
+      "group": "recommended_reject",
+      "section": "order",
+      "status": "NOT_SATISFIED",
+      "item_name": "Transaction type",
       "check_text": "Transaction type — Loan type on order form match with Assignment Type",
       "description": "Transaction type — Loan type on order form match with Assignment Type",
       "reject_text": "Loan type does not match assignment type.",
       "headline": "Recommended reject — Transaction type",
-      "expected": "match", "found": "Conventional vs Purchase",
+      "expected": "match",
+      "found": "Conventional vs Purchase",
       "reviewer_line": "Loan type Conventional does not match the assignment; recommend reject or override.",
       "evidence": [
-        {"label": "loan_type", "value": "Conventional", "quote": "Conventional",
-         "page": 11, "bbox": {"x": 0.12, "y": 0.29, "w": 0.065, "h": 0.009},
-         "location_quality": "exact", "source": "Source.PDF_DIGITAL", "source_badge": "Order form", "confidence": 0.92}
+        {
+          "label": "loan_type",
+          "value": "Conventional",
+          "quote": "Conventional",
+          "page": 11,
+          "bbox": {
+            "x": 0.12,
+            "y": 0.29,
+            "w": 0.065,
+            "h": 0.009
+          },
+          "location_quality": "exact",
+          "source": "Source.PDF_DIGITAL",
+          "source_badge": "Order form",
+          "confidence": 0.92
+        }
       ],
-      "primary_location": {"page": 11, "bbox": {"x": 0.12, "y": 0.29, "w": 0.065, "h": 0.009},
-                           "label": "loan_type", "location_quality": "exact"},
-      "values": {"loan_type": "Conventional"},
+      "primary_location": {
+        "page": 11,
+        "bbox": {
+          "x": 0.12,
+          "y": 0.29,
+          "w": 0.065,
+          "h": 0.009
+        },
+        "label": "loan_type",
+        "location_quality": "exact"
+      },
+      "values": {
+        "loan_type": "Conventional"
+      },
       "suggested_wording": "Loan type does not match assignment type.",
-      "confidence": 0.95, "judgeable": "text", "guardrails": [],
-      "decided_by": "judge_v2", "bound_by": "llm", "binder_confidence": 0.95,
-      "bound_labels": ["loan_type", "assignment_type"], "llm_interaction_id": "iid-eqb-1"
+      "confidence": 0.95,
+      "judgeable": "text",
+      "guardrails": [],
+      "decided_by": "judge_v2",
+      "bound_by": "llm",
+      "binder_confidence": 0.95,
+      "bound_labels": [
+        "loan_type",
+        "assignment_type"
+      ],
+      "llm_interaction_id": "iid-eqb-1"
     },
     {
-      "item_id": "EQ-C", "group": "please_verify", "section": "subject",
-      "status": "REVIEW", "item_name": "Property Address",
+      "item_id": "EQ-C",
+      "group": "please_verify",
+      "section": "subject",
+      "status": "REVIEW",
+      "item_name": "Property Address",
       "check_text": "Property Address must match the engagement letter.",
       "description": "Property Address must match the engagement letter.",
-      "reject_text": null, "headline": "Please verify — Property Address",
-      "expected": "match", "found": "unclear",
+      "reject_text": null,
+      "headline": "Please verify — Property Address",
+      "expected": "match",
+      "found": "unclear",
       "reviewer_line": "Verify the subject address against the engagement letter.",
       "evidence": [
-        {"label": "property_address", "value": "123 Test St", "quote": null,
-         "page": 1, "bbox": {"x": 0.1, "y": 0.15, "w": 0.3, "h": 0.01},
-         "location_quality": "exact", "source": "Source.XML", "source_badge": "XML", "confidence": 0.97}
+        {
+          "label": "property_address",
+          "value": "123 Test St",
+          "quote": null,
+          "page": 1,
+          "bbox": {
+            "x": 0.1,
+            "y": 0.15,
+            "w": 0.3,
+            "h": 0.01
+          },
+          "location_quality": "exact",
+          "source": "Source.XML",
+          "source_badge": "XML",
+          "confidence": 0.97
+        }
       ],
-      "primary_location": {"page": 1, "bbox": {"x": 0.1, "y": 0.15, "w": 0.3, "h": 0.01},
-                           "label": "property_address", "location_quality": "exact"},
-      "values": {"property_address": "123 Test St"},
-      "suggested_wording": null, "confidence": 0.5, "judgeable": "text", "guardrails": ["low_judge_confidence"],
-      "decided_by": "judge_v2", "bound_by": "llm", "binder_confidence": 0.9,
-      "bound_labels": ["property_address"], "llm_interaction_id": "iid-eqc-1"
+      "primary_location": {
+        "page": 1,
+        "bbox": {
+          "x": 0.1,
+          "y": 0.15,
+          "w": 0.3,
+          "h": 0.01
+        },
+        "label": "property_address",
+        "location_quality": "exact"
+      },
+      "values": {
+        "property_address": "123 Test St"
+      },
+      "suggested_wording": null,
+      "confidence": 0.5,
+      "judgeable": "text",
+      "guardrails": [
+        "low_judge_confidence"
+      ],
+      "decided_by": "judge_v2",
+      "bound_by": "llm",
+      "binder_confidence": 0.9,
+      "bound_labels": [
+        "property_address"
+      ],
+      "llm_interaction_id": "iid-eqc-1",
+      "photo_verification_required": true
     },
     {
-      "item_id": "EQ-Z", "group": "looks_good", "section": "site",
-      "status": "SATISFIED", "item_name": "Zoning Compliance",
+      "item_id": "EQ-Z",
+      "group": "looks_good",
+      "section": "site",
+      "status": "SATISFIED",
+      "item_name": "Zoning Compliance",
       "check_text": "Zoning compliance box must be marked.",
       "description": "Zoning compliance box must be marked.",
-      "reject_text": null, "headline": "Zoning Compliance",
-      "expected": "Legal", "found": "Legal",
+      "reject_text": null,
+      "headline": "Zoning Compliance",
+      "expected": "Legal",
+      "found": "Legal",
       "reviewer_line": "Zoning marked Legal — satisfied.",
       "evidence": [
-        {"label": "zoning_compliance", "value": "Legal", "quote": "Legal",
-         "page": 2, "bbox": {"x": 0.2, "y": 0.4, "w": 0.05, "h": 0.01},
-         "location_quality": "region", "source": "Source.XML", "source_badge": "XML", "confidence": 0.97}
+        {
+          "label": "zoning_compliance",
+          "value": "Legal",
+          "quote": "Legal",
+          "page": 2,
+          "bbox": {
+            "x": 0.2,
+            "y": 0.4,
+            "w": 0.05,
+            "h": 0.01
+          },
+          "location_quality": "region",
+          "source": "Source.XML",
+          "source_badge": "XML",
+          "confidence": 0.97
+        }
       ],
-      "primary_location": {"page": 2, "bbox": {"x": 0.2, "y": 0.4, "w": 0.05, "h": 0.01},
-                           "label": "zoning_compliance", "location_quality": "region"},
-      "values": {"zoning_compliance": "Legal"},
-      "suggested_wording": null, "confidence": 0.9, "judgeable": "text", "guardrails": [],
-      "decided_by": "judge_v2", "bound_by": "llm", "binder_confidence": 0.96,
-      "bound_labels": ["zoning_compliance"], "llm_interaction_id": "iid-eqz-1"
+      "primary_location": {
+        "page": 2,
+        "bbox": {
+          "x": 0.2,
+          "y": 0.4,
+          "w": 0.05,
+          "h": 0.01
+        },
+        "label": "zoning_compliance",
+        "location_quality": "region"
+      },
+      "values": {
+        "zoning_compliance": "Legal"
+      },
+      "suggested_wording": null,
+      "confidence": 0.9,
+      "judgeable": "text",
+      "guardrails": [],
+      "decided_by": "judge_v2",
+      "bound_by": "llm",
+      "binder_confidence": 0.96,
+      "bound_labels": [
+        "zoning_compliance"
+      ],
+      "llm_interaction_id": "iid-eqz-1"
     },
     {
-      "item_id": "EQ-NA", "group": "not_applicable", "section": "income",
-      "status": "NOT_APPLICABLE", "item_name": "Rent Schedule",
+      "item_id": "EQ-NA",
+      "group": "not_applicable",
+      "section": "income",
+      "status": "NOT_APPLICABLE",
+      "item_name": "Rent Schedule",
       "check_text": "Rent schedule required only when income approach is used.",
       "description": "Rent schedule required only when income approach is used.",
-      "reject_text": null, "headline": "Rent Schedule",
-      "expected": "", "found": "",
+      "reject_text": null,
+      "headline": "Rent Schedule",
+      "expected": "",
+      "found": "",
       "reviewer_line": "Income approach not used — not applicable.",
-      "evidence": [], "primary_location": null, "values": {},
-      "suggested_wording": null, "confidence": 0.8, "judgeable": "text", "guardrails": [],
-      "decided_by": "judge_v2", "bound_by": "llm", "binder_confidence": 0.7,
-      "bound_labels": ["indicated_value_income_approach"], "llm_interaction_id": "iid-eqna-1"
+      "evidence": [],
+      "primary_location": null,
+      "values": {},
+      "suggested_wording": null,
+      "confidence": 0.8,
+      "judgeable": "text",
+      "guardrails": [],
+      "decided_by": "judge_v2",
+      "bound_by": "llm",
+      "binder_confidence": 0.7,
+      "bound_labels": [
+        "indicated_value_income_approach"
+      ],
+      "llm_interaction_id": "iid-eqna-1"
     },
     {
-      "item_id": "EQ-PHOTO", "group": "manual_visual", "section": "exhibits",
-      "status": "REVIEW", "item_name": "Subject Photos",
+      "item_id": "EQ-PHOTO",
+      "group": "manual_visual",
+      "section": "exhibits",
+      "status": "REVIEW",
+      "item_name": "Subject Photos",
       "check_text": "Front, rear, and street photos of the subject must be present.",
       "description": "Front, rear, and street photos of the subject must be present.",
-      "reject_text": null, "headline": "Manual visual check — Subject Photos",
-      "expected": "", "found": "",
+      "reject_text": null,
+      "headline": "Manual visual check — Subject Photos",
+      "expected": "",
+      "found": "",
       "reviewer_line": "Manual visual check: subject photos — review by eye.",
-      "evidence": [], "primary_location": null, "values": {},
-      "suggested_wording": null, "confidence": 0.0, "judgeable": "visual", "guardrails": [],
-      "decided_by": "precompiled", "bound_by": "constant", "binder_confidence": 0.0,
-      "bound_labels": [], "llm_interaction_id": null
+      "evidence": [],
+      "primary_location": null,
+      "values": {},
+      "suggested_wording": null,
+      "confidence": 0.0,
+      "judgeable": "visual",
+      "guardrails": [],
+      "decided_by": "precompiled",
+      "bound_by": "constant",
+      "binder_confidence": 0.0,
+      "bound_labels": [],
+      "llm_interaction_id": null
     }
   ],
   "extraction_gaps": [],
   "llm_interactions": [
-    {"id": "iid-eqb-1", "item_id": "EQ-B", "call_type": "judge2:judge_v2:order",
-     "prompt_version": "judge_v2", "batch_id": "order#0", "provider": "together",
-     "model": "openai/gpt-oss-120b", "ms": 25050.0, "cached": false,
-     "request": {"item_id": "EQ-B"}, "response": {"status": "NOT_SATISFIED"},
-     "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-B\",\"status\":\"NOT_SATISFIED\"}]}", "error": null},
-    {"id": "iid-eqc-1", "item_id": "EQ-C", "call_type": "judge2:judge_v2:subject",
-     "prompt_version": "judge_v2", "batch_id": "subject#0", "provider": "together",
-     "model": "openai/gpt-oss-120b", "ms": 21000.0, "cached": false,
-     "request": {"item_id": "EQ-C"}, "response": {"status": "REVIEW"},
-     "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-C\",\"status\":\"REVIEW\"}]}", "error": null},
-    {"id": "iid-eqz-1", "item_id": "EQ-Z", "call_type": "judge2:judge_v2:site",
-     "prompt_version": "judge_v2", "batch_id": "site#0", "provider": "together",
-     "model": "openai/gpt-oss-120b", "ms": 18000.0, "cached": false,
-     "request": {"item_id": "EQ-Z"}, "response": {"status": "SATISFIED"},
-     "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-Z\",\"status\":\"SATISFIED\"}]}", "error": null},
-    {"id": "iid-eqna-1", "item_id": "EQ-NA", "call_type": "judge2:judge_v2:income",
-     "prompt_version": "judge_v2", "batch_id": "income#0", "provider": "together",
-     "model": "openai/gpt-oss-120b", "ms": 15000.0, "cached": false,
-     "request": {"item_id": "EQ-NA"}, "response": {"status": "NOT_APPLICABLE"},
-     "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-NA\",\"status\":\"NOT_APPLICABLE\"}]}", "error": null}
+    {
+      "id": "iid-eqb-1",
+      "item_id": "EQ-B",
+      "call_type": "judge2:judge_v2:order",
+      "prompt_version": "judge_v2",
+      "batch_id": "order#0",
+      "provider": "together",
+      "model": "openai/gpt-oss-120b",
+      "ms": 25050.0,
+      "cached": false,
+      "request": {
+        "item_id": "EQ-B"
+      },
+      "response": {
+        "status": "NOT_SATISFIED"
+      },
+      "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-B\",\"status\":\"NOT_SATISFIED\"}]}",
+      "error": null
+    },
+    {
+      "id": "iid-eqc-1",
+      "item_id": "EQ-C",
+      "call_type": "judge2:judge_v2:subject",
+      "prompt_version": "judge_v2",
+      "batch_id": "subject#0",
+      "provider": "together",
+      "model": "openai/gpt-oss-120b",
+      "ms": 21000.0,
+      "cached": false,
+      "request": {
+        "item_id": "EQ-C"
+      },
+      "response": {
+        "status": "REVIEW"
+      },
+      "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-C\",\"status\":\"REVIEW\"}]}",
+      "error": null
+    },
+    {
+      "id": "iid-eqz-1",
+      "item_id": "EQ-Z",
+      "call_type": "judge2:judge_v2:site",
+      "prompt_version": "judge_v2",
+      "batch_id": "site#0",
+      "provider": "together",
+      "model": "openai/gpt-oss-120b",
+      "ms": 18000.0,
+      "cached": false,
+      "request": {
+        "item_id": "EQ-Z"
+      },
+      "response": {
+        "status": "SATISFIED"
+      },
+      "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-Z\",\"status\":\"SATISFIED\"}]}",
+      "error": null
+    },
+    {
+      "id": "iid-eqna-1",
+      "item_id": "EQ-NA",
+      "call_type": "judge2:judge_v2:income",
+      "prompt_version": "judge_v2",
+      "batch_id": "income#0",
+      "provider": "together",
+      "model": "openai/gpt-oss-120b",
+      "ms": 15000.0,
+      "cached": false,
+      "request": {
+        "item_id": "EQ-NA"
+      },
+      "response": {
+        "status": "NOT_APPLICABLE"
+      },
+      "raw_response": "{\"verdicts\":[{\"item_id\":\"EQ-NA\",\"status\":\"NOT_APPLICABLE\"}]}",
+      "error": null
+    }
   ],
-  "location_metric": {"exact_pct": 66.7, "located": {"exact": 2, "region": 1, "page": 0, "none": 0}, "total_fields": 3},
-  "degradations": ["bundle_not_signed_off:EQUITYSOLUTIONS:draft"],
-  "versions": {"judge_mode": "language", "binder_prompt": "binder_v2", "judge_prompt": "judge_v2"},
-  "fingerprint": "test-fp", "revision_no": 0
+  "location_metric": {
+    "exact_pct": 66.7,
+    "located": {
+      "exact": 2,
+      "region": 1,
+      "page": 0,
+      "none": 0
+    },
+    "total_fields": 3
+  },
+  "degradations": [
+    "bundle_not_signed_off:EQUITYSOLUTIONS:draft"
+  ],
+  "versions": {
+    "judge_mode": "language",
+    "binder_prompt": "binder_v2",
+    "judge_prompt": "judge_v2"
+  },
+  "fingerprint": "test-fp",
+  "revision_no": 0
 }

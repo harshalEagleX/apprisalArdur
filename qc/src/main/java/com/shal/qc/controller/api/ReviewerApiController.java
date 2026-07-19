@@ -504,6 +504,11 @@ public class ReviewerApiController {
                 ruleMap.put("decisionLatencyMs", rule.getDecisionLatencyMs());
                 ruleMap.put("acknowledgedReferences", rule.getAcknowledgedReferences());
                 ruleMap.put("severity",        rule.getSeverity() != null ? rule.getSeverity() : "STANDARD");
+                // The text verdict above stands on its own; this says the check ALSO
+                // rests on photos/sketch the engine cannot see, so the reviewer must
+                // confirm the image by eye before accepting it.
+                ruleMap.put("photoVerificationRequired",
+                        Boolean.TRUE.equals(rule.getPhotoVerificationRequired()));
                 ruleMap.put("verifiedAt",      rule.getVerifiedAt() != null ? rule.getVerifiedAt().toString() : null);
                 ruleMap.put("pdfPage",         rule.getPdfPage());
                 ruleMap.put("bboxX",           rule.getBboxX());
