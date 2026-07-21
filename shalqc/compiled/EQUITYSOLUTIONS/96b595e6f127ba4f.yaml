@@ -949,6 +949,7 @@ items:
   - utilities_water
   - utilities_sewer
   - street_ownership
+  - site_comments
   scope: cross_section
   expects: utilities_gas == True && utilities_electricity == True
   judgeable: text

@@ -133,6 +133,40 @@ def _badge(source: Optional[str]) -> str:
     return _SOURCE_BADGE.get(key, "Report")
 
 
+# An evidence chip is a glance target, not a reading pane. Narrative packet values
+# (neighborhood description, market-conditions commentary, sales-comparison summary,
+# addendum text) run to hundreds of words and were dumped verbatim into the chip,
+# burying the reviewer. Clip the DISPLAY value/quote to a readable lead; the full
+# text stays reachable via the document "show me" scroll (grounding reads the packet
+# directly, so clipping the row is display-only and changes no verdict). Length-based
+# so it is vendor- and field-agnostic — no per-field list to maintain.
+_EVIDENCE_DISPLAY_MAX = 180
+
+
+# Extraction leaves leading noise on narrative fields (". ", "-::-",
+# "-:NEIGHBORHOOD DESCRIPTION:-") — a chip must never lead with garbage. Strip a
+# leading run of punctuation/label noise so the snippet starts on a real word. A
+# a leading "." / "-" / "+" is treated as noise ONLY when it is not the start of a
+# number, so a negative value ("-6.7", "-17.4") keeps its sign and a bare decimal
+# (".2 ac") keeps its value.
+_LEAD_NOISE = re.compile(r"^(?:[\s,;:—–*_#>|]|[.\-+](?!\d))+(?:[A-Z][A-Z /&]{3,}:-?\s*)?")
+
+
+def _clip_display(text: Any) -> Any:
+    if not isinstance(text, str):
+        return text
+    # Clean leading noise on every value (short included) so the chip is always
+    # tidy; fall back to the original if cleaning would empty it.
+    cleaned = _LEAD_NOISE.sub("", text).lstrip() or text
+    if len(cleaned) <= _EVIDENCE_DISPLAY_MAX:
+        return cleaned
+    head = cleaned[:_EVIDENCE_DISPLAY_MAX].rstrip()
+    cut = head.rfind(" ")
+    if cut >= _EVIDENCE_DISPLAY_MAX * 0.6:  # only break on a word if it's not too early
+        head = head[:cut]
+    return head.rstrip(" .,;:—–-") + "…"
+
+
 def _located_evidence(packet: Packet, quotes_by_label: Dict[str, str]) -> List[Dict[str, Any]]:
     """One evidence row per bound packet value, carrying coordinates so the
     frontend can auto-scroll the document. A grounded LLM quote is attached to its
@@ -146,8 +180,8 @@ def _located_evidence(packet: Packet, quotes_by_label: Dict[str, str]) -> List[D
             continue
         rows.append({
             "label": label,
-            "value": entry.get("v"),
-            "quote": quotes_by_label.get(label),
+            "value": _clip_display(entry.get("v")),
+            "quote": _clip_display(quotes_by_label.get(label)),
             "page": entry.get("page"),
             "bbox": entry.get("bbox"),
             "location_quality": entry.get("lq") or "none",

@@ -137,6 +137,23 @@ _UNIT_RE = re.compile(
     r"\.?\s*#?\s*\w*)$",
     re.I,
 )
+# A LABEL-LESS unit designator sitting between the street suffix and the city in a
+# comma-less blob ("691 AUWAHA ST A Haiku HI 96708" → unit "A", city "Haiku"). A
+# single letter, or a short token containing a digit (12, 3B, B2, PH4). Kept tight so
+# a real city word is never mistaken for a unit — the caller only skips it when more
+# tokens (the actual city) still follow.
+_BARE_UNIT_RE = re.compile(r"^(?:[A-Za-z]|[A-Za-z]{0,2}\d{1,5}[A-Za-z]?|PH\d{1,3})$", re.I)
+
+
+def _strip_leading_bare_unit(city: str) -> str:
+    """Drop a label-less unit token the tagger folded onto the front of the city
+    ("A Haiku" → "Haiku", "3B Springfield" → "Springfield"). Only strips while a
+    later word remains, so a genuine single-word city ("Starbuck") or a real
+    multi-word city ("Las Vegas") is never touched."""
+    toks = (city or "").split()
+    while len(toks) > 1 and _BARE_UNIT_RE.match(toks[0]):
+        toks.pop(0)
+    return " ".join(toks)
 
 
 def _label_of(line: str) -> Optional[str]:
@@ -247,9 +264,13 @@ def _split_street_city(head: str) -> Dict[str, str]:
             last_suffix = i
     if last_suffix < 0 or last_suffix >= len(tokens) - 1:
         return {"street": head}          # no suffix, or nothing after it → city unknown (VERIFY)
-    # skip any secondary-unit tokens right after the suffix (they are street)
+    # skip any secondary-unit tokens right after the suffix (they are street). A
+    # label-less unit ("... ST A Haiku") is only skipped while a later token remains
+    # to serve as the city, so the city itself is never consumed.
     j = last_suffix + 1
-    while j < len(tokens) - 0 and _looks_like_unit(tokens[j]):
+    while j < len(tokens) - 1 and (
+        _looks_like_unit(tokens[j]) or _BARE_UNIT_RE.match(tokens[j])
+    ):
         j += 1
     street = " ".join(tokens[:j])
     city = " ".join(tokens[j:]).strip()
@@ -283,7 +304,7 @@ def _usaddress_parse(s: str) -> Dict[str, str]:
         out["property_address"] = " ".join(street_parts)
     city = tagged.get("PlaceName")
     if city and not any(ch.isdigit() for ch in city):
-        out["city"] = city.strip()
+        out["city"] = _strip_leading_bare_unit(city.strip())
     st = (tagged.get("StateName") or "").strip()
     if st:
         out["state"] = _STATE_ABBR.get(st.lower(), st.upper() if st.upper() in _ABBRS else "")

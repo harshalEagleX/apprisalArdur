@@ -81,6 +81,7 @@ def extract_xml(xml_path) -> ExtractedFieldSet:
     _extract_uad_extensions(root, fields)
     # needs addendum_text, which _extract_forms populates above.
     _listing_facts_from_addendum(fields)
+    _site_comments_from_addendum(fields)
 
     for canonical, value in fields.items():
         if value is None:
@@ -261,6 +262,11 @@ def _parse_listing_facts(f: dict, text: str) -> None:
     if _dom:
         f.setdefault("days_on_market", _dom.group(1))
     _ld = re.search(r"(?:listed|dated)\s+(?:on\s+)?(\d{1,2}/\d{1,2}/\d{2,4})", text, re.I)
+    if not _ld:
+        # Many vendors state the listing date POSITIONALLY after the offering price,
+        # with no "listed/dated" keyword: "MLS #410069  -  $1,549,000  -  06/25/2026".
+        # Anchor on "$amount -" so a random date elsewhere in the prose is never grabbed.
+        _ld = re.search(r"\$\s?[\d,]{3,}\s*[-–]\s*(\d{1,2}/\d{1,2}/\d{2,4})", text)
     if _ld:
         f.setdefault("list_date", _ld.group(1))
     _lp = re.search(r"\$\s?([\d,]{3,})", text)
@@ -283,6 +289,28 @@ def _listing_facts_from_addendum(f: dict) -> None:
         return
     _m = re.search(r"-:\s*[^:]*LISTING HISTORY[^:]*:-(.{0,1200})", _add, re.I | re.S)
     _parse_listing_facts(f, _m.group(1) if _m else "")
+
+
+def _site_comments_from_addendum(f: dict) -> None:
+    """The form's Site section carries only short cells; the appraiser's site
+    narrative — including the street-MAINTENANCE comment a private street requires
+    (EQ-32: "The private street ... is maintained by HOA") — lives in the addendum's
+    "-:SITE COMMENTS:-" section. Merge it into site_comments so the judge reads the
+    'why', instead of seeing only street_ownership=Private and firing a false reject.
+    Section-scoped and label-driven, so it stays vendor-agnostic."""
+    add = f.get("addendum_text") or ""
+    if not add:
+        return
+    m = re.search(r"-:\s*SITE\s+COMMENTS?\s*:-\s*(.*?)(?=\n?-:\s*[A-Z]|\Z)", add, re.I | re.S)
+    if not m:
+        return
+    section = re.sub(r"\s+", " ", m.group(1)).strip(" .-")
+    if not section:
+        return
+    existing = (f.get("site_comments") or "").strip()
+    if section in existing:
+        return
+    f["site_comments"] = f"{existing}  {section}".strip() if existing else section
 
 
 def _extract_uad_extensions(root: ET.Element, f: dict) -> None:
@@ -407,6 +435,15 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     f["occupancy_type"]   = _a(prop, "_CurrentOccupancyType")
     f["occupant_status"]  = f["occupancy_type"]
     f["property_rights"]  = _a(prop, "_RightsType")
+    # Unit # (condo/co-op/PUD) — STRUCTURE/_UNIT carries the subject's unit id. Without
+    # it the address-match check (EQ-C) sees the report city ("Haiku") against an
+    # engagement city that folded the unit letter in ("A Haiku") and reads a false
+    # mismatch; the unit is a distinct address component and must be extracted when the
+    # form states one, so the check can reconcile it instead of tripping on it.
+    _unit = prop.find(".//_UNIT")
+    if _unit is not None and _a(_unit, "UnitIdentifier"):
+        f["unit_number"] = _a(_unit, "UnitIdentifier")
+        f["subject_unit"] = f["unit_number"]
     # Legal description — MISMO carries the clean text on PROPERTY/_LEGAL_DESCRIPTION;
     # without this mapping the field fell to a PDF label-proximity grab that returned
     # narrative fragments ("aware", "used, offering price(s),") every time.
@@ -1151,6 +1188,13 @@ def _extract_comp_grid(root: ET.Element, f: dict) -> None:
             # it fell to a PDF grab that returned the grid ROW LABEL, not the value.
             if f.get(f"{pfx}_functional_utility"):
                 f["functional_utility"] = f[f"{pfx}_functional_utility"]
+            # Subject design (style) (EQ-40/EQ-65) — canonical design_style is read
+            # from STRUCTURE/_DesignDescription, which some vendors omit while still
+            # populating the grid's subject-row Design (Style) cell (e.g. "DT1L;SFR").
+            # Backfill from the grid so the check doesn't read "field absent" when the
+            # value is plainly on the form. STRUCTURE wins when it did carry one.
+            if not f.get("design_style") and f.get(f"{pfx}_design_style"):
+                f["design_style"] = f[f"{pfx}_design_style"]
             if prior is not None:
                 _pd = _a(prior, "PropertySalesDate")
                 f["prior_sale_date"]  = _dates.to_display(_pd) or _pd
