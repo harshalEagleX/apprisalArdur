@@ -22,6 +22,7 @@ from typing import List, Optional
 from app.extraction.engagement import extract_engagement
 from app.extraction.merge import run_extraction
 from app.extraction.result import ExtractedFieldSet
+from app.pipeline import progress as _progress
 from app.pipeline.intake import assemble_order
 from app.profiles.engine_binding import active_rules, apply_severity
 from app.profiles.loader import load_profile
@@ -52,7 +53,8 @@ def _blocked_report(order, profile) -> dict:
 
 
 def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = False,
-           mode: Optional[str] = None, amc_code: Optional[str] = None) -> dict:
+           mode: Optional[str] = None, amc_code: Optional[str] = None,
+           progress_token: Optional[str] = None) -> dict:
     """Run the full synchronous pipeline for one order folder → reviewer report.
 
     Honors §14 G-0..G-3 (block / cache / XML-overlay-disable), §16 partial-
@@ -62,11 +64,19 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     v1.0.69 language-driven judge; anything else keeps the legacy rule engine.
     Defaults to settings.judge_mode (env JUDGE_MODE). Both paths share
     extraction/locate/report and never 5xx.
+
+    `progress_token` (optional) drives the admin "Background activity" bar: each
+    stage boundary publishes an eased percent the Java poller reads from
+    `/qc/progress/{token}`. None → progress is simply not published.
     """
     from app.config import settings
     from app.persistence import repo
 
     mode = (mode or settings.judge_mode or "legacy").lower()
+
+    # Stage markers (sub_percent 0..1). floor = where the bar is when the stage
+    # starts; the bar eases toward the NEXT stage's floor while the stage runs.
+    _progress.update(progress_token, "intake", "Reading the order documents", 0.02, 0.08, tau=3.0)
 
     order = assemble_order(order_dir)
     # Caller-supplied amc_code (e.g. Java passes the client's AMC code on
@@ -78,6 +88,7 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     profile = load_profile(order.amc_code)
 
     if order.status == "BLOCKED":
+        _progress.finish(progress_token)
         return _blocked_report(order, profile)
 
     # §14 G-3 idempotency: identical package already processed ⇒ return stored run.
@@ -85,9 +96,15 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
         cached = repo.get_cached_run(order.order_id, order.package_hash)
         if cached is not None:
             logger.info("run_qc %s: G-3 cache hit — returning stored run", order.order_id)
+            _progress.finish(progress_token)
             return cached
 
     degradations: List[str] = []
+
+    # Extraction is real, bounded work (OCR/grid/XML/locate); ease toward 0.35
+    # over ~15s so the bar visibly moves through it.
+    _progress.update(progress_token, "extraction",
+                     "Reading values from the report and documents", 0.08, 0.35, tau=15.0)
 
     # 2026-07-13 timing ledger (perf work order): wall-clock the stages that
     # actually cost time, so speed is a monitored property, not something
@@ -138,15 +155,24 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     # extraction/locate above; replaces rules+report with the compiled-checklist
     # judge. Wrapped in §16 partial-failure so a language-path crash still returns.
     if mode == "language":
+        # The judge/LLM phase is the long one and has no per-item callback, so
+        # ease slowly (tau ~120s) toward 0.92 — the bar keeps creeping through
+        # the minutes of LLM work instead of freezing.
+        _progress.update(progress_token, "judging",
+                         "Checking the report against the AMC checklist", 0.35, 0.92, tau=120.0)
         report = _safe_stage(
             "language_judge", degradations, None,
             lambda: _run_language(order, profile, appraisal_fs, engagement_fs,
                                   contract_fs, llm_client, degradations))
         if report is not None:
+            _progress.update(progress_token, "finalizing",
+                             "Building the reviewer report", 0.94, 0.99, tau=4.0)
             timings = report.setdefault("timings", {})
             timings["extract_s"] = round(extract_s, 2)
             timings["total_s"] = round(extract_s + timings.get("judge_and_packet_s", 0.0), 2)
-            return _finalize(report, order, profile, persist, repo)
+            result = _finalize(report, order, profile, persist, repo)
+            _progress.finish(progress_token)
+            return result
         # a total language-path failure degrades to the legacy path rather than 5xx.
         degradations.append("language_path_failed: fell back to legacy engine")
 
@@ -155,6 +181,8 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
                     review_conf=router.thresholds_for("__default__").review,
                     llm_client=llm_client)
 
+    _progress.update(progress_token, "judging",
+                     "Checking the report against the rules", 0.35, 0.92, tau=60.0)
     verdicts: List[Verdict] = _safe_stage(
         "rules", degradations, [],
         lambda: run_rules(ctx, rules=active_rules(profile), llm_client=llm_client,
@@ -193,6 +221,7 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
             report.setdefault("degradations", []).append(f"persistence_failed:{type(e).__name__}")
 
     logger.info("run_qc %s (rev %d): %s", order.order_id, revision_no, report["summary"])
+    _progress.finish(progress_token)
     return report
 
 

@@ -57,8 +57,12 @@ class Settings:
     # (app/llm/together_pool.py) for the real fix: a per-key token-bucket +
     # in-flight governor that stops OVER-SENDING instead of reacting to 429s
     # after the fact.
+    # Rate limits are PER KEY, so each additional key is a linear throughput gain
+    # with NO extra 429 risk (unlike raising per-key inflight, which contends on
+    # one key's budget). Reads TOGETHER_API_KEY_1..8 so adding a key to .env is
+    # all it takes to widen the pipe — the TogetherPool round-robins across them.
     together_keys: List[str] = field(default_factory=lambda: [
-        k for k in (_env("TOGETHER_API_KEY_1"), _env("TOGETHER_API_KEY_2")) if k
+        k for k in (_env(f"TOGETHER_API_KEY_{i}") for i in range(1, 9)) if k
     ])
     together_model: str = field(default_factory=lambda: _env("TOGETHER_MODEL", "openai/gpt-oss-120b"))
     together_base_url: str = "https://api.together.xyz/v1/chat/completions"
@@ -137,7 +141,7 @@ class Settings:
         if not self.internal_api_key:
             problems.append("INTERNAL_API_KEY unset — API auth would be open (set it, or unset APP_DEPLOY_STRICT for dev).")
         if not self.llm_configured:
-            problems.append("No TOGETHER_API_KEY_1/2 — the language judge cannot run.")
+            problems.append("No TOGETHER_API_KEY_1..8 — the language judge cannot run.")
         if self.judge_mode != "language":
             problems.append(f"JUDGE_MODE='{self.judge_mode}' — production must run the language judge.")
         return problems
@@ -158,7 +162,7 @@ class Settings:
             raise RuntimeError(
                 f"Groq was removed from this codebase (2026-07-13) but {', '.join(stray)} "
                 "is still set in the environment — remove it from .env/deployment secrets. "
-                "Together AI (TOGETHER_API_KEY_1/2) is the only LLM provider now.")
+                "Together AI (TOGETHER_API_KEY_1..8) is the only LLM provider now.")
 
 
 settings = Settings()

@@ -43,6 +43,7 @@ class MatchConfidenceIntegrationTests {
     @Autowired private QCRuleResultRepository qcRuleResultRepository;
     @Autowired private DocumentMatchRepository documentMatchRepository;
     @Autowired private ProcessingMetricsRepository processingMetricsRepository;
+    @Autowired private DocStatRepository docStatRepository;
     @Autowired private TransactionTemplate tx;
 
     // ── (1) High-confidence engagement → stays AUTO_PASS ─────────────────────
@@ -218,6 +219,7 @@ class MatchConfidenceIntegrationTests {
         tx.executeWithoutResult(s -> {
             documentMatchRepository.findByAppraisalFile_Batch_Id(ids[0]).forEach(documentMatchRepository::delete);
             processingMetricsRepository.deleteByBatchId(ids[0]);
+            docStatRepository.deleteTreeByBatchId(ids[0]);
             qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(ids[1])
                     .forEach(r -> { qcRuleResultRepository.findByQcResultId(r.getId()).forEach(qcRuleResultRepository::delete); qcResultRepository.delete(r); });
             batchFileRepository.findByBatchId(ids[0]).forEach(batchFileRepository::delete);
@@ -240,7 +242,10 @@ class MatchConfidenceIntegrationTests {
                 Map.of("satisfied", 1, "not_satisfied", 0, "review", 0,
                        "not_applicable", 0, "cannot_evaluate", 0),
                 List.of(pass), List.of(), List.of(), List.of(), Map.of(),
-                List.of(), List.of(), Map.of(), null, 0, false);
+                Map.of(),                 // usage
+                List.of(), List.of(), Map.of(),
+                Map.of(),                 // timings
+                null, 0, false);
     }
 
     private static String uuid() {

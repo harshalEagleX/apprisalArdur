@@ -52,6 +52,7 @@ class RerunGuardIntegrationTests {
     private final BatchFileRepository batchFileRepository;
     private final QCResultRepository qcResultRepository;
     private final ProcessingMetricsRepository processingMetricsRepository;
+    private final DocStatRepository docStatRepository;
     private final AuditLogRepository auditLogRepository;
     private final TransactionTemplate tx;
 
@@ -64,6 +65,7 @@ class RerunGuardIntegrationTests {
                                BatchFileRepository batchFileRepository,
                                QCResultRepository qcResultRepository,
                                ProcessingMetricsRepository processingMetricsRepository,
+                               DocStatRepository docStatRepository,
                                AuditLogRepository auditLogRepository,
                                TransactionTemplate tx) {
         this.verificationService = verificationService;
@@ -74,6 +76,7 @@ class RerunGuardIntegrationTests {
         this.batchFileRepository = batchFileRepository;
         this.qcResultRepository = qcResultRepository;
         this.processingMetricsRepository = processingMetricsRepository;
+        this.docStatRepository = docStatRepository;
         this.auditLogRepository = auditLogRepository;
         this.tx = tx;
     }
@@ -242,6 +245,7 @@ class RerunGuardIntegrationTests {
                             auditLogRepository.findRecentByUserId(usr.getId()).forEach(auditLogRepository::delete));
                 }
                 processingMetricsRepository.deleteByBatchId(ids[0]);
+                docStatRepository.deleteTreeByBatchId(ids[0]);
                 qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(ids[1])
                         .forEach(qcResultRepository::delete);
                 batchFileRepository.findById(ids[1]).ifPresent(batchFileRepository::delete);
@@ -327,6 +331,7 @@ class RerunGuardIntegrationTests {
             final long bId = batchId;
             tx.executeWithoutResult(s -> {
                 processingMetricsRepository.deleteByBatchId(bId);
+                docStatRepository.deleteTreeByBatchId(bId);
                 for (long fid : fileIds) {
                     if (fid == 0) continue;
                     qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(fid)
@@ -393,6 +398,9 @@ class RerunGuardIntegrationTests {
                 Map.of("satisfied", 0, "not_satisfied", 0, "review", 1,
                        "not_applicable", 0, "cannot_evaluate", 0),
                 List.of(verify), List.of(), List.of(), List.of(), Map.of(),
-                List.of(), List.of(), Map.of(), null, 0, false);
+                Map.of(),                 // usage
+                List.of(), List.of(), Map.of(),
+                Map.of(),                 // timings
+                null, 0, false);
     }
 }

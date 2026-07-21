@@ -32,12 +32,19 @@ public record ShalqcResponse(
         @JsonProperty("extraction_gaps")  List<Map<String, Object>> extractionGaps,
         @JsonProperty("llm_interactions") List<ShalqcInteraction> llmInteractions,
         @JsonProperty("location_metric")  Map<String, Object> locationMetric,
+        // Per-order LLM token usage + $ cost: {prompt_tokens, completion_tokens,
+        // total_tokens, billed_calls, cost_usd, model}. Surfaced in DocStats as
+        // "what this document cost to QC".
+        Map<String, Object> usage,
         List<String> degradations,
         // Why the order was blocked at the G-0 gate (missing required document, wrong
         // XML, …). Present only when status == "BLOCKED"; surfaced to the reviewer so a
         // held order shows the reason instead of an empty, misleading pass.
         @JsonProperty("hold_reasons")  List<String> holdReasons,
         Map<String, Object> versions,
+        // Per-stage wall-clock ledger from the Python pipeline (extract_s,
+        // judge_wall_s, judge_and_packet_s, total_s, …) — feeds DocStats timing.
+        Map<String, Object> timings,
         String fingerprint,
         @JsonProperty("revision_no")   Integer revisionNo,
         @JsonProperty("cached_run")    Boolean cachedRun

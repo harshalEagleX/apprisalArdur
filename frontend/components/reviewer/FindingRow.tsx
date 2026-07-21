@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
+  Crosshair,
   X,
   Save,
   CheckCircle2,
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 import type { QCRuleResult, RuleDetail } from "@/lib/api";
 import { getRuleDetail } from "@/lib/api";
-import { documentLabel } from "@/lib/ruleEvidence";
+import { coerceEvidenceSources, type EvidenceSource } from "@/lib/ruleEvidence";
 import { failRejectionLanguage } from "@/lib/ruleLanguage";
 import { ruleStatus, isReviewLikeStatus } from "@/lib/ruleStatus";
 
@@ -41,6 +42,8 @@ export interface FindingRowProps {
   onAcknowledge: (checked: boolean) => void;
   onComment: (c: string) => void;
   commentRef: (node: HTMLTextAreaElement | null) => void;
+  /** Jump the document viewer to one evidence value's page/box. */
+  onLocateEvidence?: (src: EvidenceSource) => void;
 }
 
 // Severity intent drives the dot, its glow ring, the card tint, and the confidence
@@ -84,11 +87,11 @@ function tierLabel(tier: string | null | undefined, confidence: number | null | 
   const t = (tier || "").toLowerCase();
   if (t === "high") return "High confidence";
   if (t === "medium") return "Double-check";
-  if (t === "low") return "Verify manually";
+  if (t === "low") return "Please check";
   const pct = Math.round((confidence ?? 0) * 100);
   if (pct >= 75) return "High confidence";
   if (pct >= 41) return "Double-check";
-  return "Verify manually";
+  return "Please check";
 }
 
 /** Emphasize the cited values (from `highlightedValues`) inside the summary line. */
@@ -123,6 +126,7 @@ export const FindingRow = memo(function FindingRow({
   onAcknowledge,
   onComment,
   commentRef,
+  onLocateEvidence,
 }: FindingRowProps) {
   const status = ruleStatus(rule.status);
   const isVerify = isReviewLikeStatus(status);
@@ -208,7 +212,7 @@ export const FindingRow = memo(function FindingRow({
     </svg>
   );
 
-  const sources = detail?.sources ?? [];
+  const sources = coerceEvidenceSources(detail?.sources);
   const explanation = (detail?.explanation && detail.explanation.trim())
     ? detail.explanation
     : isVerify && rule.verifyQuestion
@@ -263,7 +267,7 @@ export const FindingRow = memo(function FindingRow({
         {rule.photoVerificationRequired && (
           <span
             className="hidden sm:inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-sky-500/30 bg-sky-950/40 px-2 py-0.5 text-[11px] font-medium text-sky-200"
-            title="Check the photos/sketch by eye — the automated verdict covers only the text part of this check."
+            title="Please also look at the photos/sketch — the automated verdict covers only the written part of this check."
           >
             <Camera size={10} aria-hidden /> Photo
           </span>
@@ -304,21 +308,56 @@ export const FindingRow = memo(function FindingRow({
             )}
           </div>
 
-          {/* Clean source cards: document label + value only (no %, no token noise). */}
+          {/* Source cards in words: WHAT the value is (bound field label), the value
+              itself, and WHERE it came from (document + page). Clicking a located
+              card jumps the viewer to that exact spot. */}
           {detailLoading && sources.length === 0 && (
             <div className="text-[11px] text-slate-600">Loading evidence…</div>
           )}
           {sources.length > 0 && (
             <div className={`grid gap-2 ${sources.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-              {sources.map((src, i) => (
-                <div key={i} className="rounded-lg border border-white/10 bg-surface/80 p-2.5">
-                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                    {src.comparable ? `${src.comparable} · ` : ""}
-                    {documentLabel(src.document ?? "")}
+              {sources.map((src, i) => {
+                const located = Boolean(src.page && onLocateEvidence);
+                const heading = src.fieldLabel || src.label;
+                const origin = [
+                  src.fieldLabel ? src.label : null,
+                  src.page ? `page ${src.page}` : null,
+                ].filter(Boolean).join(" · ");
+                const body = (
+                  <>
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                      {src.comparable ? `${src.comparable} · ` : ""}
+                      {heading}
+                    </div>
+                    <div className="text-xs leading-relaxed text-slate-200">{src.value}</div>
+                    {(origin || located) && (
+                      <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-600">
+                        <span className="truncate">{origin}</span>
+                        {located && (
+                          <span className="ml-auto flex flex-shrink-0 items-center gap-0.5 text-sky-400/80">
+                            <Crosshair size={9} aria-hidden /> show me
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+                return located ? (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => onLocateEvidence?.(src)}
+                    title={`Jump to this value in the ${src.label.toLowerCase()}`}
+                    className="rounded-lg border border-white/10 bg-surface/80 p-2.5 text-left transition-colors hover:border-sky-500/30 hover:bg-sky-950/20 focus-visible:ring-1 focus-visible:ring-sky-400/40 focus:outline-none"
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div key={i} className="rounded-lg border border-white/10 bg-surface/80 p-2.5">
+                    {body}
                   </div>
-                  <div className="text-xs leading-relaxed text-slate-200">{src.value}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

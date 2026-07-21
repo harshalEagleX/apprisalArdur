@@ -162,7 +162,10 @@ def test_directive_reviewer_line_is_neutralized():
     line = jv.reviewer_line.lower()
     for banned in ("revise", "recommend reject", "add a comment", "must"):
         assert banned not in line
-    assert "please verify" in line
+    # 2026-07-20 tone contract: the synthesized line asks softly and still
+    # carries the expected/found facts — never a bare imperative "verify".
+    assert "could you please" in line
+    assert "6 comparables" in line and "4 comparables" in line
     # the reject authority still lives in the rule-authored wording, intact
     assert jv.suggest_reject_wording == "only 4 comps"
 

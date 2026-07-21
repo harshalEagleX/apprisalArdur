@@ -50,4 +50,7 @@ def test_no_automated_vision_rules_flag_manual():
     v = body(_Ctx())
     assert v.status.value == "VERIFY"
     assert v.degraded_reason == "manual_vision_required"
-    assert "MANUAL VISION CHECK" in v.message
+    # 2026-07-20 tone contract: soft asking language that still names the
+    # photos/sketch/map scope — never a shouted "MANUAL VISION CHECK".
+    assert "photos/sketch/map" in v.message
+    assert "could you please" in v.message.lower()

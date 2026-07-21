@@ -17,6 +17,24 @@ export function fmtMs(ms: number | null | undefined): string {
   return `${m} min ${rem} s`;
 }
 
+/** LLM $ cost. Per-document costs are fractions of a cent, so show enough
+ *  precision to be non-zero (e.g. $0.0043) while keeping larger sums readable. */
+export function fmtCost(usd: number | null | undefined): string {
+  if (usd == null || Number.isNaN(usd)) return "—";
+  if (usd === 0) return "$0";
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  if (usd < 1) return `$${usd.toFixed(3)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+/** Token counts: 1234 → "1.2k", 1_200_000 → "1.2M". */
+export function fmtTokens(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
 /** Compact form for tight table cells (no unit spacing). */
 export function fmtMsCompact(ms: number | null | undefined): string {
   return fmtMs(ms).replace(" ", " "); // narrow no-break space

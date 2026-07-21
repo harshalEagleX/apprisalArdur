@@ -265,6 +265,12 @@ public class DocStatsApiController {
         m.put("llmInferenceMs", d.getLlmInferenceMs());
         m.put("llmThrottleWaitMs", d.getLlmThrottleWaitMs());
         m.put("rateLimitHits", d.getRateLimitHits());
+        // Per-order LLM token usage + $ cost ("what this document cost to QC").
+        m.put("promptTokens", d.getPromptTokens());
+        m.put("completionTokens", d.getCompletionTokens());
+        m.put("totalTokens", d.getTotalTokens());
+        m.put("llmCostUsd", d.getLlmCostUsd());
+        m.put("llmModel", d.getLlmModel());
         m.put("createdAt", String.valueOf(d.getCreatedAt()));
         return m;
     }

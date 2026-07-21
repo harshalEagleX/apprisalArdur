@@ -16,7 +16,7 @@ import DeviceGate from "@/components/shared/DeviceGate";
 import { FindingRow } from "@/components/reviewer/FindingRow";
 import { RuleGroup } from "@/components/reviewer/RuleGroup";
 import { SignOffDialog } from "@/components/reviewer/SignOffDialog";
-import { cleanRuleValue, evidenceText } from "@/lib/ruleEvidence";
+import { cleanRuleValue, evidenceText, type EvidenceSource } from "@/lib/ruleEvidence";
 import { ruleStatus, isReviewLikeStatus } from "@/lib/ruleStatus";
 import {
   FILTERS, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, VIEWER_SCROLL_KEYS, clampZoom,
@@ -109,6 +109,9 @@ export default function VerifyFilePage() {
   const inFlightDecisionIds = useRef<Set<number>>(new Set());
   const commentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const focusModeRef = useRef(false);
+  // Monotonic focus counter: re-clicking the same finding must re-scroll the
+  // viewer even when the target page/box are unchanged.
+  const focusNonceRef = useRef(0);
   const viewerPointerInsideRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
@@ -322,11 +325,29 @@ export default function VerifyFilePage() {
     if (sessionToken) {
       void recordRuleFocus(rule.id, sessionToken).catch(() => undefined);
     }
-    const nextFocus = focusForRule(rule);
+    const nextFocus = { ...focusForRule(rule), nonce: ++focusNonceRef.current };
     if (!nextFocus.located) { setActiveFocus(nextFocus); setHighlighting(false); return; }
     const preferredDoc = documents.find(doc => doc.fileType === nextFocus.documentType) ?? documents.find(doc => doc.fileType === "APPRAISAL") ?? documents[0];
     if (preferredDoc) setActiveDocumentId(preferredDoc.id);
     setActiveFocus(nextFocus); setActivePage(nextFocus.page); setHighlighting(true);
+    window.setTimeout(() => setHighlighting(false), 5000);
+  }
+
+  // Jump the viewer to ONE evidence value's own location (each evidence row
+  // carries its page/bbox) — finer-grained than the card-level primary location.
+  function locateEvidence(rule: QCRuleResult, src: EvidenceSource) {
+    if (!src.page) return;
+    const fileType = src.document === "engagement" ? "ENGAGEMENT"
+      : src.document === "contract" ? "CONTRACT" : "APPRAISAL";
+    const doc = documents.find(d => d.fileType === fileType)
+      ?? documents.find(d => d.fileType === "APPRAISAL") ?? documents[0];
+    if (doc) setActiveDocumentId(doc.id);
+    setActiveFocus({
+      ruleId: rule.ruleId, page: src.page, documentType: fileType,
+      note: src.fieldLabel ? `${src.fieldLabel} — ${src.value}` : "Evidence location",
+      bbox: src.bbox ?? null, located: true, nonce: ++focusNonceRef.current,
+    });
+    setActivePage(src.page); setHighlighting(true);
     window.setTimeout(() => setHighlighting(false), 5000);
   }
 
@@ -644,6 +665,7 @@ export default function VerifyFilePage() {
       onAcknowledge={checked => setAcknowledged(prev => ({ ...prev, [rule.id]: checked }))}
       onComment={c => setComments(prev => ({ ...prev, [rule.id]: c }))}
       commentRef={node => { commentRefs.current[rule.id] = node; }}
+      onLocateEvidence={src => locateEvidence(rule, src)}
     />
   );
 
@@ -821,6 +843,7 @@ export default function VerifyFilePage() {
                   <div className="relative mx-auto w-max">
                     <PdfDocumentViewer key={activeDocument.id} fileUrl={activeDocumentUrl}
                       targetPage={activePage} targetBox={activeFocus?.bbox ?? null}
+                      focusNonce={activeFocus?.nonce ?? 0}
                       width={Math.round(viewerWidth * zoom)} highlighting={highlighting}
                       onLoadSuccess={numPages => { setPageCount(numPages); setPdfError(false); setActivePage(p => Math.min(Math.max(p, 1), numPages)); }}
                       onLoadError={() => setPdfError(true)} />

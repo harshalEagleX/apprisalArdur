@@ -100,8 +100,8 @@ def _visual_card(item: CompiledItem) -> JudgeVerdict:
     return JudgeVerdict(
         item_id=item.item_id, status=StatusV2.REVIEW, check_text=item.check_text,
         section=item.section, judgeable="visual", decided_by="precompiled",
-        reviewer_line=(f"Manual visual check: {item.check_text[:180]}"
-                       " — review the photos/sketch/map by eye.")[:240],
+        reviewer_line=(f"Could you please look at the photos/sketch/map for this one? "
+                       f"The check: {item.check_text[:160]}")[:240],
         **_item_fields(item),
     )
 
@@ -116,9 +116,11 @@ def _fallback_card(packet: Packet, reason: str,
                    item: Optional[CompiledItem] = None) -> JudgeVerdict:
     """S-6 / S-9: never SATISFIED. Packet values (WITH coordinates) ride along so
     the reviewer can still judge by eye and the document can still auto-scroll."""
-    line = ("Automated judgment was unavailable for this check — please review the "
-            "values shown.") if reason == "llm_unavailable" else (
-            "This check produced no data to judge — please review manually.")
+    line = ("We couldn't finish the automated judgment for this check — the values "
+            "we did read are shown here. Could you please review them and decide?"
+            ) if reason == "llm_unavailable" else (
+            "We couldn't find any data for this check in the documents — could you "
+            "please look it up in the report directly?")
     evidence = _located_evidence(packet, {})
     return JudgeVerdict(
         item_id=packet.item_id, status=StatusV2.REVIEW,
@@ -131,7 +133,7 @@ def _fallback_card(packet: Packet, reason: str,
     )
 
 
-_PHOTO_NOTE = "Please also verify the photo(s)/sketch for this check manually."
+_PHOTO_NOTE = "Could you also take a look at the photo(s)/sketch for this check?"
 
 
 def _mark_photo_verification(jv: JudgeVerdict, item: CompiledItem) -> JudgeVerdict:
@@ -176,8 +178,8 @@ def _narrative_pointer_card(item: CompiledItem, packet: Packet):
         item_id=item.item_id, status=StatusV2.REVIEW, check_text=item.check_text,
         section=item.section, decided_by="precompiled:a3", guardrails=["narrative_pointer"],
         values=raw, evidence=evidence, primary_location=_primary_location(evidence),
-        reviewer_line=("The form points to an addendum for this narrative but I could not "
-                       "find the matching text — please check the addendum pages by eye.")[:240],
+        reviewer_line=("The form points to an addendum for this narrative but we couldn't "
+                       "find the matching text — could you please check the addendum pages for it?")[:240],
         **_item_fields(item),
     )
 
@@ -376,7 +378,44 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
             interactions.append(rec)
             results[item_id] = jv
 
+    # Per-order token usage: a batch call's tokens are shared by every item in it,
+    # so sum over DISTINCT batch metas (by identity) to count each real call once.
+    judge_timing["usage"] = _judge_usage(metas)
     return results, interactions, judge_timing
+
+
+# gpt-oss-120b serverless pricing (Together, 2026): $/1M tokens. Kept here as the
+# authoritative source; the Java side mirrors it for the persisted cost column.
+_PRICE_IN_PER_MTOK = 0.15
+_PRICE_OUT_PER_MTOK = 0.60
+
+
+def _judge_usage(metas: Dict[str, Any]) -> Dict[str, Any]:
+    seen = set()
+    prompt = completion = calls = 0
+    for meta in metas.values():
+        if meta is None or id(meta) in seen:
+            continue
+        seen.add(id(meta))
+        pt = int(meta.get("prompt_tokens", 0) or 0)
+        ct = int(meta.get("completion_tokens", 0) or 0)
+        if pt or ct:
+            calls += 1
+        prompt += pt
+        completion += ct
+    cost = round(prompt / 1_000_000 * _PRICE_IN_PER_MTOK
+                 + completion / 1_000_000 * _PRICE_OUT_PER_MTOK, 6)
+    return {"prompt_tokens": prompt, "completion_tokens": completion,
+            "total_tokens": prompt + completion, "billed_calls": calls,
+            "cost_usd": cost, "model": _judge_model()}
+
+
+def _judge_model() -> str:
+    try:
+        from app.config import settings
+        return settings.together_model
+    except Exception:
+        return ""
 
 
 def _card(jv: JudgeVerdict) -> Dict[str, Any]:
@@ -532,6 +571,10 @@ def build_language_report(order_id: str, amc_code: str,
         "extraction_gaps": ops,
         "llm_interactions": interactions or [],
         "location_metric": _location_metric(appraisal_fs),
+        # Per-order LLM token usage + $ cost (the reviewer-visible "what did this
+        # document cost" figure surfaced in DocStats). Pulled out of timings so
+        # it is a first-class report field the Java persist layer maps directly.
+        "usage": (timings or {}).get("usage", {}),
         "degradations": degradations or [],
         "versions": versions or {},
         "timings": timings or {},
@@ -580,6 +623,15 @@ def run_language(order_id: str, amc_code: str, appraisal_fs, engagement_fs,
             "language.run %s: %d item(s) fell back to llm_unavailable — provider trouble, "
             "not extraction/binding (retries=%d)",
             order_id, timings["s6_count"], timings.get("retries", 0))
+
+    usage = timings.get("usage") or {}
+    if usage:
+        logger.info(
+            "language.run %s: LLM usage — %d prompt + %d completion = %d tokens "
+            "across %d billed call(s), cost $%.4f (%s)",
+            order_id, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+            usage.get("total_tokens", 0), usage.get("billed_calls", 0),
+            usage.get("cost_usd", 0.0), usage.get("model", ""))
 
     return build_language_report(order_id, amc_code, results, appraisal_fs, gaps,
                                  degradations=degradations, versions=versions,

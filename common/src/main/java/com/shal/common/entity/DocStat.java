@@ -64,6 +64,13 @@ public class DocStat {
     @Column(name = "llm_throttle_wait_ms")   private Double llmThrottleWaitMs;
     @Column(name = "rate_limit_hits")        private Integer rateLimitHits;
 
+    // Per-order LLM token usage + $ cost — "what this document cost to QC".
+    @Column(name = "prompt_tokens")          private Integer promptTokens;
+    @Column(name = "completion_tokens")      private Integer completionTokens;
+    @Column(name = "total_tokens")           private Integer totalTokens;
+    @Column(name = "llm_cost_usd")           private Double llmCostUsd;
+    @Column(name = "llm_model", length = 96) private String llmModel;
+
     @Column(name = "created_at") private LocalDateTime createdAt;
 
     // ── Breakdown children ─────────────────────────────────────────────────────
@@ -109,6 +116,11 @@ public class DocStat {
         public Builder llmInferenceMs(Double v)     { d.llmInferenceMs = v;    return this; }
         public Builder llmThrottleWaitMs(Double v)  { d.llmThrottleWaitMs = v; return this; }
         public Builder rateLimitHits(Integer v)     { d.rateLimitHits = v;     return this; }
+        public Builder promptTokens(Integer v)      { d.promptTokens = v;      return this; }
+        public Builder completionTokens(Integer v)  { d.completionTokens = v;  return this; }
+        public Builder totalTokens(Integer v)       { d.totalTokens = v;       return this; }
+        public Builder llmCostUsd(Double v)         { d.llmCostUsd = v;        return this; }
+        public Builder llmModel(String v)           { d.llmModel = v;          return this; }
         public DocStat build()                      { return d; }
     }
 
@@ -136,6 +148,11 @@ public class DocStat {
     public Double getLlmInferenceMs()    { return llmInferenceMs; }
     public Double getLlmThrottleWaitMs() { return llmThrottleWaitMs; }
     public Integer getRateLimitHits()    { return rateLimitHits; }
+    public Integer getPromptTokens()     { return promptTokens; }
+    public Integer getCompletionTokens() { return completionTokens; }
+    public Integer getTotalTokens()      { return totalTokens; }
+    public Double getLlmCostUsd()        { return llmCostUsd; }
+    public String getLlmModel()          { return llmModel; }
     public LocalDateTime getCreatedAt()  { return createdAt; }
     public List<DocStatStage> getStages()     { return stages; }
     public List<DocStatSection> getSections() { return sections; }

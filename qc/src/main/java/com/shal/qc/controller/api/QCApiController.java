@@ -179,28 +179,55 @@ public class QCApiController {
 
         List<Long> startedOrders = new java.util.ArrayList<>();
         List<Long> alreadyRunningOrders = new java.util.ArrayList<>();
+        List<Long> failedToStartOrders = new java.util.ArrayList<>();
         for (Long orderId : runnableOrders) {
-            if (!qcProcessingService.claimOrderForProcessing(orderId, modelConfig)) {
-                alreadyRunningOrders.add(orderId);
-                continue;
+            // A claim that throws — including a transaction that fails at COMMIT, after
+            // claimOrderForProcessing's own body succeeded — must release the local claim,
+            // or this JVM refuses every later run of the order until it restarts. Same for
+            // a rejected async submission (the executor uses AbortPolicy): the order would
+            // sit claimed with no worker behind it. One order's failure never aborts the rest.
+            boolean claimed = false;
+            try {
+                claimed = qcProcessingService.claimOrderForProcessing(orderId, modelConfig);
+                if (!claimed) {
+                    alreadyRunningOrders.add(orderId);
+                    continue;
+                }
+                qcProcessingService.processOrderAsync(orderId, modelConfig);
+                startedOrders.add(orderId);
+            } catch (RuntimeException e) {
+                qcProcessingService.releaseOrderClaim(orderId);
+                failedToStartOrders.add(orderId);
+                log.error("QC start failed for order {} — claim released so it stays runnable: {}",
+                        orderId, e.getMessage(), e);
             }
-            qcProcessingService.processOrderAsync(orderId, modelConfig);
-            startedOrders.add(orderId);
         }
 
         log.info(TimelineLog.event("admin_orders", "java_qc_order_run",
                 "orders_requested", orderIds.size(),
                 "orders_started", startedOrders.size(),
-                "orders_already_running", alreadyRunningOrders.size()));
+                "orders_already_running", alreadyRunningOrders.size(),
+                "orders_failed_to_start", failedToStartOrders.size()));
 
+        // Never report "already being processed" for an order that actually failed to
+        // start — that message sent the reader looking for a worker that does not exist.
+        String message;
+        if (!startedOrders.isEmpty()) {
+            message = "QC processing started for " + startedOrders.size() + " order(s).";
+        } else if (!failedToStartOrders.isEmpty()) {
+            message = "QC could not be started for " + failedToStartOrders.size()
+                    + " order(s) — the QC service hit an error while starting. "
+                    + "The order(s) are still runnable; check the server logs and try again.";
+        } else {
+            message = "No QC run was started — the selected order(s) are already being processed.";
+        }
         Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("message", startedOrders.isEmpty()
-                ? "No QC run was started — the selected order(s) are already being processed."
-                : "QC processing started for " + startedOrders.size() + " order(s).");
+        resp.put("message", message);
         resp.put("ordersRequested", orderIds.size());
         resp.put("ordersResolved", startedOrders.size());
         resp.put("startedOrderIds", startedOrders);
         resp.put("alreadyRunningOrderIds", alreadyRunningOrders);
+        resp.put("failedToStartOrderIds", failedToStartOrders);
         resp.put("ordersWithoutAppraisal", ordersWithoutAppraisal);
         resp.put("incompleteOrders", incompleteOrders);
         return startedOrders.isEmpty()

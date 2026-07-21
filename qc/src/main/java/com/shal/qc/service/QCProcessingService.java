@@ -27,6 +27,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -72,6 +73,7 @@ public class QCProcessingService {
     private final BusinessEventService businessEventService;
     private final com.shal.common.service.OrderStatusService orderStatusService;
     private final com.shal.common.repository.AppraisalTransactionRepository appraisalTransactionRepository;
+    private final com.shal.common.repository.DocStatRepository docStatRepository;
     private final com.shal.common.service.LinkageGateService linkageGateService;
     // Cross-node cancellation signal. Backed by Redis in production (so "Stop QC"
     // reaches a worker on another instance) with a graceful in-memory fallback, so
@@ -120,6 +122,7 @@ public class QCProcessingService {
             com.shal.common.cluster.ClusterCoordinator clusterCoordinator,
             com.shal.common.service.OrderStatusService orderStatusService,
             com.shal.common.repository.AppraisalTransactionRepository appraisalTransactionRepository,
+            com.shal.common.repository.DocStatRepository docStatRepository,
             com.shal.common.service.LinkageGateService linkageGateService) {
         this.pythonClient = pythonClient;
         this.fileMatchingService = fileMatchingService;
@@ -136,6 +139,7 @@ public class QCProcessingService {
         this.clusterCoordinator = clusterCoordinator;
         this.orderStatusService = orderStatusService;
         this.appraisalTransactionRepository = appraisalTransactionRepository;
+        this.docStatRepository = docStatRepository;
         this.linkageGateService = linkageGateService;
     }
 
@@ -232,28 +236,73 @@ public class QCProcessingService {
     // ════════════════════════════════════════════════════════════════════════
 
     /**
-     * Claim an Order for QC. dedupes via {@code activeOrders} and flips the Order's documentStatus to QC_PROCESSING
-     * (never the Batch's status). Returns false if the order is already being processed.
+     * Claim an Order for QC: takes the authoritative DB claim, then records the local
+     * fast-path claim in {@code activeOrders}, then flips the Order's documentStatus to
+     * QC_PROCESSING (never the Batch's status). Returns false if the order is already
+     * being processed.
+     *
+     * <p><b>Claim order matters (2026-07-19 incident).</b> The DB row is taken FIRST and
+     * {@code activeOrders} second. Previously the in-memory set was added to before the
+     * DB call, so anything that made that call fail — or merely BLOCK — left this JVM
+     * believing a worker held an order the database still reported as READY_FOR_QC. That
+     * is exactly what happened: a claim blocked inside its transaction for four minutes,
+     * and every retry in the meantime was refused with "another worker is active" while
+     * the UI correctly showed the order as ready. The order was unrunnable until a JVM
+     * restart, because nothing but a restart clears a leaked in-memory claim.
+     *
+     * <p>Taking the DB claim first loses nothing: {@code markProcessing} is an atomic
+     * conditional UPDATE and is already the cross-node source of truth, so a genuinely
+     * running order is rejected there (its row is QC_PROCESSING) without the set's help.
+     * The {@code finally} then guarantees that any failure after the set is touched —
+     * exception, rollback, cancel — releases the local claim instead of stranding it.
      */
     @Transactional
     public boolean claimOrderForProcessing(@NonNull Long orderId, QCModelConfig modelConfig) {
         QCModelConfig cfg = modelConfig != null ? modelConfig : QCModelConfig.defaults();
-        if (!activeOrders.add(orderId)) {
-            log.warn("QC claim rejected for order {} — another worker is active", orderId);
-            return false;
-        }
-        orderCancellationRequests.remove(orderId);
         var orderOpt = appraisalTransactionRepository.findById(orderId);
         if (orderOpt.isEmpty() || !orderStatusService.markProcessing(orderOpt.get())) {
-            activeOrders.remove(orderId);
+            // Either the order is gone, or the row already says QC_PROCESSING — a real
+            // worker holds it. Nothing was claimed here, so there is nothing to release.
+            log.warn("QC claim rejected for order {} — the order row is already claimed or missing", orderId);
             return false;
         }
-        orderQcStartedAt.put(orderId, Instant.now());
-        updateProgress(JobScope.order(orderId), "queued", "QC job queued with " + cfg.label(), 0, 1, true, cfg);
-        businessEventService.record("ORDER_QC_QUEUED", null, "java", "QUEUED",
-                "Order", orderId, null, null, null, null, Map.of("model", cfg.label()));
-        log.info("Claimed order {} for QC using {}", orderId, cfg.label());
-        return true;
+        boolean claimed = false;
+        try {
+            if (!activeOrders.add(orderId)) {
+                // The DB said the order was free but this JVM thinks a worker holds it.
+                // That means a previous claim leaked; the DB is authoritative, so take over.
+                log.warn("QC claim for order {} found a stale in-memory claim (DB row was free) — taking over", orderId);
+            }
+            orderCancellationRequests.remove(orderId);
+            orderQcStartedAt.put(orderId, Instant.now());
+            updateProgress(JobScope.order(orderId), "queued", "QC job queued with " + cfg.label(), 0, 1, true, cfg);
+            businessEventService.record("ORDER_QC_QUEUED", null, "java", "QUEUED",
+                    "Order", orderId, null, null, null, null, Map.of("model", cfg.label()));
+            log.info("Claimed order {} for QC using {}", orderId, cfg.label());
+            claimed = true;
+            return true;
+        } finally {
+            if (!claimed) {
+                activeOrders.remove(orderId);
+                orderQcStartedAt.remove(orderId);
+                log.warn("QC claim for order {} failed after the row was claimed — released the local claim", orderId);
+            }
+        }
+    }
+
+    /**
+     * Release a local (in-memory) QC claim without touching the order row.
+     *
+     * <p>Covers the one leak {@link #claimOrderForProcessing}'s own {@code finally} cannot:
+     * a transaction that fails at COMMIT, after the method body has already returned true.
+     * The caller sees an exception for a claim this JVM still holds, so the caller releases
+     * it. Safe to call when nothing is held — it is a set removal.
+     */
+    public void releaseOrderClaim(@NonNull Long orderId) {
+        if (activeOrders.remove(orderId)) {
+            orderQcStartedAt.remove(orderId);
+            log.warn("Released local QC claim for order {} after a failed start", orderId);
+        }
     }
 
     public boolean isOrderActive(@NonNull Long orderId) {
@@ -572,8 +621,32 @@ public class QCProcessingService {
         }
     }
 
-    /** Heartbeat the job's row so the stuck-job reconciler sees it as alive. */
+    /**
+     * Heartbeat the job's row so the stuck-job reconciler sees it as alive.
+     *
+     * <p><b>Never heartbeat from inside a transaction (2026-07-19 deadlock).</b> Both
+     * touch methods are REQUIRES_NEW, so they run on a SECOND connection. If the calling
+     * thread is already in a transaction that has written the same row — which is exactly
+     * what {@code claimOrderForProcessing} does, via {@code markProcessing}'s conditional
+     * UPDATE — the heartbeat's {@code UPDATE … SET updated_at} blocks on the row lock the
+     * caller's own uncommitted transaction holds. The thread then waits for itself, with
+     * no lock timeout, forever: the request hangs (the UI gave up at 90s), the order row
+     * stays locked, and every retry piles up behind it. Postgres showed it plainly — one
+     * session "idle in transaction" holding the row, its sibling "active / Lock" waiting
+     * on it, and three more clicks queued behind that.
+     *
+     * <p>Skipping is not a compromise, it is the correct behavior: if a transaction is
+     * open on this thread it is going to commit its own {@code updated_at} anyway, so the
+     * heartbeat would add nothing but a second writer for the same row. The long-running
+     * worker path ({@code processOrder}) is deliberately NOT transactional, so its
+     * heartbeats — the ones the reconciler actually depends on — still fire.
+     */
     private void touchActivity(JobScope scope) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            log.debug("Skipping QC heartbeat for {} {} — a transaction is already open on this thread",
+                    scope.kind(), scope.id());
+            return;
+        }
         if (scope.kind() == JobKind.ORDER) self.touchOrderActivity(scope.id());
         else self.touchBatchActivity(scope.id());
     }
@@ -841,6 +914,16 @@ public class QCProcessingService {
                 shalqcMapper.passed(summary), shalqcMapper.failed(summary), shalqcMapper.verify(summary),
                 cards.size(), response.llmInteractions() != null ? response.llmInteractions().size() : 0, batchId);
 
+        // DocStats row: per-order timing + LLM token usage + $ cost, so the admin
+        // DocStats page shows "what this document cost to QC". Best-effort — a
+        // metrics write must never fail the QC result the reviewer is waiting on.
+        try {
+            writeDocStat(qcResult, appraisal, batchId, decision, cards.size(), response);
+        } catch (Exception ex) {
+            log.warn("DocStats write failed for order {} (QC result still saved): {}",
+                    response.orderId(), ex.getMessage());
+        }
+
         // If the engagement letter OR contract was matched by filename heuristic or
         // positional guess (confidence < 0.82) and the rules all auto-passed, force
         // review. A confident rule-pass against the wrong document is not a pass.
@@ -875,6 +958,80 @@ public class QCProcessingService {
         }
 
         return qcResult;
+    }
+
+    /**
+     * Persist one DocStats row for a completed order QC — per-order timing plus
+     * the LLM token usage + $ cost from the Python {@code usage} block. This is
+     * the ONLY writer of {@link DocStat}; without it the DocStats page stays
+     * empty ("0 appraisals measured"). Values absent from an older Python build
+     * are simply left null.
+     */
+    private void writeDocStat(QCResult qcResult, BatchFile appraisal, Long batchId,
+                              QCDecision decision, int ruleCount, ShalqcResponse response) {
+        Map<String, Object> usage = response.usage() != null ? response.usage() : Map.of();
+        Map<String, Object> timings = response.timings() != null ? response.timings() : Map.of();
+
+        Integer promptTok = intOf(usage.get("prompt_tokens"));
+        Integer completionTok = intOf(usage.get("completion_tokens"));
+        Integer totalTok = intOf(usage.get("total_tokens"));
+        Integer billedCalls = intOf(usage.get("billed_calls"));
+        Double costUsd = doubleOf(usage.get("cost_usd"));
+        String model = usage.get("model") != null ? String.valueOf(usage.get("model")) : null;
+
+        // Python timings are in SECONDS; DocStats stores milliseconds.
+        Double totalMs = secToMs(timings.get("total_s"));
+        Double judgeMs = secToMs(timings.get("judge_wall_s"));
+        Double extractMs = secToMs(timings.get("extract_s"));
+
+        Long clientId = appraisal.getBatch() != null && appraisal.getBatch().getClient() != null
+                ? appraisal.getBatch().getClient().getId() : null;
+        String clientName = appraisal.getBatch() != null && appraisal.getBatch().getClient() != null
+                ? appraisal.getBatch().getClient().getName() : null;
+
+        DocStat stat = DocStat.builder()
+                .qcResult(qcResult)
+                .batchFileId(appraisal.getId())
+                .batchId(batchId)
+                .clientId(clientId)
+                .filename(appraisal.getFilename())
+                .clientName(clientName)
+                .qcDecision(decision != null ? decision.name() : null)
+                .totalMs(totalMs)
+                .measuredPipelineMs(extractMs)
+                .ruleEngineMs(judgeMs)     // the judge/LLM phase IS the rule engine in the language pipeline
+                .ruleCount(ruleCount)
+                .slowestStageLabel(judgeMs != null ? "judging (LLM)" : null)
+                .slowestStageMs(judgeMs)
+                .llmCalls(billedCalls)
+                .llmInferenceMs(judgeMs)
+                .promptTokens(promptTok)
+                .completionTokens(completionTok)
+                .totalTokens(totalTok)
+                .llmCostUsd(costUsd)
+                .llmModel(model)
+                .build();
+        docStatRepository.save(stat);
+        log.info("DocStats saved: file={} total={}ms tokens={} cost=${} model={}",
+                appraisal.getFilename(), totalMs != null ? Math.round(totalMs) : null,
+                totalTok, costUsd, model);
+    }
+
+    private static Integer intOf(Object v) {
+        if (v instanceof Number n) return n.intValue();
+        try { return v != null ? (int) Double.parseDouble(String.valueOf(v)) : null; }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private static Double doubleOf(Object v) {
+        if (v instanceof Number n) return n.doubleValue();
+        try { return v != null ? Double.parseDouble(String.valueOf(v)) : null; }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private static Double secToMs(Object seconds) {
+        Double s = doubleOf(seconds);
+        return s != null ? s * 1000.0 : null;
     }
 
     // Known rule-status vocabulary the engine may emit. Used only to detect ENUM

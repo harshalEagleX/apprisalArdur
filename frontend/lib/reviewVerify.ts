@@ -27,6 +27,9 @@ export type RuleFocus = {
   ruleId: string; page: number; documentType: string; note: string;
   bbox?: { x: number; y: number; w: number; h: number } | null;
   located: boolean;
+  /** Bumped on every focus action so re-clicking the same finding re-scrolls
+   *  the viewer even when page/box are unchanged. */
+  nonce?: number;
 };
 export type ReviewProgress = { pending: number; canSubmit: boolean; totalToVerify: number };
 export type DecisionEvent = {

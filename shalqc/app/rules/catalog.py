@@ -229,13 +229,14 @@ def _body_cross_modal(item: dict):
                 return Verdict(rule_id=item["rule_id"], status=Status.PASS,
                                evidence=_first_present_evidence(ctx, have), fields_involved=have)
             return Verdict(rule_id=item["rule_id"], status=Status.VERIFY, confidence=0.6,
-                           message=f"Exhibit not confirmed present: {', '.join(missing)} — please verify.",
+                           message=f"We couldn't confirm these exhibits are present: {', '.join(missing)} — "
+                                   "could you please check the report for them?",
                            evidence=_first_present_evidence(ctx, have), fields_involved=have,
                            degraded_reason="manual_vision_required")
         return Verdict(
             rule_id=item["rule_id"], status=Status.VERIFY, confidence=0.5,
-            message=f"MANUAL VISION CHECK: {item.get('item','this item')} requires reviewing the "
-                    "photos/sketch/map by eye — the system does not read images. Please verify manually.",
+            message=f"Could you please look at the photos/sketch/map for this one? "
+                    f"{item.get('item','This item')} depends on images, which the automated review cannot read.",
             degraded_reason="manual_vision_required")
     return body
 

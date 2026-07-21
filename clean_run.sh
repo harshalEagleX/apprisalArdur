@@ -4,25 +4,40 @@
 #
 # Order of operations (exactly as intended):
 #   1. ALWAYS ask whether to reset & clean the database (drops ALL data).
-#   2. Clean-compile the Java backend into a fresh jar and start it.
-#   3. Start the frontend — last.
+#   2. Start SHALqc (the Python QC service) — BEFORE Java, so the first order
+#      Java processes finds a live QC backend instead of a connection refused.
+#   3. Clean-compile the Java backend into a fresh jar and start it.
+#   4. Start the frontend — last.
 #
+#   SHALqc     : http://localhost:5001
 #   Java API   : http://localhost:8080
 #   Frontend   : http://localhost:3000
 #
-# NOTE: the Python OCR/QC service (ocr-service) was retired; QC is being rebuilt
-# as the standalone `shalqc` service and is not launched here yet.
+# SHALqc replaced the retired ocr-service and reuses its port (5001) — that is
+# what Java's OCR_SERVICE_URL still points at. It runs out of ./shalqc with the
+# conda env `shal` (override with SHALQC_PYTHON=/path/to/python) and reads its
+# OWN ./shalqc/.env — the root .env is NOT enough for it.
+#
+# Java and SHALqc share ONE Postgres database (shal_qc): Java's tables come from
+# Hibernate ddl-auto, SHALqc's from SQLAlchemy create_all on first persist. A
+# schema drop therefore wipes both, and both recreate themselves on startup/use.
+#
+# This script never compiles AMC bundles. The compiled bundle under
+# shalqc/compiled/ is the source of record (hand-tuned bindings live only there);
+# recompiling would destroy it. The preflight only *reports* its sign-off status.
 #
 # Logs + PIDs live in ./.uat-run/ ; stop everything with:
 #   bash scripts/uat/stop-local.sh
 #
-# Env overrides: JAVA_PORT / FRONTEND_PORT.
+# Env overrides: JAVA_PORT / SHALQC_PORT / FRONTEND_PORT / SHALQC_PYTHON,
+#                SKIP_SHALQC=1 to run the stack without QC.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
+SHALQC_DIR="$SCRIPT_DIR/shalqc"
 RUN_DIR="$SCRIPT_DIR/.uat-run"
 mkdir -p "$RUN_DIR"
 
@@ -46,11 +61,29 @@ load_env() {
 load_env "$SCRIPT_DIR/.env"
 load_env "$SCRIPT_DIR/.env.uat"
 
+# Read a single KEY from an env file WITHOUT exporting it (used by the preflight
+# to compare secrets across the two .env files without leaking them into logs).
+env_value() { # file key
+    local file="$1" key="$2" line
+    [[ -f "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ "$line" == \#* ]] && continue
+        [[ "$line" != "$key"=* ]] && continue
+        printf '%s' "${line#*=}"
+        return 0
+    done < "$file"
+}
+
 # ── Service env defaults (local, no Docker; plain http on localhost) ──────────
 export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-uat}"
 export COOKIE_SECURE="${COOKIE_SECURE:-false}"
 export NEXT_PUBLIC_JAVA_URL="${NEXT_PUBLIC_JAVA_URL:-http://localhost:8080}"
 JAVA_PORT="${JAVA_PORT:-8080}"; FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+SHALQC_PORT="${SHALQC_PORT:-5001}"
+# Java reaches SHALqc through OCR_SERVICE_URL (the config key kept its retired
+# ocr-service name; the URL is SHALqc's). Keep the two in lockstep by default.
+export OCR_SERVICE_URL="${OCR_SERVICE_URL:-http://127.0.0.1:${SHALQC_PORT}}"
 JAR="app/target/app-0.0.1-SNAPSHOT.jar"
 
 # ── Resolve a psql-compatible URL (only needed if the DB reset is chosen) ─────
@@ -63,6 +96,71 @@ resolve_psql_url() {
         PSQL_URL="postgresql://${DB_USERNAME:-postgres}:${DB_PASSWORD:-}@${host_path}"
     else
         PSQL_URL=""
+    fi
+}
+
+# ── SHALqc interpreter + preflight ────────────────────────────────────────────
+# SHALqc runs under the conda env `shal`. We invoke that env's python DIRECTLY
+# rather than `conda activate` — activation needs conda's shell hook, which is
+# not loaded in a non-interactive bash script.
+resolve_shalqc_python() {
+    local cand base
+    if [[ -n "${SHALQC_PYTHON:-}" ]]; then SHALQC_PY="$SHALQC_PYTHON"; return 0; fi
+    if command -v conda >/dev/null 2>&1; then
+        base="$(conda info --base 2>/dev/null || true)"
+        if [[ -n "$base" && -x "$base/envs/shal/bin/python" ]]; then
+            SHALQC_PY="$base/envs/shal/bin/python"; return 0
+        fi
+    fi
+    for cand in "$HOME/miniconda3/envs/shal/bin/python" \
+                "$HOME/anaconda3/envs/shal/bin/python" \
+                "/opt/homebrew/Caskroom/miniconda/base/envs/shal/bin/python"; do
+        [[ -x "$cand" ]] && { SHALQC_PY="$cand"; return 0; }
+    done
+    SHALQC_PY="$(command -v python3 || true)"
+}
+
+# Everything that makes SHALqc start-but-be-useless is checked here, loudly, so a
+# failure shows up now instead of as a wall of 401s or mass-VERIFY cards later.
+preflight_shalqc() {
+    resolve_shalqc_python
+    [[ -n "$SHALQC_PY" && -x "$SHALQC_PY" ]] || {
+        echo "ERROR: no python for SHALqc (conda env 'shal' not found)." >&2
+        echo "       Create it, or set SHALQC_PYTHON=/path/to/python." >&2
+        exit 1; }
+    "$SHALQC_PY" -c 'import uvicorn, fastapi' 2>/dev/null || {
+        echo "ERROR: $SHALQC_PY cannot import uvicorn/fastapi." >&2
+        echo "       Install deps:  $SHALQC_PY -m pip install -r shalqc/requirements.txt" >&2
+        exit 1; }
+    echo "   • interpreter : $SHALQC_PY"
+
+    [[ -f "$SHALQC_DIR/.env" ]] || {
+        echo "ERROR: shalqc/.env is missing — SHALqc reads its own env file, the root" >&2
+        echo "       .env is not enough. Copy shalqc/.env.example and fill it in." >&2
+        exit 1; }
+
+    # A mismatched key is the single most confusing failure: SHALqc starts fine,
+    # is healthy, and 401s every request Java sends.
+    local root_key qc_key
+    root_key="$(env_value "$SCRIPT_DIR/.env" INTERNAL_API_KEY)"
+    qc_key="$(env_value "$SHALQC_DIR/.env" INTERNAL_API_KEY)"
+    if [[ -n "$root_key" && -n "$qc_key" && "$root_key" != "$qc_key" ]]; then
+        echo "   ⚠ INTERNAL_API_KEY differs between .env and shalqc/.env — Java's QC"
+        echo "     calls will 401. Make the two values identical."
+    fi
+
+    # The compiled bundle is the source of record. Report its sign-off status:
+    # a draft bundle is refused outright in production, and a MISSING one means
+    # SHALqc silently falls back to the generic _base catalog → mass VERIFY.
+    local bundle
+    bundle="$(ls "$SHALQC_DIR"/compiled/EQUITYSOLUTIONS/*.yaml 2>/dev/null | head -n1 || true)"
+    if [[ -z "$bundle" ]]; then
+        echo "   ⚠ no compiled EQUITYSOLUTIONS bundle — QC will fall back to _base (mass VERIFY)."
+    elif grep -qE '^\s*status:\s*active' "$bundle"; then
+        echo "   • bundle      : $(basename "$bundle") (active)"
+    else
+        echo "   ⚠ bundle $(basename "$bundle") is NOT status=active (draft) — dev runs it with a"
+        echo "     degradation warning; a strict/production deploy would refuse to run it."
     fi
 }
 
@@ -119,7 +217,7 @@ free_port() { # port
 stop_existing() {
     echo "==> Stopping any existing SHAL services…"
     local name pid
-    for name in frontend java; do
+    for name in frontend java shalqc; do
         pid="$(cat "$RUN_DIR/$name.pid" 2>/dev/null || true)"
         if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
             echo "   • stopping $name (pid $pid)"
@@ -127,13 +225,16 @@ stop_existing() {
         fi
         rm -f "$RUN_DIR/$name.pid"
     done
-    for port in "$FRONTEND_PORT" "$JAVA_PORT"; do
+    for port in "$FRONTEND_PORT" "$JAVA_PORT" "$SHALQC_PORT"; do
         free_port "$port"
     done
+    # A uvicorn --reload parent respawns its worker, and the worker is not the pid
+    # we recorded; clear any straggler still bound to the SHALqc app.
+    pkill -f "uvicorn app.main:app" 2>/dev/null || true
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Step 1/3 — ALWAYS ask whether to reset & clean the database
+# Step 1/4 — ALWAYS ask whether to reset & clean the database
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
@@ -152,32 +253,51 @@ if [[ "${RESET_ANS:-}" =~ ^([Yy]|[Yy][Ee][Ss])$ ]]; then
         exit 1
     fi
     echo ""
-    echo "Step 1/3 — Resetting database (DROP SCHEMA CASCADE)…"
+    echo "Step 1/4 — Resetting database (DROP SCHEMA CASCADE)…"
     psql "$PSQL_URL" <<-'SQL'
         DROP SCHEMA IF EXISTS public CASCADE;
         CREATE SCHEMA public;
         GRANT ALL ON SCHEMA public TO PUBLIC;
 	SQL
-    echo "  ✓ Schema cleared. Java tables recreate on app startup (Hibernate ddl-auto)."
+    echo "  ✓ Schema cleared. Java tables recreate on app startup (Hibernate ddl-auto);"
+    echo "    SHALqc's tables recreate on its first persist (SQLAlchemy create_all)."
 else
-    echo "Step 1/3 — Skipping DB reset (existing data kept; Hibernate will update Java tables)."
+    echo "Step 1/4 — Skipping DB reset (existing data kept; Hibernate will update Java tables)."
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Step 2/3 — Clean-compile the Java backend into a fresh jar, then start it
+# Step 2/4 — Start SHALqc (the Python QC service) BEFORE Java
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""
-echo "Step 2/3 — Clean-building Java jar (mvnw clean package -DskipTests)…"
+if [[ "${SKIP_SHALQC:-}" == "1" ]]; then
+    echo "Step 2/4 — Skipping SHALqc (SKIP_SHALQC=1). QC calls from Java WILL fail."
+else
+    echo "Step 2/4 — Starting SHALqc on :${SHALQC_PORT}…"
+    preflight_shalqc
+    # Run from the shalqc folder: app.config loads ./shalqc/.env relative to the
+    # package, and the compiled bundles/config are resolved from there too.
+    ( cd "$SHALQC_DIR"
+      start_bg shalqc "$SHALQC_PY" -m uvicorn app.main:app \
+          --host 0.0.0.0 --port "$SHALQC_PORT" )
+    # /health is one of the few unauthenticated paths, so this probe needs no key.
+    wait_http shalqc "http://127.0.0.1:${SHALQC_PORT}/health"
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Step 3/4 — Clean-compile the Java backend into a fresh jar, then start it
+# ═════════════════════════════════════════════════════════════════════════════
+echo ""
+echo "Step 3/4 — Clean-building Java jar (mvnw clean package -DskipTests)…"
 ./mvnw -q -B -pl app -am clean package -DskipTests
 [[ -f "$JAR" ]] || { echo "ERROR: expected jar not found at $JAR after build." >&2; exit 1; }
 start_bg java java -jar "$JAR"
 wait_http java "http://127.0.0.1:${JAVA_PORT}/actuator/health"
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Step 3/3 — Start the frontend (LAST)
+# Step 4/4 — Start the frontend (LAST)
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""
-echo "Step 3/3 — Building & starting the frontend (last)…"
+echo "Step 4/4 — Building & starting the frontend (last)…"
 ( cd "$FRONTEND_DIR"
   [[ -d node_modules ]] || npm ci
   NEXT_PUBLIC_JAVA_URL="$NEXT_PUBLIC_JAVA_URL" npm run build
@@ -189,7 +309,8 @@ cat <<EOF
 ✅ SHAL is up (clean run complete).
    Frontend   : http://localhost:${FRONTEND_PORT}
    Java API   : http://localhost:${JAVA_PORT}
+   SHALqc     : http://localhost:${SHALQC_PORT}  (health: /health, docs: /docs, metrics: /metrics)
 
-   Logs : $RUN_DIR/{java,frontend}.log
+   Logs : $RUN_DIR/{java,shalqc,frontend}.log
    Stop : bash scripts/uat/stop-local.sh
 EOF

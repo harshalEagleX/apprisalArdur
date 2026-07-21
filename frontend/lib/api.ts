@@ -597,6 +597,12 @@ export interface DocStatSummary {
   llmInferenceMs: number | null;
   llmThrottleWaitMs: number | null;
   rateLimitHits: number | null;
+  // Per-order LLM token usage + $ cost — "what this document cost to QC".
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  llmCostUsd: number | null;
+  llmModel: string | null;
   createdAt: string | null;
 }
 export interface DocStatStage {
@@ -1222,6 +1228,14 @@ export interface RuleEvidenceEntry {
   confidence?: number | null;
   page?: number | null;
   method?: string | null;
+  // SHALqc-native rows: the bound field label, the judge's cited snippet, the
+  // located box and provenance badge — ruleEvidence.ts renders these.
+  label?: string | null;
+  quote?: string | null;
+  bbox?: { x: number; y: number; w: number; h: number } | null;
+  source?: string | null;
+  source_badge?: string | null;
+  location_quality?: string | null;
 }
 
 export interface RuleHelp {

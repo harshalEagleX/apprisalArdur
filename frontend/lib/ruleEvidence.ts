@@ -60,11 +60,30 @@ export function cleanRuleValue(v?: string | null): string | undefined {
 export interface EvidenceSource {
   document: string; // raw token: appraisal | engagement | contract | ...
   label: string; // human-readable document name
+  /** Humanized bound-field name ("Sale price", "Comp 2 GLA") — SHALqc rows only. */
+  fieldLabel?: string;
   comparable?: string; // "Comp 1" | "Subject" — which property this value is for
   value: string;
+  /** The verbatim snippet the judge cited, when it differs from the value. */
+  quote?: string;
   confidence?: number; // 0..1
   page?: number;
-  method?: string; // how the value was extracted, when the pipeline reports it
+  /** Normalized {x,y,w,h} page fractions for click-to-locate, when available. */
+  bbox?: { x: number; y: number; w: number; h: number } | null;
+  method?: string; // provenance badge (XML / Report / Order form / AI-read), when reported
+}
+
+/**
+ * "comp_2_sale_price" → "Comp 2 sale price". Presentation only — the raw label
+ * stays the identifier everywhere else. Tokens of ≤3 letters render uppercased
+ * (gla → GLA, apn → APN) since they are acronyms on the form.
+ */
+export function humanizeFieldLabel(raw: string): string {
+  const words = raw.trim().split(/_+/).filter(Boolean).map(w =>
+    /^[a-z]{1,3}$/.test(w) && !/^(per|of|to|the|and|for|in|on)$/.test(w) ? w.toUpperCase() : w
+  );
+  const joined = words.join(" ");
+  return joined.charAt(0).toUpperCase() + joined.slice(1);
 }
 
 // "<doc>: <value> (<conf>%, p<page>)" — page is optional; value may itself
@@ -97,17 +116,20 @@ function parseEvidenceEntry(entry: string): EvidenceSource | null {
   return null;
 }
 
-// One evidence element may arrive as a structured object (current API), a
-// preformatted string (legacy rows), or — defensively — anything else.
+// One evidence element may arrive as a SHALqc-native row (label + source +
+// page/bbox), a structured document-tagged object (older API), a preformatted
+// string (legacy rows), or — defensively — anything else.
 function coerceSource(entry: unknown): EvidenceSource | null {
   if (typeof entry === "string") return parseEvidenceEntry(entry);
-  if (entry && typeof entry === "object") {
-    const o = entry as Record<string, unknown>;
-    const doc = typeof o.document === "string" ? o.document : "";
-    const rawValue =
-      typeof o.value === "string" ? o.value : o.value == null ? undefined : String(o.value);
-    const value = cleanRuleValue(rawValue);
-    if (!doc || !value) return null;
+  if (!entry || typeof entry !== "object") return null;
+  const o = entry as Record<string, unknown>;
+  const rawValue =
+    typeof o.value === "string" ? o.value : o.value == null ? undefined : String(o.value);
+  const value = cleanRuleValue(rawValue);
+  if (!value) return null;
+
+  const doc = typeof o.document === "string" ? o.document : "";
+  if (doc) {
     return {
       document: doc.trim().toLowerCase(),
       label: documentLabel(doc),
@@ -118,7 +140,46 @@ function coerceSource(entry: unknown): EvidenceSource | null {
       method: typeof o.method === "string" ? o.method : undefined,
     };
   }
-  return null;
+
+  // SHALqc-native evidence row: {label, value, quote?, page?, bbox?, source,
+  // source_badge}. The bound-label + provenance say what the value IS and where
+  // it came from — without this branch the row rendered as a bare value with an
+  // empty header.
+  const fieldRaw = typeof o.label === "string" ? o.label.trim() : "";
+  if (!fieldRaw) return null;
+  const srcTok = typeof o.source === "string" ? o.source.toLowerCase() : "";
+  const document = srcTok.includes("engagement") ? "engagement"
+    : srcTok.includes("contract") ? "contract"
+    : "appraisal";
+  const b = o.bbox as Record<string, unknown> | null | undefined;
+  const bbox =
+    b && typeof b === "object" &&
+    typeof b.x === "number" && typeof b.y === "number" &&
+    typeof b.w === "number" && typeof b.h === "number" && b.w > 0 && b.h > 0
+      ? { x: b.x, y: b.y, w: b.w, h: b.h }
+      : null;
+  const quote = typeof o.quote === "string" && o.quote.trim() ? o.quote.trim() : undefined;
+  return {
+    document,
+    label: documentLabel(document),
+    fieldLabel: humanizeFieldLabel(fieldRaw),
+    value,
+    quote: quote !== value ? quote : undefined,
+    confidence: typeof o.confidence === "number" ? o.confidence : undefined,
+    page: typeof o.page === "number" && o.page > 0 ? o.page : undefined,
+    bbox,
+    method: typeof o.source_badge === "string" && o.source_badge ? o.source_badge : undefined,
+  };
+}
+
+/**
+ * Coerce a rule-detail `sources` array (any of the three shapes) into renderable
+ * evidence sources — the expanded finding row's label+value cards.
+ */
+export function coerceEvidenceSources(entries: unknown[] | null | undefined): EvidenceSource[] {
+  return (entries ?? [])
+    .map(coerceSource)
+    .filter((s): s is EvidenceSource => s != null);
 }
 
 /**

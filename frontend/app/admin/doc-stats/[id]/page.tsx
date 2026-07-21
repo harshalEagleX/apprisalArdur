@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft, Timer, Layers, Gauge, Search, ArrowUpDown, Cpu, FileText,
-  Hourglass, AlertTriangle, Info,
+  Hourglass, AlertTriangle, Info, DollarSign,
 } from "lucide-react";
 import {
   getDocStatDetail, getDocStatThresholds, getDocStatCompare,
   type DocStatDetail, type DocStatRule, type DocStatStage, type DocStatCompare,
 } from "@/lib/api";
-import { fmtMs, durationTone } from "@/lib/duration";
+import { fmtMs, durationTone, fmtCost, fmtTokens } from "@/lib/duration";
 import { stageLabel } from "@/lib/stageLabels";
 import { Skeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
@@ -228,14 +228,17 @@ export default function DocStatDetailPage() {
       </div>
 
       {/* Overview tab: headline numbers + insight + compare + pipeline + sections */}
-      {/* Headline numbers — total, rule engine, and the Groq inference/throttle split */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Headline numbers — total, rule engine, the AI inference/throttle split, and $ cost */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <HeadStat icon={Timer} label="Total time"   value={fmtMs(data.totalMs)} hint="end-to-end" tone="text-white" />
         <HeadStat icon={Cpu}   label="Rule engine"  value={fmtMs(data.ruleEngineMs)} hint={`${data.ruleCount ?? 0} rules`} tone="text-sky-300" />
         <HeadStat icon={Cpu}   label="AI analysis" value={fmtMs(data.llmInferenceMs)} hint={`${data.llmCalls ?? 0} AI call${(data.llmCalls ?? 0) === 1 ? "" : "s"}`} tone="text-sky-300" />
         <HeadStat icon={Hourglass} label="Rate-limit wait" value={fmtMs(data.llmThrottleWaitMs)}
           hint={(data.rateLimitHits ?? 0) > 0 ? `${data.rateLimitHits} rate-limit hit(s)` : "no rate-limit hits"}
           tone={(data.rateLimitHits ?? 0) > 0 ? "text-red-300" : "text-amber-300"} />
+        <HeadStat icon={DollarSign} label="AI cost" value={fmtCost(data.llmCostUsd)}
+          hint={(data.totalTokens ?? 0) > 0 ? `${fmtTokens(data.totalTokens)} tokens` : "no tokens billed"}
+          tone="text-emerald-300" />
       </div>
 
       {/* "So what?" — interpret the dominant cost and recommend an action, so the numbers
@@ -250,7 +253,7 @@ export default function DocStatDetailPage() {
         if (pctT >= 30) {
           tone = "border-amber-500/30 bg-amber-950/20 text-amber-200";
           headline = `${pctT}% of processing was spent waiting on the AI rate limit.`;
-          rec = "Raise GROQ_TPM_LIMIT (if your Groq plan allows) or reduce concurrent QC jobs so requests aren't throttled.";
+          rec = "Add another TOGETHER_API_KEY (rate limits are per key) or reduce concurrent QC jobs so requests aren't throttled.";
         } else if (pctI >= 40) {
           tone = "border-sky-500/30 bg-sky-950/20 text-sky-200";
           headline = `${pctI}% of processing was AI analysis (${data.llmCalls ?? 0} call${(data.llmCalls ?? 0) === 1 ? "" : "s"}).`;

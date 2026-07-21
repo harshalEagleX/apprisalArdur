@@ -22,6 +22,7 @@ export function PdfDocumentViewer({
   fileUrl,
   targetPage,
   targetBox,
+  focusNonce = 0,
   width,
   highlighting,
   onLoadSuccess,
@@ -30,6 +31,9 @@ export function PdfDocumentViewer({
   fileUrl?: string;
   targetPage: number;
   targetBox?: { x: number; y: number; w: number; h: number } | null;
+  /** Bumped by the parent on every focus action, so a re-click on the same
+   *  finding re-scrolls even when page/box are unchanged. */
+  focusNonce?: number;
   width: number;
   highlighting: boolean;
   onLoadSuccess: (numPages: number) => void;
@@ -46,20 +50,29 @@ export function PdfDocumentViewer({
   // Last measured height per page, so an unmounted page's placeholder keeps its
   // real size and scrolling past it doesn't cause the content to jump.
   const pageHeights = useRef<Record<number, number>>({});
+  // The real rendered height of a page at the current width. Report pages are a
+  // UNIFORM size, so once ONE page has rendered we use its true height for every
+  // not-yet-rendered page's placeholder — instead of the US-Letter GUESS, which
+  // is ~250px too short on the common legal-size (8.5×14) report. A wrong guess
+  // made every page grow when it rendered, shoving the just-jumped-to finding
+  // down the page and forcing a second, disruptive re-scroll to correct it.
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
 
   const estimatedHeight = Math.round(width * DEFAULT_PAGE_RATIO);
 
   // Reset virtualization when the document changes.
   useEffect(() => {
     pageHeights.current = {};
+    setMeasuredHeight(null);
     setVisiblePages(new Set([Math.max(1, targetPage)]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileUrl]);
 
   // Zoom changes the render width, so cached placeholder heights are stale —
-  // drop them (visible pages re-measure on render; the estimate covers the rest).
+  // drop them (visible pages re-measure on render; the measured height covers the rest).
   useEffect(() => {
     pageHeights.current = {};
+    setMeasuredHeight(null);
   }, [width]);
 
   // Find the scrollable ancestor (the viewer's overflow-auto container) so the
@@ -112,17 +125,34 @@ export function PdfDocumentViewer({
     if (node && observerRef.current) observerRef.current.observe(node);
   }, []);
 
-  // Keep the target (highlighted) page mounted and scroll it into view.
+  // Set while a focus is awaiting the target page's first render, so the ONE
+  // scroll can fire from onRenderSuccess (below) the moment the real height exists.
+  const pendingFocusRef = useRef(false);
+
+  const scrollToTarget = useCallback(() => {
+    const page = pageRefs.current[targetPage];
+    const target = (targetBox && highlightRef.current) ? highlightRef.current : page;
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [targetPage, targetBox]);
+
+  // Scroll the target finding into view EXACTLY ONCE per focus, and only once the
+  // target page has its REAL height — so the landing is accurate and never needs a
+  // second (disruptive) correction that shoves the document up/down after the jump.
+  // If the page is already rendered, scroll now; otherwise defer the single scroll
+  // to onRenderSuccess. `highlighting` is intentionally NOT a dependency — it is a
+  // visual ring and must never move the document (its 5s toggle used to re-fire
+  // this effect and re-scroll the page out from under the reviewer).
   useEffect(() => {
     if (!targetPage) return;
     setVisiblePages(prev => prev.has(targetPage) ? prev : new Set(prev).add(targetPage));
-    const page = pageRefs.current[targetPage];
-    if (!page) return;
-    window.setTimeout(() => {
-      const target = targetBox ? highlightRef.current : page;
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 120);
-  }, [fileUrl, targetPage, targetBox, highlighting, numPages]);
+    const ready = pageRefs.current[targetPage] && pageHeights.current[targetPage] != null;
+    if (ready) {
+      pendingFocusRef.current = false;
+      const t = window.setTimeout(scrollToTarget, 60);
+      return () => window.clearTimeout(t);
+    }
+    pendingFocusRef.current = true;   // not rendered yet → onRenderSuccess does the one scroll
+  }, [fileUrl, targetPage, targetBox, numPages, focusNonce, scrollToTarget]);
 
   return (
     <Document
@@ -140,7 +170,7 @@ export function PdfDocumentViewer({
         {Array.from({ length: numPages }, (_, index) => {
           const pageNumber = index + 1;
           const isVisible = visiblePages.has(pageNumber);
-          const placeholderHeight = pageHeights.current[pageNumber] ?? estimatedHeight;
+          const placeholderHeight = pageHeights.current[pageNumber] ?? measuredHeight ?? estimatedHeight;
           return (
             <div
               key={`${fileUrl}-${pageNumber}`}
@@ -170,7 +200,19 @@ export function PdfDocumentViewer({
                   renderTextLayer
                   onRenderSuccess={() => {
                     const node = pageRefs.current[pageNumber];
-                    if (node) pageHeights.current[pageNumber] = node.offsetHeight;
+                    if (node) {
+                      pageHeights.current[pageNumber] = node.offsetHeight;
+                      // First real height → use it for every un-rendered page's
+                      // placeholder so later renders don't shift the layout.
+                      if (measuredHeight == null) setMeasuredHeight(node.offsetHeight);
+                    }
+                    // The ONE scroll for a pending focus, now that the target page
+                    // has its real height — a single accurate landing, never a
+                    // jump-then-correct.
+                    if (pendingFocusRef.current && pageNumber === targetPage) {
+                      pendingFocusRef.current = false;
+                      window.setTimeout(scrollToTarget, 60);
+                    }
                   }}
                   className="overflow-hidden rounded-md bg-white shadow-[0_18px_48px_rgba(0,0,0,0.46)]"
                 />

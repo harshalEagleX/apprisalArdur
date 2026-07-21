@@ -38,6 +38,7 @@ class BatchStatusDeterminationTest {
     @Autowired private QCResultRepository qcResultRepository;
     @Autowired private QCRuleResultRepository qcRuleResultRepository;
     @Autowired private ProcessingMetricsRepository processingMetricsRepository;
+    @Autowired private DocStatRepository docStatRepository;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TransactionTemplate tx;
 
@@ -102,8 +103,9 @@ class BatchStatusDeterminationTest {
 
     private void cleanup(String tag, long[] ids) {
         tx.executeWithoutResult(s -> {
-            // processing_metrics has FK → qc_result; delete metrics FIRST
+            // processing_metrics AND doc_stat have FK → qc_result; delete them FIRST
             if (ids[0] != 0) processingMetricsRepository.deleteByBatchId(ids[0]);
+            if (ids[0] != 0) docStatRepository.deleteTreeByBatchId(ids[0]);
             if (ids[2] != 0) qcRuleResultRepository.findByQcResultId(ids[2]).forEach(qcRuleResultRepository::delete);
             if (ids[1] != 0) {
                 qcResultRepository.findAllByBatchFileIdOrderByProcessedAtDesc(ids[1])
@@ -129,7 +131,11 @@ class BatchStatusDeterminationTest {
                     scopedCard("G-1",   "cross_document"),
                     scopedCard("SEM-1", "semantic")
                 ),
-                List.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), Map.of(), null, 0, false);
+                List.of(), List.of(), List.of(), Map.of(),
+                Map.of(),                 // usage
+                List.of(), List.of(), Map.of(),
+                Map.of(),                 // timings
+                null, 0, false);
     }
 
     private static ShalqcCard scopedCard(String itemId, String scope) {

@@ -208,24 +208,37 @@ def classify_file(path: Path) -> str:
         return "unknown"
 
     pages = _pdf_page_count(path)
-    text = _pdf_text_sample(path)
+    # Sample 6 pages, not 3: the URAR form's UAD markers ("sales comparison
+    # approach", "reconciliation") sit a few pages IN, past the cover. A shallow
+    # 3-page sample missed them, so a 30+ page report whose scope merely QUOTES
+    # "sales contract" fell through to the contract branch → appraisal_pdf stayed
+    # None → the whole order was G-0 blocked ("appraisal PDF not found"). This is
+    # the exact EBER96709 failure.
+    text = _pdf_text_sample(path, max_pages=6)
 
+    # 1) Definitive appraisal signal (UAD/URAR markers on a long report). Checked
+    #    FIRST so an appraisal that mentions "sales contract" is never a contract.
     if pages >= _APPRAISAL_MIN_PAGES and any(m in text for m in _UAD_MARKERS):
         return "appraisal_pdf"
-    if any(m in text for m in _CONTRACT_MARKERS):
+    # 2) Engagement letter / order pack — identified by its own markers at ANY
+    #    length (an order pack can run to ~9 pages, so this must not depend on
+    #    page count, which would collide with the appraisal floor).
+    if any(m in text for m in _ENGAGEMENT_MARKERS):
+        return "engagement_letter"
+    # 3) A purchase contract is a SHORT document; its markers apply only below the
+    #    appraisal floor (a long PDF with a contract phrase is the appraisal).
+    if pages < _APPRAISAL_MIN_PAGES and any(m in text for m in _CONTRACT_MARKERS):
         return "contract"
-    if any(m in text for m in _ENGAGEMENT_MARKERS) or pages <= 3:
-        return "engagement_letter"
-    # Structural fallback for a letter this AMC titles differently — a short PDF
-    # dense in order-form fields is an order form (see _ORDER_FORM_TOKENS).
-    if (pages < _APPRAISAL_MIN_PAGES
-            and sum(1 for t in _ORDER_FORM_TOKENS if t in text) >= _ORDER_FORM_TOKEN_FLOOR):
-        return "engagement_letter"
-    # A long PDF without UAD markers is still most likely the appraisal
-    # report (scanned reports may miss the text markers entirely) — never
-    # silently drop the largest document in the package.
+    # 4) A long PDF with no distinguishing markers is still the appraisal report
+    #    (scanned reports miss text markers) — never drop the largest document.
     if pages >= _APPRAISAL_MIN_PAGES:
         return "appraisal_pdf"
+    # 5) Short PDFs: a 1-3 page doc is a letter; an order-form-dense short PDF is an
+    #    order form this AMC titles differently (see _ORDER_FORM_TOKENS).
+    if pages <= 3:
+        return "engagement_letter"
+    if sum(1 for t in _ORDER_FORM_TOKENS if t in text) >= _ORDER_FORM_TOKEN_FLOOR:
+        return "engagement_letter"
     return "unknown"
 
 

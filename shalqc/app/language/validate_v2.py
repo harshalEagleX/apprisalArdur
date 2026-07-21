@@ -75,20 +75,41 @@ def _has_directive(text: str) -> bool:
     return bool(_DIRECTIVE_RX.search(text or ""))
 
 
-def _synth_line(status: StatusV2, expected: str, found: str) -> str:
+def _human_label(label: str) -> str:
+    return (label or "").replace("_", " ").strip()
+
+
+def _missing_summary(packet: Packet, item: CompiledItem) -> str:
+    """Name WHAT could not be read, so the reviewer knows what to go look for
+    instead of being told a bare 'verify'."""
+    labels = [_human_label(l) for l in (packet.absent_labels or [])[:3] if l]
+    if labels:
+        return ", ".join(labels)
+    name = (item.item_name or "").strip()
+    return name or "the value this check needs"
+
+
+def _synth_line(status: StatusV2, expected: str, found: str,
+                packet: Packet, item: CompiledItem) -> str:
+    """The system-composed finding line. Tone contract (user directive
+    2026-07-20): soft, asking language that names WHAT to verify — never a bare
+    'please verify' / 'check manually' the reviewer can't act on."""
     if status == StatusV2.NOT_SATISFIED:
         # NEUTRAL finding — states expected vs found, leaves the decision to the
         # reviewer (the card's reject_text carries the reject wording, used only
         # after Confirm). No imperative, no "reject" pronounced by the LLM layer.
-        base = f"Expected {expected or 'the check to be met'}; found {found or 'a discrepancy'}. Please verify."
+        base = (f"Expected {expected or 'the check to be met'}; the report shows "
+                f"{found or 'something different'}. Could you please take a look and decide?")
     elif status == StatusV2.SATISFIED:
-        base = f"Checked: {found or 'the report data'} — looks satisfied."
+        base = f"Checked: {found or 'the report data'} — this looks in order."
     elif status == StatusV2.NOT_APPLICABLE:
         base = f"Not applicable: {expected or found or 'precondition absent'}."
     elif status == StatusV2.CANNOT_EVALUATE:
-        base = f"The report does not appear to contain the data needed — please check by eye."
+        base = (f"We couldn't find {_missing_summary(packet, item)} in the report — "
+                "could you please look it up in the document and confirm?")
     else:
-        base = f"Expected {expected or 'a value'}; found {found or 'unclear data'}. Please verify."
+        base = (f"Expected {expected or 'a value'}; found {found or 'unclear data'}. "
+                "Could you please double-check this one?")
     return base[:240]
 
 
@@ -115,7 +136,9 @@ def _badge(source: Optional[str]) -> str:
 def _located_evidence(packet: Packet, quotes_by_label: Dict[str, str]) -> List[Dict[str, Any]]:
     """One evidence row per bound packet value, carrying coordinates so the
     frontend can auto-scroll the document. A grounded LLM quote is attached to its
-    label when present. Order: best-located first (exact > region > page > none)."""
+    label when present. Order: the value the judge actually CITED first (that is
+    the one the reviewer should be scrolled to), then best-located
+    (exact > region > page > none)."""
     rank = {"exact": 0, "region": 1, "page": 2, "none": 3}
     rows: List[Dict[str, Any]] = []
     for label, entry in packet.values.items():
@@ -132,7 +155,8 @@ def _located_evidence(packet: Packet, quotes_by_label: Dict[str, str]) -> List[D
             "source_badge": _badge(entry.get("source")),
             "confidence": round(float(entry.get("confidence") or 0.0), 3),
         })
-    rows.sort(key=lambda r: rank.get(r["location_quality"], 3))
+    rows.sort(key=lambda r: (0 if r["quote"] else 1,
+                             rank.get(r["location_quality"], 3)))
     return rows
 
 
@@ -273,9 +297,9 @@ def validate(raw: Dict[str, Any], packet: Packet, item: CompiledItem) -> JudgeVe
     # §4: neutralize a malformed OR a directive/verdict-issuing reviewer_line into
     # the system-composed finding line — the LLM never gets to phrase the decision.
     if not _reviewer_line_ok(reviewer_line):
-        reviewer_line = _synth_line(status, expected, found)
+        reviewer_line = _synth_line(status, expected, found, packet, item)
     elif _has_directive(reviewer_line):
-        reviewer_line = _synth_line(status, expected, found)
+        reviewer_line = _synth_line(status, expected, found, packet, item)
         guardrails.append("directive_language")
 
     return JudgeVerdict(

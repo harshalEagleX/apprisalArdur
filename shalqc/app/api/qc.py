@@ -6,10 +6,12 @@ order package (.zip, the normal Java→service flow) or, for local/testing, a
 JSON body naming an already-unpacked order folder. Returns the reviewer report
 (report.builder shape).
 
-The async trio (/qc/submit, /qc/job/{id}, /qc/progress/{token}) needs the
-Celery worker + Redis (SHALqc.md §9) — not wired in this build pass; those
-routes are declared so the contract is visible and return 501 until Part 9's
-async half lands.
+GET /qc/progress/{token} is live: /qc/process runs in the thread pool and
+publishes eased stage progress to app.pipeline.progress, which this endpoint
+serves to the Java poller (drives the admin "Background activity" bar).
+
+The async submit trio (/qc/submit, /qc/job/{id}) still needs the Celery worker +
+Redis (SHALqc.md §9) and falls back to the synchronous path until Part 9 lands.
 """
 
 from __future__ import annotations
@@ -21,7 +23,9 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
+from app.pipeline import progress as _progress
 from app.pipeline.intake import safe_extract_zip
 from app.pipeline.orchestrator import run_qc
 
@@ -72,8 +76,20 @@ async def process(request: Request):
         # bundle (e.g. EQUITYSOLUTIONS) rather than resolving from the temp order
         # dir and falling back to _base.
         amc_code = form.get("amc_code") or None
-        return run_qc(extract_dir, llm_client=_resolve_client(use_llm),
-                      mode="language", amc_code=amc_code)
+        # Java hands us a progress_token and polls GET /qc/progress/{token} to
+        # drive the admin bar. Register it up front so the first poll (which can
+        # arrive before run_qc reaches its first stage) already resolves.
+        token = _clean_token(form.get("progress_token"))
+        _progress.start(token)
+        # run_qc is fully blocking (OCR + minutes of LLM). Run it in the thread
+        # pool so the event loop stays free to answer /qc/progress/{token} and
+        # /live DURING the run — on the loop it would freeze the whole service.
+        try:
+            return await run_in_threadpool(
+                run_qc, extract_dir, llm_client=_resolve_client(use_llm),
+                mode="language", amc_code=amc_code, progress_token=token)
+        finally:
+            _progress.finish(token)
 
     body = await request.json()
     order_dir = (body or {}).get("order_dir")
@@ -88,8 +104,14 @@ async def process(request: Request):
     # a prior run of a different mode; the cache keys on package hash, not mode).
     mode = (body or {}).get("mode")   # None → settings.judge_mode
     persist = bool((body or {}).get("persist", True))
-    return run_qc(order_path, llm_client=_resolve_client((body or {}).get("use_llm", True)),
-                  mode=mode, persist=persist)
+    token = _clean_token((body or {}).get("progress_token"))
+    _progress.start(token)
+    try:
+        return await run_in_threadpool(
+            run_qc, order_path, llm_client=_resolve_client((body or {}).get("use_llm", True)),
+            mode=mode, persist=persist, progress_token=token)
+    finally:
+        _progress.finish(token)
 
 
 async def _order_dir_from_files(form) -> Path:
@@ -116,6 +138,26 @@ def _resolve_client(use_llm):
         return None
     from app.llm.client import get_client
     return get_client()   # None when no keys configured → rules degrade to VERIFY
+
+
+def _clean_token(raw) -> Optional[str]:
+    """A safe, bounded progress token from an untrusted form/JSON field."""
+    if not raw:
+        return None
+    s = str(raw).strip()
+    return s[:64] if s else None
+
+
+@router.get("/progress/{token}")
+def progress(token: str):
+    """Live sub-progress for a running QC job (SHALqc.md §9). Java's
+    PythonClientService polls this every ~1.5s to drive the admin bar; keys are
+    {stage, message, sub_percent, elapsed_ms}. 404 when the token is unknown
+    (not started yet, or already evicted) — the poller tolerates a few 404s."""
+    snap = _progress.snapshot(token)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="unknown or expired progress token")
+    return snap
 
 
 class SubmitByPath(BaseModel):

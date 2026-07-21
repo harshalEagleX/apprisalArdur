@@ -103,6 +103,10 @@ class LLMCall:
     ms: float = 0.0
     error: Optional[str] = None
     retries: int = 0
+    # Provider-reported token usage for this call (0 on a cache hit or when the
+    # response carried no usage block). Drives the per-order cost/usage report.
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 class LLMResult:
@@ -278,7 +282,7 @@ class LLMClient:
                 break
             used: Optional[float] = None
             try:
-                data, err, ms, raw, used = self._one_call(key, model, messages, max_tokens,
+                data, err, ms, raw, used, usage_split = self._one_call(key, model, messages, max_tokens,
                                                           reasoning_effort)
             finally:
                 # Refund the difference between the reserved ceiling and what the
@@ -289,7 +293,8 @@ class LLMClient:
                 self._pool.release(key, reserved=estimated, actual=used)
             if data is not None:
                 call = LLMCall(call_type=call_type, provider="together", model=model,
-                               ok=True, ms=ms, retries=retries)
+                               ok=True, ms=ms, retries=retries,
+                               prompt_tokens=int(usage_split[0]), completion_tokens=int(usage_split[1]))
                 self._record(call)
                 self._cache_put(cache_key, data,
                                 meta={"call_type": call_type, "model": model,
@@ -330,22 +335,23 @@ class LLMClient:
         except httpx.TimeoutException as exc:
             # deliberately NOT prefixed "transport:" — _is_retryable must never
             # retry this (module docstring: a timeout means the call is dead).
-            return None, f"timeout:{exc}", (time.perf_counter() - t0) * 1000, None, None
+            return None, f"timeout:{exc}", (time.perf_counter() - t0) * 1000, None, None, (0, 0)
         except Exception as exc:
-            return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000, None, None
+            return None, f"transport:{exc}", (time.perf_counter() - t0) * 1000, None, None, (0, 0)
         ms = (time.perf_counter() - t0) * 1000
         if resp.status_code == 429 or resp.status_code >= 500:
-            return None, f"http_{resp.status_code}", ms, None, None   # retry trigger
+            return None, f"http_{resp.status_code}", ms, None, None, (0, 0)   # retry trigger
         if resp.status_code != 200:
-            return None, f"http_{resp.status_code}:{resp.text[:200]}", ms, None, None
+            return None, f"http_{resp.status_code}:{resp.text[:200]}", ms, None, None, (0, 0)
         try:
             envelope = resp.json()
             choice = envelope["choices"][0]
             content = choice["message"]["content"]
             finish = choice.get("finish_reason", "")
         except Exception as exc:
-            return None, f"bad_envelope:{exc}", ms, None, None
+            return None, f"bad_envelope:{exc}", ms, None, None, (0, 0)
         used = _usage_tokens(envelope)
+        p_tok, c_tok = _usage_split(envelope)
         data = _parse_json(content)
         if data is None:
             # finish_reason distinguishes the two failure modes that both surface
@@ -373,12 +379,14 @@ class LLMClient:
                 used2 = _usage_tokens(envelope2)
                 if used2 is not None:
                     used = (used or 0.0) + used2
+                p2, c2 = _usage_split(envelope2)
+                p_tok += p2; c_tok += c2
             except Exception:
                 data = None
         if data is None:
             reason = "truncated_length" if finish == "length" else "invalid_json_after_retry"
-            return None, reason, ms, content, used
-        return data, None, ms, content, used
+            return None, reason, ms, content, used, (p_tok, c_tok)
+        return data, None, ms, content, used, (p_tok, c_tok)
 
     # ------------------------------------------------------------------
     # GapfillClient protocol (extraction/llm_gapfill.py C1)
@@ -441,6 +449,19 @@ def _usage_tokens(envelope: dict) -> Optional[float]:
     parts = [usage.get("prompt_tokens"), usage.get("completion_tokens")]
     nums = [float(p) for p in parts if isinstance(p, (int, float))]
     return sum(nums) if nums else None
+
+
+def _usage_split(envelope: dict) -> tuple:
+    """(prompt_tokens, completion_tokens) from the response usage block — the
+    input/output split needed for cost (they are priced differently). (0, 0)
+    when absent."""
+    usage = (envelope or {}).get("usage")
+    if not isinstance(usage, dict):
+        return (0, 0)
+    def _i(k):
+        v = usage.get(k)
+        return int(v) if isinstance(v, (int, float)) else 0
+    return (_i("prompt_tokens"), _i("completion_tokens"))
 
 
 def _parse_json(text: str) -> Optional[dict]:

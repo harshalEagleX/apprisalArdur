@@ -105,13 +105,22 @@ _BATCH_CLASSES: Dict[str, BatchClass] = {
     "fact":      BatchClass("fact", chunk=8, tokens_per_item=600, reasoning_effort="low"),
     "cross_doc": BatchClass("cross_doc", chunk=6, tokens_per_item=650, reasoning_effort="low"),
     "narrative": BatchClass("narrative", chunk=4, tokens_per_item=750, reasoning_effort="low"),
+    # comps carry a wide grid (each item reasons over Subject + up to 7 comps),
+    # so an 8-item "fact" batch overflowed max_tokens (observed 2026-07-21:
+    # `comps#0 failed: truncated_length`) — the whole batch was discarded and
+    # re-run as a split-retry, costing an extra provider round AND a slow
+    # truncated call. A smaller chunk with more per-item headroom lets the JSON
+    # finish on the FIRST pass: strictly safer for truncation (same direction as
+    # the 2026-07-14 headroom raise) and faster (no wasted retry round).
+    "comps":     BatchClass("comps", chunk=4, tokens_per_item=700, reasoning_effort="low"),
 }
-# packet.scope -> batch class. Anything not listed (subject/comps/unbound/
-# other) is "fact" — the safe, small-packet default.
+# packet.scope -> batch class. Anything not listed (subject/unbound/other) is
+# "fact" — the safe, small-packet default.
 _SCOPE_TO_CLASS = {
     "cross_document": "cross_doc",
     "narrative": "narrative",
     "cross_section": "narrative",
+    "comps": "comps",
 }
 
 
@@ -179,8 +188,13 @@ RULES OF EVIDENCE:
     or "within the last N years" checks deterministically; never REVIEW such a check
     for lack of knowing "now" when these hints are present.
  5) Write reviewer_line as one short plain-English FINDING a human reviewer reads
-    first: what was expected and what was found — factual, neutral, and ending in
-    "Please verify." You REPORT the finding; you do NOT issue the decision. NEVER
+    first: what was expected, what was found, and — for REVIEW / CANNOT_EVALUATE —
+    exactly WHAT the reviewer should look at to settle it, phrased as a soft,
+    polite request that names the specific value(s) and place: "Could you please
+    confirm the contract price — the report shows $250,000 but the engagement
+    letter shows $255,000?" NEVER a bare "Please verify" / "verify manually" /
+    "check by eye" — a line that doesn't say WHAT to check wastes the reviewer's
+    time. You REPORT the finding; you do NOT issue the decision. NEVER
     tell the appraiser to revise/correct/resubmit/add a comment, and NEVER pronounce
     "reject" — the reviewer decides, and the rejection wording is the AMC's authored
     reject_text (surfaced only after the human confirms), never your prose.
@@ -341,6 +355,9 @@ def _batch_meta(section: str, res) -> Dict[str, object]:
         "model": getattr(call, "model", "") if call else "",
         "ms": getattr(call, "ms", 0.0) if call else 0.0,
         "cached": getattr(call, "cached", False) if call else False,
+        # provider-reported token usage for this batch call → per-order cost report.
+        "prompt_tokens": getattr(call, "prompt_tokens", 0) if call else 0,
+        "completion_tokens": getattr(call, "completion_tokens", 0) if call else 0,
         "raw_response": getattr(res, "raw", None),
     }
 
@@ -540,7 +557,8 @@ def _unstable_reviewer_line(samples: List[str]) -> str:
     downstream validator (8–240) passes and the reviewer sees WHY it's a verify."""
     from collections import Counter
     tally = ", ".join(f"{s}×{c}" for s, c in Counter(samples).most_common())
-    return f"Judge verdict was unstable across {len(samples)} runs ({tally}) — please verify."[:240]
+    return (f"The automated judgment came out differently across {len(samples)} runs "
+            f"({tally}) — could you please take a look and decide?")[:240]
 
 
 def judge_all_consistent(client, packets_by_section: Dict[str, List], n: int = 1

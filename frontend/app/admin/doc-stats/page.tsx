@@ -14,7 +14,7 @@ import {
   type DocStatSummary, type DocStatBatchRollup, type DocStatRuleRank, type Pctl,
   type DocStatTrendPoint,
 } from "@/lib/api";
-import { fmtMs, durationTone } from "@/lib/duration";
+import { fmtMs, durationTone, fmtCost, fmtTokens } from "@/lib/duration";
 import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
 import StatusBadge from "@/components/shared/StatusBadge";
@@ -40,13 +40,14 @@ export default function DocStatsPage() {
             <Timer size={18} className="text-indigo-300" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-white">DocStats — QC timing</h1>
+            <h1 className="text-lg font-semibold text-white">DocStats — QC timing &amp; cost</h1>
             <p className="text-xs text-slate-500">
-              Real measured time per pipeline stage and QC rule. Groq calls are split into model
-              inference vs throttle wait, so a frequency problem looks different from a size problem.
+              Real measured time per pipeline stage and QC rule, plus the LLM tokens and dollar cost
+              of each document. AI time is split into model inference vs throttle wait, so a frequency
+              problem looks different from a size problem.
               <span className="text-slate-600"> &ldquo;Other&rdquo; is everything not in the rule engine or
               AI — OCR, extraction and, when several orders run at once, the time each spends contending
-              for the single Python process and shared Groq budget.</span>
+              for the single Python process and shared LLM budget.</span>
             </p>
           </div>
         </div>
@@ -137,6 +138,7 @@ function AppraisalsPanel() {
                 <th className="px-4 py-2.5 font-medium text-right">Total</th>
                 <th className="px-4 py-2.5 font-medium text-right">Rule engine</th>
                 <th className="px-4 py-2.5 font-medium">AI (analysis / wait)</th>
+                <th className="px-4 py-2.5 font-medium text-right" title="LLM tokens used and the dollar cost of this document's QC (input + output tokens, priced per the model)">AI cost</th>
                 <th className="px-4 py-2.5 font-medium text-right" title="Total minus rule engine, AI inference and throttle wait — OCR, extraction, transport, and cross-order contention when running in bulk">Other</th>
                 <th className="px-4 py-2.5 font-medium">Slowest rule</th>
                 <th className="px-4 py-2.5"></th>
@@ -175,7 +177,15 @@ function AppraisalsPanel() {
                       </div>
                     ) : <span className="text-slate-600 text-xs">none</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-400" title="Time not attributed to the rule engine or AI: OCR, extraction, transport, and — in bulk — contention for the single Python process and shared Groq budget">
+                  <td className="px-4 py-3 text-right tabular-nums" title={d.llmModel ? `${fmtTokens(d.totalTokens)} tokens on ${d.llmModel}` : "No LLM cost recorded"}>
+                    {(d.totalTokens ?? 0) > 0 ? (
+                      <div className="flex flex-col items-end leading-tight">
+                        <span className="font-medium text-emerald-300">{fmtCost(d.llmCostUsd)}</span>
+                        <span className="text-[11px] text-slate-500">{fmtTokens(d.totalTokens)} tok</span>
+                      </div>
+                    ) : <span className="text-slate-600 text-xs">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-400" title="Time not attributed to the rule engine or AI: OCR, extraction, transport, and — in bulk — contention for the single Python process and shared LLM budget">
                     {fmtMs(Math.max(0, (d.totalMs ?? 0) - (d.ruleEngineMs ?? 0) - (d.llmInferenceMs ?? 0) - (d.llmThrottleWaitMs ?? 0)))}
                   </td>
                   <td className="px-4 py-3">
@@ -315,7 +325,7 @@ function RankingPanel() {
     <div className="overflow-hidden rounded-xl border border-white/10 bg-surface/60">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
         <span className="text-[11px] text-slate-500">
-          Average evaluation time per rule across every measured run. LLM% = share of runs that called Groq.
+          Average evaluation time per rule across every measured run. LLM% = share of runs that called the AI judge.
         </span>
         <div className="flex items-center gap-3 text-[11px]">
           {highCount > 0 && (
