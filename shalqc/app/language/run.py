@@ -229,6 +229,33 @@ def _form_not_applicable(item: CompiledItem, src: Sources) -> bool:
     return all(registry.is_absent_on_form(lbl, str(form_type)) for lbl in labels)
 
 
+def _transaction_not_applicable(item: CompiledItem, src: Sources) -> bool:
+    """Transaction-aware N/A: the CONTRACT section concerns the pending SALE contract
+    (price, date, seller-is-owner data source, financial assistance) — a REFINANCE has
+    no sale, so every contract-section check is structurally not applicable. Decided in
+    code, section-driven (no per-item list to maintain). Fail-safe: unknown/absent
+    transaction type → False (never a guessed N/A)."""
+    if item.section != "contract":
+        return False
+    ap = src.appraisal
+    if ap is None:
+        return False
+    tt = ap.value("transaction_type") or ap.value("assignment_type")
+    return "refinance" in str(tt or "").lower()
+
+
+def _transaction_na_card(item: CompiledItem) -> JudgeVerdict:
+    """Deterministic NOT_APPLICABLE for a contract-section check on a refinance."""
+    return JudgeVerdict(
+        item_id=item.item_id, status=StatusV2.NOT_APPLICABLE, check_text=item.check_text,
+        section=item.section, decided_by="precompiled:transaction_gate",
+        guardrails=["refinance_no_contract"],
+        reviewer_line=("Not applicable — this is a refinance, so there is no sales "
+                       "contract for this section to check.")[:240],
+        **_item_fields(item),
+    )
+
+
 def _form_na_card(item: CompiledItem, form_type: str) -> JudgeVerdict:
     """Deterministic NOT_APPLICABLE for a check whose field(s) do not exist on the
     detected form — no packet, no LLM."""
@@ -317,6 +344,11 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
         # detected form is decided by the registry, before any packet/LLM work.
         if _form_not_applicable(item, src):
             results[item.item_id] = _form_na_card(item, str(src.appraisal.value("form_type")))
+            continue
+        # Transaction-aware N/A — a contract-section check on a refinance has no sale
+        # contract to evaluate; decided in code before any packet/LLM work.
+        if _transaction_not_applicable(item, src):
+            results[item.item_id] = _transaction_na_card(item)
             continue
         packet = build_packet(item, src)
         if _empty_packet(packet):

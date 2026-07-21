@@ -270,6 +270,41 @@ def test_trigger_not_fired_gates_to_not_applicable_without_llm():
     assert "trigger_not_fired" in jv.guardrails
 
 
+def test_contract_section_is_not_applicable_on_a_refinance():
+    from app.language.run import judge_items
+    # A contract-section check has no sale contract to evaluate on a refinance →
+    # deterministic NOT_APPLICABLE, never sent to the (None) client.
+    fs = _fs(transaction_type="Refinance", property_address="123 Main St")
+    item = _item(item_id="EQ-15", check_text="Contract Price & Date of Contract",
+                 section="contract", bound_labels=["contract_price", "contract_date"])
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    jv = res["EQ-15"]
+    assert jv.status == StatusV2.NOT_APPLICABLE
+    assert jv.decided_by == "precompiled:transaction_gate"
+    assert "refinance_no_contract" in jv.guardrails
+
+
+def test_contract_section_still_judged_on_a_purchase():
+    from app.language.run import judge_items
+    # Same check on a PURCHASE is NOT gated (client=None → llm_unavailable REVIEW,
+    # proving it was not deterministically N/A'd).
+    fs = _fs(transaction_type="Purchase", contract_price="500000")
+    item = _item(item_id="EQ-15", check_text="Contract Price & Date of Contract",
+                 section="contract", bound_labels=["contract_price", "contract_date"])
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    assert res["EQ-15"].status != StatusV2.NOT_APPLICABLE
+
+
+def test_non_contract_section_never_transaction_gated_on_refinance():
+    from app.language.run import judge_items
+    # A SUBJECT-section check must still be evaluated on a refinance.
+    fs = _fs(transaction_type="Refinance", borrower_name="Jane Doe")
+    item = _item(item_id="EQ-1", check_text="Owner of public record",
+                 section="subject", bound_labels=["borrower_name"])
+    res, _, _ = judge_items([item], Sources.of(fs), fs, client=None)
+    assert res["EQ-1"].status != StatusV2.NOT_APPLICABLE
+
+
 def test_trigger_fired_when_condition_present_is_left_to_judge():
     from app.language.run import judge_items
     # condition label present with a real value → NOT gated; with client=None it
