@@ -608,6 +608,27 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
                 _suppress(ef, "caption-echo/grid-bleed")
                 suppressed += 1
             continue
+        # value_pattern gate — source-agnostic. sweep.py enforces it only on its own
+        # prose captures, so a LABEL-PROXIMITY grab from another reader (e.g.
+        # reasonable_exposure_time = "reasonablly", a word lifted from the sentence next
+        # to the "Exposure Time" label) slipped through and EQ-122 read a non-time value.
+        # The schema already states what a real answer looks like; enforce it for every
+        # source. Config-driven — only fields that declare value_pattern are affected.
+        if fd.value_pattern and not re.search(fd.value_pattern, value, re.I):
+            logger.info("Plausibility (generic) rejected %s='%s': fails value_pattern", fname, value)
+            _suppress(ef, "does not match the field's declared value_pattern")
+            suppressed += 1
+            continue
+        # A lone stopword ("or", "of", "is") is a label/prose fragment a reader lifted
+        # next to the field — never a real answer, for ANY field including narrative
+        # ones (prior_sale_analysis_comment = "or" tripped EQ-86/EQ-80). The full
+        # string gate below exempts narrative fields, so catch the single-token case
+        # here where it holds regardless of the field's nature.
+        if value.strip().lower().rstrip(".,;:()") in _STOPWORDS:
+            logger.info("Plausibility (generic) rejected %s='%s': lone stopword", fname, value)
+            _suppress(ef, "value is a single stopword/label fragment")
+            suppressed += 1
+            continue
         ok = True
         reason = ""
         if fd.allowed_values:
