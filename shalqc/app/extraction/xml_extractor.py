@@ -1226,6 +1226,20 @@ def _extract_comp_grid(root: ET.Element, f: dict) -> None:
                 _pd = _a(prior, "PropertySalesDate")
                 f["prior_sale_date"]  = _dates.to_display(_pd) or _pd
                 f["prior_sale_price"] = _a(prior, "PropertySalesAmount")
+                # EQ-85 binds prior_sale_effective_date_subject / data source — the
+                # subject's PRIOR_SALES row carries both, but the SUBJECT-element reader
+                # never sees this grid-row instance, so they were absent on every order.
+                _psrc = comp.find("PRIOR_SALES")
+                if _psrc is not None:
+                    _ped = _a(_psrc, "DataSourceEffectiveDate")
+                    if _ped:
+                        f.setdefault("prior_sale_effective_date_subject", _dates.to_display(_ped) or _ped)
+                    if _a(_psrc, "DataSourceDescription"):
+                        f.setdefault("prior_sale_data_source_subject", _a(_psrc, "DataSourceDescription"))
+            # EQ-119 (condo/co-op): the project phase — on the subject grid row. Absent
+            # on every order because nothing read it; the check hedged for lack of it.
+            if comp.get("ProjectPhaseIdentifier"):
+                f.setdefault("project_phase", comp.get("ProjectPhaseIdentifier"))
             # EQ-44/70: the subject grid's basement exit type (WalkOut|WalkUp|
             # InteriorOnly) — must be a walkout/walkup when basement_outside_entry=Yes.
             _scd = comp.find(".//COMPARISON_DETAIL")
@@ -1319,6 +1333,14 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     # plainly stated one.
     _set(f"{pfx}_financing_concessions", "FinancingConcessions", "_Description")
     _set(f"{pfx}_location_rating",   "Location",           "_Description")
+    # EQ-62 binds comp_N_leasehold: the grid's PropertyRights row states each comp's
+    # tenure ("Fee Simple" / "Leasehold"). It was never mapped, so the check saw the
+    # subject's rights but NO comp rights and hedged to REVIEW on every order. Map the
+    # rights cell and derive the leasehold flag the check reads.
+    _set(f"{pfx}_property_rights",   "PropertyRights",     "_Description")
+    _pr = _get("PropertyRights", "_Description")
+    if _pr:
+        f[f"{pfx}_leasehold"] = "Yes" if "lease" in _pr.lower() else "No"
     _set(f"{pfx}_site_area",         "SiteArea",           "_Description")
     _set(f"{pfx}_site_size",         "SiteArea",           "_Description")
     _set(f"{pfx}_view",              "View",               "_Description")
