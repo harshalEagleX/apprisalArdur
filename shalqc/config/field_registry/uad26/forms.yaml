@@ -21,3 +21,12 @@ forms:
     # a single detached dwelling has no condo/co-op unit identifier
     absent_fields:
       - unit_number
+  "1073":
+    label: "Individual Condominium Unit Appraisal Report"
+    # The 1073 sales-comparison grid has NO Site/Lot line (its lines are Floor
+    # Location, Common Elements, Rec Facilities, HOA fees, …) — a condo unit owns no
+    # site. So the per-comp site-size cell does not exist on this form; EQ-63
+    # ("site size in SF/acres") was a false REVIEW on every 1073 (golden-set: the
+    # 691 Auwaha condo). UNAMBIGUOUS per the form; grown from a real failure.
+    absent_fields:
+      - comp_N_site_size
