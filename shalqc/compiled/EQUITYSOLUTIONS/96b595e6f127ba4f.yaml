@@ -1850,15 +1850,19 @@ items:
   item_name: Basement & Finish/Rooms Below Grade
   bound_labels:
   - comp_N_basement_gla
+  - comp_N_basement_area
+  - comp_N_basement_finished
   - has_full_basement
   - has_partial_basement
   - basement_outside_entry
   - subject_basement_exit
   scope: cross_section
   expects: 'if the subject has a full or partial basement (has_full_basement / has_partial_basement),
-    the sales grid must show basement area and finish in two separate lines (comp_N_basement_gla present).
-    Walkout consistency: when basement_outside_entry is Yes, subject_basement_exit must be WalkOut or
-    WalkUp (not InteriorOnly/absent) → else NOT_SATISFIED. If there is no basement, NOT_APPLICABLE.'
+    the sales grid must show basement area and finish in two separate lines. That requirement is met when
+    BOTH comp_N_basement_area and comp_N_basement_finished are present (the area and finish are stated
+    separately); comp_N_basement_gla may additionally carry the raw combined cell and does NOT by itself
+    mean the lines are missing. Walkout consistency: when basement_outside_entry is Yes, subject_basement_exit
+    must be WalkOut or WalkUp (not InteriorOnly/absent) → else NOT_SATISFIED. If there is no basement, NOT_APPLICABLE.'
   judgeable: text
   conditional: null
   bound_by: manual

@@ -313,6 +313,23 @@ def _site_comments_from_addendum(f: dict) -> None:
     f["site_comments"] = f"{existing}  {section}".strip() if existing else section
 
 
+_BSMT_EXIT = {"wo": "WalkOut", "wu": "WalkUp", "up": "WalkUp", "in": "InteriorOnly"}
+
+
+def _split_basement(desc: str) -> Optional[dict]:
+    """Split a MISMO combined below-grade cell into its URAR grid lines.
+    "1726sf726sfwo" → area 1726 sf, finished 726 sf, exit WalkOut;
+    "435sf0sfin" → area 435 sf, finished 0 sf, exit InteriorOnly;
+    "0sf" → area 0 sf (no finish/exit stated). None when not this shape."""
+    m = re.match(r"^\s*(\d+)\s*sf(?:\s*(\d+)\s*sf)?\s*([A-Za-z]{2})?\s*$", desc or "")
+    if not m:
+        return None
+    out = {"area": f"{m.group(1)}sf", "finished": f"{m.group(2)}sf" if m.group(2) is not None else ""}
+    if m.group(3):
+        out["exit"] = _BSMT_EXIT.get(m.group(3).lower(), m.group(3))
+    return out
+
+
 def _collapse_repeat(value: str) -> str:
     """Collapse a cell that is the SAME token repeated across whitespace
     ("07/14/2026 07/14/2026 07/14/2026" → "07/14/2026") — one value read across
@@ -1336,6 +1353,17 @@ def _map_adj(adj: dict[str, dict], pfx: str, f: dict) -> None:
     # EQ-70 binds comp_N_basement_gla; the grid states the below-grade area in the
     # SAME BasementArea cell ("0sf", "1340sf"), so alias rather than leave it blank.
     _set(f"{pfx}_basement_gla",      "BasementArea",       "_Description")
+    # MISMO packs the URAR's TWO below-grade grid lines (Area / Finished) plus the
+    # exit code into ONE BasementArea cell ("1726sf726sfwo" = 1726 sf total, 726 sf
+    # finished, walkout). EQ-70 requires the two lines to read separately, so a
+    # combined cell tripped it even though the appraiser filled both. Split the cell
+    # into its components so the check sees the separate area + finish it expects.
+    _bsmt = _split_basement(adj.get("BasementArea", {}).get("_Description", ""))
+    if _bsmt:
+        f[f"{pfx}_basement_area"]     = _bsmt["area"]
+        f[f"{pfx}_basement_finished"] = _bsmt["finished"]
+        if _bsmt.get("exit"):
+            f[f"{pfx}_basement_exit"] = _bsmt["exit"]
     _set(f"{pfx}_energy_efficient",  "EnergyEfficient",    "_Description")
     # EQ-73: the LINE-ITEM energy-efficiency adjustment ($0 is an explicit "no
     # adjustment", tracked apart from an absent cell).
