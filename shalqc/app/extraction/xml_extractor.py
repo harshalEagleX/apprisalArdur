@@ -313,6 +313,16 @@ def _site_comments_from_addendum(f: dict) -> None:
     f["site_comments"] = f"{existing}  {section}".strip() if existing else section
 
 
+def _collapse_repeat(value: str) -> str:
+    """Collapse a cell that is the SAME token repeated across whitespace
+    ("07/14/2026 07/14/2026 07/14/2026" → "07/14/2026") — one value read across
+    several grid columns. Unchanged when the tokens are not all identical."""
+    toks = (value or "").split()
+    if len(toks) > 1 and len(set(toks)) == 1:
+        return toks[0]
+    return value
+
+
 def _extract_uad_extensions(root: ET.Element, f: dict) -> None:
     for data in root.iter():
         if not data.tag.split("}")[-1].endswith("_EXTENSION_SECTION_DATA"):
@@ -1390,6 +1400,12 @@ def _extract_subject_prior_sales(root: ET.Element, f: dict) -> None:
     if not f.get("subject_prior_sale_date") and f.get("prior_sale_date"):
         f["subject_prior_sale_date"] = f["prior_sale_date"]
 
+    # A grid row whose single date spans several comp columns can arrive space-joined
+    # ("07/14/2026 07/14/2026 07/14/2026 07/14/2026"); EQ-82 then reads that as a
+    # repeated-date typo the appraiser never made. Collapse an all-identical repeat to
+    # the single token before any date handling. Generic (any repeated-token cell).
+    if f.get("subject_prior_sale_date"):
+        f["subject_prior_sale_date"] = _collapse_repeat(f["subject_prior_sale_date"])
     # MISMO stores prior-sale dates ISO (YYYY-MM-DD); the form and the AMC check
     # (EQ-82) use MM/DD/YYYY. Present the form's format so a valid ISO date is never
     # read as a wrong-format typo. Generic date display normalization, any AMC.
