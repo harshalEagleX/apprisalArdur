@@ -82,6 +82,7 @@ def extract_xml(xml_path) -> ExtractedFieldSet:
     # needs addendum_text, which _extract_forms populates above.
     _listing_facts_from_addendum(fields)
     _site_comments_from_addendum(fields)
+    _derive_basement_absence(fields)
 
     for canonical, value in fields.items():
         if value is None:
@@ -328,6 +329,23 @@ def _split_basement(desc: str) -> Optional[dict]:
     if m.group(3):
         out["exit"] = _BSMT_EXIT.get(m.group(3).lower(), m.group(3))
     return out
+
+
+def _derive_basement_absence(f: dict) -> None:
+    """When the subject positively has NO basement (a marked slab/crawlspace
+    foundation, or a 0-sf below-grade grid cell), state has_full_basement /
+    has_partial_basement = "No" explicitly. Absent flags made EQ-44/EQ-70 hedge to
+    REVIEW because the judge could not tell "no basement" from "unknown"; an explicit
+    No lets them resolve to NOT_APPLICABLE. Only fires on positive no-basement
+    evidence, never on unknowns, and never overrides a Yes already found."""
+    if f.get("has_full_basement") or f.get("has_partial_basement"):
+        return
+    area = str(f.get("subject_grid_basement_area") or f.get("subject_grid_basement_gla") or "").strip()
+    ft = str(f.get("foundation_type") or "").lower()
+    no_basement = bool(re.match(r"^0\s*sf$", area, re.I)) or "slab" in ft or "crawl" in ft
+    if no_basement:
+        f["has_full_basement"] = "No"
+        f["has_partial_basement"] = "No"
 
 
 def _collapse_repeat(value: str) -> str:
