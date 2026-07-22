@@ -211,6 +211,14 @@ def _extract_report(root: ET.Element, f: dict) -> None:
     elif "appraisal report" in _lo:
         f["uspap_report_description"] = _uspap
         f["appraisal_report_type"] = "Appraisal Report"
+    # Fallback (EQ-121): when the title/USPAP text did not name the option, the FNMA
+    # FORM itself is the answer — a Restricted Appraisal Report is a narrative format,
+    # NEVER produced on a 1004/1073/1025-family form. So any recognized URAR-family form
+    # is an "Appraisal Report" by definition. Only fires when nothing above set it, and
+    # some vendors state the option ONLY via the form content type (AppraisalForm), not
+    # a title string — so this closes EQ-121's REVIEW without a guess.
+    if not f.get("appraisal_report_type") and str(f.get("form_type") or "").strip():
+        f["appraisal_report_type"] = "Appraisal Report"
 
 
 # ── UAD GSE extension sections ────────────────────────────────────────────────
@@ -286,10 +294,18 @@ def _listing_facts_from_addendum(f: dict) -> None:
     if f.get("list_date") and f.get("mls_number"):
         return
     _add = f.get("addendum_text") or ""
-    if not _add:
-        return
-    _m = re.search(r"-:\s*[^:]*LISTING HISTORY[^:]*:-(.{0,1200})", _add, re.I | re.S)
-    _parse_listing_facts(f, _m.group(1) if _m else "")
+    if _add:
+        _m = re.search(r"-:\s*[^:]*LISTING HISTORY[^:]*:-(.{0,1200})", _add, re.I | re.S)
+        _parse_listing_facts(f, _m.group(1) if _m else "")
+    # Document-wide fallback for the listing DATE only (EQ-13): vendors state it inside
+    # a sales / prior-sale / market comment ("MLS#A11970721; LISTED ON 02/24/2026 AT
+    # $...") rather than the listing-history cell. Keyword-anchored ("listed … on
+    # <date>") so a stray date in unrelated prose is never taken.
+    if not f.get("list_date"):
+        blob = " ".join(v for v in f.values() if isinstance(v, str) and len(v) > 30)
+        _m = re.search(r"\blisted\b[^.]{0,40}?\bon\s+(\d{1,2}/\d{1,2}/\d{2,4})", blob, re.I)
+        if _m:
+            f["list_date"] = _m.group(1)
 
 
 def _site_comments_from_addendum(f: dict) -> None:

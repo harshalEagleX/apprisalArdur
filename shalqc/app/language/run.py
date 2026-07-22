@@ -173,6 +173,18 @@ def _narrative_pointer_card(item: CompiledItem, packet: Packet):
                     for l in labels)
     if has_prose:
         return None
+    # A3 is only for a narrative whose ONLY content is a pointer ("See addendum").
+    # If the packet also carries a present, non-pointer STRUCTURED value (e.g. EQ-72's
+    # heating grid cells "FWA/Central" for the subject and every comp), the check is
+    # judgeable on those — A3 must not pre-empt it to REVIEW. Was a false positive on
+    # every order that points its heating/HVAC narrative to an addendum.
+    from app.language.hints import _is_nullish
+    non_pointer_present = any(
+        l not in pointers and str(raw.get(l) or "").strip()
+        and not _is_nullish(str(raw.get(l) or ""))
+        for l in labels)
+    if non_pointer_present:
+        return None
     evidence = _located_evidence(packet, {})
     return JudgeVerdict(
         item_id=item.item_id, status=StatusV2.REVIEW, check_text=item.check_text,
