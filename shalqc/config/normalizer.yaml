@@ -122,6 +122,41 @@ names:
   suffix_tokens:    [jr, sr, ii, iii, iv]
   company_noise:    [inc, llc, corp, corporation, co, company, na, lp, llp, ltd, pllc, pc, fsb, isaoa, atima]
   county_suffixes:  [county, parish, borough, "census area", municipality, "city and county", district, township]
+  # Nicknames — a report signed "Jim Hommel" against an order-form "JAMES HOMMEL" is
+  # the SAME person, not a mismatch (the appraiser explains this verbatim: "Jim, James
+  # or Jimmy, all the same name"). canonical: [variants]; every variant folds to the
+  # canonical before the token compare, both directions. YAML edit, never code (P7).
+  nicknames:
+    james:     [jim, jimmy, jamie]
+    william:   [bill, billy, will, willy, liam]
+    robert:    [bob, bobby, rob, robbie]
+    richard:   [rick, ricky, dick, rich, richie]
+    michael:   [mike, mikey, mick]
+    christopher: [chris, kris]
+    charles:   [charlie, chuck, chas]
+    thomas:    [tom, tommy]
+    joseph:    [joe, joey]
+    edward:    [ed, eddie, ted]
+    daniel:    [dan, danny]
+    david:     [dave, davey]
+    john:      [jack, johnny, jon]
+    anthony:   [tony]
+    steven:    [steve, stevie]
+    stephen:   [steve, steph]
+    kenneth:   [ken, kenny]
+    matthew:   [matt, matty]
+    andrew:    [andy, drew]
+    nicholas:  [nick, nic]
+    benjamin:  [ben, benny]
+    samuel:    [sam, sammy]
+    patricia:  [pat, patty, tricia]
+    elizabeth: [liz, beth, betty, lisa, eliza]
+    margaret:  [maggie, meg, peggy]
+    katherine: [kate, katie, kathy, kat]
+    jennifer:  [jen, jenny]
+    deborah:   [deb, debbie]
+    susan:     [sue, suzy]
+    barbara:   [barb, babs]
 
 # ── Text-match tolerance bands (SHALqc.md §4 / matching) ────────────────────
 match_bands:

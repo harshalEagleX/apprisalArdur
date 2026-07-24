@@ -256,6 +256,111 @@ def _transaction_not_applicable(item: CompiledItem, src: Sources) -> bool:
     return "refinance" in str(tt or "").lower()
 
 
+import re as _re
+
+# The subject prior-sale DETAIL items (price of prior sale, analysis of prior sale)
+# presuppose that a prior sale exists. When none does, the appraiser states so with an
+# affirmative "none" / "no prior sales" — that is a COMPLETE answer, not a missing value.
+_AFFIRM_NO_PRIOR_RX = _re.compile(
+    r"^\s*(none|no\s+prior\s+(sale|transfer)s?|no\s+sales?|n/?a|not\s+applicable)\b", _re.I)
+# Items whose subject reduces to "report the prior-sale price / analysis" — bound to
+# these labels — are the ones a genuine no-prior-sale makes N/A. The did/did-not box
+# check (bound to sales_history_researched) is NOT here: it still verifies the box.
+_PRIOR_SALE_DETAIL_LABELS = frozenset({
+    "prior_sale_price_subject", "subject_prior_sale_price", "prior_sale_analysis_comment"})
+# Presence is keyed on the ACTUAL prior-sale price/date only. Deliberately NOT
+# `prior_sale_date_subject` — it aliases (field_resolution.yaml) to the data-source
+# EFFECTIVE date (when the appraiser ran the research, ~today), which is present even
+# when there was no prior sale, and would falsely suppress the N/A on a true no-sale.
+_PRIOR_SALE_PRESENCE_LABELS = (
+    "subject_prior_sale_date", "subject_prior_sale_price", "prior_sale_price_subject")
+
+
+def _no_prior_sale_not_applicable(item: CompiledItem, src: Sources) -> bool:
+    """Prior-sale DETAIL N/A: EQ-83 (price of prior sale) / EQ-86 (analysis of prior
+    sale) only apply when the subject HAS a prior sale. If no prior-sale date or price
+    was reported AND the appraiser affirmatively states there is none ('NONE' / 'no
+    prior sales'), there is nothing to report — N/A, not a missing-value FAIL. Fail-safe:
+    any prior-sale date or price present → the check runs (a present date with a missing
+    price is a real defect), and a truly blank analysis (no affirmative 'none') still
+    runs (leaving it blank is a genuine, if minor, gap)."""
+    if item.section != "prior_sales":
+        return False
+    if not (set(item.all_labels) & _PRIOR_SALE_DETAIL_LABELS):
+        return False
+    ap = src.appraisal
+    if ap is None:
+        return False
+    from app.language.hints import _is_nullish
+    for lbl in _PRIOR_SALE_PRESENCE_LABELS:
+        v = ap.value(lbl)
+        if v not in (None, "") and not _is_nullish(str(v)):
+            return False   # a prior sale exists → the detail check must run
+    analysis = str(ap.value("prior_sale_analysis_comment") or "")
+    return bool(_AFFIRM_NO_PRIOR_RX.match(analysis))
+
+
+def _no_prior_sale_na_card(item: CompiledItem) -> JudgeVerdict:
+    """Deterministic NOT_APPLICABLE: the subject has no prior sale and the appraiser
+    states so — the prior-sale price/analysis detail has nothing to report."""
+    return JudgeVerdict(
+        item_id=item.item_id, status=StatusV2.NOT_APPLICABLE, check_text=item.check_text,
+        section=item.section, decided_by="precompiled:prior_sale_gate",
+        guardrails=["no_prior_sale_asserted"],
+        reviewer_line=("Not applicable — the report shows no prior sale/transfer of the "
+                       "subject and the appraiser states there is none, so there is no "
+                       "prior-sale detail to report.")[:240],
+        **_item_fields(item),
+    )
+
+
+# Core 1004MC market-inventory fields: if EVERY one is empty, the whole addendum is blank.
+_CORE_MCA_LABELS = frozenset({
+    "mca_total_sales_current_3", "mca_total_sales_prior_4_6", "mca_total_sales_prior_7_12",
+    "mca_active_listings_current_3", "mca_active_listings_prior_4_6", "mca_active_listings_prior_7_12",
+    "comp_sales_researched_count", "mca_median_comparable_sale_price",
+    "mca_median_comparable_sales_days", "mca_median_comparable_list_price"})
+# Forms that CARRY a 1004MC addendum — its wholesale absence there is a missing required
+# addendum, not "not applicable".
+_FORMS_WITH_1004MC = frozenset({"1004", "1004c", "1025", "1073", "2055"})
+
+
+def _required_1004mc_blank(item: CompiledItem, src: Sources) -> bool:
+    """A CORE 1004MC inventory check whose EVERY bound market-inventory field is empty means
+    the 1004MC addendum is BLANK. It is required on the standard residential forms, so a blank
+    one is MISSING/unfilled (→ VERIFY), NOT "not applicable" — otherwise the judge collapses
+    empty→N/A and silently excuses a required-but-missing addendum (ESPA-0005366: MARKET_INVENTORY
+    rows = 0, EQ-113/114 wrongly N/A). Fires ONLY when ALL core fields are absent — a partially
+    filled 1004MC is judged normally; the condo/project 1004MC checks (EQ-119) bind different
+    labels and are unaffected."""
+    if item.section != "mc_1004":
+        return False
+    core = set(item.all_labels) & _CORE_MCA_LABELS
+    if not core:
+        return False
+    ap = src.appraisal
+    if ap is None:
+        return False
+    form = str(ap.value("form_type") or "").lower()
+    if form and form not in _FORMS_WITH_1004MC:
+        return False
+    from app.language.hints import _is_nullish
+    return all(ap.value(l) in (None, "") or _is_nullish(ap.value(l)) for l in core)
+
+
+def _1004mc_blank_card(item: CompiledItem) -> JudgeVerdict:
+    """VERIFY (not N/A): the required 1004MC addendum appears blank/unfilled."""
+    return JudgeVerdict(
+        item_id=item.item_id, status=StatusV2.REVIEW, check_text=item.check_text,
+        section=item.section, decided_by="precompiled:1004mc_blank_gate",
+        guardrails=["required_section_blank"],
+        reviewer_line=("The 1004MC market-conditions addendum appears blank — its inventory "
+                       "fields are all empty. A 1004MC is required on this form, so please "
+                       "confirm it is completed. (Flagged for review, not treated as N/A.)")[:240],
+        **_item_fields(item),
+    )
+
+
 def _transaction_na_card(item: CompiledItem) -> JudgeVerdict:
     """Deterministic NOT_APPLICABLE for a contract-section check on a refinance."""
     return JudgeVerdict(
@@ -361,6 +466,16 @@ def judge_items(items: List[CompiledItem], src: Sources, appraisal_fs,
         # contract to evaluate; decided in code before any packet/LLM work.
         if _transaction_not_applicable(item, src):
             results[item.item_id] = _transaction_na_card(item)
+            continue
+        # Prior-sale detail N/A — price/analysis of a prior sale that does not exist
+        # (appraiser affirmatively states "none"); decided in code, no packet/LLM work.
+        if _no_prior_sale_not_applicable(item, src):
+            results[item.item_id] = _no_prior_sale_na_card(item)
+            continue
+        # Required-but-empty ≠ N/A: a blank required 1004MC addendum is a MISSING addendum
+        # (VERIFY), decided in code so the judge cannot collapse empty→N/A and hide it.
+        if _required_1004mc_blank(item, src):
+            results[item.item_id] = _1004mc_blank_card(item)
             continue
         packet = build_packet(item, src)
         if _empty_packet(packet):

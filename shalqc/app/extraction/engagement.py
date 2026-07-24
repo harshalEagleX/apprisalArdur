@@ -438,15 +438,22 @@ def extract_engagement_fields(pdf_path, hints: Optional[Dict[str, List[str]]] = 
         value = " ".join(block).strip()
         if value and (canon not in found or canon in ("_property_block", "form_type")):
             if canon == "_property_block":
+                # "Property County:" / "Subject County:" are LABELS on the order form —
+                # the "<word> County" regex must not capture the label word itself as the
+                # county name (ESWA-0002189: yielded county="Property", which then false-
+                # mismatched EQ-C against the report's real county). Reject label words.
+                _COUNTY_STOP = {"property", "subject", "the", "appraisal", "order", "client"}
+                def _valid_county(name: str) -> bool:
+                    return bool(name) and name.strip().lower() not in _COUNTY_STOP
                 if end + 1 < len(lines):
                     nxt = lines[end + 1].strip()
                     if ":" not in nxt:
                         cm = re.match(r"([A-Za-z][A-Za-z .'\-]+?)\s+County\b", nxt)
-                        if cm and "county" not in found:
+                        if cm and "county" not in found and _valid_county(cm.group(1)):
                             found["county"] = cm.group(1).strip()
                 if "county" not in found:
                     cm = re.search(r"\b([A-Za-z][A-Za-z .'\-]+?)\s+County\b", value)
-                    if cm:
+                    if cm and _valid_county(cm.group(1)):
                         found["county"] = cm.group(1).strip()
                 addr = parse_address(value)
                 found.update({k: v for k, v in addr.items() if k not in found})

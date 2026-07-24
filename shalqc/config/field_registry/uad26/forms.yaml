@@ -30,3 +30,16 @@ forms:
     # 691 Auwaha condo). UNAMBIGUOUS per the form; grown from a real failure.
     absent_fields:
       - comp_N_site_size
+      # The 1073 has NO cost approach and NO opinion-of-site-value line — Fannie Mae
+      # does not require cost/income for an individual condo unit (the unit owns no
+      # site). EQ-92 ("support for the opinion of site value") was a false REVIEW on
+      # every 1073 (golden-set: the ESCA-0020171 condo, site_value_estimate absent).
+      - site_value_estimate
+      # A condo unit report has no foundation/basement section — foundation and the
+      # building substructure are common elements, not on the 1073 improvements grid.
+      # EQ-44 ("Foundation") false-REVIEWed on the same condo (all five labels absent).
+      - foundation_type
+      - has_full_basement
+      - has_partial_basement
+      - basement_gla
+      - basement_finish_pct

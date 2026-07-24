@@ -88,6 +88,12 @@ class Normalizer:
             self._name_suffixes = {str(x).lower() for x in names.get("suffix_tokens", [])}
             self._company_noise = {str(x).lower() for x in names.get("company_noise", [])}
             self._county_suffixes = {str(x).lower() for x in names.get("county_suffixes", [])}
+            # nickname -> canonical (Jim -> james); folds a signed nickname to the
+            # order-form legal given name before the token compare, both directions.
+            self._nick: Dict[str, str] = {}
+            for canonical, variants in (names.get("nicknames") or {}).items():
+                for v in variants:
+                    self._nick[str(v).lower()] = str(canonical).lower()
             self._jw_auto_pass = float(names.get("jaro_winkler_auto_pass", 0.90))
             bands = self._raw.get("match_bands") or {}
             self._match_th = float(bands.get("match", 0.88))
@@ -210,13 +216,40 @@ class Normalizer:
             return self._normalize_county(s)
         return b
 
+    # A secondary-unit designator + its identifier are dropped before an address
+    # compare: the report frequently OMITS the unit the AMC order form carries
+    # ("2037 Tango Loop" vs "2037 Tango Loop Unit 2"), and the base street address is
+    # the match signal. Kept deliberately small and UNAMBIGUOUS — `fl`/`rm` are NOT
+    # here (an address "fl" is the state Florida, not a floor). `#303` is rewritten to
+    # `unit 303` first so the hash form is dropped the same way.
+    _UNIT_STRIP = frozenset({"apt", "ste", "suite", "unit", "bldg", "building", "no"})
+    _ZIP4_RX = re.compile(r"\b(\d{5})-\d{4}\b")
+    _HASH_UNIT_RX = re.compile(r"#\s*([\w-]+)")
+    _ORDINAL_RX = re.compile(r"\b(\d+)(st|nd|rd|th)\b")
+
     def _normalize_address(self, s: str) -> str:
-        tokens = _basic(s).split()
-        out = [self._street.get(t, self._units.get(t, t)) for t in tokens]
+        raw = self._ZIP4_RX.sub(r"\1", str(s or ""))        # 33134-6162 -> 33134 (ZIP+4 == ZIP5)
+        raw = self._HASH_UNIT_RX.sub(r" unit \1 ", raw)     # #303 -> unit 303
+        raw = self._ORDINAL_RX.sub(r"\1", raw)              # 34th -> 34 (ordinal == cardinal)
+        tokens = _basic(raw).split()
+        out, drop_next = [], False
+        for t in tokens:
+            if drop_next:
+                drop_next = False          # swallow the unit identifier after a designator
+                continue
+            if t in self._UNIT_STRIP:
+                drop_next = True
+                continue
+            # Only street-suffix/directional canonicalization here — NOT the secondary-
+            # unit map: in an address "fl"/"rm" are the state (Florida) / a street name,
+            # not "floor"/"room", and the unit designators we DO care about are stripped
+            # above, so folding them is both unnecessary and a source of false diffs.
+            out.append(self._street.get(t, t))
         return " ".join(out)
 
     def _normalize_name(self, s: str) -> str:
-        tokens = [t for t in _basic(s).split() if t not in self._name_noise and len(t) > 1]
+        tokens = [self._nick.get(t, t) for t in _basic(s).split()
+                  if t not in self._name_noise and len(t) > 1]
         return " ".join(sorted(tokens))
 
     def _normalize_company(self, s: str) -> str:
@@ -309,7 +342,7 @@ class Normalizer:
     def _name_tokens(self, text) -> List[str]:
         s = re.sub(r"[&;]|\band\b", " ", str(text or "").lower())
         s = re.sub(r"[^\w\s]", " ", s)
-        return [t for t in s.split()
+        return [self._nick.get(t, t) for t in s.split()
                 if (t in self._name_suffixes) or (t not in self._name_noise and len(t) > 1)]
 
     # ── P5 / F3: person-aware name comparison ────────────────────────────────
@@ -323,7 +356,8 @@ class Normalizer:
         so a new/renamed credential needs no code or config change."""
         raw = str(text or "")
         drop = self._designation_tokens(raw)
-        toks = [t for t in re.sub(r"[^\w\s]", " ", raw.lower()).split()
+        toks = [self._nick.get(t, t)
+                for t in re.sub(r"[^\w\s]", " ", raw.lower()).split()
                 if len(t) > 1 and t != "and"          # grammar connector, not a name part
                 and t not in self._name_noise and t not in drop]
         return frozenset(toks)

@@ -747,9 +747,17 @@ def _extract_property(root: ET.Element, f: dict) -> None:
     # rows were mapped, so the six Y/N conformance/deficiency boxes the checklist
     # asks about (EQ-34/49/51/52) fell to a PDF label-proximity guess or stayed
     # unbound → REVIEW even though MISMO carries them cleanly.
-    _ANALYSIS_COMMENT = {"QualityAndAppearance": "condition_comments",
-                         "PropertyCondition":    "improvements_comments",
-                         "AdditionalFeatures":   "additional_features"}
+    # PropertyCondition._Comment is the subject CONDITION narrative in every vendor
+    # sampled (ClickFORMS 1073, a la mode 1025, 1004): "…appears to be in C3 condition…",
+    # "…IN AVERAGE CONDITION OVERALL…". QualityAndAppearance duplicates it on a la mode
+    # but is ABSENT on ClickFORMS/1004, so mapping PropertyCondition to improvements_comments
+    # alone left condition_comments empty on those forms — and EQ-50 ("describe the
+    # condition") then saw only the C-code and false-FAILed. Feed PropertyCondition to the
+    # condition narrative (merging, so an updates/QualityAndAppearance value already there
+    # is not clobbered) while keeping improvements_comments for the improvements prose slot.
+    _ANALYSIS_COMMENT = {"QualityAndAppearance": ["condition_comments"],
+                         "PropertyCondition":    ["condition_comments", "improvements_comments"],
+                         "AdditionalFeatures":   ["additional_features"]}
     # Y/N indicators — surfaced three-state ("Yes"/"No"; absent ⇒ VERIFY, never FAIL).
     _ANALYSIS_INDICATOR = {
         "ConformsToNeighborhood": "conforms_to_neighborhood",
@@ -769,12 +777,22 @@ def _extract_property(root: ET.Element, f: dict) -> None:
             f.setdefault("adverse_conditions",
                          "Yes" if "Yes" in (_pd, _asc) else "No")
 
+    def _merge_comment(key: str, text: str) -> None:
+        """Accumulate narrative into a slot without clobbering: a form may state
+        the same condition text under two _Types (a la mode) or have an updates
+        line already present (07260094), so append only genuinely new text."""
+        prev = f.get(key)
+        if not prev:
+            f[key] = text
+        elif text and text not in prev:
+            f[key] = f"{prev} {text}".strip()
+
     for pa in prop.findall("PROPERTY_ANALYSIS"):
         t = _a(pa, "_Type")
         comment = _a(pa, "_Comment")
-        ckey = _ANALYSIS_COMMENT.get(t)
-        if ckey and comment:
-            f[ckey] = comment
+        if comment:
+            for ckey in _ANALYSIS_COMMENT.get(t, ()):
+                _merge_comment(ckey, comment)
         ikey = _ANALYSIS_INDICATOR.get(t)
         if ikey:
             ind = _a(pa, "_ExistsIndicator").upper()

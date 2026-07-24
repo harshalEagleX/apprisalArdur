@@ -246,6 +246,87 @@ def equal_after_norm(values: Dict[str, Any], a: str, b: str) -> Optional[bool]:
 
 # ── driver: compute the always-safe hint set for a packet ────────────────────
 
+def _heat_family(s: Any) -> str:
+    """Map a heating token to a canonical HEAT FAMILY, absorbing every vendor spelling.
+    Subject enums ("ForcedWarmAir") and grid abbreviations ("FA/CENT", "F/AIR/CAC",
+    "HP", "EBB") must land on the same family so a comparison is meaningful. Cooling
+    tokens (CENT/CAC/AC/None) are irrelevant to the HEAT family and ignored."""
+    t = re.sub(r"[^a-z]", " ", str(s or "").lower())
+    if "radiant" in t or re.search(r"\brad\b", t):
+        return "radiant"
+    if "heat pump" in t or "heatpump" in t or "htpump" in t or re.search(r"\bhp\b", t):
+        return "heat_pump"
+    if ("baseboard" in t or re.search(r"\be?bb\b", t) or re.search(r"\bhwbb\b", t)
+            or re.search(r"\bebb\b", t)):
+        return "baseboard"
+    if ("forced" in t or "warm air" in t or "warmair" in t or re.search(r"\bf\s*air\b", t)
+            or re.search(r"\bfwa\b", t) or re.search(r"\bfa\b", t) or re.search(r"\bfau\b", t)):
+        return "forced_air"
+    if re.search(r"\bwall\b", t) or "wall furnace" in t or "space heat" in t or "ductless" in t or "mini split" in t:
+        return "other_fixed"
+    if not t.strip() or re.search(r"\bnone\b", t) or re.search(r"\bother\b", t):
+        return "none"
+    return "unknown"
+
+
+# The families whose UAD rule requires ≥1 matching comp (EQ-72's own text: FWA/FWBB/Radiant).
+_HEAT_MATCH_REQUIRED = frozenset({"forced_air", "baseboard", "radiant"})
+
+
+def _car_storage_hint(values: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """DETERMINISTIC car-storage presence for EQ-74. A non-zero subject car count
+    (number_of_cars / parking_space_number / garage_spaces) means the subject HAS a
+    garage/carport, so the check APPLIES — it must not be N/A'd as "no garage". Tells
+    the judge the subject's storage and each comp's grid cell so a "2ga2dw" match is
+    obvious, since the judge otherwise reads a bare count as "garage not marked"."""
+    subj = None
+    for k in ("number_of_cars", "parking_space_number", "garage_spaces"):
+        v = values.get(k)
+        if v not in (None, ""):
+            n = _num(v)
+            subj = n if n is not None else v
+            break
+    if subj in (None, "") or (isinstance(subj, (int, float)) and subj == 0):
+        return None
+    comps = {i: values.get(f"comp_{i}_garage_carport")
+             for i in range(1, 13) if values.get(f"comp_{i}_garage_carport") not in (None, "")}
+    return {
+        "hint": (f"subject_car_storage={subj} (non-zero → subject HAS a garage/carport, so this "
+                 f"check APPLIES, not N/A); comp_garage_cells={comps} "
+                 f"(a cell like '2ga2dw' = 2-car garage + 2 driveway = reflects garage with driveway)"),
+        "value": {"subject_car_storage": subj, "applies": True, "comp_cells": comps},
+        "labels": ["number_of_cars"] + [f"comp_{i}_garage_carport" for i in comps],
+    }
+
+
+def _heating_match_hint(values: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """DETERMINISTIC heat-family reconciliation for EQ-72. The judge cannot be trusted
+    to equate the subject enum "ForcedWarmAir" with grid tokens "FA"/"F/AIR", so compute
+    it: subject family, each comp's family, which comps share it, and whether the
+    "≥1 matching comp" requirement (only for FWA/FWBB/Radiant subjects) is met."""
+    subj = values.get("heating") or values.get("heating_description")
+    subj_fam = _heat_family(subj) if subj else None
+    if not subj_fam or subj_fam in ("none", "unknown"):
+        return None
+    comp_fams: Dict[int, str] = {}
+    for i in range(1, 13):
+        v = values.get(f"comp_{i}_heating_cooling")
+        if v not in (None, ""):
+            comp_fams[i] = _heat_family(v)
+    if not comp_fams:
+        return None
+    matches = [i for i, f in comp_fams.items() if f == subj_fam]
+    required = subj_fam in _HEAT_MATCH_REQUIRED
+    met = (not required) or bool(matches)
+    return {
+        "hint": (f"heating_family_match: subject={subj_fam}; per_comp={comp_fams}; "
+                 f"matching_comps={matches}; requirement_applies={required}; requirement_met={met} "
+                 f"(FA/F-AIR/ForcedWarmAir are all forced_air — treat as MATCH)"),
+        "value": {"subject_family": subj_fam, "matching_comps": matches, "requirement_met": met},
+        "labels": ["heating"] + [f"comp_{i}_heating_cooling" for i in comp_fams],
+    }
+
+
 def compute_hints(values: Dict[str, Any], bound_labels: List[str],
                   expects: str = "", comp_count: Optional[int] = None) -> List[Dict[str, Any]]:
     """Every hint we can safely derive for this item. `comp_count_present` is
@@ -312,6 +393,18 @@ def compute_hints(values: Dict[str, Any], bound_labels: List[str],
     scale = _price_scale_hint(values)
     if scale:
         hints.append(scale)
+
+    # EQ-72: deterministic heat-family match so "ForcedWarmAir" vs grid "FA"/"F/AIR" is
+    # resolved in code, not left to the judge (which false-rejected it on the held-out set).
+    heat = _heating_match_hint(values)
+    if heat:
+        hints.append(heat)
+
+    # EQ-74: deterministic car-storage presence so a non-zero subject car count is not
+    # mis-read as "no garage" and N/A'd.
+    car = _car_storage_hint(values)
+    if car:
+        hints.append(car)
 
     # PART 1.2: a NORMALIZED cross-document comparison, so a trailing comma, a
     # corporate suffix, ZIP+4, or "Refinance Transaction" vs "Refinance" can no

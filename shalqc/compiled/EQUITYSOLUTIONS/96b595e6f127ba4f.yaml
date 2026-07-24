@@ -103,16 +103,25 @@ items:
   section: order
   item_name: Form Type (Product)
   bound_labels:
+  - form_type
   - report_form_number
   scope: cross_document
-  expects: assignment_type == ordered_form_type
+  expects: 'Match the report''s form on its NUMBER (1004 / 1004C / 1073 / 1025 / 2055 …), NOT the
+    marketing/order wrapper. The engagement''s ordered PRODUCT is engagement.form_type — e.g.
+    "1004 Conventional", "1004 FHA, Rush Fee", "1004C". Strip suffixes like Conventional / FHA /
+    Rush Fee / Consumer when comparing: report "1004" vs engagement "1004 Conventional" is a MATCH;
+    report "1004" vs "1004 FHA" is a MATCH. Do NOT compare against the generic order-TYPE wrapper
+    "Residential Appraisal" — that is the assignment category, not the product. If the engagement
+    states only "Residential Appraisal" with NO form number (product not captured), you cannot
+    confirm the product → VERIFY, never a reject. Flag only when both sides carry a form number and
+    the NUMBERS genuinely differ (e.g. report 1004 vs ordered 1073).'
   judgeable: text
   conditional: null
   bound_by: llm
   binder_confidence: 0.92
   severity: null
   reject_branches:
-  - trigger: form != ordered product
+  - trigger: both sides state a form number and the numbers genuinely differ (e.g. report 1004 vs ordered 1073)
     reject_text: Report form type does not match the product ordered on the order form, please correct.
   hold: false
   never_reject: false
@@ -184,8 +193,13 @@ items:
   - transaction_type
   - owner_of_public_record
   scope: cross_document
-  expects: borrower_name == engagement.borrower_name; co_borrower_name present; if transaction_type ==
-    Refinance and owner_of_public_record != borrower_name then comment
+  expects: 'Two independent parts. (1) borrower_name should match engagement.borrower_name (compare by
+    PERSON, ignoring case/whitespace/order and treating a co-borrower superset as fine) — a genuinely
+    different borrower is reject-worthy. (2) The refinance owner-vs-borrower COMMENT requirement fires
+    ONLY when owner_of_public_record is PRESENT and is a genuinely DIFFERENT party from the borrower.
+    If owner_of_public_record is ABSENT/unextracted, or is a SUPERSET of the borrower (adds a spouse/
+    co-owner), do NOT flag the owner/borrower difference — that is not a confirmable defect (at most a
+    please-verify). Do not infer "differs" from an absent owner value.'
   judgeable: needs_engagement
   conditional: null
   bound_by: manual
@@ -217,21 +231,27 @@ items:
   - borrower_name
   - assignment_type
   scope: cross_section
-  expects: ''
+  expects: 'Compare names by PERSON, not by exact string. When the owner of record is a SUPERSET
+    of the borrower — it contains the borrower plus a spouse/co-owner ("Cyril & Barbara Jacob"
+    owner vs "Cyril Jacob" borrower) — the borrower IS an owner of record; this is the common,
+    benign refinance case → SATISFIED (or at most a please-verify if you want the added-owner
+    noted), NEVER a hard reject. Likewise ignore whitespace/case/ordering and middle names. Only
+    treat as a real mismatch when the owner of record is a GENUINELY DIFFERENT party with NO name
+    overlap with the borrower, and on a refinance no explanatory comment is provided.'
   judgeable: text
   conditional: null
   bound_by: llm
   binder_confidence: 0.9
   severity: null
   reject_branches:
-  - trigger: refi, owner != borrower
+  - trigger: refi, owner is a genuinely different party (no name overlap with borrower), no comment
     reject_text: Assignment type of the report is noted as 'Refinance'; however, the owner name and the
       borrower name are different, please revise or comment.
   - trigger: purchase, owner == borrower
     reject_text: Assignment Type is "Purchase", however borrower and owner of public record names are
       same, please correct.
   hold: false
-  never_reject: false
+  never_reject: true
 - item_id: EQ-2
   check_text: Legal Description — This field should not be blank
   reject_text: Please provide legal description under subject section.
@@ -479,17 +499,21 @@ items:
   bound_labels:
   - lender_name
   scope: cross_section
-  expects: lender_name == order_form_lender_name
+  expects: 'Compare lender/client names ignoring case, punctuation, and WHITESPACE — "United
+    Wholesalemortgage" and "United Wholesale Mortgage" differ only by a missing space and are
+    the SAME lender → SATISFIED. Corp-form suffixes (LLC / Inc / Corp) and spacing are not
+    mismatches. Only note a genuinely DIFFERENT lender/client. A spelling/spacing difference is
+    at most a please-verify, never a hard reject.'
   judgeable: needs_engagement
   conditional: null
   bound_by: llm
   binder_confidence: 0.6
   severity: null
   reject_branches:
-  - trigger: lender/client name mismatch vs order
+  - trigger: a genuinely different lender/client name (not a spacing/spelling/suffix variant)
     reject_text: 'Please correct Lender/Client on the report to match the order: ___________.'
   hold: false
-  never_reject: false
+  never_reject: true
 - item_id: EQ-F
   check_text: 'Lender/client Address — Must match lender/client address listed on the Client Engagement
     Letter | Triggers: If lender/client address is different than order form'
@@ -838,14 +862,20 @@ items:
   bound_labels:
   - market_conditions_commentary
   scope: narrative
-  expects: market_conditions_commentary present and not placeholder like "See 1004MC"
+  expects: 'SATISFIED when the commentary makes ANY substantive statement about the
+    market (trend/stability, supply-demand, pricing, financing, days-on-market, etc.),
+    even if it ALSO points to the 1004MC — e.g. "Current market considered to be fairly
+    stable with some highs and lows noted. See attached 1004MC." is a COMPLETE comment,
+    not a placeholder, because the 1004MC it references is itself filled out. Fail ONLY
+    when the field is empty or is nothing but a bare pointer with zero substantive
+    market characterization (literally just "See 1004MC" and nothing else).'
   judgeable: text
   conditional: null
   bound_by: llm
   binder_confidence: 0.92
   severity: null
   reject_branches:
-  - trigger: market conditions blank or placeholder ('See 1004MC')
+  - trigger: market conditions field is empty or is ONLY a bare "See 1004MC" pointer with no substantive comment
     reject_text: Please provide Market Conditions comment in Neighborhood section, "See 1004MC" is not
       acceptable.
   hold: false
@@ -951,7 +981,12 @@ items:
   - street_ownership
   - site_comments
   scope: cross_section
-  expects: utilities_gas == True && utilities_electricity == True
+  expects: 'Each utility row must carry SOME descriptor — Public, Private, None, or an
+    "Other" value (Well, Septic, Electric, Propane…). A descriptor of "None"/absent for GAS
+    is a VALID marked state, not an unmarked box: rural and all-electric properties legitimately
+    have no gas service. So gas = "None" / absent SATISFIES this check. Only flag a utility row
+    that is genuinely BLANK — no Public/Private/None/Other descriptor at all — or the street/water
+    conditions in the other branches. Do NOT require gas to be Public/"True".'
   judgeable: text
   conditional: null
   bound_by: llm
@@ -1108,7 +1143,12 @@ items:
   bound_labels:
   - building_status
   scope: subject
-  expects: ''
+  expects: 'The trigger is a PHOTO signal ("if photos show work going on") that requires
+    vision you do not have. When building_status is affirmatively stated as "Existing"
+    (or "Existing (built)"), that is a valid, complete answer — SATISFIED; do NOT REVIEW
+    it merely because you cannot inspect the photos (a human verifies photos separately).
+    Only raise this when building_status is itself missing, or is "Proposed" / "Under
+    Construction" with no supporting comment.'
   judgeable: text
   conditional: null
   bound_by: manual
@@ -1361,8 +1401,15 @@ items:
   item_name: Condition of the Property
   bound_labels:
   - condition_rating
+  - condition_comments
+  - improvements_comments
   scope: subject
-  expects: condition_rating code extracted
+  expects: 'SATISFIED when a descriptive condition narrative is present (condition_comments
+    / improvements_comments) — e.g. "extensively updated over the years…", "Kitchen
+    Remodeled…", "no updates in the prior 15 years" — in ADDITION to the C-code. The
+    C-rating alone (condition_rating) is NOT enough; but any real free-text description
+    of the condition/updates satisfies the "describe the condition" requirement. Fail
+    only when BOTH the narrative fields are empty (just a bare C-code with no prose).'
   judgeable: text
   conditional: null
   bound_by: llm
@@ -1461,24 +1508,28 @@ items:
   item_name: '# of COMPARABLE Sales w/in 12 Months'
   bound_labels:
   - comp_N_sale_price
+  - comp_N_sale_date
   - comp_sales_range_low
   - comp_sales_range_high
-  - price_high
-  - price_low
-  - predominant_price
   scope: comps
-  expects: NOT a comp-count rule. Each comp's unadjusted sale price must fall within the stated neighborhood
-    price range (price_low..price_high), be consistent with the 1004MC form, and be consistent with the
-    page-1 predominant price range. SATISFIED when every comp's price is inside the range.
+  expects: 'NOT a comp-count rule and there is NO fixed "3–6 comps" band. Compare LIKE-SCOPE to
+    LIKE-SCOPE: a SETTLED comp''s sale price is judged against the COMPARABLE-SALES range
+    (comp_sales_range_low..comp_sales_range_high), NOT against the page-1 One-Unit Housing
+    neighborhood range (price_low..price_high) — the neighborhood band is a DIFFERENT, wider
+    population and a comp price outside it is normal and expected. EXCLUDE active/pending
+    LISTINGS from the settled-sale range test (a listing priced above the settled high is
+    normal, not a defect). SATISFIED when the settled comps fall within the comparable-sales
+    range and that range is internally consistent with the 1004MC. Only flag a genuine
+    inconsistency between the stated comparable range and the settled comps actually provided.'
   judgeable: text
   conditional: null
   bound_by: manual
   binder_confidence: 0.9
   severity: null
   reject_branches:
-  - trigger: comp price outside One-Unit Housing range
-    reject_text: In the Neighborhood section please revise the low, high, pred. price range in One-Unit
-      Housing section on page 1.
+  - trigger: a SETTLED comp's sale price falls outside the stated COMPARABLE-SALES range (active/pending listings are exempt); do NOT use the One-Unit Housing neighborhood range
+    reject_text: A settled comparable's sale price falls outside the stated comparable-sales range, please
+      reconcile the range with the comparables provided.
   - trigger: top-of-grid figures != 1004MC
     reject_text: The information on the 1004MC does not match the information given on top of 2nd page,
       please correct.
@@ -1657,14 +1708,20 @@ items:
   - property_rights
   - comp_N_leasehold
   scope: cross_section
-  expects: ''
+  expects: 'comp_N_leasehold is a BOOLEAN FLAG derived from the grid Property Rights cell:
+    "No" = that comp is FEE SIMPLE, "Yes" = that comp is LEASEHOLD. So when the subject
+    property_rights is Fee Simple, every comp with comp_N_leasehold="No" MATCHES the
+    subject — that is SATISFIED. NEVER read leasehold="No" as "the comp is leasehold".
+    Only flag when a comp''s tenure genuinely DIFFERS from the subject (subject Fee Simple
+    but a comp is Leasehold="Yes", or subject Leasehold with a Fee-Simple comp) and no
+    similar-tenure comps / adjustment are provided.'
   judgeable: text
   conditional: null
   bound_by: llm
   binder_confidence: 0.6
   severity: null
   reject_branches:
-  - trigger: grid property rights != subject (Fee Simple)
+  - trigger: a comp's tenure genuinely differs from the subject (leasehold flag "Yes" mismatch) with no adjustment
     reject_text: Property Rights Appraised shows Fee Simple under subject section however sales grid shows
       ___________, please correct.
   - trigger: subject leasehold, comp fee simple, no adjustment
@@ -1804,11 +1861,16 @@ items:
   bound_labels:
   - comp_N_condition_rating
   - condition_rating
+  - comp_N_condition_adj
+  - comp_N_condition_adj_blank
   scope: comps
-  expects: each comp's condition rating should be consistent with the subject and the other comps; where
-    a comp differs, a condition adjustment (or a comment explaining why none is warranted) is expected.
-    Evaluate ALL comps — "comps# 2, 3 and 4" in reject_text is an illustrative example, name the comps
-    that actually differ here.
+  expects: 'Where a comp''s condition rating differs from the subject, a condition ADJUSTMENT
+    (comp_N_condition_adj — e.g. "-45,400", "+68,000") OR an explanatory comment is required.
+    A comp that differs in rating but CARRIES a non-empty comp_N_condition_adj is SATISFIED —
+    the adjustment IS present; do not report "no adjustment" when the adjustment cell has a value.
+    A comp whose rating EQUALS the subject needs no adjustment (comp_N_condition_adj_blank is fine).
+    Only flag a comp that differs AND has an empty adjustment cell (comp_N_condition_adj_blank=True)
+    with no comment. Name the comps that actually differ.'
   judgeable: text
   conditional: null
   bound_by: manual
@@ -1910,8 +1972,17 @@ items:
   - air_conditioning_type
   - comp_N_heating_cooling
   scope: comps
-  expects: heating and air_conditioning_type both present; if the subject heating source is FWA/FWBB/Radiant,
-    at least one comp_N_heating_cooling should match
+  expects: 'NORMALIZE heating/cooling tokens before comparing — they are vendor abbreviations:
+    "Fa" = "FA" = "FWA" = forced warm air; "HP"/"HtPump" = heat pump; "HWBB"/"EBB" = baseboard;
+    "Rad" = radiant; "CAC"/"AC"/"Central" = central air; "no ac"/"None" = no cooling. So subject
+    "Fa Ac" MATCHES comps "Fa no ac"/"FA HP"/"FA no ac" on the HEAT source (all forced air) — do
+    NOT report "none match" over a Fa/FA casing/spacing difference. The "at least one comp must
+    match" requirement applies ONLY when the SUBJECT heat source is FWA/FWBB/Radiant; if the
+    subject is a HEAT PUMP, baseboard, ductless, or other system, that conditional does NOT fire —
+    heating is then a normal gridded line item (adjusted if material), so do not require a matching
+    comp. Absent/"None" COOLING is a valid state (not every home has AC) and does not fail this check.
+    SATISFIED when every comp states some heat+cool value and, for a FWA/FWBB/Radiant subject, at
+    least one comp shares that heat family.'
   judgeable: text
   conditional: null
   bound_by: manual
@@ -1963,9 +2034,17 @@ items:
   item_name: Garage/Carport
   bound_labels:
   - comp_N_garage_carport
+  - number_of_cars
+  - parking_space_number
+  - garage_spaces
   scope: cross_section
-  expects: if subject garage marked then comp_N_garage_carport includes garage with driveway (e.g., contains
-    'ga' and 'dw')
+  expects: 'The SUBJECT car-storage is number_of_cars / parking_space_number / garage_spaces — a
+    non-zero value means the subject HAS a garage/carport, so this check APPLIES (do not mark it
+    N/A "no garage" when the subject shows 2, 4, etc. car spaces). When the subject has car storage,
+    each comp_N_garage_carport should reflect a comparable garage+driveway; where a comp differs, an
+    adjustment (or explicit 0) is expected. If the comp car-storage cells were not captured, VERIFY
+    against the grid — do not skip the check as N/A. Only truly N/A when the subject has zero car
+    storage AND no carport/driveway.'
   judgeable: text
   conditional: null
   bound_by: llm
@@ -2150,8 +2229,14 @@ items:
   - comp_N_prior_sale_date
   - comp_N_prior_sale_price
   - comp_N_has_prior_sales
+  - comp_N_sale_date
+  - comp_N_settlement_date
   scope: comps
-  expects: if(comp_N_sale_date within 12mo) then prior_comp_N_sale_date is null
+  expects: 'the 12-month window is measured from the comp''s own sale/settlement date
+    (comp_N_sale_date / comp_N_settlement_date), NOT from today: if comp_N_prior_sale_date
+    is MORE than 12 months before comp_N_sale_date, a "Did Not" box is CORRECT and
+    comp_N_has_prior_sales="No" is consistent (do not flag). Only flag when a prior
+    transfer falls WITHIN 12 months of the comp sale date but the "Did" box is unmarked.'
   judgeable: text
   conditional: null
   bound_by: llm
@@ -2203,7 +2288,11 @@ items:
   bound_labels:
   - prior_sale_price_subject
   scope: cross_section
-  expects: value_present
+  expects: 'SATISFIED when a prior-sale price figure is present. A NOMINAL amount — "1"
+    ($1), "10", or a low intra-family / quitclaim / grant-deed consideration — is a REAL,
+    validly-recorded transfer figure, NOT a missing or invalid value; do NOT reject it as
+    "not a valid sale amount". Only flag when the price is genuinely ABSENT while a prior
+    sale/transfer exists (a date is present but no figure).'
   judgeable: text
   conditional: null
   bound_by: llm
@@ -2290,16 +2379,22 @@ items:
   - sales_comparison_summary
   - market_value_opinion
   scope: cross_section
-  expects: ''
+  expects: 'Bracketing is judged on the ADJUSTED comp sale prices (comp_N_adjusted_sale_price),
+    which are the reconciled value indicators — NOT the unadjusted prices. The opinion of value
+    (market_value_opinion) is BRACKETED, and this check is SATISFIED, when it falls within the
+    range of the adjusted comp prices [min adjusted, max adjusted]. Example: value 404,000 with
+    adjusted comps 399,003 / 404,655 / 435,179 IS bracketed (399,003 ≤ 404,000 ≤ 435,179) — do
+    NOT flag it for sitting below the UNADJUSTED range (420,000–450,000). Only flag when the value
+    is outside the adjusted range AND the summary provides no supporting commentary.'
   judgeable: text
   conditional: null
   bound_by: manual
   binder_confidence: 0.9
   severity: null
   reject_branches:
-  - trigger: final value not bracketed (unadjusted+adjusted), no comment
-    reject_text: Final value is not bracketed by unadjusted and adjusted sales comps, please revise or
-      provide sufficient commentary.
+  - trigger: the value opinion falls OUTSIDE the range of ADJUSTED comp prices (not merely below the unadjusted range) AND no supporting commentary is provided
+    reject_text: Final value is not bracketed by the adjusted sales comps and no supporting commentary is
+      provided, please revise.
   hold: false
   never_reject: false
 - item_id: EQ-88
@@ -2520,18 +2615,26 @@ items:
   item_name: Company Name
   bound_labels:
   - appraiser_company_name
+  - appraiser_name
   scope: cross_document
-  expects: appraiser_company_name == engagement_letter_company_name
+  expects: 'The AMC order form frequently fills its Vendor Company Name field with the
+    appraiser''s PERSONAL name, not the firm DBA (a data-entry convention). So if
+    engagement.appraiser_company_name equals the vendor/appraiser PERSON name
+    (engagement.appraiser_name) — e.g. company="JAMES HOMMEL" and appraiser="JAMES
+    HOMMEL" — then the report''s own company (a real DBA such as "Hommel Appraisal
+    Services") is CORRECT and internally consistent → SATISFIED, do not flag. Only
+    treat as a discrepancy when the order form carries a GENUINELY DIFFERENT firm name
+    from the report''s company. When in doubt, this is a VERIFY, never a hard reject.'
   judgeable: needs_engagement
   conditional: null
   bound_by: llm
   binder_confidence: 0.92
   severity: null
   reject_branches:
-  - trigger: appraiser company name != engagement letter
+  - trigger: order form carries a genuinely different firm name than the report's company
     reject_text: Appraiser company name does not match the engagement letter, please correct.
   hold: false
-  never_reject: false
+  never_reject: true
 - item_id: EQ-98
   check_text: Company Address — Should match the engagement letter
   reject_text: Appraiser company address does not match the engagement letter, please correct.
@@ -2783,17 +2886,20 @@ items:
   - lender_name
   - engagement.lender_name
   scope: cross_document
-  expects: lender_name == engagement.lender_name
+  expects: 'Compare ignoring case, punctuation, and WHITESPACE: "United Wholesalemortgage" ==
+    "United Wholesale Mortgage" (missing space) → SATISFIED. Corp-form suffixes and spacing are
+    not mismatches. Only note a genuinely different lender/client; a spacing/spelling variant is
+    at most a please-verify, never a hard reject.'
   judgeable: needs_engagement
   conditional: null
   bound_by: manual
   binder_confidence: 0.95
   severity: null
   reject_branches:
-  - trigger: signature-page lender/client name != order
+  - trigger: a genuinely different lender/client name (not a spacing/spelling/suffix variant)
     reject_text: 'Please correct Lender/Client on the report to match the order: ___________.'
   hold: false
-  never_reject: false
+  never_reject: true
 - item_id: EQ-111
   check_text: Company Address — Must match the Client Engagement letter (Lender/client address)
   reject_text: 'Please correct Lender/Client Address on the report to match the order: ___________.'
@@ -3006,14 +3112,18 @@ items:
   bound_labels:
   - market_conditions_commentary
   scope: narrative
-  expects: non_canned
+  expects: 'SATISFIED when the 1004MC commentary says something specific about the subject
+    market (trend/stability, supply-demand, days-on-market, pricing, financing) — a real
+    characterization, even a brief one, and even if it references the 1004MC grid, counts.
+    Fail ONLY when the field is empty or is pure generic boilerplate / a bare placeholder
+    with no subject-specific market content.'
   judgeable: text
   conditional: null
   bound_by: llm
   binder_confidence: 0.92
   severity: null
   reject_branches:
-  - trigger: 1004MC commentary canned or blank
+  - trigger: 1004MC commentary empty or pure boilerplate with no subject-specific market content
     reject_text: Please provide specific commentary for each section of the 1004MC form; canned commentary
       is not acceptable.
   hold: false
@@ -3054,14 +3164,18 @@ items:
   bound_labels:
   - market_conditions_commentary
   scope: narrative
-  expects: non_canned
+  expects: 'SATISFIED when the 1004MC commentary says something specific about the subject
+    market (trend/stability, supply-demand, days-on-market, pricing, financing) — a real
+    characterization, even a brief one, and even if it references the 1004MC grid, counts.
+    Fail ONLY when the field is empty or is pure generic boilerplate / a bare placeholder
+    with no subject-specific market content.'
   judgeable: text
   conditional: null
   bound_by: llm
   binder_confidence: 0.92
   severity: null
   reject_branches:
-  - trigger: 1004MC commentary canned or blank
+  - trigger: 1004MC commentary empty or pure boilerplate with no subject-specific market content
     reject_text: Please provide specific commentary for each section of the 1004MC form; canned commentary
       is not acceptable.
   hold: false

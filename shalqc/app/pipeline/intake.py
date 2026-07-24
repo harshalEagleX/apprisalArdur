@@ -215,15 +215,28 @@ def classify_file(path: Path) -> str:
     # None → the whole order was G-0 blocked ("appraisal PDF not found"). This is
     # the exact EBER96709 failure.
     text = _pdf_text_sample(path, max_pages=6)
+    uad_count = sum(1 for m in _UAD_MARKERS if m in text)
+    eng_hit = any(m in text for m in _ENGAGEMENT_MARKERS)
 
-    # 1) Definitive appraisal signal (UAD/URAR markers on a long report). Checked
-    #    FIRST so an appraisal that mentions "sales contract" is never a contract.
-    if pages >= _APPRAISAL_MIN_PAGES and any(m in text for m in _UAD_MARKERS):
+    # 1) Order pack / engagement letter, identified by its OWN specific markers
+    #    ("engagement letter", "appraisal order", "engagement instructions", …) which
+    #    never appear in an appraisal REPORT body. This precedes the length+UAD signal
+    #    below because an Equity order pack can run 12 pages and QUOTE a UAD term once —
+    #    that previously tripped the appraisal branch and silently dropped the whole
+    #    engagement (ESPA-0005366: engagement=None → EVERY cross-doc check went N/A).
+    #    A real report is UAD-DENSE (>=2 markers in the first 6 pages); an order pack
+    #    that merely names the form is UAD-sparse (<=1), so engagement-markers + sparse
+    #    ⇒ engagement, regardless of page count.
+    if eng_hit and uad_count <= 1:
+        return "engagement_letter"
+    # 2) Definitive appraisal signal (UAD/URAR markers on a long report). Checked
+    #    before the contract branch so an appraisal that mentions "sales contract" is
+    #    never a contract; the UAD-density guard above already routed any order pack.
+    if pages >= _APPRAISAL_MIN_PAGES and uad_count >= 1:
         return "appraisal_pdf"
-    # 2) Engagement letter / order pack — identified by its own markers at ANY
-    #    length (an order pack can run to ~9 pages, so this must not depend on
-    #    page count, which would collide with the appraisal floor).
-    if any(m in text for m in _ENGAGEMENT_MARKERS):
+    # 2b) Engagement markers on a UAD-dense doc are extremely unlikely, but keep the
+    #     any-length engagement fallback for short packs the density test didn't catch.
+    if eng_hit:
         return "engagement_letter"
     # 3) A purchase contract is a SHORT document; its markers apply only below the
     #    appraisal floor (a long PDF with a contract phrase is the appraisal).
