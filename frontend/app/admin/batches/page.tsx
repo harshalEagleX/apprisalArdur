@@ -21,7 +21,6 @@ import { BatchHistoryDrawer } from "@/components/admin/BatchHistoryDrawer";
 import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
 import { toast } from "@/lib/toast";
-import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 
 const STATUSES = [
   "", "UPLOADED", "VALIDATING", "VALIDATION_FAILED",
@@ -32,17 +31,6 @@ type ReconcileResult = {
   stuckFound: number; retried: number; abandoned: number; pythonHealthy: boolean; message: string;
 };
 
-function batchLog(...args: unknown[]) {
-  void args;
-  // no-op
-}
-
-function statusCounts(batches: Batch[]) {
-  return batches.reduce<Record<string, number>>((acc, batch) => {
-    acc[batch.status] = (acc[batch.status] ?? 0) + 1;
-    return acc;
-  }, {});
-}
 
 // ── Pill summary ──────────────────────────────────────────────────────────────
 function SummaryPill({ icon: Icon, label, value, tone }: {
@@ -141,7 +129,6 @@ export default function BatchesPage() {
   const [recoveryTarget, setRecoveryTarget] = useState<Batch | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Batch | null>(null);
   const [dbDegraded, setDbDegraded] = useState(false);
-  const [actionLoading, setActionLoading] = useState<Set<number>>(new Set());
   const [reconciling, setReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
   const searchMountedRef              = useRef(false);
@@ -149,6 +136,7 @@ export default function BatchesPage() {
   // ── Bulk selection state ─────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   const handleSelect = useCallback((id: number, checked: boolean) => {
     setSelectedIds(prev => {
@@ -171,7 +159,7 @@ export default function BatchesPage() {
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Delete ${selectedIds.size} batch${selectedIds.size > 1 ? "es" : ""}? This cannot be undone.`)) return;
+    setBulkConfirmOpen(false);
     setBulkLoading(true);
     try {
       const ids = Array.from(selectedIds);
@@ -189,14 +177,6 @@ export default function BatchesPage() {
     }
   }, [selectedIds, clearSelection]);
 
-  const setActionBusy = useCallback((id: number, on: boolean) => {
-    setActionLoading(prev => {
-      const n = new Set(prev);
-      if (on) n.add(id);
-      else n.delete(id);
-      return n;
-    });
-  }, []);
 
   // Debounce search
   useEffect(() => {
@@ -209,36 +189,14 @@ export default function BatchesPage() {
   }, [search]);
 
   const load = useCallback(async () => {
-    const started = performance.now();
-    batchLog("load:start", { page, statusFilter, debouncedSearch });
-    adminBatchTimeline("frontend_page_load_start", {
-      page,
-      status_filter: statusFilter || "ALL",
-      search: debouncedSearch || "",
-    });
     setLoading(true);
     try {
       const bRes = await getAdminBatches(page, statusFilter || undefined, debouncedSearch || undefined);
       setBatches(bRes.content);
       setTotalPages(bRes.totalPages);
       setTotalElements(Number(bRes.totalElements ?? bRes.content.length));
-      batchLog("load:success", { count: bRes.content.length });
-      adminBatchTimeline("frontend_page_load_complete", {
-        page,
-        returned: bRes.content.length,
-        total_elements: Number(bRes.totalElements ?? bRes.content.length),
-        total_pages: bRes.totalPages,
-        status_counts: statusCounts(bRes.content),
-        elapsed_ms: elapsedMs(started),
-      });
     } catch (e) {
-      batchLog("load:error", e);
-      adminBatchTimeline("frontend_page_load_failed", {
-        page,
-        elapsed_ms: elapsedMs(started),
-        error: e instanceof Error ? e.message : String(e),
-      });
-      toast.error("Failed to load batches");
+      toast.error("Failed to load batches", e instanceof Error ? e.message : undefined);
     } finally {
       setLoading(false);
     }
@@ -285,13 +243,6 @@ export default function BatchesPage() {
 
   useEffect(() => {
     if (loading) return;
-    adminBatchTimeline("frontend_table_displayed", {
-      page,
-      row_count: batches.length,
-      total_elements: totalElements,
-      status_counts: statusCounts(batches),
-      batch_ids: batches.map(b => b.id),
-    });
   }, [batches, loading, page, totalElements]);
 
   async function handleDelete() {
@@ -358,11 +309,6 @@ export default function BatchesPage() {
             Reconcile
           </button>
           <button onClick={() => {
-            adminBatchTimeline("frontend_upload_button_clicked", {
-              page,
-              row_count: batches.length,
-              status_filter: statusFilter || "ALL",
-            });
             setShowUpload(true);
           }}
             className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white shadow-[0_0_22px_rgba(226,232,240,0.16)] transition-colors hover:bg-slate-500">
@@ -422,7 +368,7 @@ export default function BatchesPage() {
           </span>
           <span className="mx-1 h-4 w-px bg-white/10" />
           <button
-            onClick={handleBulkDelete}
+            onClick={() => setBulkConfirmOpen(true)}
             disabled={bulkLoading}
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/25 bg-red-950/30 px-3 text-xs font-medium text-red-300 transition-colors hover:bg-red-950/60 disabled:opacity-40"
           >
@@ -485,7 +431,7 @@ export default function BatchesPage() {
                 <BatchRow
                   key={b.id}
                   batch={b}
-                  isLoading={actionLoading.has(b.id) || bulkLoading}
+                  isLoading={bulkLoading}
                   progress={undefined}
                   onDelete={setDeleteTarget}
                   onOpenRecovery={setRecoveryTarget}
@@ -517,25 +463,23 @@ export default function BatchesPage() {
       {/* Modals */}
       <UploadModal open={showUpload} onClose={() => setShowUpload(false)}
         onUploaded={(batchId, ref, fileCount) => {
-          adminBatchTimeline("frontend_upload_visible_complete", {
-            batch_id: batchId,
-            batch_ref: ref,
-            file_count: fileCount,
-          });
           toast.success(`Batch "${ref}" uploaded`, `${fileCount} files ready for QC`);
-          adminBatchTimeline("frontend_table_refresh_after_upload_start", {
-            batch_id: batchId,
-            batch_ref: ref,
-          });
           void load();
         }} />
+      {/* Copy matches what the API actually does: deleteBatch() soft-deletes, so
+          the batch leaves the workspace but its files, QC results and audit trail
+          are retained. Both dialogs used to promise an irreversible purge. */}
       <ConfirmDialog open={!!deleteTarget} title="Delete batch"
-        message={`Delete "${deleteTarget?.parentBatchId}"? All associated files and QC results will be permanently removed. This cannot be undone.`}
+        message={`Remove "${deleteTarget?.parentBatchId}" and its files from the workspace? It disappears from every list and its orders stop being processed. The records and audit trail are retained, so support can restore it.`}
         confirmLabel="Delete batch" danger confirmationText={deleteTarget?.parentBatchId}
         onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
+      <ConfirmDialog open={bulkConfirmOpen} title={`Delete ${selectedIds.size} batch${selectedIds.size === 1 ? "" : "es"}`}
+        message={`Remove ${selectedIds.size} selected batch${selectedIds.size === 1 ? "" : "es"} and their files from the workspace? They disappear from every list and their orders stop being processed. The records and audit trail are retained, so support can restore them.`}
+        confirmLabel={`Delete ${selectedIds.size} batch${selectedIds.size === 1 ? "" : "es"}`} danger
+        onConfirm={() => void handleBulkDelete()} onCancel={() => setBulkConfirmOpen(false)} />
       <BatchRecoveryDrawer
         batch={recoveryTarget}
-        busy={recoveryTarget ? actionLoading.has(recoveryTarget.id) : false}
+        busy={bulkLoading}
         onClose={() => setRecoveryTarget(null)}
         onDelete={batch => { setRecoveryTarget(null); setDeleteTarget(batch); }}
         onReupload={() => { setRecoveryTarget(null); setShowUpload(true); }}

@@ -24,11 +24,3 @@ export function PageSpinner({ label = "Loading…" }: { label?: string }) {
   );
 }
 
-export function InlineSpinner({ label }: { label?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-slate-400 text-sm">
-      <Spinner size={13} />
-      {label}
-    </span>
-  );
-}

@@ -427,7 +427,6 @@ function fileTypeBadgeClass(t: BatchFile["fileType"]): string {
 
 function PropertySetSection({
   set,
-  allAppraisals,
   resultMap,
   onReQC,
   onHistory,
@@ -437,7 +436,6 @@ function PropertySetSection({
   isUnlinkedPool = false,
 }: {
   set: PropertySet;
-  allAppraisals: BatchFile[];
   resultMap: Map<number, QCResult>;
   onReQC: (fileId: number) => void;
   onHistory: (fileId: number) => void;
@@ -853,7 +851,6 @@ export default function BatchDetailPage() {
             <PropertySetSection
               key={ps.orderId ?? ps.setName ?? i}
               set={ps}
-              allAppraisals={allAppraisals}
               resultMap={resultMap}
               onReQC={handleReQC}
               onHistory={setHistoryFileId}
@@ -871,7 +868,6 @@ export default function BatchDetailPage() {
                 <PropertySetSection
                   key={`unlinked-${ps.setName ?? i}`}
                   set={ps}
-                  allAppraisals={allAppraisals}
                   resultMap={resultMap}
                   onReQC={handleReQC}
                   onHistory={setHistoryFileId}
@@ -890,7 +886,6 @@ export default function BatchDetailPage() {
             setName: null, files, fileCount: files.length,
             completedCount: 0, errorCount: 0, pendingCount: 0, needsAssignmentCount: 0,
           }}
-          allAppraisals={allAppraisals}
           resultMap={resultMap}
           onReQC={handleReQC}
           onHistory={setHistoryFileId}

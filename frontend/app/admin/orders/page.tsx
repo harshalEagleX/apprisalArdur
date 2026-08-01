@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight, ClipboardList,
@@ -82,7 +82,10 @@ export default function OrdersPage() {
     }
   }, [page, statusFilter, debouncedSearch]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const t = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(t);
+  }, [load]);
 
   useEffect(() => {
     getOrderStatuses().then(list => { if (Array.isArray(list) && list.length) setStatusOptions(list); }).catch(() => undefined);
@@ -158,16 +161,14 @@ export default function OrdersPage() {
     jobIdsRef.current = new Set();
   }, []);
 
-  // Drop selections for rows no longer on the page (filter/page change).
-  useEffect(() => {
-    setSelected(prev => {
-      const visible = new Set(orders.map(o => o.id));
-      const next = new Set([...prev].filter(id => visible.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [orders]);
-
-  const selectedIds = Array.from(selected);
+  // Selections are scoped to what is on screen. Deriving that intersection —
+  // rather than pruning `selected` from an effect after each load — means a row
+  // that scrolls out of the current filter can never contribute to a bulk action,
+  // and there is no render where the two are briefly out of step.
+  const selectedIds = useMemo(
+    () => orders.map(o => o.id).filter(id => selected.has(id)),
+    [orders, selected],
+  );
   const allOnPageSelected = orders.length > 0 && orders.every(o => selected.has(o.id));
 
   function toggleOne(id: number) {
@@ -178,7 +179,7 @@ export default function OrdersPage() {
     });
   }
   function toggleAll() {
-    setSelected(prev => (allOnPageSelected ? new Set() : new Set(orders.map(o => o.id))));
+    setSelected(allOnPageSelected ? new Set() : new Set(orders.map(o => o.id)));
   }
 
   async function handleRunQCSelected() {

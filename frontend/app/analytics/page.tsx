@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Clock, FileText, Lightbulb, Scale, ShieldAlert, TrendingUp, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Clock, FileText, Lightbulb, Scale, ShieldAlert, TrendingUp, Users } from "lucide-react";
+import EmptyState from "@/components/shared/EmptyState";
+import { PageSpinner } from "@/components/shared/Spinner";
 import { displayName } from "@/lib/displayName";
 import {
   getAnalyticsOverview,
@@ -148,23 +150,21 @@ export default function AnalyticsPage() {
       )}
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center text-slate-500">
-          <span className="mr-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
-          Loading analytics…
-        </div>
+        <PageSpinner label="Loading analytics…" />
       ) : num("totalFilesProcessed") === 0 ? (
         // Educational empty-state instead of a wall of zeros that reads as "broken".
         <div className="mx-auto max-w-7xl p-6">
-          <div className="flex flex-col items-center justify-center rounded-lg border border-white/10 bg-surface px-6 py-16 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-muted text-slate-500 text-xl">📊</div>
-            <h2 className="text-lg font-semibold text-white">No processed files yet</h2>
-            <p className="mt-1 max-w-md text-sm text-slate-500">
-              Analytics populate once QC has run. Upload an appraisal batch and run QC — OCR
-              accuracy, pass rates, SLA, and trends will appear here.
-            </p>
-            <Link href="/admin/batches" className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-500">
-              Go to Batches
-            </Link>
+          <div className="rounded-lg border border-white/10 bg-surface">
+            <EmptyState
+              icon={BarChart3}
+              title="No processed files yet"
+              description="Analytics populate once QC has run. Upload an appraisal batch and run QC — OCR accuracy, pass rates, SLA, and trends will appear here."
+              action={(
+                <Link href="/admin/batches" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-400/30 bg-slate-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-500">
+                  Go to Batches
+                </Link>
+              )}
+            />
           </div>
         </div>
       ) : (

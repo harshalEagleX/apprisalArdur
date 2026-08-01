@@ -49,7 +49,10 @@ export function PdfDocumentViewer({
   const observerRef = useRef<IntersectionObserver | null>(null);
   // Last measured height per page, so an unmounted page's placeholder keeps its
   // real size and scrolling past it doesn't cause the content to jump.
-  const pageHeights = useRef<Record<number, number>>({});
+  // Tagged with the width each height was measured at, so a zoom change makes
+  // old entries self-evidently stale. That removes the need to clear the cache
+  // when width changes — which would mean mutating a ref during render.
+  const pageHeights = useRef<Record<number, { width: number; height: number }>>({});
   // The real rendered height of a page at the current width. Report pages are a
   // UNIFORM size, so once ONE page has rendered we use its true height for every
   // not-yet-rendered page's placeholder — instead of the US-Letter GUESS, which
@@ -60,20 +63,20 @@ export function PdfDocumentViewer({
 
   const estimatedHeight = Math.round(width * DEFAULT_PAGE_RATIO);
 
-  // Reset virtualization when the document changes.
-  useEffect(() => {
-    pageHeights.current = {};
-    setMeasuredHeight(null);
-    setVisiblePages(new Set([Math.max(1, targetPage)]));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileUrl]);
+  // Switching documents needs no reset effect: the parent mounts this component
+  // with key={activeDocument.id}, so a different file remounts it and every ref
+  // and state value starts fresh. The effect that used to do this by hand was
+  // redundant, and it reset state from inside an effect for no reason.
 
-  // Zoom changes the render width, so cached placeholder heights are stale —
-  // drop them (visible pages re-measure on render; the measured height covers the rest).
-  useEffect(() => {
-    pageHeights.current = {};
+  // Zoom changes the render width, so the measured height no longer applies.
+  // Adjusting during render (React's documented pattern for "reset state when a
+  // prop changes") drops it before the pages paint, rather than painting once at
+  // the old height and then correcting.
+  const [renderedWidth, setRenderedWidth] = useState(width);
+  if (renderedWidth !== width) {
+    setRenderedWidth(width);
     setMeasuredHeight(null);
-  }, [width]);
+  }
 
   // Find the scrollable ancestor (the viewer's overflow-auto container) so the
   // IntersectionObserver measures against what the user actually scrolls.
@@ -129,6 +132,11 @@ export function PdfDocumentViewer({
   // scroll can fire from onRenderSuccess (below) the moment the real height exists.
   const pendingFocusRef = useRef(false);
 
+  // Current width, readable by the scroll effect WITHOUT making width a scroll
+  // trigger. See the effect below for why that distinction matters.
+  const widthRef = useRef(width);
+  useEffect(() => { widthRef.current = width; }, [width]);
+
   const scrollToTarget = useCallback(() => {
     const page = pageRefs.current[targetPage];
     const target = (targetBox && highlightRef.current) ? highlightRef.current : page;
@@ -142,10 +150,15 @@ export function PdfDocumentViewer({
   // to onRenderSuccess. `highlighting` is intentionally NOT a dependency — it is a
   // visual ring and must never move the document (its 5s toggle used to re-fire
   // this effect and re-scroll the page out from under the reviewer).
+  //
+  // `width` is excluded for the same reason, and read through a ref instead: it
+  // is needed to tell a stale cached height from a fresh one, but zoom must not
+  // re-trigger a scroll. The parent zooms around the cursor anchor, so pulling
+  // the document back to the focused box mid-zoom would fight the reviewer.
   useEffect(() => {
     if (!targetPage) return;
-    setVisiblePages(prev => prev.has(targetPage) ? prev : new Set(prev).add(targetPage));
-    const ready = pageRefs.current[targetPage] && pageHeights.current[targetPage] != null;
+    const measured = pageHeights.current[targetPage];
+    const ready = pageRefs.current[targetPage] && measured?.width === widthRef.current;
     if (ready) {
       pendingFocusRef.current = false;
       const t = window.setTimeout(scrollToTarget, 60);
@@ -153,6 +166,15 @@ export function PdfDocumentViewer({
     }
     pendingFocusRef.current = true;   // not rendered yet → onRenderSuccess does the one scroll
   }, [fileUrl, targetPage, targetBox, numPages, focusNonce, scrollToTarget]);
+
+  // The focus target must be mounted for the scroll above to have something to
+  // land on. Deriving that — rather than pushing targetPage into visiblePages
+  // from the effect — keeps the mounted set a pure function of "what the
+  // observer sees" plus "where we are being sent".
+  const mountedPages = useMemo(() => {
+    if (!targetPage || visiblePages.has(targetPage)) return visiblePages;
+    return new Set(visiblePages).add(targetPage);
+  }, [visiblePages, targetPage]);
 
   return (
     <Document
@@ -169,8 +191,13 @@ export function PdfDocumentViewer({
       <div ref={rootMarkerRef} className="flex flex-col items-center gap-6">
         {Array.from({ length: numPages }, (_, index) => {
           const pageNumber = index + 1;
-          const isVisible = visiblePages.has(pageNumber);
-          const placeholderHeight = pageHeights.current[pageNumber] ?? measuredHeight ?? estimatedHeight;
+          const isVisible = mountedPages.has(pageNumber);
+          // Report pages are a uniform size, so the first measured height sizes
+          // every placeholder. Reading the per-page `pageHeights` ref here instead
+          // made render depend on a value React does not track — and for an
+          // unmounted page (the only case a placeholder is shown) that ref entry
+          // is unset anyway, so this is the same number by a legal route.
+          const placeholderHeight = measuredHeight ?? estimatedHeight;
           return (
             <div
               key={`${fileUrl}-${pageNumber}`}
@@ -201,7 +228,7 @@ export function PdfDocumentViewer({
                   onRenderSuccess={() => {
                     const node = pageRefs.current[pageNumber];
                     if (node) {
-                      pageHeights.current[pageNumber] = node.offsetHeight;
+                      pageHeights.current[pageNumber] = { width, height: node.offsetHeight };
                       // First real height → use it for every un-rendered page's
                       // placeholder so later renders don't shift the layout.
                       if (measuredHeight == null) setMeasuredHeight(node.offsetHeight);

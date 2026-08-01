@@ -1,48 +1,17 @@
 /**
- * Single source of truth for QC rule status + severity presentation.
+ * Single source of truth for QC rule status semantics.
  *
- * Rule status and severity drive colour, review-routing, and the blocking
- * acknowledgment gate in several places (RuleCard, the verify page, future
- * dashboards). Keeping the normaliser, the review-like set, and the style maps
- * here — rather than copied per component — guarantees they can never drift
- * apart (e.g. a new "hold" style added in one place but not the other).
+ * This module owns *meaning*, not colour: how a raw backend status string is
+ * normalised, and which statuses count as "needs a reviewer". Presentation lives
+ * with the components that render it (StatusBadge, FindingRow) — the style maps
+ * that used to sit here had no importers and had already drifted from both.
  */
-
-/** Visual treatment per normalised status. */
-export interface StatusStyle {
-  border: string;
-  bg: string;
-  text: string;
-}
-
-export const STATUS_STYLE: Record<string, StatusStyle> = {
-  pass:               { border: "border-green-500/20", bg: "bg-green-950/10", text: "text-green-200" },
-  fail:               { border: "border-red-500/20",   bg: "bg-red-950/10",   text: "text-red-200" },
-  verify:             { border: "border-amber-500/20", bg: "bg-amber-950/5",  text: "text-amber-200" },
-  review:             { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  extraction_failed:  { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  ocr_low_confidence: { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  source_missing:     { border: "border-amber-500/20", bg: "bg-amber-950/10", text: "text-amber-200" },
-  system_error:       { border: "border-red-500/20",   bg: "bg-red-950/10",   text: "text-red-200" },
-  cross_doc_mismatch: { border: "border-red-500/20",   bg: "bg-red-950/10",   text: "text-red-200" },
-  hold:               { border: "border-red-500/30",   bg: "bg-red-950/15",   text: "text-red-200" },
-  skipped:            { border: "border-white/8",      bg: "bg-white/[0.03]", text: "text-slate-400" },
-  not_executed:       { border: "border-white/8",      bg: "bg-white/[0.03]", text: "text-slate-400" },
-  not_applicable:     { border: "border-white/8",      bg: "bg-white/[0.03]", text: "text-slate-400" },
-  MANUAL_PASS:        { border: "border-green-500/20", bg: "bg-green-950/10", text: "text-green-200" },
-};
-
-export const SEV_STYLE: Record<string, string> = {
-  BLOCKING: "bg-red-950/50 border-red-500/25 text-red-200",
-  STANDARD: "bg-muted border-white/10 text-slate-400",
-  ADVISORY: "bg-muted/70 border-white/10 text-slate-500",
-};
 
 /**
  * Statuses that require reviewer attention (not a clean pass/fail-only set).
  * A single canonical list so "what counts as needing review" is defined once.
  */
-export const REVIEW_LIKE_STATUSES: readonly string[] = [
+const REVIEW_LIKE_STATUSES: readonly string[] = [
   "verify",
   "review",
   "hold",
@@ -67,12 +36,3 @@ export function isReviewLikeStatus(status: string): boolean {
   return REVIEW_LIKE_STATUSES.includes(ruleStatus(status));
 }
 
-/** Style for a status, falling back to the neutral "verify" treatment. */
-export function statusStyle(status: string): StatusStyle {
-  return STATUS_STYLE[ruleStatus(status)] ?? STATUS_STYLE.verify;
-}
-
-/** Style for a severity, falling back to STANDARD. */
-export function severityStyle(severity: string | null | undefined): string {
-  return SEV_STYLE[severity ?? "STANDARD"] ?? SEV_STYLE.STANDARD;
-}

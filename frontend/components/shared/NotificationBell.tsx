@@ -26,6 +26,39 @@ export interface Notification {
   read: boolean;
 }
 
+/**
+ * Which shell the bell is mounted in. The reviewer shell must never offer the
+ * admin-only deep link (/admin/batches/...) — the route gate bounces reviewers
+ * straight back to their queue, so the link read as broken.
+ */
+export type BellVariant = "admin" | "reviewer";
+
+// The backend has no "dismiss" endpoint, so a dismissal is a client-side
+// preference. Persisting the ids means the 30s poll can't resurrect a card the
+// user already cleared — which is exactly what it used to do.
+const DISMISSED_KEY = "shal_dismissed_notification_ids";
+
+function loadDismissed(): Set<number> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((n): n is number => typeof n === "number") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(ids: Set<number>): void {
+  if (typeof window === "undefined") return;
+  try {
+    // Keep the list bounded — only recent ids can still come back from the poll.
+    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids].slice(-300)));
+  } catch {
+    /* storage full or disabled — dismissal degrades to session-only */
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function notifIcon(type: string, status?: string) {
@@ -77,11 +110,17 @@ const MAX_NOTIFS = 60;
 
 // ── Single card ───────────────────────────────────────────────────────────────
 
-function NotifCard({ n, onDismiss, onRead }: {
+function NotifCard({ n, variant, onDismiss, onRead }: {
   n: Notification;
+  variant: BellVariant;
   onDismiss: (id: string) => void;
   onRead: (id: string) => void;
 }) {
+  // Prefer the destination the server sent. Only fall back to the batch deep link
+  // in the admin shell, where that route is actually reachable.
+  const href = n.link
+    ?? (variant === "admin" && n.needsReview && n.batchId ? `/admin/batches/${n.batchId}` : null);
+
   return (
     <div
       onClick={() => onRead(n.id)}
@@ -111,13 +150,13 @@ function NotifCard({ n, onDismiss, onRead }: {
         </p>
         <div className="mt-2 flex items-center gap-3">
           <span className="text-[11px] text-slate-600">{timeAgo(n.occurredAt)}</span>
-          {n.needsReview && n.batchId && (
+          {href && (
             <Link
-              href={`/admin/batches/${n.batchId}`}
+              href={href}
               onClick={e => { e.stopPropagation(); onRead(n.id); }}
               className="text-[11px] font-medium text-indigo-400/80 transition-colors hover:text-indigo-300"
             >
-              View batch →
+              {n.type === "ORDER_ASSIGNED" ? "Open order →" : "View batch →"}
             </Link>
           )}
         </div>
@@ -144,6 +183,7 @@ function NotifCard({ n, onDismiss, onRead }: {
 
 function NotificationDrawer({
   notifs,
+  variant,
   open,
   onClose,
   onMarkAllRead,
@@ -152,6 +192,7 @@ function NotificationDrawer({
   onRead,
 }: {
   notifs: Notification[];
+  variant: BellVariant;
   open: boolean;
   onClose: () => void;
   onMarkAllRead: () => void;
@@ -314,13 +355,13 @@ function NotificationDrawer({
               {today.length > 0 && (
                 <>
                   <p className="px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-700">Today</p>
-                  {today.map(n => <NotifCard key={n.id} n={n} onDismiss={onDismiss} onRead={onRead} />)}
+                  {today.map(n => <NotifCard key={n.id} n={n} variant={variant} onDismiss={onDismiss} onRead={onRead} />)}
                 </>
               )}
               {earlier.length > 0 && (
                 <>
                   <p className="px-2 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-widest text-slate-700">Earlier</p>
-                  {earlier.map(n => <NotifCard key={n.id} n={n} onDismiss={onDismiss} onRead={onRead} />)}
+                  {earlier.map(n => <NotifCard key={n.id} n={n} variant={variant} onDismiss={onDismiss} onRead={onRead} />)}
                 </>
               )}
             </div>
@@ -348,11 +389,16 @@ function NotificationDrawer({
 
 // ── Bell trigger (lives in sidebar) ──────────────────────────────────────────
 
-export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
+export function NotificationBell({
+  topics = ["/topic/admin/notifications"],
+  variant = "admin",
+}: {
   topics?: string[];
+  variant?: BellVariant;
 }) {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const dismissedRef = useRef<Set<number>>(loadDismissed());
 
   const unread = notifs.filter(n => !n.read).length;
 
@@ -381,15 +427,17 @@ export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
   const refreshPersisted = useCallback(async () => {
     try {
       const res = await getNotifications(30);
-      const persisted: Notification[] = res.items.map(it => ({
-        id: `db-${it.id}`,
-        serverId: it.id,
-        type: it.type,
-        message: it.message || it.title,
-        link: it.link ?? undefined,
-        occurredAt: it.createdAt ?? new Date().toISOString(),
-        read: it.read,
-      }));
+      const persisted: Notification[] = res.items
+        .filter(it => !dismissedRef.current.has(it.id))
+        .map(it => ({
+          id: `db-${it.id}`,
+          serverId: it.id,
+          type: it.type,
+          message: it.message || it.title,
+          link: it.link ?? undefined,
+          occurredAt: it.createdAt ?? new Date().toISOString(),
+          read: it.read,
+        }));
       setNotifs(prev => {
         const wsOnly = prev.filter(n => n.serverId === undefined);
         return [...wsOnly, ...persisted]
@@ -402,10 +450,37 @@ export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
   }, []);
 
   useEffect(() => {
-    void refreshPersisted();
-    const t = setInterval(() => void refreshPersisted(), 30000);
-    return () => clearInterval(t);
+    const first = setTimeout(() => void refreshPersisted(), 0);
+    const poll = setInterval(() => void refreshPersisted(), 30000);
+    return () => { clearTimeout(first); clearInterval(poll); };
   }, [refreshPersisted]);
+
+  // Dismissal is client-side (the API has no dismiss route), so the id has to be
+  // remembered or the next 30s poll brings the card straight back. Also mark it
+  // read server-side so the unread badge agrees with what's on screen.
+  const handleDismiss = useCallback((id: string) => {
+    setNotifs(prev => {
+      const target = prev.find(n => n.id === id);
+      if (target?.serverId != null) {
+        dismissedRef.current.add(target.serverId);
+        saveDismissed(dismissedRef.current);
+        if (!target.read) void markNotificationRead(target.serverId).catch(() => undefined);
+      }
+      return prev.filter(n => n.id !== id);
+    });
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    setNotifs(prev => {
+      for (const n of prev) {
+        if (n.serverId != null) dismissedRef.current.add(n.serverId);
+      }
+      saveDismissed(dismissedRef.current);
+      return [];
+    });
+    void markAllNotificationsRead().catch(() => undefined);
+    setDrawerOpen(false);
+  }, []);
 
   const handleRead = useCallback((id: string) => {
     setNotifs(prev => {
@@ -439,11 +514,12 @@ export function NotificationBell({ topics = ["/topic/admin/notifications"] }: {
       {/* Drawer rendered at document.body via portal */}
       <NotificationDrawer
         notifs={notifs}
+        variant={variant}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onMarkAllRead={handleMarkAllRead}
-        onClearAll={() => { setNotifs([]); setDrawerOpen(false); }}
-        onDismiss={id => setNotifs(p => p.filter(n => n.id !== id))}
+        onClearAll={handleClearAll}
+        onDismiss={handleDismiss}
         onRead={handleRead}
       />
     </>

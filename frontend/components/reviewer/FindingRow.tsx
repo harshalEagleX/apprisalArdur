@@ -1,5 +1,5 @@
 "use client";
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { QCRuleResult, RuleDetail } from "@/lib/api";
 import { getRuleDetail } from "@/lib/api";
+import Spinner from "@/components/shared/Spinner";
 import { coerceEvidenceSources, type EvidenceSource } from "@/lib/ruleEvidence";
 import { failRejectionLanguage } from "@/lib/ruleLanguage";
 import { ruleStatus, isReviewLikeStatus } from "@/lib/ruleStatus";
@@ -137,7 +138,12 @@ export const FindingRow = memo(function FindingRow({
   const [expanded, setExpanded] = useState(isFail || isVerify);
   const [detail, setDetail] = useState<RuleDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [now, setNow] = useState(0);
+  // Seeded with the real clock so the very first paint shows the true SLA figure
+  // and the true unlock countdown. Starting at 0 made every row render "4h 0m
+  // remaining" and a full 8s lock for one frame before correcting.
+  const [now, setNow] = useState(() => Date.now());
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
 
   const sevTag = rule.severity ?? "STANDARD";
   const isBlockingVerify = isVerify && sevTag === "BLOCKING";
@@ -163,21 +169,40 @@ export const FindingRow = memo(function FindingRow({
           ? failRejectionLanguage(rule).text
           : rule.message;
 
-  // Lazy-load the verbose evidence only once, the first time the row expands.
+  // Rows for findings that need a decision open by default, so "fetch on expand"
+  // alone would fire one /detail request per finding the moment the page mounts —
+  // ~100 parallel calls on a full checklist. Gate the fetch on the row actually
+  // reaching the viewport (with a screenful of lead-in) so evidence loads just
+  // ahead of the reviewer instead of all at once.
   useEffect(() => {
-    if (!expanded || detail || detailLoading) return;
+    const node = rowRef.current;
+    if (!node || inView) return;
+    if (typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    const observer = new IntersectionObserver(
+      entries => { if (entries.some(e => e.isIntersecting)) setInView(true); },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [inView]);
+
+  // Lazy-load the verbose evidence only once, when the row is both expanded and
+  // near enough to be read.
+  useEffect(() => {
+    if (!expanded || !inView || detail || detailLoading) return;
     setDetailLoading(true);
     getRuleDetail(rule.id)
       .then(setDetail)
       .catch(() => undefined)
       .finally(() => setDetailLoading(false));
-  }, [expanded, detail, detailLoading, rule.id]);
+  }, [expanded, inView, detail, detailLoading, rule.id]);
 
   // SLA / wait countdown — only mounts for rules that need a reviewer.
   const presentedAt = rule.firstPresentedAt ? new Date(rule.firstPresentedAt).getTime() : 0;
-  const elapsedMs = presentedAt > 0 && now > 0 ? Math.max(0, now - presentedAt) : 0;
+  const elapsedMs = presentedAt > 0 ? Math.max(0, now - presentedAt) : 0;
   const waitMs = isVerify && presentedAt > 0 ? Math.max(0, 8000 - elapsedMs) : 0;
   const waitSeconds = Math.ceil(waitMs / 1000);
+  const unlockPending = waitMs > 0;
 
   const slaMs = rule.reviewRequired ? 4 * 60 * 60 * 1000 - elapsedMs : null;
   const slaExpired = slaMs != null && slaMs <= 0;
@@ -194,23 +219,17 @@ export const FindingRow = memo(function FindingRow({
   const canPass = canAct;
   const canFail = canAct && (isVerify || isFail);
 
+  // Two speeds. The unlock gate counts down in whole seconds, so it needs a
+  // sub-second tick — but only while it is actually running. The SLA label is
+  // "Xh Ym", which changes once a minute. Ticking every row at 500ms for the
+  // label's sake meant ~200 state updates per second on a full checklist.
   useEffect(() => {
     if (!rule.reviewRequired && !isVerify) return;
-    const tick = () => setNow(Date.now());
-    const startTimer = window.setTimeout(tick, 0);
-    const interval = window.setInterval(tick, 500);
-    return () => {
-      window.clearTimeout(startTimer);
-      window.clearInterval(interval);
-    };
-  }, [isVerify, rule.reviewRequired]);
+    const interval = window.setInterval(() => setNow(Date.now()), unlockPending ? 250 : 30_000);
+    return () => window.clearInterval(interval);
+  }, [isVerify, rule.reviewRequired, unlockPending]);
 
-  const spinnerSvg = (
-    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
+  const spinnerSvg = <Spinner size={12} />;
 
   const sources = coerceEvidenceSources(detail?.sources);
   const explanation = (detail?.explanation && detail.explanation.trim())
@@ -223,6 +242,7 @@ export const FindingRow = memo(function FindingRow({
 
   return (
     <div
+      ref={rowRef}
       id={`rule-${rule.id}`}
       className={`rounded-[10px] border ${s.card} ${active ? "ring-1 ring-slate-500/50" : ""}`}
     >

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ruleStatus, isReviewLikeStatus, statusStyle, severityStyle, STATUS_STYLE, SEV_STYLE } from "@/lib/ruleStatus";
+import { ruleStatus, isReviewLikeStatus } from "@/lib/ruleStatus";
 
 describe("ruleStatus", () => {
   it("lowercases ordinary statuses", () => {
@@ -24,12 +24,11 @@ describe("isReviewLikeStatus", () => {
   });
 });
 
-describe("style fallbacks", () => {
-  it("falls back to the verify style for unknown statuses", () => {
-    expect(statusStyle("nonsense")).toBe(STATUS_STYLE.verify);
+describe("isReviewLikeStatus — unknown input", () => {
+  it("treats an unrecognised status as not needing review", () => {
+    expect(isReviewLikeStatus("nonsense")).toBe(false);
   });
-  it("falls back to STANDARD severity for unknown/nullish severity", () => {
-    expect(severityStyle(null)).toBe(SEV_STYLE.STANDARD);
-    expect(severityStyle("nonsense")).toBe(SEV_STYLE.STANDARD);
+  it("handles a nullish status without throwing", () => {
+    expect(isReviewLikeStatus(undefined as unknown as string)).toBe(false);
   });
 });

@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from "react";
 import { AlertCircle, CheckCircle2, X, Upload, ChevronRight } from "lucide-react";
 import { getClients, uploadBatch, BatchStructureError, type Client } from "@/lib/api";
 import Spinner from "@/components/shared/Spinner";
-import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 
 interface Props {
   open: boolean;
@@ -28,30 +27,21 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const started = performance.now();
-    adminBatchTimeline("frontend_upload_modal_open", {});
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const timer = window.setTimeout(() => {
       setFile(null); setClientId(""); setError(""); setStructureIssues([]); setFieldErrors({}); setProgress(0);
+      // Without the client list there is nothing to upload against, so a failure
+      // here has to be visible — it used to resolve into an empty dropdown with
+      // no explanation of why no client could be picked.
       getClients().then(nextClients => {
         setClients(nextClients);
-        adminBatchTimeline("frontend_upload_modal_clients_loaded", {
-          client_count: nextClients.length,
-          elapsed_ms: elapsedMs(started),
-        });
       }).catch(err => {
-        adminBatchTimeline("frontend_upload_modal_clients_failed", {
-          elapsed_ms: elapsedMs(started),
-          error: err instanceof Error ? err.message : String(err),
-        });
+        setError(err instanceof Error ? err.message : "Could not load the client list. Close and reopen to retry.");
       });
       dialogRef.current?.focus();
     }, 0);
     return () => {
       window.clearTimeout(timer);
-      adminBatchTimeline("frontend_upload_modal_close", {
-        elapsed_ms: elapsedMs(started),
-      });
       previousFocusRef.current?.focus();
     };
   }, [open]);
@@ -79,16 +69,7 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
       setFile(f);
       setError("");
       setStructureIssues([]);
-      adminBatchTimeline("frontend_upload_file_selected", {
-        filename: f.name,
-        file_size_bytes: f.size,
-      });
     } else {
-      adminBatchTimeline("frontend_upload_file_rejected", {
-        filename: f.name,
-        file_size_bytes: f.size,
-        reason: nextErrors.file,
-      });
     }
   }
 
@@ -100,22 +81,12 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       setError("Fix the highlighted fields before uploading.");
-      adminBatchTimeline("frontend_upload_submit_validation_failed", {
-        has_client: Boolean(clientId),
-        has_file: Boolean(file),
-        errors: nextErrors,
-      });
       return;
     }
     const selectedFile = file;
     if (!selectedFile) return;
     setError(""); setStructureIssues([]); setUploading(true); setProgress(0);
     submitStartedRef.current = performance.now();
-    adminBatchTimeline("frontend_upload_submit_start", {
-      filename: selectedFile.name,
-      file_size_bytes: selectedFile.size,
-      client_id: clientId,
-    });
 
     // Simulate upload progress while we wait for the server
     const interval = setInterval(() => setProgress(p => Math.min(p + 8, 85)), 300);
@@ -123,22 +94,10 @@ export default function UploadModal({ open, onClose, onUploaded }: Props) {
       const result = await uploadBatch(selectedFile, clientId as number);
       clearInterval(interval); setProgress(100);
       await new Promise(r => setTimeout(r, 400));
-      adminBatchTimeline("frontend_upload_submit_complete", {
-        batch_id: result.batchId,
-        batch_ref: result.parentBatchId,
-        file_count: result.fileCount,
-        elapsed_ms: submitStartedRef.current ? elapsedMs(submitStartedRef.current) : undefined,
-      });
       onUploaded(result.batchId, result.parentBatchId, result.fileCount);
       onClose();
     } catch (err: unknown) {
       clearInterval(interval); setProgress(0);
-      adminBatchTimeline("frontend_upload_submit_failed", {
-        filename: selectedFile.name,
-        client_id: clientId,
-        elapsed_ms: submitStartedRef.current ? elapsedMs(submitStartedRef.current) : undefined,
-        error: err instanceof Error ? err.message : String(err),
-      });
       if (err instanceof BatchStructureError) {
         setStructureIssues(err.issues);
         setError("This ZIP can't be accepted yet — fix the items below and upload again.");

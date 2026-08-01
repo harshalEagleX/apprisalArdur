@@ -5,6 +5,7 @@ import { Trash2, AlertTriangle, AlertCircle, History } from "lucide-react";
 import type { Batch } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
 import StatusBadge from "@/components/shared/StatusBadge";
+import Spinner from "@/components/shared/Spinner";
 // Batch QC progress shape — retained for the inert in-flight display; batch QC is no
 // longer triggerable (order-scoped), so `progress` is effectively always undefined.
 interface BatchProgress {
@@ -70,25 +71,10 @@ export const BatchRow = memo(function BatchRow({
   const maybeStuck =
     b.status === "QC_PROCESSING" && !progress && minsSinceUpdate >= STUCK_GRACE_MIN;
 
-  const spinnerSvg = (
-    <svg
-      className="animate-spin h-3 w-3"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-      />
-    </svg>
-  );
-
   return (
     <tr
-      className={`transition-colors ${selected ? "bg-indigo-950/20" : b.status === "QC_PROCESSING" ? "bg-slate-950/10" : "hover:bg-white/[0.03]"}`}
+      aria-busy={isLoading || undefined}
+      className={`transition-colors ${isLoading ? "pointer-events-none opacity-50" : ""} ${selected ? "bg-indigo-950/20" : b.status === "QC_PROCESSING" ? "bg-slate-950/10" : "hover:bg-white/[0.03]"}`}
     >
       {/* Bulk-select checkbox */}
       <td className="w-10 px-3 py-3" onClick={e => e.stopPropagation()}>
@@ -240,7 +226,7 @@ export const BatchRow = memo(function BatchRow({
               className={`text-[11px] flex items-center gap-1 ${maybeStuck ? "text-amber-400" : "text-slate-400"}`}
               title={maybeStuck ? "No progress for a while — the QC worker may have stopped." : undefined}
             >
-              {maybeStuck ? <AlertTriangle size={12} /> : spinnerSvg}
+              {maybeStuck ? <AlertTriangle size={12} /> : <Spinner size={12} />}
               {maybeStuck ? "Stuck?" : "Processing"}
             </span>
           )}

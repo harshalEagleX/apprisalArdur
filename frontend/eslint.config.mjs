@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated vitest coverage output — gitignored, and its vendored reporter
+    // assets are not ours to lint.
+    "coverage/**",
   ]),
 ]);
 

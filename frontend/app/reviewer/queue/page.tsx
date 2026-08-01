@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Clock, AlertCircle, CheckCircle2, ChevronRight, RefreshCw,
   Search, XCircle, FileText, ShieldAlert, PlayCircle, CalendarDays,
@@ -55,6 +56,7 @@ function formatProcessedAt(value?: string | null): string {
 }
 
 export default function ReviewerQueuePage() {
+  const router = useRouter();
   const [items, setItems]     = useState<QCResult[]>([]);
   const [submittedItems, setSubmittedItems] = useState<SubmittedReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,7 +209,10 @@ export default function ReviewerQueuePage() {
 
   function openQueueItem(item?: QCResult) {
     if (!item) return;
-    window.location.href = reviewHref(item.id, queueReturnPath);
+    // Same client-side transition the row's <Link> uses. This used to be a
+    // window.location assignment, so opening a report from the keyboard tore the
+    // app down and re-downloaded it while clicking the same row did not.
+    router.push(reviewHref(item.id, queueReturnPath));
   }
 
   function moveSelection(delta: number) {

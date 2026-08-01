@@ -7,7 +7,6 @@
  * never reads or writes the token — this eliminates the XSS token-theft vector.
  */
 
-import { adminBatchTimeline, elapsedMs } from "@/lib/adminBatchTimeline";
 import { JAVA } from "@/lib/config";
 
 function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
@@ -59,20 +58,8 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const LONG_TIMEOUT_MS    = 90_000;
 
 const LONG_TIMEOUT_PATHS = ["/api/qc/process/", "/api/admin/batches/upload", "/qc/process"];
-const ADMIN_BATCH_TIMELINE_PATHS = [
-  "/api/admin/batches",
-  "/api/qc/process/",
-  "/api/qc/cancel/",
-  "/api/qc/progress/",
-  "/api/qc/reconcile",
-];
-
-function shouldLogAdminBatchTimeline(path: string): boolean {
-  return ADMIN_BATCH_TIMELINE_PATHS.some(p => path.includes(p));
-}
 
 async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  let res: Response;
   const { headers, timeoutMs, ...rest } = options ?? {};
 
   const timeout = timeoutMs
@@ -80,92 +67,55 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
-  const started = performance.now();
-  const method = rest.method ?? "GET";
-  const timeline = shouldLogAdminBatchTimeline(path);
 
-  if (timeline) {
-    adminBatchTimeline("frontend_api_request_start", {
-      path,
-      method,
-      timeout_ms: timeout,
-    });
-  }
-
+  // The timeout has to stay armed until the body is fully read, not just until
+  // the response headers arrive. Clearing it right after `fetch` resolved left
+  // every `res.text()` below able to hang forever on a stalled stream.
   try {
-    res = await fetch(`${JAVA}${path}`, {
-      // credentials:"include" sends the HttpOnly jwt cookie on every request.
-      credentials: "include",
-      signal: controller.signal,
-      ...rest,
-      headers: {
-        "Content-Type": "application/json",
-        ...normalizeHeaders(headers),
-      },
-    });
-  } catch (err) {
-    if (timeline) {
-      adminBatchTimeline("frontend_api_request_failed", {
-        path,
-        method,
-        elapsed_ms: elapsedMs(started),
-        error: err instanceof Error ? err.message : String(err),
+    let res: Response;
+    try {
+      res = await fetch(`${JAVA}${path}`, {
+        // credentials:"include" sends the HttpOnly jwt cookie on every request.
+        credentials: "include",
+        signal: controller.signal,
+        ...rest,
+        headers: {
+          "Content-Type": "application/json",
+          ...normalizeHeaders(headers),
+        },
       });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(`Request timed out after ${timeout / 1000}s. Please try again.`);
+      }
+      // A bare TypeError means the request never reached the server: the backend
+      // is restarting, the machine went offline, or CORS rejected it. That is NOT
+      // an authentication failure, and it used to bounce the user to /login —
+      // throwing a reviewer out of a half-finished report over a two-second
+      // hiccup. Surface it as a connection error and let the caller retry; the
+      // 401 branch below is what actually ends a session.
+      if (err instanceof TypeError) {
+        throw new Error("Can't reach the server. Check your connection — your saved work is safe.");
+      }
+      throw err;
     }
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error(`Request timed out after ${timeout / 1000}s. Please try again.`);
+
+    if (res.status === 401 || res.status === 302) {
+      if (typeof window !== "undefined") window.location.href = "/login";
+      throw new Error("Unauthenticated");
     }
-    // Network error or CORS failure (e.g. backend redirected to /login cross-origin).
-    if (typeof window !== "undefined"
-        && err instanceof TypeError
-        && window.location.pathname !== "/login") {
-      window.location.href = "/login";
+    if (res.status === 403) throw new Error("Access denied");
+    if (res.status === 429) throw new Error("Too many requests. Please wait before trying again.");
+
+    if (!res.ok) {
+      throw new Error(await readErrorMessage(res, `Request failed (${res.status})`));
     }
-    throw err;
+
+    const text = await res.text();
+    return text ? JSON.parse(text) : ({} as T);
   } finally {
     clearTimeout(timer);
   }
-
-  if (timeline) {
-    adminBatchTimeline("frontend_api_response_received", {
-      path,
-      method,
-      status: res.status,
-      ok: res.ok,
-      elapsed_ms: elapsedMs(started),
-    });
-  }
-
-  if (res.status === 401 || res.status === 302) {
-    if (typeof window !== "undefined") window.location.href = "/login";
-    throw new Error("Unauthenticated");
-  }
-  if (res.status === 403) throw new Error("Access denied");
-  if (res.status === 429) throw new Error("Too many requests. Please wait before trying again.");
-
-  if (!res.ok) {
-    if (timeline) {
-      adminBatchTimeline("frontend_api_response_rejected", {
-        path,
-        method,
-        status: res.status,
-        elapsed_ms: elapsedMs(started),
-      });
-    }
-    throw new Error(await readErrorMessage(res, `Request failed (${res.status})`));
-  }
-
-  const text = await res.text();
-  if (timeline) {
-    adminBatchTimeline("frontend_api_response_parsed", {
-      path,
-      method,
-      status: res.status,
-      elapsed_ms: elapsedMs(started),
-      response_bytes: text.length,
-    });
-  }
-  return text ? JSON.parse(text) : ({} as T);
 }
 
 // ── Session expiry tracking ────────────────────────────────────────────────────
@@ -176,15 +126,6 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1_000; // 24 h — matches JwtUtils expiry
 function recordSessionStart(): void {
   if (typeof window === "undefined") return;
   sessionStorage.setItem(SESSION_EXPIRES_KEY, String(Date.now() + SESSION_TTL_MS));
-}
-
-/** Returns milliseconds until the JWT cookie is expected to expire, or null if unknown. */
-export function sessionMsRemaining(): number | null {
-  if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(SESSION_EXPIRES_KEY);
-  if (!raw) return null;
-  const expiresAt = Number(raw);
-  return Number.isFinite(expiresAt) ? Math.max(0, expiresAt - Date.now()) : null;
 }
 
 /** Clear the session-expiry record on logout. */
@@ -216,8 +157,8 @@ export async function login(username: string, password: string): Promise<void> {
   if (!res.ok) {
     throw new Error("Invalid username or password");
   }
-  // jwt HttpOnly cookie is now set by the backend — record expiry for the
-  // session-expiry warning hook, then nothing else needed from JS.
+  // jwt HttpOnly cookie is now set by the backend — record when the session
+  // started so a future expiry warning has something to read.
   recordSessionStart();
 
   // Also establish a session cookie for WebSocket auth fallback path.
@@ -285,7 +226,6 @@ export const getPasswordPolicy = () =>
 
 // ── Admin: Dashboard ──────────────────────────────────────────────────────────
 export const getAdminDashboard    = () => apiFetch<Record<string, unknown>>("/api/admin/dashboard");
-export const getReviewerDashboard = () => apiFetch<Record<string, unknown>>("/api/reviewer/dashboard");
 
 // ── Admin: Users ──────────────────────────────────────────────────────────────
 export const getUsers = (page = 0, size = 20) =>
@@ -686,12 +626,6 @@ export async function uploadBatch(
   file: File,
   clientId: number
 ): Promise<{ batchId: number; parentBatchId: string; fileCount: number }> {
-  const started = performance.now();
-  adminBatchTimeline("frontend_upload_api_start", {
-    filename: file.name,
-    file_size_bytes: file.size,
-    client_id: clientId,
-  });
   const fd = new FormData();
   fd.append("file", file);
   fd.append("clientId", String(clientId));
@@ -701,16 +635,7 @@ export async function uploadBatch(
       credentials: "include",
       body: fd,
     });
-    adminBatchTimeline("frontend_upload_api_response", {
-      status: res.status,
-      ok: res.ok,
-      elapsed_ms: elapsedMs(started),
-    });
     if (!res.ok) {
-      adminBatchTimeline("frontend_upload_api_rejected", {
-        status: res.status,
-        elapsed_ms: elapsedMs(started),
-      });
       // 422 = structural rejection carrying a fixable issue list.
       if (res.status === 422) {
         const body = (await res.json().catch(() => null)) as { error?: string; issues?: unknown } | null;
@@ -725,20 +650,8 @@ export async function uploadBatch(
       throw new Error(await readErrorMessage(res, `Upload failed (${res.status})`));
     }
     const parsed = await res.json();
-    adminBatchTimeline("frontend_upload_api_complete", {
-      batch_id: parsed.batchId,
-      batch_ref: parsed.parentBatchId,
-      file_count: parsed.fileCount,
-      elapsed_ms: elapsedMs(started),
-    });
     return parsed;
   } catch (err) {
-    adminBatchTimeline("frontend_upload_api_failed", {
-      filename: file.name,
-      client_id: clientId,
-      elapsed_ms: elapsedMs(started),
-      error: err instanceof Error ? err.message : String(err),
-    });
     throw err;
   }
 }
@@ -819,10 +732,6 @@ export const getQCResults = (batchId: number) =>
 
 export const getQCRules = (qcResultId: number) =>
   apiFetch<QCRuleResult[]>(`/api/reviewer/qc/${qcResultId}/rules`);
-
-/** Review policy flags the UI mirrors so its messaging matches the backend. */
-export const getReviewConfig = () =>
-  apiFetch<Record<string, unknown>>("/api/reviewer/config");
 
 export const getQCProgress = (qcResultId: number) =>
   apiFetch<{ totalRules: number; totalToVerify: number; pending: number; canSubmit: boolean }>(
@@ -988,11 +897,6 @@ export const requestReReview = (qcResultId: number, reason: string) =>
     method: "POST",
     body: JSON.stringify({ reason }),
   });
-
-export const getSubmittedQCResult = (qcResultId: number) =>
-  apiFetch<{ id: number; finalDecision: string; reviewedAt: string; reviewerNotes?: string }>(
-    `/api/reviewer/qc/${qcResultId}/result`
-  );
 
 export interface SubmittedQCResult {
   id: number;

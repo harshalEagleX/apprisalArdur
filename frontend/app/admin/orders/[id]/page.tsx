@@ -15,6 +15,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { Skeleton, TableSkeleton } from "@/components/shared/Skeleton";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { toast } from "@/lib/toast";
+import EmptyState from "@/components/shared/EmptyState";
 
 function formatDuration(seconds?: number | null): string | null {
   if (seconds == null || seconds < 0) return null;
@@ -80,7 +81,10 @@ export default function OrderDetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const t = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(t);
+  }, [load]);
 
   useEffect(() => {
     getAllUsers().then(list => setReviewers(list.filter(u => u.role === "REVIEWER"))).catch(() => undefined);
@@ -452,7 +456,11 @@ export default function OrderDetailPage() {
             </Link>
           ))}
           {(order?.batchHistory ?? []).length === 0 && !loading && (
-            <div className="px-5 py-6 text-center text-sm text-slate-500">No batch history found.</div>
+            <EmptyState
+              icon={History}
+              title="No batch history"
+              description="This order has not been linked to an uploaded batch yet."
+            />
           )}
         </div>
       </div>

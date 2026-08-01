@@ -35,11 +35,6 @@ export function fmtTokens(n: number | null | undefined): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
-/** Compact form for tight table cells (no unit spacing). */
-export function fmtMsCompact(ms: number | null | undefined): string {
-  return fmtMs(ms).replace(" ", " "); // narrow no-break space
-}
-
 /** A tailwind text-color class keyed to how slow something is, for quick scan. */
 export function durationTone(ms: number | null | undefined): string {
   if (ms == null) return "text-slate-500";

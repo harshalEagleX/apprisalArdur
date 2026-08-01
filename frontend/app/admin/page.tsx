@@ -8,6 +8,7 @@ import {
 import { getAdminDashboard, type Batch, type User } from "@/lib/api";
 import { displayName } from "@/lib/displayName";
 import StatCard from "@/components/shared/StatCard";
+import EmptyState from "@/components/shared/EmptyState";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { CardSkeleton, Skeleton } from "@/components/shared/Skeleton";
 
@@ -175,10 +176,12 @@ export default function AdminOverviewPage() {
               ))}
             </div>
           ) : reviewers.length === 0 ? (
-            <div className="px-5 py-10 text-center">
-              <p className="text-slate-500 text-sm mb-3">No reviewers yet</p>
-              <Link href="/admin/users" className="text-xs text-slate-400 hover:underline">Add a reviewer</Link>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No reviewers yet"
+              description="Reviewers pick up QC results once they have an account."
+              action={<Link href="/admin/users" className="text-xs text-slate-400 hover:underline">Add a reviewer</Link>}
+            />
           ) : (
             <div className="divide-y divide-white/10">
               {reviewers
@@ -376,14 +379,16 @@ function RecentActivity({ loading, recentBatches }: { loading: boolean; recentBa
           ))}
         </div>
       ) : recentBatches.length === 0 ? (
-        <div className="px-5 py-10 text-center">
-          <Package size={20} className="mx-auto mb-2 text-slate-600" />
-          <p className="text-sm font-medium text-slate-300">No batches yet</p>
-          <p className="mt-1 text-xs text-slate-500">Upload the first ZIP archive to start the workflow.</p>
-          <Link href="/admin/batches" className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-300">
-            Upload first batch <ArrowRight size={13} />
-          </Link>
-        </div>
+        <EmptyState
+          icon={Package}
+          title="No batches yet"
+          description="Upload the first ZIP archive to start the workflow."
+          action={(
+            <Link href="/admin/batches" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-300">
+              Upload first batch <ArrowRight size={13} />
+            </Link>
+          )}
+        />
       ) : (
         <div className="divide-y divide-slate-800">
           {recentBatches.slice(0, 6).map(b => (

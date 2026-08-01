@@ -153,7 +153,7 @@ export default function ReviewerLayout({ children }: { children: React.ReactNode
             Reviewer
           </span>
           {/* Notification bell — reviewer topic */}
-          <NotificationBell topics={["/topic/reviewer/notifications"]} />
+          <NotificationBell topics={["/topic/reviewer/notifications"]} variant="reviewer" />
           {/* Profile */}
           <Link
             href="/reviewer/profile"

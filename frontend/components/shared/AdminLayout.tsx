@@ -235,13 +235,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [paletteOpen, setPalette]    = useState(false);
   const guide = adminGuideFor(pathname);
 
+  // Auto-collapse below the breakpoint and auto-restore above it — but only when
+  // the viewport actually crosses the threshold. The previous version re-ran
+  // `setNarrow(true)` on every resize event below 1024px, so a sidebar the admin
+  // had just expanded snapped shut again on the next pixel of resize, and it
+  // never re-opened when the window grew back.
   useEffect(() => {
-    const syncSidebar = () => {
-      if (window.innerWidth < 1024) setNarrow(true);
-    };
-    syncSidebar();
-    window.addEventListener("resize", syncSidebar);
-    return () => window.removeEventListener("resize", syncSidebar);
+    const query = window.matchMedia("(min-width: 1024px)");
+    const sync = (event: MediaQueryList | MediaQueryListEvent) => setNarrow(!event.matches);
+    sync(query);
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
   }, []);
 
   // ⌘K / Ctrl+K opens the command palette

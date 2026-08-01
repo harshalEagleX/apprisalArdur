@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, Info } from "lucide-react";
+import Modal from "./Modal";
 
 interface Props {
   open: boolean;
@@ -48,55 +49,62 @@ function ConfirmDialogContent({
   confirmationText,
 }: Omit<Props, "open"> & { confirmLabel: string; danger: boolean }) {
   const [typed, setTyped] = useState("");
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   const requiresTyping = Boolean(confirmationText);
   const canConfirm = !requiresTyping || typed.trim() === confirmationText;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
-      <div
-        className="relative mx-4 w-full max-w-sm rounded-lg border border-white/10 bg-surface p-5 shadow-[0_22px_60px_rgba(0,0,0,0.46)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-      >
-        <div className="flex gap-3 mb-4">
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${danger ? "bg-red-950/60 border border-red-500/30" : "bg-slate-950/50 border border-slate-500/30"}`}>
-            {danger ? <AlertTriangle size={16} className="text-red-400" /> : <Info size={16} className="text-slate-400" />}
-          </div>
-          <div>
-            <h3 id="confirm-dialog-title" className="text-sm font-semibold text-white">{title}</h3>
-            <p className="text-sm text-slate-400 mt-0.5 leading-relaxed">{message}</p>
-          </div>
+    <Modal
+      onClose={onCancel}
+      role="alertdialog"
+      labelledBy="confirm-dialog-title"
+      describedBy="confirm-dialog-message"
+      // Typed confirmations autofocus their own input. Otherwise focus lands on
+      // Cancel below, so a stray Enter can never trigger a destructive action.
+      autoFocus={false}
+    >
+      <div className="flex gap-3 mb-4">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${danger ? "bg-red-950/60 border border-red-500/30" : "bg-slate-950/50 border border-slate-500/30"}`}>
+          {danger ? <AlertTriangle size={16} className="text-red-400" /> : <Info size={16} className="text-slate-400" />}
         </div>
-        {requiresTyping && (
-          <div className="mb-4 rounded-lg border border-red-500/20 bg-red-950/20 p-3">
-            <label className="block text-xs font-medium text-red-100/80">
-              Type <span className="font-mono text-red-100">{confirmationText}</span> to confirm
-            </label>
-            <input
-              value={typed}
-              onChange={event => setTyped(event.target.value)}
-              autoFocus
-              className="mt-2 h-9 w-full rounded-md border border-red-500/30 bg-sunken px-3 font-mono text-sm text-red-50 placeholder:text-red-900/70 focus:outline-none focus:ring-2 focus:ring-red-500/35"
-              placeholder={confirmationText}
-            />
-          </div>
-        )}
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04]">
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={!canConfirm}
-            className={`px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-40 ${danger ? "bg-red-600 hover:bg-red-500" : "bg-slate-600 hover:bg-slate-500"}`}
-          >
-            {confirmLabel}
-          </button>
+        <div>
+          <h3 id="confirm-dialog-title" className="text-sm font-semibold text-white">{title}</h3>
+          <p id="confirm-dialog-message" className="text-sm text-slate-400 mt-0.5 leading-relaxed">{message}</p>
         </div>
       </div>
-    </div>
+      {requiresTyping && (
+        <div className="mb-4 rounded-lg border border-red-500/20 bg-red-950/20 p-3">
+          <label htmlFor="confirm-dialog-typed" className="block text-xs font-medium text-red-100/80">
+            Type <span className="font-mono text-red-100">{confirmationText}</span> to confirm
+          </label>
+          <input
+            id="confirm-dialog-typed"
+            value={typed}
+            onChange={event => setTyped(event.target.value)}
+            autoFocus
+            className="mt-2 h-9 w-full rounded-md border border-red-500/30 bg-sunken px-3 font-mono text-sm text-red-50 placeholder:text-red-900/70 focus:outline-none focus:ring-2 focus:ring-red-500/35"
+            placeholder={confirmationText}
+          />
+        </div>
+      )}
+      <div className="flex justify-end gap-2">
+        <button
+          ref={cancelRef}
+          onClick={onCancel}
+          autoFocus={!requiresTyping}
+          className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={!canConfirm}
+          className={`px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${danger ? "bg-red-600 hover:bg-red-500" : "bg-slate-600 hover:bg-slate-500"}`}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </Modal>
   );
 }

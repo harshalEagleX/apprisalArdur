@@ -1,9 +1,10 @@
 "use client";
 import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, AlertTriangle, CheckCircle2, ChevronDown,
+  ArrowLeft, AlertTriangle, CheckCircle2, ChevronDown, FileText, FileX2, SearchX,
   Crosshair, ZoomIn, ZoomOut, Cloud, WifiOff, ArrowDownCircle, Search, Maximize2, Minimize2, RefreshCw,
 } from "lucide-react";
 import {
@@ -11,7 +12,8 @@ import {
   submitReview,
   type BatchFile, type DocumentMatch, type QCRuleResult,
 } from "@/lib/api";
-import { PageSpinner } from "@/components/shared/Spinner";
+import Spinner, { PageSpinner } from "@/components/shared/Spinner";
+import EmptyState from "@/components/shared/EmptyState";
 import DeviceGate from "@/components/shared/DeviceGate";
 import { FindingRow } from "@/components/reviewer/FindingRow";
 import { RuleGroup } from "@/components/reviewer/RuleGroup";
@@ -69,6 +71,7 @@ function RuleFocusOverlay({ focus, highlighting }: { focus: RuleFocus; highlight
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function VerifyFilePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const qcResultId = Number(id);
   const returnTo = safeReviewerQueuePath(searchParams.get("returnTo"));
@@ -271,9 +274,9 @@ export default function VerifyFilePage() {
   // SHALqc severity gate: "informational" rows carry no reject authority — they are
   // kept OUT of the reviewer queue and shown in a separate collapsed tab, mirroring the
   // Python reviewer report. Everything else is the actionable queue.
-  const informationalRules = rules.filter(r => r.cardGroup === "informational");
-  const queueRules = rules.filter(r => r.cardGroup !== "informational");
-  const counts = {
+  const informationalRules = useMemo(() => rules.filter(r => r.cardGroup === "informational"), [rules]);
+  const queueRules = useMemo(() => rules.filter(r => r.cardGroup !== "informational"), [rules]);
+  const counts = useMemo(() => ({
     // "All" must count EVERY AMC check the reviewer can see — the actionable queue
     // PLUS the demoted informational items (which are AMC language too, shown in the
     // collapsed section below). Counting only the queue made "All (108)" hide the 26
@@ -283,8 +286,12 @@ export default function VerifyFilePage() {
     fail:   queueRules.filter(r => r.status === "fail").length,
     review: queueRules.filter(r => isReviewLikeStatus(r.status)).length,
     informational: informationalRules.length,
-  };
-  const filtered = queueRules.filter(r => {
+  }), [rules, queueRules, informationalRules]);
+
+  // Memoised: `filtered` feeds the render-item builder, the keyboard navigation and
+  // an effect. Recomputing it every render (it calls evidenceText per rule) made a
+  // 134-rule report re-scan every finding on every keystroke and every SLA tick.
+  const filtered = useMemo(() => queueRules.filter(r => {
     if (filter === "attention") return r.status === "fail" || isReviewLikeStatus(r.status);
     if (filter === "fail")   return r.status === "fail";
     if (filter === "verify") return isReviewLikeStatus(r.status);
@@ -295,7 +302,7 @@ export default function VerifyFilePage() {
     if (!q) return true;
     return [r.ruleId, r.ruleName, r.message, r.verifyQuestion, r.rejectionText, r.appraisalValue, r.engagementValue, evidenceText(r)]
       .some(v => String(v ?? "").toLowerCase().includes(q));
-  });
+  }), [queueRules, filter, ruleQuery]);
 
   const reviewedCount  = (progress?.totalToVerify ?? 0) - (progress?.pending ?? 0);
   const reviewProgress = progress?.totalToVerify ? Math.round((reviewedCount / progress.totalToVerify) * 100) : 0;
@@ -457,10 +464,23 @@ export default function VerifyFilePage() {
   }
 
   async function handleSubmit() {
-    if (!sessionToken) return;
+    // Never fail silently: the reviewer pressed Submit (or S) and deserves to know
+    // why the sign-off dialog did not open.
+    if (!sessionToken) {
+      setSaveNotice({ text: "Review session is not ready yet.", tone: "info" });
+      return;
+    }
     const freshProgress = await getQCProgress(qcResultId);
     setProgress(freshProgress);
-    if (!freshProgress.canSubmit) return;
+    if (!freshProgress.canSubmit) {
+      setSaveNotice({
+        text: freshProgress.pending > 0
+          ? `${freshProgress.pending} item${freshProgress.pending === 1 ? "" : "s"} still need a decision.`
+          : "This report is not ready for sign-off yet.",
+        tone: "info",
+      });
+      return;
+    }
     setSubmitNotes(""); setSignoffOpen(true);
   }
 
@@ -487,9 +507,11 @@ export default function VerifyFilePage() {
     setSubmitting(true);
     try {
       await submitReview(qcResultId, submitNotes.trim(), sessionToken);
-      // Success — close dialog then navigate so the browser can complete the lifecycle
+      // Success — close the dialog, then hand off to the router. A client-side
+      // push keeps the shell mounted instead of tearing down and re-downloading
+      // the whole app between two adjacent reviewer screens.
       setSignoffOpen(false);
-      window.location.href = `/reviewer/submitted/${qcResultId}?returnTo=${encodeURIComponent(returnTo)}`;
+      router.push(`/reviewer/submitted/${qcResultId}?returnTo=${encodeURIComponent(returnTo)}`);
     } catch (err) {
       const msg = err instanceof Error && err.message
         ? err.message
@@ -501,29 +523,23 @@ export default function VerifyFilePage() {
     }
   }
 
-  // ── Keyboard shortcuts (stable listener, reads refs) ────────────────────
-  // Keep mutable state in refs so the keydown handler closure (registered once) can access fresh values
-  const kbStateRef = useRef({
-    activeRule: undefined as QCRuleResult | undefined,
-    acknowledged, comments, decisions, documents, filter, filtered,
-    offline, ruleQuery, saving, sessionError, sessionToken,
-  });
-
-  useEffect(() => {
-    kbStateRef.current = { activeRule, acknowledged, comments, decisions, documents, filter, filtered, offline, ruleQuery, saving, sessionError, sessionToken };
-  }, [activeRule, acknowledged, comments, decisions, documents, filter, filtered, offline, ruleQuery, saving, sessionError, sessionToken]);
-
-  useKeyboardShortcuts(useCallback((event: KeyboardEvent) => {
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  // The handler is intentionally NOT memoised. useKeyboardShortcuts keeps a
+  // single window listener forever and re-points its ref at the latest handler
+  // every render, so passing a fresh closure is what makes the shortcuts read
+  // live state. Memoising it with an empty dep array (as this once did) froze
+  // the closure at first render — where sessionToken is null and documents/
+  // filtered are empty — which silently disabled P/F, J/K, N, S and [ ].
+  useKeyboardShortcuts((event: KeyboardEvent) => {
     const target = event.target as HTMLElement | null;
     const tagName = target?.tagName?.toLowerCase();
     const inTextField = tagName === "input" || tagName === "textarea" || tagName === "select" || Boolean(target?.isContentEditable);
     if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const kb = kbStateRef.current;
 
     if (event.key === "Escape") {
       if (focusModeRef.current) { event.preventDefault(); void toggleFocusMode(); }
-      else if (kb.ruleQuery) { event.preventDefault(); setRuleQuery(""); ruleSearchRef.current?.blur(); }
-      else if (kb.sessionError) { event.preventDefault(); clearSessionError(); }
+      else if (ruleQuery) { event.preventDefault(); setRuleQuery(""); ruleSearchRef.current?.blur(); }
+      else if (sessionError) { event.preventDefault(); clearSessionError(); }
       return;
     }
     if (!inTextField && event.key.toLowerCase() === "r") {
@@ -540,14 +556,14 @@ export default function VerifyFilePage() {
     }
     if (!inTextField && (event.key.toLowerCase() === "j" || event.key === "ArrowDown")) { event.preventDefault(); moveActiveRule(1); return; }
     if (!inTextField && (event.key.toLowerCase() === "k" || event.key === "ArrowUp")) { event.preventDefault(); moveActiveRule(-1); return; }
-    if (!inTextField && event.key === "Enter" && kb.activeRule) {
-      event.preventDefault(); focusRule(kb.activeRule);
-      document.getElementById(`rule-${kb.activeRule.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); return;
+    if (!inTextField && event.key === "Enter" && activeRule) {
+      event.preventDefault(); focusRule(activeRule);
+      document.getElementById(`rule-${activeRule.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); return;
     }
     if (!inTextField && event.key.toLowerCase() === "n") { event.preventDefault(); jumpToNextPending(); return; }
-    if (!inTextField && event.key.toLowerCase() === "c") { event.preventDefault(); if (kb.activeRule) commentRefs.current[kb.activeRule.id]?.focus(); return; }
-    if (!inTextField && event.key.toLowerCase() === "a" && kb.activeRule) {
-      event.preventDefault(); setAcknowledged(prev => ({ ...prev, [kb.activeRule!.id]: !prev[kb.activeRule!.id] })); return;
+    if (!inTextField && event.key.toLowerCase() === "c") { event.preventDefault(); if (activeRule) commentRefs.current[activeRule.id]?.focus(); return; }
+    if (!inTextField && event.key.toLowerCase() === "a" && activeRule) {
+      event.preventDefault(); setAcknowledged(prev => ({ ...prev, [activeRule.id]: !prev[activeRule.id] })); return;
     }
     if (!inTextField && event.key.toLowerCase() === "s") { event.preventDefault(); void handleSubmit(); return; }
     if (!inTextField && event.key.toLowerCase() === "x") { event.preventDefault(); void toggleFocusMode(); return; }
@@ -556,14 +572,14 @@ export default function VerifyFilePage() {
     if (!inTextField && (event.key === "+" || event.key === "=")) { event.preventDefault(); zoomBy(ZOOM_STEP); return; }
     if (!inTextField && event.key === "-") { event.preventDefault(); zoomBy(-ZOOM_STEP); return; }
     if (!inTextField && event.key === "0") { event.preventDefault(); setViewerZoom(1); return; }
-    if (!inTextField && kb.activeRule && (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "f")) {
+    if (!inTextField && activeRule && (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "f")) {
       const decision: Decision = event.key.toLowerCase() === "p" ? "PASS" : "FAIL";
-      const blocked = keyboardDecisionAllowed(kb.activeRule, decision);
-      if (blocked) return;
-      event.preventDefault(); void handleDecision(kb.activeRule, decision);
+      const blocked = keyboardDecisionAllowed(activeRule, decision);
+      // Tell the reviewer WHY the shortcut did nothing instead of failing silently.
+      if (blocked) { event.preventDefault(); setSaveNotice({ text: blocked, tone: "info" }); return; }
+      event.preventDefault(); void handleDecision(activeRule, decision);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []));
+  });
 
   // ── PDF viewer drag-to-pan ────────────────────────────────────────────────
   function onViewerMouseDown(e: React.MouseEvent<HTMLDivElement>) {
@@ -603,50 +619,66 @@ export default function VerifyFilePage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const sortedFiltered = [...filtered].sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
-  const rulesByGroupKey = new Map<string, QCRuleResult[]>();
-  for (const rule of sortedFiltered) {
-    const key = ruleGroupKey(rule);
-    rulesByGroupKey.set(key, [...(rulesByGroupKey.get(key) ?? []), rule]);
-  }
-  // A section every one of whose rules is Not Applicable (e.g. SCA on a 1004D
-  // update form with no sales-comparison grid) collapses to ONE summary row, so
-  // 35 N/A cards don't flood the list. Single-rule N/A sections are left as-is.
-  const naOnlySections = new Set<string>();
-  const bySection = new Map<string, QCRuleResult[]>();
-  for (const rule of sortedFiltered) {
-    const sec = rule.section ?? "OTHER";
-    bySection.set(sec, [...(bySection.get(sec) ?? []), rule]);
-  }
-  for (const [sec, secRules] of bySection) {
-    if (secRules.length > 1 && secRules.every(isNotApplicable)) naOnlySections.add(sec);
-  }
+  // The whole grouping pass — sort, group-by-key, N/A section collapse, render
+  // items and the per-section header stats — is derived purely from `filtered`,
+  // so it is computed once per filter/search change instead of on every render.
+  // The section stats used to be recomputed inside the render loop with a
+  // `filtered.filter(...)` per item, which is O(rules × items) on every paint.
+  const { renderItems, sectionStats } = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
 
-  const emittedGroups = new Set<string>();
-  const emittedNaSections = new Set<string>();
-  const renderItems: RuleRenderItem[] = [];
-  for (const rule of sortedFiltered) {
-    const sec = rule.section ?? "OTHER";
-    if (naOnlySections.has(sec)) {
-      if (emittedNaSections.has(sec)) continue;
-      emittedNaSections.add(sec);
-      renderItems.push({
-        key: `na-section-${sec}`, section: rule.section, grouped: true,
-        rules: bySection.get(sec) ?? [rule],
-        label: "Not applicable to this report form",
+    const rulesByGroupKey = new Map<string, QCRuleResult[]>();
+    const bySection = new Map<string, QCRuleResult[]>();
+    for (const rule of sorted) {
+      const key = ruleGroupKey(rule);
+      const forKey = rulesByGroupKey.get(key);
+      if (forKey) forKey.push(rule); else rulesByGroupKey.set(key, [rule]);
+
+      const sec = rule.section ?? "OTHER";
+      const forSection = bySection.get(sec);
+      if (forSection) forSection.push(rule); else bySection.set(sec, [rule]);
+    }
+
+    // A section every one of whose rules is Not Applicable (e.g. SCA on a 1004D
+    // update form with no sales-comparison grid) collapses to ONE summary row, so
+    // 35 N/A cards don't flood the list. Single-rule N/A sections are left as-is.
+    const naOnlySections = new Set<string>();
+    const stats = new Map<string, { count: number; need: number }>();
+    for (const [sec, secRules] of bySection) {
+      if (secRules.length > 1 && secRules.every(isNotApplicable)) naOnlySections.add(sec);
+      stats.set(sec, {
+        count: secRules.length,
+        need: secRules.filter(r => r.status === "fail" || isReviewLikeStatus(r.status)).length,
       });
-      continue;
     }
-    const key = ruleGroupKey(rule);
-    const groupedRules = rulesByGroupKey.get(key) ?? [rule];
-    if (shouldGroupRule(rule, groupedRules.length)) {
-      if (emittedGroups.has(key)) continue;
-      emittedGroups.add(key);
-      renderItems.push({ key: `group-${key}`, section: rule.section, rules: groupedRules, grouped: true });
-    } else {
-      renderItems.push({ key: `rule-${rule.id}`, section: rule.section, rules: [rule], grouped: false });
+
+    const emittedGroups = new Set<string>();
+    const emittedNaSections = new Set<string>();
+    const items: RuleRenderItem[] = [];
+    for (const rule of sorted) {
+      const sec = rule.section ?? "OTHER";
+      if (naOnlySections.has(sec)) {
+        if (emittedNaSections.has(sec)) continue;
+        emittedNaSections.add(sec);
+        items.push({
+          key: `na-section-${sec}`, section: rule.section, grouped: true,
+          rules: bySection.get(sec) ?? [rule],
+          label: "Not applicable to this report form",
+        });
+        continue;
+      }
+      const key = ruleGroupKey(rule);
+      const groupedRules = rulesByGroupKey.get(key) ?? [rule];
+      if (shouldGroupRule(rule, groupedRules.length)) {
+        if (emittedGroups.has(key)) continue;
+        emittedGroups.add(key);
+        items.push({ key: `group-${key}`, section: rule.section, rules: groupedRules, grouped: true });
+      } else {
+        items.push({ key: `rule-${rule.id}`, section: rule.section, rules: [rule], grouped: false });
+      }
     }
-  }
+    return { renderItems: items, sectionStats: stats };
+  }, [filtered]);
 
   const renderRuleCard = (rule: QCRuleResult) => (
     <FindingRow
@@ -680,12 +712,12 @@ export default function VerifyFilePage() {
           <div className="flex items-center gap-3 border-b border-indigo-500/30 bg-indigo-950/60 px-4 py-2.5 text-xs text-indigo-100">
             <RefreshCw size={14} className="flex-shrink-0" />
             <span className="flex-1">{superseded.message}</span>
-            <a
+            <Link
               href={`/reviewer/verify/${superseded.newResultId}?returnTo=${encodeURIComponent(returnTo)}`}
               className="h-7 flex-shrink-0 rounded-md border border-indigo-400/40 bg-indigo-900/50 px-3 text-[11px] font-semibold leading-7 text-indigo-50 hover:bg-indigo-800/60"
             >
               Load new results
-            </a>
+            </Link>
           </div>
         )}
 
@@ -733,9 +765,9 @@ export default function VerifyFilePage() {
         >
           {!focusMode && (
             <>
-              <a href={returnTo} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors flex-shrink-0">
+              <Link href={returnTo} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors flex-shrink-0">
                 <ArrowLeft size={14} /> Queue
-              </a>
+              </Link>
               <div className="w-px h-4 bg-white/10 flex-shrink-0" />
             </>
           )}
@@ -797,7 +829,7 @@ export default function VerifyFilePage() {
                 ? "border-green-400/30 bg-green-600 hover:bg-green-500"
                 : "border-slate-400/30 bg-slate-600 hover:bg-slate-500"
             }`}>
-            {submitting ? <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : null}
+            {submitting ? <Spinner size={13} /> : null}
             {submitting ? "Submitting…" : progress?.pending ? `Submit (${progress.pending} left)` : "Submit review"}
           </button>
         </header>
@@ -806,7 +838,7 @@ export default function VerifyFilePage() {
           {/* PDF viewer */}
           <div data-guide="review-document" className="w-[55%] flex-shrink-0 border-r border-white/10 flex flex-col">
             <div className="flex-shrink-0 border-b border-white/10 bg-surface/60 px-4 py-2 flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <FileText size={14} className="flex-shrink-0 text-slate-500" />
               <span className="text-xs text-slate-500 flex-shrink-0">Documents</span>
               <div className="flex items-center gap-1 overflow-x-auto">
                 {documents.map(doc => (
@@ -851,12 +883,16 @@ export default function VerifyFilePage() {
                 </div>
               </div>
             ) : pdfError ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-500">
-                <AlertTriangle size={18} className="text-amber-500" /><span className="text-sm">Document unavailable</span>
+              <div className="flex flex-1 items-center justify-center">
+                <EmptyState
+                  icon={FileX2}
+                  title="Document unavailable"
+                  description="The source file could not be opened. You can still read each finding's evidence, but please flag this report to an admin before signing off."
+                />
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <svg className="animate-spin h-6 w-6 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <div className="flex flex-1 items-center justify-center">
+                <PageSpinner label="Opening document…" />
               </div>
             )}
           </div>
@@ -897,11 +933,18 @@ export default function VerifyFilePage() {
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {loading ? <PageSpinner label="Loading rules…" /> : filtered.length === 0 ? (
-                <div className="text-center text-slate-500 py-10 text-sm">No rules match this filter</div>
+                <EmptyState
+                  icon={SearchX}
+                  title={ruleQuery.trim() ? "No findings match your search" : "Nothing in this view"}
+                  description={
+                    ruleQuery.trim()
+                      ? "Clear the search box or press Esc to see the full checklist again."
+                      : "Switch to another filter above to see the rest of the checklist."
+                  }
+                />
               ) : renderItems.map((item, i, arr) => {
                 const showHeader = i === 0 || arr[i - 1].section !== item.section;
-                const secRules = filtered.filter(r => r.section === item.section);
-                const need = secRules.filter(r => r.status === "fail" || isReviewLikeStatus(r.status)).length;
+                const stats = sectionStats.get(item.section ?? "OTHER") ?? { count: item.rules.length, need: 0 };
                 const firstRule = item.rules[0];
                 const fail = item.rules.filter(r => r.status === "fail").length;
                 const review = item.rules.filter(r => isReviewLikeStatus(r.status)).length;
@@ -912,7 +955,7 @@ export default function VerifyFilePage() {
                       <div className="sticky -top-3 z-10 -mx-3 mb-1 flex items-center justify-between border-y border-white/5 bg-sunken/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur">
                         <span>{sectionLabel(item.section)}</span>
                         <span className="font-normal normal-case text-slate-600">
-                          {secRules.length} rules{need ? ` · ${need} need attention` : ""}
+                          {stats.count} rules{stats.need ? ` · ${stats.need} need attention` : ""}
                         </span>
                       </div>
                     )}

@@ -7,6 +7,7 @@ import {
 import type { ComponentType } from "react";
 import { getUsers, deleteUser, resetUserPassword, setUserStatus, type User } from "@/lib/api";
 import UserModal from "@/components/admin/UserModal";
+import PasswordResetDialog from "@/components/admin/PasswordResetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { TableSkeleton } from "@/components/shared/Skeleton";
 import EmptyState from "@/components/shared/EmptyState";
@@ -25,6 +26,8 @@ export default function UsersPage() {
   const [loading, setLoading]   = useState(true);
   const [editUser, setEditUser] = useState<User | null | undefined>(undefined);
   const [deleteTarget, setDelete] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,14 +52,18 @@ export default function UsersPage() {
     } catch (e) { toast.error("Delete failed", String(e)); }
   }
 
-  async function handleResetPassword(u: User) {
-    const pw = window.prompt(`Set a new password for ${u.username} (min 8 characters):`);
-    if (pw == null) return;
-    if (pw.length < 8) { toast.error("Password too short", "Must be at least 8 characters."); return; }
+  async function handleResetPassword(password: string) {
+    if (!resetTarget) return;
+    setResetting(true);
     try {
-      await resetUserPassword(u.id, pw);
-      toast.success("Password reset", `A new password was set for ${u.username}.`);
-    } catch (e) { toast.error("Reset failed", String(e)); }
+      await resetUserPassword(resetTarget.id, password);
+      toast.success("Password reset", `A new password was set for ${resetTarget.username}.`);
+      setResetTarget(null);
+    } catch (e) {
+      toast.error("Reset failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setResetting(false);
+    }
   }
 
   async function handleToggleActive(u: User) {
@@ -179,7 +186,7 @@ export default function UsersPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     <button
-                      onClick={() => handleResetPassword(u)}
+                      onClick={() => setResetTarget(u)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-300"
                       aria-label={`Reset password for ${u.username}`}
                       title="Reset password"
@@ -234,6 +241,12 @@ export default function UsersPage() {
       )}
 
       <UserModal open={editUser !== undefined} user={editUser} onClose={() => setEditUser(undefined)} onSaved={load} />
+      <PasswordResetDialog
+        user={resetTarget}
+        submitting={resetting}
+        onSubmit={pw => void handleResetPassword(pw)}
+        onCancel={() => setResetTarget(null)}
+      />
       <ConfirmDialog
         open={!!deleteTarget}
         title="Remove user"
