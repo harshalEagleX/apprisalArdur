@@ -1,0 +1,56 @@
+section: reconciliation
+title: Reconciliation
+uad_version: "3.6"
+doc_order: 7
+# Where this section sits through the document, as a fraction of the extractable
+# pages (0=front, 1=back). Used to pick candidate pages WITHOUT a triage call,
+# because section ORDER is stable across URAR variants even though page NUMBERS
+# are not. Cheap and layout-tolerant: a window is searched, not a fixed page.
+page_hint: 0.64
+match_sections:
+  - Reconciliation
+  - Supplemental Information
+
+instruction: >
+  Transcribe the reconciliation and signature block. Two dates sit close
+  together and are routinely confused — the EFFECTIVE date of the appraisal and
+  the date the report was SIGNED. Match each to its own printed label. Where an
+  approach was not developed, transcribe what the form says rather than
+  inferring a value.
+
+fields:
+  appraised_value:
+    type: string
+    describe: >
+      The final opinion of market value for the subject. Not the contract price
+      and not an indicated value from a single approach.
+  effective_date:
+    type: string
+    describe: Effective date of the appraisal (the date of value).
+  indicated_value_sca:
+    type: string
+    describe: Value indicated by the Sales Comparison Approach.
+  indicated_value_cost_approach:
+    type: string
+    describe: >
+      Value indicated by the Cost Approach. If the approach was not developed,
+      transcribe what the form states (e.g. "Not Developed").
+  indicated_value_income_approach:
+    type: string
+    describe: >
+      Value indicated by the Income Approach. If not developed, transcribe what
+      the form states.
+  appraisal_subject_to:
+    type: string
+    describe: >
+      The basis of the appraisal — "As Is", "subject to completion per plans",
+      "subject to repairs", or "subject to inspection". Report the option
+      actually marked.
+  final_reconciliation_comment:
+    type: string
+    describe: Narrative reconciliation commentary, as printed.
+  reasonable_exposure_time:
+    type: string
+    describe: >
+      Reasonable exposure time stated for the subject. On this form it is a
+      field in its own right.

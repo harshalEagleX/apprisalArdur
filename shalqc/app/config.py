@@ -98,6 +98,138 @@ class Settings:
     together_timeout_s: float = field(
         default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "120") or 120))
 
+    # ── extraction ────────────────────────────────────────────────────────────
+    # Was a hardcoded `max_pages: int = 8` in pdf_digital/pdf_scanned — right for a
+    # 1004, blind for the 40-page UAD 3.6 URAR whose entire valuation (market trends,
+    # listing history, 6-comp grid, reconciliation, certifications) lives on pages
+    # 9-40. 60 covers a long 3.6 report with room; a 1004 still costs 8 pages of work
+    # because the loop stops at len(doc).
+    extract_max_pages: int = field(default_factory=lambda: int(_env("EXTRACT_MAX_PAGES", "60") or 60))
+
+    # ── UAD 3.6 vision extraction (app/extraction/vision/) ────────────────────
+    # Single provider preserved: Together serves BOTH the judge (gpt-oss-120b) and
+    # the 3.6 page transcription (gemma-4-31B-it). Different jobs on one account —
+    # the judge reasons over already-extracted facts, the extractor reads pixels.
+    #
+    # SERVERLESS ONLY. The obvious-looking pick, Qwen3-VL-32B, is dedicated-only on
+    # Together: using it means provisioning a GPU endpoint billed per hour whether
+    # or not an order is processed (~$6.49/hr H100, ~$4.7k/month at 24/7), plus
+    # cold-start latency at sparse traffic. That is a growth lever at sustained
+    # high volume, not a starting point. gemma-4-31B-it is serverless, takes
+    # Text+Image input, and supports JSON Mode.
+    #
+    # An Anthropic backend is implemented behind the same VisionProvider interface
+    # and is one env var away (VISION_PROVIDER=anthropic) if the grid turns out to
+    # need a stronger reader — the budget band ($0.50-0.75/order) affords it.
+    vision_provider: str = field(default_factory=lambda: _env("VISION_PROVIDER", "together") or "together")
+    vision_model: str = field(
+        default_factory=lambda: _env("VISION_MODEL", "google/gemma-4-31B-it") or "google/gemma-4-31B-it")
+    # Per-tier overrides. Default: the same verified model everywhere. Point
+    # VISION_MODEL_ESCALATE at a different family for an uncorrelated second
+    # opinion on a checksum failure, once that model's image support is verified.
+    vision_model_section: str = field(
+        default_factory=lambda: _env("VISION_MODEL_SECTION", "google/gemma-4-31B-it") or "google/gemma-4-31B-it")
+    vision_model_grid: str = field(
+        default_factory=lambda: _env("VISION_MODEL_GRID", "google/gemma-4-31B-it") or "google/gemma-4-31B-it")
+    vision_model_escalate: str = field(
+        default_factory=lambda: _env("VISION_MODEL_ESCALATE", "google/gemma-4-31B-it") or "google/gemma-4-31B-it")
+    anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
+    # Dedicated Together key for VISION. Together's rate limits are PER KEY, so
+    # giving extraction its own key means a 40-page order's image traffic cannot
+    # eat the judge's token budget and trigger the 429-retry storms that made
+    # runs both slower AND lossier (see the together_max_inflight_per_key note
+    # above). Falls back to the shared pool when unset, so this is an
+    # optimisation rather than a requirement.
+    together_vision_api_key: str = field(default_factory=lambda: _env("TOGETHER_API_GEMMA"))
+    # Render DPI. MEASURED against this provider, and the result is blunt:
+    #
+    #     DPI    pixels        upload    prompt_tokens   address read
+    #      72    612x792        91 KB        298         correct
+    #     130    1105x1430     205 KB        298         correct
+    #     200    1700x2200     322 KB        298         correct
+    #
+    # The token count is IDENTICAL at every DPI — Together downscales server-side
+    # to a fixed internal representation — so raising DPI buys no extra detail
+    # and no extra accuracy, only upload bytes. At high concurrency those bytes
+    # are actively harmful: oversized payloads produced connection failures that
+    # cost whole sections.
+    #
+    # This is also exactly WHY the grid is read as per-comparable column CROPS
+    # (render.label_and_column_clips). Since the model always sees a fixed-size
+    # image, a crop is genuinely higher effective resolution — the same budget
+    # spent on one column instead of on four columns plus margin.
+    vision_dpi_section: int = field(default_factory=lambda: int(_env("VISION_DPI_SECTION", "100") or 100))
+    vision_dpi_grid: int = field(default_factory=lambda: int(_env("VISION_DPI_GRID", "110") or 110))
+    vision_dpi_retry: int = field(default_factory=lambda: int(_env("VISION_DPI_RETRY", "150") or 150))
+    # Hard per-order spend ceiling in USD. The governor stops issuing calls when the
+    # projected cost of the NEXT call would breach it, so an order degrades to REVIEW
+    # cards instead of silently overrunning the budget. User-set band: $0.50-0.75.
+    vision_budget_usd_per_order: float = field(
+        default_factory=lambda: float(_env("VISION_BUDGET_USD_PER_ORDER", "0.75") or 0.75))
+    # Checksum-failure retries per region (re-prompt with the arithmetic error, then
+    # escalate DPI). 0 disables the retry loop entirely.
+    vision_max_retries: int = field(default_factory=lambda: int(_env("VISION_MAX_RETRIES", "2") or 2))
+    # Output-token ceilings. MEASURED, not guessed: gemma-4-31B-it is a REASONING
+    # model — it writes into a `reasoning` field before emitting `content`, so the
+    # ceiling must cover deliberation PLUS the JSON. A 24-field section consumed
+    # ~2,900 output tokens; at 1,500 it ran out mid-reasoning and returned an
+    # EMPTY content field, i.e. full latency and full token spend for nothing.
+    #
+    # But a ceiling is NOT free to over-size, which the "generous on purpose" note
+    # here used to claim. Two costs bite from the other side:
+    #
+    #   * Output generates serially at a measured 25 tok/s floor under concurrency,
+    #     so a 9,000-token ceiling is ~360s of wall clock — beyond the 180s read
+    #     timeout. Calls that need the headroom time out while working correctly.
+    #   * A call that actually REACHES its ceiling has truncated, so it returns
+    #     nothing. Run 14 spent 27,000 output tokens — 36% of the order — on three
+    #     grid calls pinned at exactly 9,000 that produced zero fields.
+    #
+    # Keep `ceiling / 25 tok/s` inside the provider's read timeout. The provider
+    # logs a warning when a configured ceiling breaches that relationship.
+    vision_max_tokens_section: int = field(
+        default_factory=lambda: int(_env("VISION_MAX_TOKENS_SECTION", "10000") or 10000))
+    # One page's half of one comparable. 4,500 was measured too LOW: eight of run
+    # 16's twelve grid calls stopped at exactly 4,500, i.e. truncated. A dense
+    # crop needs more room than that, and at concurrency 8 it can be afforded —
+    # 6,000 tokens is ~85s at the ~70 tok/s uncontended rate, comfortably inside
+    # the read timeout, where at concurrency 23 the same call took 300s and died.
+    vision_max_tokens_grid: int = field(
+        default_factory=lambda: int(_env("VISION_MAX_TOKENS_GRID", "6000") or 6000))
+    vision_max_tokens_triage: int = field(
+        default_factory=lambda: int(_env("VISION_MAX_TOKENS_TRIAGE", "4000") or 4000))
+    # Concurrent vision calls. Latency per call is ~40s and irreducible (it is
+    # reasoning time, not JSON size — verified by measuring a value-only schema at
+    # the same speed), so hitting a 60s/order target means the calls must overlap.
+    # Bounded by ONE key's capacity: over-sending buys 429 retry storms, not
+    # throughput.
+    # Wide on purpose, and the narrow alternative was MEASURED and rejected.
+    #
+    # Run 16 (23 in flight) showed per-call decode falling from 71-121 tok/s early
+    # to 24-27 tok/s late, which looked like contention worth relieving. Run 17
+    # dropped this to 8 to relieve it, and got WORSE on every axis that matters:
+    #
+    #     concurrency 23  ->  310.0s wall, 148 fields, slowest call 300s
+    #     concurrency  8  ->  494.1s wall, 150 fields, slowest call 391s
+    #
+    # The reason is structural. All calls are independent and launched at once, so
+    # at full width the wall clock is the SLOWEST CALL. Narrowing the pool does not
+    # make calls faster, it serializes them into waves, and the wall clock becomes
+    # waves x wave-time — 3 waves of ~165s beat a single wave of 300s by nothing
+    # and lost 184s. Contention slows each call sub-linearly; queueing is linear.
+    #
+    # So the lever for latency is OUTPUT SIZE PER CALL, never pool width.
+    vision_concurrency: int = field(default_factory=lambda: int(_env("VISION_CONCURRENCY", "20") or 20))
+    # Triage costs a serial round trip (~25s) before any section can start, which
+    # a 60s budget cannot absorb. Off by default: sections are located by their
+    # position in the document instead (section ORDER is stable across URAR
+    # variants even where page NUMBERS are not). Turn on for unfamiliar layouts.
+    vision_use_triage: bool = field(default_factory=lambda: _flag("VISION_USE_TRIAGE", False))
+    # output_config.effort. Transcription is not a reasoning task; "low" keeps thinking
+    # spend (which shares the max_tokens budget on Sonnet 5) off the section pass.
+    vision_effort_section: str = field(default_factory=lambda: _env("VISION_EFFORT_SECTION", "low") or "low")
+    vision_effort_grid: str = field(default_factory=lambda: _env("VISION_EFFORT_GRID", "medium") or "medium")
+
     llm_max_calls_per_order: int = field(default_factory=lambda: int(_env("LLM_MAX_CALLS_PER_ORDER", "28") or 28))
     llm_cache_ttl_hours: int = field(default_factory=lambda: int(_env("LLM_CACHE_TTL_HOURS", "72") or 72))
 
@@ -133,6 +265,17 @@ class Settings:
     @property
     def llm_configured(self) -> bool:
         return bool(self.together_keys)
+
+    @property
+    def vision_configured(self) -> bool:
+        """Can the UAD 3.6 vision extractor actually call a model? False makes the
+        3.6 path degrade loudly (a documented gap + REVIEW cards) instead of
+        emitting an empty field set that looks like a clean extraction."""
+        if self.vision_provider == "anthropic":
+            return bool(self.anthropic_api_key)
+        if self.vision_provider == "together":
+            return bool(self.together_keys)
+        return False
 
     def production_problems(self) -> List[str]:
         """Config that MUST be set for a hardened deployment (empty list = OK). Mirrors

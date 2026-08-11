@@ -29,6 +29,15 @@ class Source(str, Enum):
     LLM_GAPFILL = "llm"
     ACROFORM = "acroform"      # SHALqc-CORE §10: embedded PDF form widget (bbox = widget rect)
     CONTRACT = "contract"      # SHALqc-CORE §11: purchase-contract LLM read (conf capped 0.75)
+    # UAD 3.6: a VLM transcribed the rendered page (app/extraction/vision/). Confidence
+    # sits ABOVE pdf_digital (0.92) — a vision read of a flattened page beats a spatial
+    # read that had no text to work with — and BELOW xml (0.97), so _merge_field's
+    # XML-priority rule keeps working untouched and vision correctly loses the day a
+    # MISMO 3.6 XML shows up. Only ever assigned to a CHECKSUM-VERIFIED value; an
+    # unverified read is emitted at VISION_UNVERIFIED so it can never win a merge
+    # against a deterministic witness.
+    VISION = "vision"
+    VISION_UNVERIFIED = "vision_unverified"
     NOT_FOUND = "not_found"
 
 

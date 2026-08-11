@@ -1,0 +1,47 @@
+# The sketch section exists mainly to FEED verify.py. Its line items and total
+# are one of the few places the report states the same number twice on different
+# pages, which makes it a free correctness oracle for the whole extraction.
+section: sketch
+title: Sketch and Area Calculations
+uad_version: "3.6"
+doc_order: 3
+# Where this section sits through the document, as a fraction of the extractable
+# pages (0=front, 1=back). Used to pick candidate pages WITHOUT a triage call,
+# because section ORDER is stable across URAR variants even though page NUMBERS
+# are not. Cheap and layout-tolerant: a window is searched, not a fixed page.
+page_hint: 0.17
+match_sections: [Sketch, Area Calculations, Level and Room Detail]
+
+instruction: >
+  Transcribe the sketch's area calculations. Capture EVERY individual area line
+  item exactly as printed, in order, along with the stated total. The individual
+  line items matter as much as the total — they are summed and checked against
+  it, so a missing line item is a defect even though the total alone would look
+  correct.
+
+fields:
+  total_living_area:
+    type: string
+    describe: Total finished above-grade living area stated by the sketch, in square feet.
+  ansi_standard_used:
+    type: string
+    describe: Whether the ANSI measurement standard was used, as marked or stated.
+  sketch_has_dimensions:
+    type: string
+    describe: >
+      Whether exterior dimensions are legible on the sketch and reported to the
+      nearest tenth of a foot. Transcribe what is shown; do not judge adequacy.
+  levels_labeled:
+    type: string
+    describe: The level names labelled on the sketch, e.g. "Level 1, Level 2, Basement".
+
+lists:
+  living_area_calcs:
+    type: number
+    describe: >
+      Each individual above-grade area calculation printed on the sketch, in
+      square feet, in the order printed — e.g. 128.38, 1018.58, 892.53, 97.87.
+      Include every line item; exclude below-grade and non-living areas.
+  room_labels:
+    type: string
+    describe: Room labels shown on the sketch, if any.

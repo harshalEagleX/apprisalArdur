@@ -228,3 +228,11 @@ Understand-Anything-main/
 loadtest/
 uploads/
 
+
+# UAD 3.6 run artifacts — regenerable outputs that carry EXTRACTED REPORT DATA
+# (borrower and seller names, subject address, comparable addresses). They are
+# debugging output, not source, and there is no reason to publish them.
+shalqc/3.6/_run*.json
+shalqc/3.6/_run*.log
+shalqc/3.6/_checklist_*.json
+shalqc/3.6/_checklist_*.log

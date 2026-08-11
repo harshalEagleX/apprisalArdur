@@ -1,0 +1,83 @@
+# Split out of the former single `improvements` section, which spanned pages
+# 7-14 — three separate page clusters. A positional window is 3 pages wide, so
+# one section covering all of them silently missed most of its own fields:
+# gla, bedrooms, baths and year_built all came back ABSENT on a live run.
+# A section must map to ONE page cluster.
+section: dwelling_exterior
+title: Dwelling Exterior, Quality and Condition, Mechanical
+uad_version: '3.6'
+doc_order: 4
+page_hint: 0.15
+match_sections:
+- Dwelling Exterior
+- Quality and Condition
+- Mechanical System Details
+- Sketch Commentary
+instruction: Transcribe the dwelling exterior, quality/condition ratings and mechanical systems. Ratings
+  are UAD codes (C1-C6, Q1-Q6) — transcribe the code as printed.
+fields:
+  design_style:
+    type: string
+    describe: Architectural design or style, e.g. Ranch, Colonial, Cape Cod.
+  stories:
+    type: string
+    describe: >
+      Number of stories or levels the dwelling has, ONLY if a row explicitly
+      labelled with a story or level count is printed on these pages. This form
+      often does not print one. "Front Door Elevation" is a height above grade,
+      NOT a story count — never take its value here. If no story/level count is
+      labelled, emit null.
+  foundation_type:
+    type: string
+    describe: Foundation type, as marked or printed.
+  exterior_walls:
+    type: string
+    describe: Exterior wall material.
+  roof_surface:
+    type: string
+    describe: Roof surface material.
+  heating:
+    type: string
+    describe: Heating system type.
+  heating_description:
+    type: string
+    describe: Additional heating system detail or fuel type.
+  cooling:
+    type: string
+    describe: Cooling system type.
+  air_conditioning_type:
+    type: string
+    describe: Air conditioning type, if separately stated.
+  year_built:
+    type: string
+    describe: 'The year the dwelling was originally constructed — a four-digit year. If the nearest value
+      to the label is not a year, the field is not visible: emit null.
+
+      '
+  effective_age:
+    type: string
+    describe: Effective age of the improvements.
+  condition_rating:
+    type: string
+    describe: 'Overall CONDITION rating of the subject, as a UAD code C1 through C6. Not the quality rating,
+      and not a comparable''s rating.
+
+      '
+  quality_rating:
+    type: string
+    describe: 'Overall QUALITY of construction rating of the subject, as a UAD code Q1 through Q6. Not
+      the condition rating.
+
+      '
+  adverse_conditions:
+    type: string
+    describe: 'Any physical deficiencies, defects, damage or adverse conditions affecting soundness, structural
+      integrity or livability. Transcribe as printed.
+
+      '
+  conforms_to_neighborhood:
+    type: string
+    describe: Whether the property conforms to the neighbourhood, as marked or stated.
+  remaining_economic_life:
+    type: string
+    describe: Remaining economic life, if stated.

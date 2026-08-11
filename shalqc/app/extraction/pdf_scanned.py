@@ -94,10 +94,18 @@ def _run_tesseract_words(pil_image, page_number: int, scale: float) -> list[Spat
     return words
 
 
-def extract_pdf_scanned(pdf_path, schema=None, max_pages: int = 8) -> ExtractedFieldSet:
-    """Label-proximity extraction over scanned (<30-word) pages via Tesseract."""
+def extract_pdf_scanned(pdf_path, schema=None, max_pages: Optional[int] = None) -> ExtractedFieldSet:
+    """Label-proximity extraction over scanned (<30-word) pages via Tesseract.
+
+    `max_pages` is config-driven (EXTRACT_MAX_PAGES) for the same reason as
+    pdf_digital's — a hardcoded 8 made every page past 8 of a 40-page UAD 3.6
+    report invisible. `None` = read the settings default.
+    """
     import fitz
 
+    if max_pages is None:
+        from app.config import settings
+        max_pages = settings.extract_max_pages
     schema = schema or _default_schema_loader
     fs = ExtractedFieldSet()
     known_labels = build_known_label_set(schema)

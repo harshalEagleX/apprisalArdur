@@ -39,6 +39,43 @@ _UAD_MARKERS = (
     "urar",
     "sales comparison approach",
     "reconciliation",
+    # UAD 3.6 (redesigned URAR, Fannie/Freddie September 2024). The first three
+    # markers above survive the redesign, but a 3.6 report delivered as a FLATTENED
+    # PDF has zero extractable text, so `uad_count` is 0 and only intake's rule-4
+    # fallback ("a long PDF with no distinguishing markers is still the appraisal")
+    # keeps it from being misrouted. These give the marker test something to bite on
+    # when the text layer IS present.
+    #
+    # STRUCTURAL MARKERS ONLY — every entry here must be a 3.6 section heading or
+    # row label that appears in a report BODY and nowhere else. That is not a style
+    # preference: rule 1 below routes engagement letters by UAD *density*
+    # (`uad_count <= 1`), so a marker that also occurs in an order pack does not
+    # merely add noise, it defeats the guard and drops the engagement letter
+    # entirely. Measured on the ESTX-0007568 fixture, "highest and best use" and
+    # "reasonable exposure time" both appear verbatim in the engagement letter and
+    # took its count to 2 — engagement_letter became None and every cross-document
+    # check went N/A, which is the exact ESPA-0005366 failure this list's own
+    # comment warns about. Both phrases are generic appraisal vocabulary that a
+    # 1004 carries too, so they discriminate nothing and were dropped outright.
+    # "september 2024" is a bare date, equally unstructural, and already lives in
+    # _UAD36_MARKERS — which sets the VERSION and is never consulted for type.
+    "subject property amenities",
+    "unit interior",
+    "vehicle storage",
+)
+
+# Section vocabulary unique to the 3.6 redesign — none of these exist on a 1004.
+# Used to set uad_version, NOT to decide document type.
+_UAD36_MARKERS = (
+    "september 2024",
+    "subject property amenities",
+    "units excluding adus",
+    "accessory dwelling units",
+    "site influence",
+    "comparable weight",
+    "outbuilding",
+    "front door elevation",
+    "property data report",
 )
 _ENGAGEMENT_MARKERS = ("engagement letter", "order form", "assignment order", "appraisal order",
                        "standards of engagement", "engagement instructions")

@@ -1,0 +1,156 @@
+# UAD 3.6 vision section — Assignment / Contact / Subject Property identity.
+#
+# `field` keys are CANONICAL names from config/field_schema.yaml. They must match
+# exactly: the compiled checklist bundle binds items to canonical labels, so a
+# name invented here produces a field nothing can ever bind to — extracted,
+# stored, and permanently invisible to the judge.
+#
+# `describe` is sent to the model as the field's definition. Write it as the
+# printed label plus what distinguishes it from its neighbours, because the
+# dominant failure mode on this form is grabbing an adjacent field's value
+# (the 2026-08-03 audit read the LENDER's address into appraiser_company_address
+# and a page footer's ReferenceID into both borrower_name and lender_name).
+
+section: assignment
+title: Assignment Information, Contact Information, and Subject Property
+uad_version: "3.6"
+doc_order: 1
+# Where this section sits through the document, as a fraction of the extractable
+# pages (0=front, 1=back). Used to pick candidate pages WITHOUT a triage call,
+# because section ORDER is stable across URAR variants even though page NUMBERS
+# are not. Cheap and layout-tolerant: a window is searched, not a fixed page.
+page_hint: 0.02
+match_sections:
+  - Assignment Information
+  - Contact Information
+  - Subject Property
+  - Ownership Rights
+  - Legal Description
+
+instruction: >
+  Transcribe the assignment, contact, and subject-property identity fields.
+  Several parties appear on these pages (borrower, lender, appraiser, AMC,
+  owner of public record) and each has its own name and address block. Match
+  every value to its own printed label. A value that appears in a page header
+  or footer belongs to neither party — emit null rather than assigning it.
+
+fields:
+  property_address:
+    type: string
+    describe: >
+      Street number and street name of the SUBJECT property only. Exclude city,
+      state and ZIP — they are separate fields. Not the lender's or appraiser's
+      address.
+  city:
+    type: string
+    describe: City or town of the subject property.
+  state:
+    type: string
+    describe: Two-letter state code of the subject property.
+  zip_code:
+    type: string
+    describe: Five-digit ZIP code of the subject property.
+  county:
+    type: string
+    describe: County (or parish) the subject property sits in.
+  borrower_name:
+    type: string
+    describe: >
+      Name(s) of the borrower, printed against a "Borrower" label. Never a
+      reference number, order number or footer identifier.
+  owner_of_public_record:
+    type: string
+    describe: Name of the current owner of public record, if printed.
+  lender_name:
+    type: string
+    describe: >
+      Name of the lender or client institution, printed against a "Lender" or
+      "Client" label.
+  lender_address:
+    type: string
+    describe: Street address of the lender/client, if printed.
+  assessors_parcel_number:
+    type: string
+    describe: >
+      Assessor's parcel number / APN / tax ID, transcribed character-for-character
+      including spaces and any apparent duplication.
+  legal_description:
+    type: string
+    describe: Legal description of the subject property (lot, block, subdivision, or metes and bounds).
+  report_form_number:
+    type: string
+    describe: >
+      The form number this report is written on, e.g. 1004, 1073, 1025, 2055.
+      Transcribe the NUMBER only, not the marketing name.
+  assignment_type:
+    type: string
+    describe: >
+      The stated purpose of the assignment — Purchase, Refinance, or other.
+      Report the option that is actually marked.
+  property_rights:
+    type: string
+    describe: >
+      Property rights appraised — Fee Simple, Leasehold, or other. Report the
+      option actually marked.
+  occupant_status:
+    type: string
+    describe: Occupancy of the subject — Owner, Tenant, or Vacant. Report the option actually marked.
+  tax_year:
+    type: string
+    describe: Tax year for the reported real estate taxes.
+  real_estate_taxes:
+    type: string
+    describe: Annual real estate tax amount, as printed.
+  # Two fields because the form asks one of two different questions. The 1004
+  # prints "Special Assessments $" and wants an amount; 3.6 prints "Special Tax
+  # Assessments" and answers Yes/No. Routing the Yes/No into the currency field
+  # threw a correctly-read answer away as non-numeric.
+  special_assessments:
+    type: string
+    describe: >
+      Special assessment AMOUNT in dollars, only if a dollar figure is printed.
+      If the form only answers Yes/No, emit null here and answer
+      special_assessments_present instead.
+  special_assessments_present:
+    type: string
+    describe: >
+      Whether the subject is subject to special (tax) assessments, as answered —
+      typically the Yes/No against a "Special Tax Assessments" label.
+  # 3.6 prints the attached/detached answer on the ASSIGNMENT page as
+  # "Attachment Type", not on the dwelling pages. Asked for on the dwelling
+  # section it landed on "Dwelling Style" instead and returned "Ranch" — an
+  # architectural style forced into an attachment enum. Section specs must map to
+  # the page the label is actually printed on (P13).
+  dwelling_type:
+    type: string
+    describe: >
+      Attachment type of the dwelling — Detached, Attached or Semi-detached —
+      as printed against the "Attachment Type" label. This is NOT the
+      architectural style; "Ranch", "Colonial" and "Cape Cod" are design styles
+      and never belong here.
+  neighborhood_name:
+    type: string
+    describe: Name of the neighborhood, subdivision or market area.
+  is_pud_checked:
+    type: string
+    describe: >
+      Whether Planned Unit Development (PUD) is the marked option in the project-type
+      group. Report exactly which option in that group is marked, or null if none is.
+  hoa_dues:
+    type: string
+    describe: HOA dues or assessment amount, as printed.
+  hoa_period:
+    type: string
+    describe: Period the HOA dues cover — per month or per year.
+  units_count:
+    type: string
+    describe: >
+      Number of units EXCLUDING accessory dwelling units. On this form that is a
+      label in its own right ("Units Excluding ADUs") — do not read the ADU count
+      into it.
+  has_adu:
+    type: string
+    describe: >
+      Number of accessory dwelling units, which on this form is a SEPARATE count
+      from the unit count. If the form states there are none, transcribe that.
+      Never infer this from the adjacent "Units Excluding ADUs" value.

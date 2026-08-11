@@ -90,8 +90,18 @@ enum_synonyms:
 # how a rule comparing them treats "True" and "Public" as the same fact.
 # NB: yes/no/true/false/on/off are quoted — unquoted, YAML 1.1 parses them as
 # booleans and the string tokens would be lost from these tables.
-boolean_true:  ["true", "yes", "1", "x", "checked", "public", "present"]
-boolean_false: ["false", "no", "0", "unchecked", "none", "absent"]
+# UAD 3.6 answers these questions in PROSE rather than with a checkbox, so the
+# form's own wording has to be part of the vocabulary or a correctly-read answer
+# is thrown away. Measured on the sample report: "Apparent Defects, Damages,
+# Deficiencies (Dwelling Exterior)" prints "None", the flood question prints "No
+# Hazard Zone Noted", and the prior-listing question prints the listing STATUS
+# ("Pending") rather than a yes/no — a pending listing was, by definition,
+# offered for sale.
+boolean_true:  ["true", "yes", "1", "x", "checked", "public", "present",
+                "pending", "listed", "active", "under contract"]
+boolean_false: ["false", "no", "0", "unchecked", "none", "absent",
+                "no hazard zone noted", "not in a flood zone", "none noted",
+                "none observed", "not applicable", "n/a"]
 
 # ── Units — "4800 sf"->4800(sf), 0.25 ac<->10890 sf ─────────────────────────
 units:

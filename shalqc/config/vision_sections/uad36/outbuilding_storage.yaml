@@ -1,0 +1,27 @@
+# Split out of the former single `improvements` section, which spanned pages
+# 7-14 — three separate page clusters. A positional window is 3 pages wide, so
+# one section covering all of them silently missed most of its own fields:
+# gla, bedrooms, baths and year_built all came back ABSENT on a live run.
+# A section must map to ONE page cluster.
+section: outbuilding_storage
+title: Outbuilding, Vehicle Storage, Subject Property Amenities
+uad_version: '3.6'
+doc_order: 6
+page_hint: 0.33
+match_sections:
+- Outbuilding
+- Vehicle Storage
+- Subject Property Amenities
+- Overall Quality and Condition
+instruction: Transcribe vehicle storage, outbuildings and amenities. On this form vehicle storage is its
+  own section — read it from there, not from an amenities list.
+fields:
+  number_of_cars:
+    type: string
+    describe: 'Vehicle storage capacity in cars. On this form vehicle storage is its own section — read
+      it from there, not from an amenities list.
+
+      '
+  porch_patio_deck:
+    type: string
+    describe: Porch, patio, deck or other outdoor living areas described.

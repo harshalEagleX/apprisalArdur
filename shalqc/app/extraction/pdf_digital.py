@@ -219,14 +219,23 @@ _SKIP_SUFFIXES = ("_adjustment", "_blank")
 _SKIP_PREFIXES = ("comp_", "subject_grid_")
 
 
-def extract_pdf_digital(pdf_path, schema=None, max_pages: int = 8) -> ExtractedFieldSet:
+def extract_pdf_digital(pdf_path, schema=None, max_pages: Optional[int] = None) -> ExtractedFieldSet:
     """Label-proximity extraction over the digital pages of an appraisal PDF.
 
     Only the first `max_pages` are scanned — main URAR form content lives
     there; narrative/exhibit pages are handled by other extractors/LLM gap-fill.
+
+    2026-08-09: `max_pages` was a hardcoded 8 — correct for a 1004, catastrophic
+    for the 40-page UAD 3.6 URAR where pages 9-40 hold the ENTIRE valuation
+    (market trends, listing history, the 6-comp sales grid, reconciliation,
+    certifications). Now config-driven via EXTRACT_MAX_PAGES so a long report is
+    a setting, not a code change. `None` = read the settings default.
     """
     import fitz
 
+    if max_pages is None:
+        from app.config import settings
+        max_pages = settings.extract_max_pages
     schema = schema or _default_schema_loader
     fs = ExtractedFieldSet()
     known_labels = build_known_label_set(schema)

@@ -46,7 +46,22 @@ __version__ = "cat-1.0.0"
 logger = logging.getLogger(__name__)
 
 _CATALOG_PATH = Path(__file__).parent.parent.parent / "readme" / "exampleAMC" / "qc_rejection_catalog.yaml"
+
+# UAD 3.6 ships its OWN checklist — different wording, different numbering,
+# different sections — and both forms are in production. They are two documents,
+# not two versions of one, so neither is derived from the other and a report is
+# scored against exactly one of them, chosen by the detected form version. A
+# merged catalog would silently apply 2.6 wording to a 3.6 report, which is the
+# fastest way to reject an appraisal for failing a question its form never asked.
+_CATALOG_BY_VERSION = {
+    "3.6": Path(__file__).parent.parent.parent / "config" / "qc_catalog_uad36.yaml",
+}
 _MAX_COMPS = 6
+
+
+def catalog_path_for(uad_version: Optional[str] = None) -> Path:
+    """The catalog for this form version; the 2.6 catalog when unset/unknown."""
+    return _CATALOG_BY_VERSION.get(str(uad_version or "").strip(), _CATALOG_PATH)
 
 # catalog field name → canonical schema field name (only the ones that differ;
 # everything else passes through unchanged). A field we don't extract resolves

@@ -1,0 +1,62 @@
+# The sales grid's INDEPENDENT ANSWER KEY.
+#
+# The "Value Reconciliation" table restates every comparable's adjusted price,
+# weight and weighted contribution — on a different page, produced by a different
+# part of the vendor's software than the grid itself. That makes it genuine
+# corroboration for the one region where a misread is both most likely and
+# hardest to catch: a column shift in the grid yields individually plausible
+# numbers no downstream check can question.
+#
+# Verified on the sample: comp 1's grid arithmetic 320,000 + (-1,700) = 318,300,
+# and this table states 318,300. Weights sum to 100%; 318,300 x 20% = 63,660.
+#
+# This page was previously SKIPPED as a photo sheet (29 images, 44.2% image area
+# — structurally identical to a real photo page). See TRACKER.md 4j.
+section: value_reconciliation
+title: Value Reconciliation / Analysis of Weighted Comparable Sales
+uad_version: "3.6"
+doc_order: 8
+page_hint: 0.82
+match_sections:
+  - Value Reconciliation
+  - Analysis of Weighted Comparable Sales
+  - Reconciliation
+
+instruction: >
+  Transcribe the weighted comparable sales table. One entry per comparable, in
+  the order listed, including any comparable weighted at 0% (a listing is often
+  shown at zero weight and must still be captured). Read the values exactly as
+  printed; do not compute or correct them.
+
+fields:
+  reconciliation_effective_date:
+    type: string
+    describe: Effective date printed on this exhibit, if shown.
+  supported_value_range_low:
+    type: string
+    describe: Low end of the supported value range, if stated.
+  supported_value_range_high:
+    type: string
+    describe: High end of the supported value range, if stated.
+
+lists:
+  value_reconciliation:
+    type: object
+    describe: >
+      One entry per comparable row in the weighted comparable sales table.
+    properties:
+      address:
+        type: string
+        describe: The comparable's address exactly as printed in this table.
+      similarity_rating:
+        type: string
+        describe: Similarity rating, e.g. "4/10".
+      weight:
+        type: string
+        describe: Weight assigned to this comparable, exactly as printed, e.g. "20.0%".
+      adjusted_price:
+        type: string
+        describe: Adjusted sale or list price for this comparable, exactly as printed.
+      weighted_contribution:
+        type: string
+        describe: Weighted contribution for this comparable, exactly as printed.

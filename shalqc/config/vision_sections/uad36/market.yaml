@@ -1,0 +1,107 @@
+# The 36-month trend matrix in this section is a FIRST-CLASS field, not colour.
+#
+# Without it, a naive reading of "market is declining" flags every positive time
+# adjustment as wrong. On the sample that would flag three provably CORRECT
+# adjustments: the cumulative-to-effective-date figures are NOT monotonic
+# (Jul -1.5%, Aug -1.1%, Sep -0.6%, Oct 0.0%, Nov +0.6%, Dec +1.1%, Jan +1.4%),
+# so a comparable settled in December earns a POSITIVE time adjustment in a
+# market whose headline trend is negative. The judge needs the matrix, not the
+# headline.
+section: market
+title: Market, Housing Trends, Neighborhood, Market Exhibits
+uad_version: "3.6"
+doc_order: 5
+# Where this section sits through the document, as a fraction of the extractable
+# pages (0=front, 1=back). Used to pick candidate pages WITHOUT a triage call,
+# because section ORDER is stable across URAR variants even though page NUMBERS
+# are not. Cheap and layout-tolerant: a window is searched, not a fixed page.
+page_hint: 0.41
+match_sections:
+  - Market
+  - Housing Trends
+  - Market Exhibits
+  - Neighborhood
+  - Highest and Best Use
+
+instruction: >
+  Transcribe the market and neighbourhood analysis. Where a trend is presented
+  as a table of periods (current 3 months / prior 4-6 / prior 7-12), transcribe
+  each period separately against its own column heading. Never collapse a table
+  to a single headline figure.
+
+fields:
+  neighborhood_boundaries:
+    type: string
+    describe: Description of the neighbourhood boundaries.
+  location:
+    type: string
+    describe: Neighbourhood location type — Urban, Suburban or Rural, as marked.
+  built_up:
+    type: string
+    describe: Built-up percentage bracket, as marked.
+  growth_rate:
+    type: string
+    describe: Growth rate — Rapid, Stable or Slow, as marked.
+  property_values:
+    type: string
+    describe: Property value trend — Increasing, Stable or Declining, as marked.
+  demand_supply:
+    type: string
+    describe: Demand/supply — Shortage, In Balance or Over Supply, as marked.
+  marketing_time:
+    type: string
+    describe: Typical marketing time bracket, as marked.
+  price_low:
+    type: string
+    describe: Low end of the neighbourhood one-unit price range.
+  price_high:
+    type: string
+    describe: High end of the neighbourhood one-unit price range.
+  predominant_price:
+    type: string
+    describe: Predominant neighbourhood price.
+  age_low:
+    type: string
+    describe: Low end of the neighbourhood age range.
+  age_high:
+    type: string
+    describe: High end of the neighbourhood age range.
+  predominant_age:
+    type: string
+    describe: Predominant neighbourhood age.
+  market_conditions_commentary:
+    type: string
+    describe: Narrative commentary on market conditions, as printed.
+  mca_median_sale_dom_prior_7_12:
+    type: string
+    describe: Median days on market for the prior 7-12 month period.
+  mca_trend_median_sale_price:
+    type: string
+    describe: >
+      Stated trend in median sale price — increasing, stable or declining — plus
+      any percentage printed alongside it.
+  mca_seller_concessions_prevalent:
+    type: string
+    describe: >
+      Whether seller concessions are prevalent in this market, and any
+      percentage or proportion stated.
+  mca_neighborhood_analysis_comment:
+    type: string
+    describe: Narrative neighbourhood/market analysis commentary.
+
+lists:
+  market_trend_matrix:
+    type: object
+    describe: >
+      The month-by-month or period-by-period market trend table, if one is
+      printed. One entry per period with its label exactly as printed (e.g.
+      "Jul 2025", "Prior 7-12 months") and its value exactly as printed
+      (e.g. "-1.5%", "+1.1%"). Transcribe EVERY row — the sequence is not
+      monotonic and a partial transcription changes its meaning.
+    properties:
+      period:
+        type: string
+        describe: The period label exactly as printed.
+      value:
+        type: string
+        describe: The value for that period exactly as printed, including sign and % symbol.

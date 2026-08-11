@@ -1,0 +1,89 @@
+section: site
+title: Site, Site Influence, View, Site Features, Utilities
+uad_version: "3.6"
+doc_order: 2
+# Where this section sits through the document, as a fraction of the extractable
+# pages (0=front, 1=back). Used to pick candidate pages WITHOUT a triage call,
+# because section ORDER is stable across URAR variants even though page NUMBERS
+# are not. Cheap and layout-tolerant: a window is searched, not a fixed page.
+page_hint: 0.06
+match_sections: [Site, Site Influence, View, Site Features, Utilities, Legal Description]
+
+instruction: >
+  Transcribe the site description. Several rows on this form are triples
+  (influence / range of view / impact) — read each row's own label rather than
+  assuming a column order. Where a value is a marked option in a group, report
+  the option that is actually marked.
+
+fields:
+  # The 3.6 form prints the number and its unit in ONE cell ("40,511 Sq. Ft."),
+  # so both fields are read from the same string and each must take only its own
+  # half. Asked without that instruction, the whole cell landed in both.
+  site_area:
+    type: string
+    describe: >
+      Total site size — the NUMBER ONLY, with no unit. The form prints the size
+      and its unit in one cell, e.g. "40,511 Sq. Ft." or "2.75 Acres"; report
+      "40,511" or "2.75". Never include "Sq. Ft." or "Acres" here.
+  site_area_unit:
+    type: string
+    describe: >
+      The UNIT ONLY from that same site-size cell — "Sq. Ft." or "Acres". Never
+      include the number. From "40,511 Sq. Ft." report "Sq. Ft.", not
+      "40,511 Sq. Ft.".
+  site_dimensions:
+    type: string
+    describe: Site dimensions, if printed.
+  site_shape:
+    type: string
+    describe: Shape of the site.
+  site_view:
+    type: string
+    describe: View description or rating for the site.
+  zoning_classification:
+    type: string
+    describe: Zoning classification code, e.g. "A-R", "R-1".
+  zoning_compliance:
+    type: string
+    describe: >
+      Zoning compliance — Legal, Legal Non-Conforming, No Zoning, or Illegal.
+      Report the option actually marked.
+  highest_and_best_use:
+    type: string
+    describe: >
+      Whether the present use is the highest and best use. Report the marked
+      answer only; do not infer it from the four-tests discussion.
+  utilities_electricity:
+    type: string
+    describe: Electricity — Public or Other/Private, as marked.
+  utilities_gas:
+    type: string
+    describe: Gas — Public or Other/Private, as marked. If gas is not present at all, transcribe what is printed.
+  utilities_water:
+    type: string
+    describe: Water — Public or Other/Private, as marked.
+  utilities_sewer:
+    type: string
+    describe: >
+      Sanitary sewer — Public or Other/Private, as marked. A septic system is a
+      private/other sewer; transcribe exactly what the form states.
+  street_ownership:
+    type: string
+    describe: Street ownership or maintenance — public or private, as marked.
+  fema_flood_hazard:
+    type: string
+    describe: Whether the property is in a FEMA Special Flood Hazard Area, as marked.
+  fema_flood_zone:
+    type: string
+    describe: FEMA flood zone designation.
+  fema_map_number:
+    type: string
+    describe: FEMA map or panel number.
+  fema_map_date:
+    type: string
+    describe: FEMA map date.
+  adverse_site_conditions:
+    type: string
+    describe: >
+      Any adverse site conditions, external factors, easements, encroachments or
+      environmental conditions described. Transcribe the text as printed.

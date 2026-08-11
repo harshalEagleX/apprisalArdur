@@ -1,0 +1,109 @@
+section: contract_history
+title: Subject Listing Information, Sales Contract, Financial Sales Concessions, Prior Sale and Transfer History
+uad_version: "3.6"
+doc_order: 6
+# Where this section sits through the document, as a fraction of the extractable
+# pages (0=front, 1=back). Used to pick candidate pages WITHOUT a triage call,
+# because section ORDER is stable across URAR variants even though page NUMBERS
+# are not. Cheap and layout-tolerant: a window is searched, not a fixed page.
+page_hint: 0.49
+match_sections:
+  - Subject Listing Information
+  - Sales Contract
+  - Financial Sales Concessions
+  - Prior Sale and Transfer History
+
+instruction: >
+  Transcribe the contract, listing and transfer history. Three different dates
+  and several different prices live close together here — contract date, sale
+  date, prior sale date, list price, contract price, prior sale price. Match
+  each to its own printed label. A listing history may show several successive
+  list prices; capture them all in order.
+
+fields:
+  contract_price:
+    type: string
+    describe: Contract price for the subject's pending sale.
+  contract_date:
+    type: string
+    describe: Date of the sales contract.
+  sale_type:
+    type: string
+    describe: Sale type — arm's length, REO, short sale, etc., as marked.
+  did_analyze_contract:
+    type: string
+    describe: Whether the appraiser analysed the contract for sale, as marked.
+  contract_analysis_comment:
+    type: string
+    describe: Narrative comment on the contract analysis.
+  is_seller_owner_of_record:
+    type: string
+    describe: Whether the seller is the owner of public record, as marked.
+  owner_record_data_source:
+    type: string
+    describe: Data source used to verify the owner of public record.
+  has_financial_assistance:
+    type: string
+    describe: >
+      Whether any financial assistance, seller concession or sales concession is
+      indicated for the subject transaction, as marked.
+  financial_assistance_amount:
+    type: string
+    describe: Dollar amount of financial assistance or seller concessions.
+  financial_assistance_description:
+    type: string
+    describe: Description of the financial assistance or concessions.
+  personal_property_items:
+    type: string
+    describe: Personal property items included in the transaction, if any.
+  offered_for_sale_12mo:
+    type: string
+    describe: >
+      Whether the subject was offered for sale in the twelve months prior to the
+      effective date, as marked.
+  list_price:
+    type: string
+    describe: >
+      The subject's current or most recent list price. If several successive
+      list prices are shown, this is the most recent one.
+  list_date:
+    type: string
+    describe: Date the subject was listed.
+  days_on_market:
+    type: string
+    describe: Days on market for the subject listing.
+  mls_number:
+    type: string
+    describe: MLS or listing number for the subject.
+  data_source:
+    type: string
+    describe: Data source(s) used for the listing information.
+  prior_sale_date_subject:
+    type: string
+    describe: >
+      Date of the SUBJECT's prior sale or transfer. Not the contract date and
+      not a comparable's prior sale date.
+  prior_sale_price_subject:
+    type: string
+    describe: Price of the subject's prior sale or transfer.
+  prior_sale_data_source_subject:
+    type: string
+    describe: Data source for the subject's prior sale/transfer research.
+  prior_sale_analysis_comment:
+    type: string
+    describe: Narrative analysis of the prior sale and transfer history.
+
+lists:
+  listing_price_history:
+    type: object
+    describe: >
+      The subject's listing price history if a sequence of list prices is shown
+      (e.g. $350,000 then $330,000 then $310,000 then $300,000). One entry per
+      price change, in the order printed.
+    properties:
+      date:
+        type: string
+        describe: Date of this list price, as printed, or null if no date is shown.
+      price:
+        type: string
+        describe: The list price at this point, exactly as printed.

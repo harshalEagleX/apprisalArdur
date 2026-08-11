@@ -177,6 +177,20 @@ class Normalizer:
             return b.upper()
         return STATE_CODES.get(b)
 
+    def to_boolean(self, s: str) -> Optional[str]:
+        """"True"/"False" for any configured boolean token, else None.
+
+        Public because the extraction-side plausibility gate needs the SAME
+        vocabulary this normalizer uses. It previously carried its own, stricter
+        frozenset ({yes, no, y, n, true, false, 1, 0}) and so suppressed values
+        this table already understood — the UAD 3.6 form answers "Apparent
+        Defects, Damages, Deficiencies" with the word "None", which is in
+        `boolean_false` here and was being discarded as unrecognised there. Two
+        boolean vocabularies in one codebase means the stricter one silently
+        wins, and every token the other knows becomes a lost field.
+        """
+        return self._normalize_boolean(s)
+
     def _normalize_boolean(self, s: str) -> Optional[str]:
         b = _basic(s)
         if b in self._bool_true:

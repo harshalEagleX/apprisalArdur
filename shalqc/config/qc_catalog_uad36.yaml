@@ -1,0 +1,1907 @@
+meta:
+  source: UAD_3.6_Checklist 2(UAD 3.csv
+  uad_version: '3.6'
+  note: UAD 3.6 checklist ONLY. The 2.6 catalog (readme/exampleAMC/qc_rejection_catalog.yaml) is a separate
+    document with different wording and numbering; both are in production and neither is derived from
+    the other.
+  total_items: 90
+  bound: 40
+  visual: 14
+  unbound: 30
+  external: 6
+  answerable_from_pdf: 84
+  classified_items: 90
+  classifier: openai/gpt-oss-120b
+items:
+- id: U36-1
+  rule_id: U36-A-1
+  item: Can you confirm the owner of public record?
+  check_type: same_section
+  requirement: Can you confirm the owner of public record?
+  uad_version: '3.6'
+  section: assignment
+  checklist_number: 1
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - owner_of_public_record
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report can confirm the owner from public records.
+  classified: true
+- id: U36-2
+  rule_id: U36-A-2
+  item: Does the borrower's name match the loan file?
+  check_type: cross_document
+  requirement: Does the borrower's name match the loan file?
+  uad_version: '3.6'
+  section: assignment
+  checklist_number: 2
+  requires_documents:
+  - loan file
+  binding: external
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - borrower_name
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The report should show the borrower name matching the loan file.
+  classified: true
+- id: U36-5
+  rule_id: U36-A-3
+  item: Is the lender information correct?
+  check_type: cross_document
+  requirement: Is the lender information correct?
+  uad_version: '3.6'
+  section: assignment
+  checklist_number: 5
+  requires_documents:
+  - loan file
+  binding: external
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - lender_name
+    - lender_address
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Lender information is verified against the loan file.
+  classified: true
+- id: U36-6
+  rule_id: U36-A-4
+  item: Have you confirmed the appraiser has an active license?
+  check_type: cross_document
+  requirement: Have you confirmed the appraiser has an active license?
+  uad_version: '3.6'
+  section: assignment
+  checklist_number: 6
+  requires_documents:
+  - appraiser license verification
+  binding: external
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - appraiser_cert_expiration_date
+    - appraiser_cert_state
+    - appraiser_state_cert_number
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The appraiser’s active license can be confirmed via a license lookup.
+  classified: true
+- id: U36-7
+  rule_id: U36-S-1
+  item: Is the property address consistent with the loan file?
+  check_type: cross_document
+  requirement: Is the property address consistent with the loan file?
+  uad_version: '3.6'
+  section: subject
+  checklist_number: 7
+  requires_documents:
+  - loan file
+  binding: external
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - property_address
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The property address should be consistent with the loan file.
+  classified: true
+- id: U36-8
+  rule_id: U36-S-2
+  item: Are there any special assessments?
+  check_type: same_section
+  requirement: Are there any special assessments?
+  uad_version: '3.6'
+  section: subject
+  checklist_number: 8
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - special_assessments
+    - special_assessments_present
+    - special_assessments_comment
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Special assessments are identified from tax or assessment records.
+  classified: true
+- id: U36-9
+  rule_id: U36-S-3
+  item: How are the property rights appraised? (Fee Simple / Leasehold / Other)
+  check_type: same_section
+  requirement: How are the property rights appraised? (Fee Simple / Leasehold / Other)
+  uad_version: '3.6'
+  section: subject
+  checklist_number: 9
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - property_rights
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The appraisal states the type of property rights.
+  classified: true
+- id: U36-10
+  rule_id: U36-S-4
+  item: Are all rights included in the appraisal?
+  check_type: same_section
+  requirement: Are all rights included in the appraisal?
+  uad_version: '3.6'
+  section: subject
+  checklist_number: 10
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - property_rights
+    - appraisal_subject_to
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The report indicates that all rights are included.
+  classified: true
+- id: U36-11
+  rule_id: U36-S-5
+  item: Is the legal description consistent with the sales contract/preliminary title?
+  check_type: cross_document
+  requirement: Is the legal description consistent with the sales contract/preliminary title?
+  uad_version: '3.6'
+  section: subject
+  checklist_number: 11
+  requires_documents: []
+  binding: external
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - legal_description
+    - contract_analysis_comment
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report would have the legal description match the contract.
+  classified: true
+- id: U36-12
+  rule_id: U36-SI-1
+  item: Is the description of the total site size consistent with the sales contract?
+  check_type: cross_document
+  requirement: Is the description of the total site size consistent with the sales contract?
+  uad_version: '3.6'
+  section: site
+  checklist_number: 12
+  requires_documents: []
+  binding: external
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - site_area
+    - site_area_unit
+    - site_dimensions
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free appraisal would show the site size consistent with the contract.
+  classified: true
+- id: U36-13
+  rule_id: U36-SI-2
+  item: Is this a multi-parcel property?
+  check_type: same_section
+  requirement: Is this a multi-parcel property?
+  uad_version: '3.6'
+  section: site
+  checklist_number: 13
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: If the property is correctly identified as multi‑parcel, the answer is yes.
+  classified: true
+- id: U36-14
+  rule_id: U36-SI-3
+  item: Is any non-residential use indicated? (If yes, are photos/comments provided?)
+  check_type: visual
+  requirement: Is any non-residential use indicated? (If yes, are photos/comments provided?)
+  uad_version: '3.6'
+  section: site
+  checklist_number: 14
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - land_use_commercial
+    - land_use_multi_family
+    - land_use_other
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report would disclose any non‑residential use and provide photos/comments.
+  classified: true
+- id: U36-15
+  rule_id: U36-SI-4
+  item: Is the property access public?
+  check_type: same_section
+  requirement: Is the property access public?
+  uad_version: '3.6'
+  section: site
+  checklist_number: 15
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free appraisal would correctly state that access is public.
+  classified: true
+- id: U36-16
+  rule_id: U36-SI-5
+  item: Is the zoning rated legal non-conforming or illegal? If Legal - Non Conforming, can the pr
+  check_type: same_section
+  requirement: Is the zoning rated legal non-conforming or illegal? If Legal - Non Conforming, can the
+    property be rebuilt if destroyed?
+  uad_version: '3.6'
+  section: site
+  checklist_number: 16
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - zoning_classification
+    - zoning_compliance
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report would correctly identify zoning status and rebuildability.
+  classified: true
+- id: U36-17
+  rule_id: U36-SI-6
+  item: Do the utilities and/or off-site improvements meet community standards?
+  check_type: same_section
+  requirement: Do the utilities and/or off-site improvements meet community standards?
+  uad_version: '3.6'
+  section: site
+  checklist_number: 17
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - utilities_electricity
+    - utilities_gas
+    - utilities_water
+    - utilities_sewer
+    - utilities_on
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free appraisal would confirm utilities/off‑site improvements meet standards.
+  classified: true
+- id: U36-18
+  rule_id: U36-SI-7
+  item: Are there any adverse site, view or site feature influences that would impact marketabilit
+  check_type: visual
+  requirement: Are there any adverse site, view or site feature influences that would impact marketability?
+    (If yes, are photos provided?)
+  uad_version: '3.6'
+  section: site
+  checklist_number: 18
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - adverse_site_conditions
+    - adverse_conditions
+    - site_view
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report would note any adverse influences and include photos if present.
+  classified: true
+- id: U36-19
+  rule_id: U36-SI-8
+  item: Are there any defects, damages or deficiencies? (If yes, are photos/comments provided?)
+  check_type: visual
+  requirement: Are there any defects, damages or deficiencies? (If yes, are photos/comments provided?)
+  uad_version: '3.6'
+  section: site
+  checklist_number: 19
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property has no defects, damages or deficiencies.
+- id: U36-20
+  rule_id: U36-SK-1
+  item: Was the ANSI measurement standard used?
+  check_type: same_section
+  requirement: Was the ANSI measurement standard used?
+  uad_version: '3.6'
+  section: sketch
+  checklist_number: 20
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - ansi_standard_used
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant appraisal uses the ANSI measurement standard.
+- id: U36-21
+  rule_id: U36-SK-2
+  item: Does the sketch include legible exterior dimensions reported to the nearest tenth of a foo
+  check_type: visual
+  requirement: Does the sketch include legible exterior dimensions reported to the nearest tenth of a
+    foot for each structure?
+  uad_version: '3.6'
+  section: sketch
+  checklist_number: 21
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - sketch_has_dimensions
+  polarity: 'yes'
+  classified: true
+  evidence_kind: sketch
+  proof: none
+  polarity_why: The sketch includes legible exterior dimensions to the required precision.
+- id: U36-22
+  rule_id: U36-SK-3
+  item: Does the sketch include all levels of the dwelling? And are the levels labeled?
+  check_type: visual
+  requirement: Does the sketch include all levels of the dwelling? And are the levels labeled?
+  uad_version: '3.6'
+  section: sketch
+  checklist_number: 22
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - levels_labeled
+  polarity: 'yes'
+  classified: true
+  evidence_kind: sketch
+  proof: none
+  polarity_why: All dwelling levels are shown and labeled in the sketch.
+- id: U36-23
+  rule_id: U36-SK-4
+  item: Are the room labels provided for all structures?
+  check_type: same_section
+  requirement: Are the room labels provided for all structures?
+  uad_version: '3.6'
+  section: sketch
+  checklist_number: 23
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  classified: true
+  evidence_kind: sketch
+  proof: none
+  polarity_why: Room labels are provided for all structures.
+- id: U36-24
+  rule_id: U36-SK-5
+  item: Does the subject layout appear to show any functional deficiencies or inadequacies?
+  check_type: unbound
+  requirement: Does the subject layout appear to show any functional deficiencies or inadequacies?
+  uad_version: '3.6'
+  section: sketch
+  checklist_number: 24
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - functional_depreciation
+  polarity: 'no'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A functional, problem‑free property shows no layout deficiencies.
+- id: U36-26
+  rule_id: U36-DE-1
+  item: If any converted areas are reported, is the quality of construction similar/superior to th
+  check_type: same_section
+  requirement: If any converted areas are reported, is the quality of construction similar/superior to
+    the rest of the living area?
+  uad_version: '3.6'
+  section: dwelling_exterior
+  checklist_number: 26
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: Converted areas are reported as having construction quality similar or superior to the
+    rest of the living area.
+- id: U36-29
+  rule_id: U36-DE-2
+  item: Do any of the exterior features have a condition status of "damaged and nonfunctional"?
+  check_type: unbound
+  requirement: Do any of the exterior features have a condition status of "damaged and nonfunctional"?
+  uad_version: '3.6'
+  section: dwelling_exterior
+  checklist_number: 29
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: No exterior features are damaged and nonfunctional on a problem‑free property.
+- id: U36-30
+  rule_id: U36-DE-3
+  item: Do the mechanical system details reflect the appropriate heating/cooling systems for all f
+  check_type: same_section
+  requirement: Do the mechanical system details reflect the appropriate heating/cooling systems for all
+    finished areas?
+  uad_version: '3.6'
+  section: dwelling_exterior
+  checklist_number: 30
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - heating
+    - cooling
+    - heating_description
+    - air_conditioning_type
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report would correctly describe heating/cooling systems for all finished areas.
+- id: U36-31
+  rule_id: U36-DE-4
+  item: Are any defects, damages or deficiencies noted that affect soundness/structural integrity?
+  check_type: visual
+  requirement: Are any defects, damages or deficiencies noted that affect soundness/structural integrity?
+    (If yes, are photos/comments provided?)
+  uad_version: '3.6'
+  section: dwelling_exterior
+  checklist_number: 31
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property has no defects affecting structural integrity.
+- id: U36-32
+  rule_id: U36-DE-5
+  item: Does the property conform to the market?
+  check_type: unbound
+  requirement: Does the property conform to the market?
+  uad_version: '3.6'
+  section: dwelling_exterior
+  checklist_number: 32
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - conforms_to_neighborhood
+  polarity: unknown
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: Whether the property conforms to the market depends on market conditions, not on compliance.
+- id: U36-33
+  rule_id: U36-DE-6
+  item: 'Are the required photos included: front, back and street scene of subject property and fro'
+  check_type: visual
+  requirement: 'Are the required photos included: front, back and street scene of subject property and
+    front of each comparable?'
+  uad_version: '3.6'
+  section: dwelling_exterior
+  checklist_number: 33
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report includes all required photos.
+- id: U36-34
+  rule_id: U36-UI-1
+  item: Is the square footage in this section consistent with the sketch?
+  check_type: unbound
+  requirement: Is the square footage in this section consistent with the sketch?
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 34
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - total_living_area
+    - gla
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free report will have square footage matching the sketch.
+- id: U36-35
+  rule_id: U36-UI-2
+  item: 'Are the number of bedrooms, bathrooms and levels reported in this section consistent with '
+  check_type: same_section
+  requirement: Are the number of bedrooms, bathrooms and levels reported in this section consistent with
+    the sketch?
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 35
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - bedrooms
+    - baths
+    - stories
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report will have bedroom, bathroom, and level counts consistent with the sketch.
+- id: U36-36
+  rule_id: U36-UI-3
+  item: Is the occupancy noted consistent with the transaction?
+  check_type: same_section
+  requirement: Is the occupancy noted consistent with the transaction?
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 36
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - occupant_status
+  polarity: 'yes'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report will note occupancy that matches the transaction.
+- id: U36-37
+  rule_id: U36-UI-4
+  item: Is any non-residential or work/live area indicated? (If yes, are photos/comments provided?
+  check_type: visual
+  requirement: Is any non-residential or work/live area indicated? (If yes, are photos/comments provided?)
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 37
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - land_use_commercial
+    - land_use_multi_family
+    - land_use_other
+  polarity: 'no'
+  classified: true
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property has no non‑residential or work/live areas.
+- id: U36-40
+  rule_id: U36-UI-5
+  item: Do the kitchen and bathroom details reflect any "damaged and nonfunctional" status?
+  check_type: same_section
+  requirement: Do the kitchen and bathroom details reflect any "damaged and nonfunctional" status?
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 40
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: No damaged or nonfunctional kitchen/bathroom details
+  classified: true
+- id: U36-41
+  rule_id: U36-UI-6
+  item: Are any defects, damages or deficiencies noted that affect soundness/structural integrity?
+  check_type: visual
+  requirement: Are any defects, damages or deficiencies noted that affect soundness/structural integrity?
+    (If yes, are photos/comments provided?)
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 41
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: No defects affecting structural integrity noted
+  classified: true
+- id: U36-42
+  rule_id: U36-UI-7
+  item: 'Are the required photos provided: kitchens, baths, main living areas (living, family, dini'
+  check_type: visual
+  requirement: 'Are the required photos provided: kitchens, baths, main living areas (living, family,
+    dining, bedrooms), below grade, finished/unfinished, any physical defect, damage, deficiencies and
+    any updates or renovations?'
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 42
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: All required photos are included
+  classified: true
+- id: U36-43
+  rule_id: U36-UI-8
+  item: Does the report indicate the presence of an ADU or outbuildings? If yes, check specific in
+  check_type: unbound
+  requirement: Does the report indicate the presence of an ADU or outbuildings? If yes, check specific
+    investor eligibility.
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 43
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - has_adu
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: Report does not indicate an ADU or outbuildings
+  classified: true
+- id: U36-44
+  rule_id: U36-UI-9
+  item: 'Functional Obsolescence: Has the appraiser noted any functional obsolescence?'
+  check_type: unbound
+  requirement: 'Functional Obsolescence: Has the appraiser noted any functional obsolescence?'
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 44
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - functional_depreciation
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: Functional obsolescence is a defect; a problem‑free property would have none.
+  classified: true
+- id: U36-45
+  rule_id: U36-UI-10
+  item: 'Vehicle Storage: Are any defects, damages or deficiencies noted? (If yes, are photos/comme'
+  check_type: visual
+  requirement: 'Vehicle Storage: Are any defects, damages or deficiencies noted? (If yes, are photos/comments
+    provided?)'
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 45
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: The question asks about defects; a clean property would have none.
+  classified: true
+- id: U36-46
+  rule_id: U36-UI-11
+  item: 'Property Amenities: Are any defects, damages or deficiencies noted? (If yes, are photos/co'
+  check_type: visual
+  requirement: 'Property Amenities: Are any defects, damages or deficiencies noted? (If yes, are photos/comments
+    provided?)'
+  uad_version: '3.6'
+  section: unit_interior
+  checklist_number: 46
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: The question asks about defects; a clean property would have none.
+  classified: true
+- id: U36-47
+  rule_id: U36-QC-1
+  item: Does the overall quality rating of Q1-Q6 meet guidelines or investor criteria?
+  check_type: same_section
+  requirement: Does the overall quality rating of Q1-Q6 meet guidelines or investor criteria?
+  uad_version: '3.6'
+  section: quality_condition
+  checklist_number: 47
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - quality_rating
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Whether the rating meets guidelines depends on the specific rating, not solely on property
+    condition.
+  classified: true
+- id: U36-48
+  rule_id: U36-QC-2
+  item: Does the overall condition rating of C1-C6 meet guidelines or investor criteria?
+  check_type: same_section
+  requirement: Does the overall condition rating of C1-C6 meet guidelines or investor criteria?
+  uad_version: '3.6'
+  section: quality_condition
+  checklist_number: 48
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - comp_1_condition_rating
+    - comp_2_condition_rating
+    - comp_3_condition_rating
+    - comp_4_condition_rating
+    - comp_5_condition_rating
+    - comp_6_condition_rating
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report would show the condition rating meets the required guidelines.
+  classified: true
+- id: U36-49
+  rule_id: U36-QC-3
+  item: Has the appraiser indicated that the present use is the highest and best use?
+  check_type: same_section
+  requirement: Has the appraiser indicated that the present use is the highest and best use?
+  uad_version: '3.6'
+  section: quality_condition
+  checklist_number: 49
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - highest_and_best_use
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free appraisal would indicate the present use is the highest and best use.
+  classified: true
+- id: U36-50
+  rule_id: U36-MK-1
+  item: Does the appraiser provide an outline of the market boundaries using north, south, east an
+  check_type: unbound
+  requirement: Does the appraiser provide an outline of the market boundaries using north, south, east
+    and west?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 50
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - neighborhood_boundaries
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report includes an outline of market boundaries.
+  classified: true
+- id: U36-51
+  rule_id: U36-MK-2
+  item: Are any factors noted that may affect marketability?
+  check_type: unbound
+  requirement: Are any factors noted that may affect marketability?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 51
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - market_conditions_commentary
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: If there are no factors affecting marketability, the answer is no.
+  classified: true
+- id: U36-52
+  rule_id: U36-MK-3
+  item: Is the median days on market reflective of an active market?
+  check_type: unbound
+  requirement: Is the median days on market reflective of an active market?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 52
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - mca_median_sale_dom_prior_7_12
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A healthy market would have median days on market reflecting activity.
+  classified: true
+- id: U36-53
+  rule_id: U36-MK-4
+  item: Is the subject property sale price within the market price range?
+  check_type: unbound
+  requirement: Is the subject property sale price within the market price range?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 53
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - price_high
+    - price_low
+    - contract_price
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant appraisal places the subject price within the market price range.
+  classified: true
+- id: U36-54
+  rule_id: U36-MK-5
+  item: Is there an indication that distressed sales is a factor and impacting the market?
+  check_type: unbound
+  requirement: Is there an indication that distressed sales is a factor and impacting the market?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 54
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - market_conditions_commentary
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: If distressed sales are not a factor, the answer is no.
+  classified: true
+- id: U36-55
+  rule_id: U36-MK-6
+  item: Does demand/supply reflect an oversupply?
+  check_type: unbound
+  requirement: Does demand/supply reflect an oversupply?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 55
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - demand_supply
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: If demand and supply are balanced, there is no oversupply.
+  classified: true
+- id: U36-56
+  rule_id: U36-MK-7
+  item: Is marketing time more than 6 months?
+  check_type: unbound
+  requirement: Is marketing time more than 6 months?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 56
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - marketing_time
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property would not have a marketing time exceeding six months.
+  classified: true
+- id: U36-57
+  rule_id: U36-MK-8
+  item: Does the market commentary/price trend graph include any indication that market values are
+  check_type: unbound
+  requirement: Does the market commentary/price trend graph include any indication that market values
+    are declining?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 57
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - market_conditions_commentary
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant market commentary would not indicate declining values.
+  classified: true
+- id: U36-58
+  rule_id: U36-MK-9
+  item: Does the market commentary support that the subject property conforms to the present use?
+  check_type: unbound
+  requirement: Does the market commentary support that the subject property conforms to the present use?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 58
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - conforms_to_neighborhood
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The market commentary should support that the subject conforms to its present use.
+  classified: true
+- id: U36-59
+  rule_id: U36-MK-10
+  item: Has the appraiser provided the appropriate graphs in the Market Exhibit section?
+  check_type: unbound
+  requirement: Has the appraiser provided the appropriate graphs in the Market Exhibit section?
+  uad_version: '3.6'
+  section: market
+  checklist_number: 59
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A proper appraisal includes the required graphs in the Market Exhibit.
+  classified: true
+- id: U36-60
+  rule_id: U36-PU-1
+  item: Is the developer/builder in control of the HOA?
+  check_type: unbound
+  requirement: Is the developer/builder in control of the HOA?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 60
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - is_developer_controls_hoa
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Control of the HOA depends on the specific development and cannot be inferred from compliance
+    alone.
+  classified: true
+- id: U36-61
+  rule_id: U36-PU-2
+  item: Has the monthly HOA fee been included in the total housing payment?
+  check_type: unbound
+  requirement: Has the monthly HOA fee been included in the total housing payment?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 61
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - hoa_monthly_assessment
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report includes the HOA fee in the total housing payment calculation.
+  classified: true
+- id: U36-62
+  rule_id: U36-PU-3
+  item: Are there any known legal actions or unit special assessments?
+  check_type: same_section
+  requirement: Are there any known legal actions or unit special assessments?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 62
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - special_assessments_present
+    - special_assessments_comment
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property has no known legal actions or special assessments.
+  classified: true
+- id: U36-63
+  rule_id: U36-PU-4
+  item: Is this a refinance transaction and is the property currently listed?
+  check_type: unbound
+  requirement: Is this a refinance transaction and is the property currently listed?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 63
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - transaction_type
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Whether the transaction is a refinance and the property is listed depends on the specific
+    loan scenario.
+  classified: true
+- id: U36-64
+  rule_id: U36-PU-5
+  item: Did the appraiser analyze the contract (if applicable)?
+  check_type: unbound
+  requirement: Did the appraiser analyze the contract (if applicable)?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 64
+  requires_documents:
+  - sales_contract
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - did_analyze_contract
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report includes contract analysis.
+  classified: true
+- id: U36-65
+  rule_id: U36-PU-6
+  item: Are personal items conveyed in the sales contract?
+  check_type: unbound
+  requirement: Are personal items conveyed in the sales contract?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 65
+  requires_documents:
+  - sales_contract
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - personal_property_items
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: No personal items are conveyed in a typical clean transaction.
+  classified: true
+- id: U36-66
+  rule_id: U36-PU-7
+  item: Is the transaction non-arm's length?
+  check_type: unbound
+  requirement: Is the transaction non-arm's length?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 66
+  requires_documents:
+  - loan_file
+  - sales_contract
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: The transaction is assumed arm's‑length.
+  classified: true
+- id: U36-67
+  rule_id: U36-PU-8
+  item: Is any financial assistance being paid by any party on behalf of the borrower?
+  check_type: unbound
+  requirement: Is any financial assistance being paid by any party on behalf of the borrower?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 67
+  requires_documents:
+  - loan_file
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - has_financial_assistance
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: No financial assistance is being provided.
+  classified: true
+- id: U36-68
+  rule_id: U36-PU-9
+  item: Are there any known sales concessions?
+  check_type: same_section
+  requirement: Are there any known sales concessions?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 68
+  requires_documents:
+  - sales_contract
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - seller_concessions
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: There are no sales concessions in a standard clean deal.
+  classified: true
+- id: U36-69
+  rule_id: U36-PU-10
+  item: Does the prior sale and transfer history indicate any disturbing trends in the last 3 year
+  check_type: unbound
+  requirement: Does the prior sale and transfer history indicate any disturbing trends in the last 3 years?
+  uad_version: '3.6'
+  section: project_pud
+  checklist_number: 69
+  requires_documents:
+  - sales_history
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - prior_sale_analysis_comment
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: No disturbing trends are present in the last three years.
+  classified: true
+- id: U36-70
+  rule_id: U36-SCA-1
+  item: Are the comparable sales located within an acceptable distance from the subject based on l
+  check_type: same_section
+  requirement: 'Are the comparable sales located within an acceptable distance from the subject based
+    on location? Exp: Urban - under 1 mile. Suburban - under 2 mile, Rural - under 5 miles. / If under
+    these recommended mileage, pleased esnure commentay.'
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 70
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: map
+  proof: none
+  polarity_why: Comparable sales are within the recommended distance.
+  classified: true
+- id: U36-71
+  rule_id: U36-SCA-2
+  item: Has the appraiser provided 2 data sources?
+  check_type: same_section
+  requirement: Has the appraiser provided 2 data sources?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 71
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - data_source
+    - comp_1_data_source
+    - comp_2_data_source
+    - comp_3_data_source
+    - comp_4_data_source
+    - comp_5_data_source
+    - comp_6_data_source
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The appraisal cites at least two data sources.
+  classified: true
+- id: U36-72
+  rule_id: U36-SCA-3
+  item: Are the photographs in color and clear and show subject property and comparable sales of s
+  check_type: visual
+  requirement: Are the photographs in color and clear and show subject property and comparable sales of
+    similar design and appeal?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 72
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: photo
+  proof: none
+  polarity_why: A compliant report includes clear color photos of subject and comparables.
+  classified: true
+- id: U36-73
+  rule_id: U36-SCA-4
+  item: Are at least 3 closed sales provided as comparable sales?
+  check_type: same_section
+  requirement: Are at least 3 closed sales provided as comparable sales?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 73
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - comparable_count
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant report provides at least three closed‑sale comparables.
+  classified: true
+- id: U36-74
+  rule_id: U36-SCA-5
+  item: Is the sale price of the subject bracketed by the sale prices of the comparable sales?
+  check_type: same_section
+  requirement: Is the sale price of the subject bracketed by the sale prices of the comparable sales?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 74
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - contract_price
+  polarity: 'yes'
+  evidence_kind: text
+  proof: bracketing
+  polarity_why: The subject price must be bracketed by the comparable sale prices.
+  classified: true
+- id: U36-75
+  rule_id: U36-SCA-6
+  item: Has the appraiser included appropriate adjustments for any differences in sales concession
+  check_type: same_section
+  requirement: Has the appraiser included appropriate adjustments for any differences in sales concessions?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 75
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - concessions_amount
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Appropriate adjustments for sales concessions are disclosed in a compliant report.
+  classified: true
+- id: U36-76
+  rule_id: U36-SCA-7
+  item: Do the comparable sales indicate contract sales within the last 12 months or appropriate t
+  check_type: same_section
+  requirement: Do the comparable sales indicate contract sales within the last 12 months or appropriate
+    time frame for current market conditions?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 76
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - contract_date
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: The report shows comparables with contract dates within the required time frame.
+  classified: true
+- id: U36-77
+  rule_id: U36-SCA-8
+  item: Did the appraiser provide commentary to support any time adjustments?
+  check_type: same_section
+  requirement: Did the appraiser provide commentary to support any time adjustments?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 77
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - market_conditions_commentary
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Commentary supporting any time adjustments is included in a compliant report.
+  classified: true
+- id: U36-78
+  rule_id: U36-SCA-9
+  item: Do the comparable sales have similar property rights?
+  check_type: same_section
+  requirement: Do the comparable sales have similar property rights?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 78
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Comparable sales are shown to have similar property rights.
+  classified: true
+- id: U36-79
+  rule_id: U36-SCA-10
+  item: Are the comparable sales sites similar in size and topography or, if not, have the appropr
+  check_type: same_section
+  requirement: Are the comparable sales sites similar in size and topography or, if not, have the appropriate
+    adjustments been applied?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 79
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - site_area
+    - site_shape
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Size/topography similarity or appropriate adjustments are documented.
+  classified: true
+- id: U36-80
+  rule_id: U36-SCA-11
+  item: Are any of the comparable sales located within the subject neighborhood?
+  check_type: same_section
+  requirement: Are any of the comparable sales located within the subject neighborhood?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 80
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Depends on which comps were selected; not a defect condition.
+  classified: true
+- id: U36-81
+  rule_id: U36-SCA-12
+  item: If the subject is located in a PUD, is 1 comp from within the PUD and 1 comp outside of th
+  check_type: unbound
+  requirement: If the subject is located in a PUD, is 1 comp from within the PUD and 1 comp outside of
+    the PUD?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 81
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Selection of comps inside/outside PUD varies; not a defect.
+  classified: true
+- id: U36-82
+  rule_id: U36-SCA-13
+  item: Do the comps display similar site influences, environmental conditions and view as the sub
+  check_type: unbound
+  requirement: Do the comps display similar site influences, environmental conditions and view as the
+    subject property?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 82
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Similarity of site influences is situational.
+  classified: true
+- id: U36-83
+  rule_id: U36-SCA-14
+  item: Are the comparable sales similar in age and design?
+  check_type: same_section
+  requirement: Are the comparable sales similar in age and design?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 83
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - effective_age
+    - year_built
+    - design_style
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Age and design similarity depends on market data.
+  classified: true
+- id: U36-84
+  rule_id: U36-SCA-15
+  item: If the subject utilities are not public, do comparable sales exhibit market acceptance?
+  check_type: same_section
+  requirement: If the subject utilities are not public, do comparable sales exhibit market acceptance?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 84
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Market acceptance of utilities is case‑specific.
+  classified: true
+- id: U36-85
+  rule_id: U36-SCA-16
+  item: 'Energy efficient and green features: Does the subject property include solar panels? (If y'
+  check_type: unbound
+  requirement: 'Energy efficient and green features: Does the subject property include solar panels? (If
+    yes, check investor guidelines.)'
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 85
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: Presence of solar panels varies; not a defect question.
+  classified: true
+- id: U36-86
+  rule_id: U36-SCA-17
+  item: Is the subject bedroom count bracketed by the comparable sales?
+  check_type: same_section
+  requirement: Is the subject bedroom count bracketed by the comparable sales?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 86
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - bedrooms
+    - comp_1_bedrooms
+    - comp_2_bedrooms
+    - comp_3_bedrooms
+    - comp_4_bedrooms
+    - comp_5_bedrooms
+    - comp_6_bedrooms
+  polarity: 'yes'
+  evidence_kind: text
+  proof: bracketing
+  polarity_why: A compliant report would show bedroom count bracketed by comps.
+  classified: true
+- id: U36-87
+  rule_id: U36-SCA-18
+  item: Is the subject bathroom count bracketed by the comparable sales?
+  check_type: same_section
+  requirement: Is the subject bathroom count bracketed by the comparable sales?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 87
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - baths
+  polarity: 'yes'
+  evidence_kind: text
+  proof: bracketing
+  polarity_why: A compliant report would show bathroom count bracketed by comps.
+  classified: true
+- id: U36-90
+  rule_id: U36-SCA-19
+  item: Does the Sales Comparison Map show the subject property and the comparable sales in a simi
+  check_type: visual
+  requirement: Does the Sales Comparison Map show the subject property and the comparable sales in a similar
+    location with similar influences?
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 90
+  requires_documents: []
+  binding: visual
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - city
+    - zip_code
+    - neighborhood_name
+  polarity: 'yes'
+  evidence_kind: map
+  proof: none
+  polarity_why: A compliant report includes a proper sales comparison map.
+  classified: true
+- id: U36-91
+  rule_id: U36-SCA-20
+  item: 'Adjustments: Are adjustments in the proper direction (+/-)?'
+  check_type: same_section
+  requirement: 'Adjustments: Are adjustments in the proper direction (+/-)?'
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 91
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Correct direction of adjustments is expected in a clean appraisal.
+  classified: true
+- id: U36-92
+  rule_id: U36-SCA-21
+  item: 'Adjustments: Are adjustments applied for differences between the subject property and the '
+  check_type: same_section
+  requirement: 'Adjustments: Are adjustments applied for differences between the subject property and
+    the comparable sales?'
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 92
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+    - quality_rating
+    - comp_1_condition_rating
+    - comp_2_condition_rating
+    - comp_3_condition_rating
+    - comp_4_condition_rating
+    - comp_5_condition_rating
+    - comp_6_condition_rating
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Adjustments should be applied for differences in a compliant report.
+  classified: true
+- id: U36-93
+  rule_id: U36-SCA-22
+  item: 'Adjustments: Are there any large across-the-board adjustments?'
+  check_type: same_section
+  requirement: 'Adjustments: Are there any large across-the-board adjustments?'
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 93
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free appraisal would have no large across‑the‑board adjustments.
+  classified: true
+- id: U36-94
+  rule_id: U36-SCA-23
+  item: 'Adjustments: Do adjustments appear to be supported and explained by the appraiser?'
+  check_type: same_section
+  requirement: 'Adjustments: Do adjustments appear to be supported and explained by the appraiser?'
+  uad_version: '3.6'
+  section: sales_comparison
+  checklist_number: 94
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: Adjustments must be supported and explained in a compliant report.
+  classified: true
+- id: U36-95
+  rule_id: U36-RC-1
+  item: How has the report been completed? (As Is / Subject to Repair / Subject to Inspection / Su
+  check_type: unbound
+  requirement: How has the report been completed? (As Is / Subject to Repair / Subject to Inspection /
+    Subject to Completion)
+  uad_version: '3.6'
+  section: reconciliation
+  checklist_number: 95
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - appraisal_report_type
+    - appraisal_subject_to
+  polarity: unknown
+  evidence_kind: text
+  proof: none
+  polarity_why: The answer depends on the specific property condition and report choice.
+  classified: true
+- id: U36-97
+  rule_id: U36-RC-2
+  item: Does the appraised value support the sale price?
+  check_type: same_section
+  requirement: Does the appraised value support the sale price?
+  uad_version: '3.6'
+  section: reconciliation
+  checklist_number: 97
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - appraised_value
+    - indicated_value_income_approach
+    - indicated_value_cost_approach
+    - indicated_value_sca
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant appraisal will have the value supporting the sale price.
+  classified: true
+- id: U36-98
+  rule_id: U36-RC-3
+  item: Do any apparent defects, damages or deficiencies require repairs to bring the overall cond
+  check_type: same_section
+  requirement: Do any apparent defects, damages or deficiencies require repairs to bring the overall condition
+    rating to an acceptable rating?
+  uad_version: '3.6'
+  section: reconciliation
+  checklist_number: 98
+  requires_documents: []
+  binding: bound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - condition_rating
+    - quality_rating
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property has no defects requiring repair to reach an acceptable rating.
+  classified: true
+- id: U36-99
+  rule_id: U36-RC-4
+  item: Did the appraiser provide an estimated cost for repair? (If yes, does the sales contract a
+  check_type: unbound
+  requirement: Did the appraiser provide an estimated cost for repair? (If yes, does the sales contract
+    address which party will remedy?)
+  uad_version: '3.6'
+  section: reconciliation
+  checklist_number: 99
+  requires_documents:
+  - sales contract
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields: []
+  polarity: 'no'
+  evidence_kind: text
+  proof: none
+  polarity_why: A problem‑free property would have no repair estimate, so the answer is no.
+  classified: true
+- id: U36-100
+  rule_id: U36-RC-5
+  item: 'Is the appraisal signed and dated, and is the appraiser''s certification or license number '
+  check_type: unbound
+  requirement: Is the appraisal signed and dated, and is the appraiser's certification or license number
+    and expiration date entered?
+  uad_version: '3.6'
+  section: reconciliation
+  checklist_number: 100
+  requires_documents: []
+  binding: unbound
+  reject_as: []
+  sources:
+  - doc: appraisal
+    fields:
+    - date_report_signed
+    - date_of_signature
+    - appraiser_state_cert_number
+    - appraiser_cert_expiration_date
+  polarity: 'yes'
+  evidence_kind: text
+  proof: none
+  polarity_why: A compliant appraisal includes the signature, date, and license information.
+  classified: true

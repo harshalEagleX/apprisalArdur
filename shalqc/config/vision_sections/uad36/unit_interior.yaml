@@ -1,0 +1,74 @@
+# Split out of the former single `improvements` section, which spanned pages
+# 7-14 — three separate page clusters. A positional window is 3 pages wide, so
+# one section covering all of them silently missed most of its own fields:
+# gla, bedrooms, baths and year_built all came back ABSENT on a live run.
+# A section must map to ONE page cluster.
+section: unit_interior
+title: Unit Interior, Kitchen and Bathroom Details, Interior Features
+uad_version: '3.6'
+doc_order: 5
+page_hint: 0.19
+match_sections:
+- Unit Interior
+- Kitchen and Bathroom Details
+- Interior Features
+- Level and Room Detail
+- Area Breakdown
+instruction: Transcribe the interior. The Area Breakdown states finished area above and below grade; the
+  Level and Room Detail states the room summary. Both are cross-checked against the sketch, so transcribe
+  each exactly as printed.
+fields:
+  gla:
+    type: string
+    describe: 'Gross living area of the subject in square feet — the finished above-grade area. Not the
+      site size and not a comparable''s GLA.
+
+      '
+  total_rooms:
+    type: string
+    describe: Total room count for the subject.
+  bedrooms:
+    type: string
+    describe: Total bedroom count for the subject.
+  baths:
+    type: string
+    describe: Bathroom count for the subject, as printed (e.g. "3" or "2.1").
+  has_full_basement:
+    type: string
+    describe: Whether a full basement is indicated, as marked.
+  has_partial_basement:
+    type: string
+    describe: Whether a partial basement is indicated, as marked.
+  basement_gla:
+    type: string
+    describe: Below-grade finished square footage, if stated.
+  basement_finish_pct:
+    type: string
+    describe: Percentage of the basement that is finished, if stated.
+  basement_outside_entry:
+    type: string
+    describe: Whether the basement has an outside entry or exit, as marked.
+  functional_utility:
+    type: string
+    describe: Functional utility description, or any noted functional deficiency or inadequacy.
+  fireplace_count:
+    type: string
+    describe: Number of fireplaces.
+  appliance_refrigerator:
+    type: string
+    describe: Whether a refrigerator is indicated, as marked.
+  appliance_range_oven:
+    type: string
+    describe: Whether a range/oven is indicated, as marked.
+  appliance_dishwasher:
+    type: string
+    describe: Whether a dishwasher is indicated, as marked.
+  appliance_disposal:
+    type: string
+    describe: Whether a disposal is indicated, as marked.
+  appliance_microwave:
+    type: string
+    describe: Whether a microwave is indicated, as marked.
+  appliance_washer_dryer:
+    type: string
+    describe: Whether a washer/dryer is indicated, as marked.

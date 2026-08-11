@@ -378,6 +378,12 @@ _MISMO_ENUM_SYNONYMS: Dict[str, str] = {
     "forcedwarmair": "FWA", "forcedairunit": "FWA", "forcedair": "FWA",
     "hotwaterbaseboard": "HWBB", "hotwater": "HWBB", "baseboard": "HWBB",
     "radiantheat": "Radiant",
+    # ── UAD 3.6 form wording ────────────────────────────────────────────────
+    # The redesigned URAR prints its own vocabulary, which matches neither MISMO
+    # nor the 2.6 display strings the schema enumerates. Measured off the sample
+    # report's Mechanical System Details and sales-grid Transfer Terms rows.
+    "centralized": "Central Air", "centralair": "Central Air",
+    "typicallymotivated": "Arms-Length",
 }
 
 
@@ -464,8 +470,35 @@ def _numeric_plausible(value: str) -> bool:
 _BOOLEAN_TOKENS = frozenset({"yes", "no", "y", "n", "true", "false", "1", "0"})
 
 
+def _boolean_canonical(value: str) -> Optional[str]:
+    """"True"/"False" for a recognised boolean answer, else None.
+
+    Defers to the NORMALIZER's configured tables (`boolean_true`/`boolean_false`
+    in config/normalizer.yaml) and keeps the local set only as a floor. Having a
+    private, stricter vocabulary here is what discarded correctly-read values:
+    the 3.6 form answers "Apparent Defects, Damages, Deficiencies" with "None",
+    which config already maps to False, and this gate called it unrecognised.
+
+    Returning the canonical form rather than a bool lets the caller REWRITE the
+    value, exactly as the enum and numeric branches do — a downstream rule asking
+    "is there an adverse condition" gets False instead of a missing field.
+    """
+    raw = value.strip().rstrip(".")
+    try:
+        from app.normalize.normalizer import normalizer
+        canonical = normalizer.to_boolean(raw)
+        if canonical is not None:
+            return canonical
+    except Exception:  # pragma: no cover - config/import guard
+        pass
+    low = raw.lower()
+    if low in _BOOLEAN_TOKENS:
+        return "True" if low in {"yes", "y", "true", "1"} else "False"
+    return None
+
+
 def _boolean_plausible(value: str) -> bool:
-    return value.strip().lower().rstrip(".") in _BOOLEAN_TOKENS
+    return _boolean_canonical(value) is not None
 
 
 # P2 / F7: a printed FORM CAPTION uses the "(s)" pluralization artifact — "Report
@@ -661,7 +694,17 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             ok = _numeric_plausible(value)
             reason = f"not numeric (data_type={fd.data_type})"
         elif fd.data_type == "boolean":
-            ok = _boolean_plausible(value)
+            # Canonicalize rather than merely accept: the form's own wording
+            # ("None", "No Hazard Zone Noted") is a real answer, and rewriting it
+            # to True/False is what makes it usable by a rule instead of a string
+            # a comparison will miss.
+            canonical = _boolean_canonical(value)
+            if canonical is not None and canonical != value:
+                logger.info("Plausibility: canonicalized boolean %s='%s' → '%s'",
+                            fname, value, canonical)
+                ef.value = canonical
+                value = canonical
+            ok = canonical is not None
             reason = "not a recognized yes/no/true/false token"
         elif fd.data_type == "string" and not fd._is_narrative:
             if _caption_echo_of_field(fname, value):

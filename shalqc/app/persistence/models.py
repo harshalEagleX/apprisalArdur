@@ -132,6 +132,27 @@ class Correction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class RuntimeConfig(Base):
+    """Frontend-editable settings, layered OVER the .env defaults.
+
+    The standing requirement is that configuration is changed in the UI, not by
+    editing Python or shelling into a box to change an env var. So every tunable
+    resolves as: **runtime_config row -> environment -> code default**, and this
+    table is the top layer. A row's absence is meaningful (fall through to env),
+    which is why a cleared setting is DELETED rather than written as empty.
+
+    `value` is JSON so a setting can be a scalar, a list, or a nested object
+    without a schema migration per tunable. Every write is mirrored into
+    config_audit, so "who changed the vision model at 3am" is answerable.
+    """
+
+    __tablename__ = "runtime_config"
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON)
+    updated_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class ConfigAudit(Base):
     __tablename__ = "config_audit"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from app.extraction import checkbox, engagement, grid_extractor, pdf_digital, pdf_scanned, plausibility, xml_extractor
 from app.extraction.llm_gapfill import GapfillClient, gapfill
@@ -109,20 +109,84 @@ def _merge_set(merged: Dict[str, ExtractedField], fs: ExtractedFieldSet) -> None
             _merge_field(merged, ef)
 
 
+def _safe_top(label: str, fn, *args) -> ExtractedFieldSet:
+    """Module-level twin of run_extraction's inner `_safe`, usable by the 3.6
+    branch which runs before that closure is defined. Same contract: a failing
+    extractor degrades the run, never sinks it."""
+    try:
+        return fn(*args)
+    except Exception as exc:
+        logger.warning("merge: extractor %s failed: %s", label, exc)
+        return ExtractedFieldSet()
+
+
 def run_extraction(
     appraisal_pdf,
     xml_path: Optional[str] = None,
     engagement_letter: Optional[str] = None,
     schema=None,
     llm_client: Optional[GapfillClient] = None,
+    uad_version: Optional[str] = None,
+    vision_report: Optional[Dict[str, Any]] = None,
 ) -> ExtractedFieldSet:
     """Run every extractor per SHALqc.md §3.2 and return one merged
     ExtractedFieldSet. Never raises — a failing extractor is caught and
     logged so the run completes with whatever the other extractors found
     (SHALqc.md §16 partial-failure contract, honored here even though
-    report.degradations[] itself is a Part-8/report-builder concern)."""
+    report.degradations[] itself is a Part-8/report-builder concern).
+
+    **UAD 3.6 forks here, and ONLY here.** 2.6 and 3.6 share a name and almost
+    nothing else: the 2.6 extractors assume a fixed grid, three comparables,
+    content inside the first eight pages, and a MISMO 2.6 spine. All four are
+    false for the redesigned URAR, and a flattened 3.6 PDF makes every
+    text-based extractor return zero WITHOUT ERRORING — which is how
+    confidently-wrong output shipped before.
+
+    Everything downstream of this function is version-agnostic and shared:
+    plausibility, normalizer, back-locator, judge, severity gate, persistence,
+    reviewer UI. `vision_report` is an optional out-parameter — pass a dict to
+    receive the 3.6 run's cost, verification and degradation detail.
+    """
     schema = schema or _default_schema_loader
     merged: Dict[str, ExtractedField] = {}
+
+    # Detect the form generation when the caller did not state it.
+    if uad_version is None:
+        try:
+            from app.extraction.page_map import detect_uad_version, profile
+            uad_version = detect_uad_version(profile(appraisal_pdf), appraisal_pdf) or "2.6"
+        except Exception as exc:
+            logger.warning("merge: UAD version detection failed (%s) — assuming 2.6", exc)
+            uad_version = "2.6"
+
+    if uad_version == "3.6":
+        logger.info("merge: UAD 3.6 detected — routing to the vision extractor")
+        from app.extraction.vision.runner import run_vision_extraction
+        try:
+            fs, report = run_vision_extraction(appraisal_pdf, schema=schema)
+        except Exception as exc:
+            logger.warning("merge: vision extraction failed: %s", exc)
+            fs, report = ExtractedFieldSet(), {"degradations": [f"vision extraction failed: {exc}"]}
+        if vision_report is not None:
+            vision_report.update(report)
+
+        # XML still wins if a MISMO 3.6 spine ever arrives: vision sits at 0.93,
+        # XML at 0.97, and _merge_field's XML-priority rule is untouched.
+        _merge_set(merged, fs)
+        if xml_path:
+            _merge_set(merged, _safe_top("xml", xml_extractor.extract_xml, xml_path))
+        if engagement_letter:
+            from app.extraction.engagement import extract_engagement
+            _merge_set(merged, _safe_top("engagement", extract_engagement, engagement_letter))
+
+        suppressed = plausibility.validate_fields(merged)
+        result = ExtractedFieldSet()
+        for ef in merged.values():
+            result.add(ef)
+        logger.info("merge[3.6]: %d fields merged (%d suppressed)", len(result), suppressed)
+        return result
+
+    # ── everything below is the existing UAD 2.6 path, unchanged ──────────────
 
     def _safe(label: str, fn, *args):
         try:

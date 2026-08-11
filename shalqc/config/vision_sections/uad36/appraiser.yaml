@@ -1,0 +1,64 @@
+# Certifications and signature block — the last pages of the report.
+# Split out of `reconciliation` because that section was spanning three separate
+# page clusters (p26 reconciliation, p33 value table, p38-40 signature) and a
+# single positional window cannot cover all three.
+section: appraiser
+title: Certifications and Signature
+uad_version: "3.6"
+doc_order: 9
+page_hint: 0.97
+match_sections:
+  - Certifications
+  - Signature
+  - Appraiser Certification
+
+instruction: >
+  Transcribe the appraiser's identity, credentials and signature dates. Several
+  parties appear in this report (lender, AMC, borrower, supervisory appraiser) —
+  match every value to its own printed label. If an address is not printed
+  against the appraiser's own label, emit null rather than assigning another
+  party's address to them.
+
+fields:
+  appraiser_name:
+    type: string
+    describe: Name of the appraiser who signed the report.
+  appraiser_company_name:
+    type: string
+    describe: Appraiser's company or firm name.
+  appraiser_company_address:
+    type: string
+    describe: >
+      Address of the APPRAISER's company. The lender's and AMC's addresses also
+      appear in this report — emit null unless it is printed against the
+      appraiser's own label.
+  appraiser_phone:
+    type: string
+    describe: Appraiser's telephone number.
+  appraiser_email:
+    type: string
+    describe: Appraiser's email address.
+  appraiser_state_cert_number:
+    type: string
+    describe: Appraiser's state certification or licence number.
+  appraiser_cert_state:
+    type: string
+    describe: State that issued the appraiser's certification.
+  appraiser_cert_expiration_date:
+    type: string
+    describe: Expiration date of the appraiser's certification.
+  date_report_signed:
+    type: string
+    describe: Date the report was signed. Distinct from the effective date of the appraisal.
+  date_of_signature:
+    type: string
+    describe: Date printed beside the appraiser's signature, if separately shown.
+  supervisory_appraiser_name:
+    type: string
+    describe: Supervisory appraiser's name, if one signed.
+  supervisory_appraiser_cert_number:
+    type: string
+    describe: Supervisory appraiser's certification number.
+  supervisory_appraiser_did_inspect:
+    type: string
+    describe: Whether the supervisory appraiser inspected the property, as marked.

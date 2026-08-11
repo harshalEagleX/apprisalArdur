@@ -414,6 +414,23 @@ fields:
     source_authority: appraisal_report
     sections: [subject]
 
+  # UAD 3.6 asks a different QUESTION here than the 1004 does. The 1004 prints
+  # "Special Assessments $" and wants an amount; the 3.6 form prints "Special Tax
+  # Assessments" and answers "Yes"/"No". Forcing that answer into the currency
+  # field above discarded it as non-numeric — a correctly-read value lost to a
+  # type mismatch, not a reading error. They are separate facts and get separate
+  # fields; whichever the form states is the one that fills.
+  special_assessments_present:
+    canonical_name: special_assessments_present
+    data_type: boolean
+    required: optional
+    synonyms:
+      - "Special Tax Assessments"
+      - "Special Assessments"
+      - "Subject to Special Assessments"
+    source_authority: appraisal_report
+    sections: [subject]
+
   special_assessments_comment:
     canonical_name: special_assessments_comment
     data_type: string
@@ -3584,6 +3601,46 @@ fields:
 # =============================================================================
 # NORMALIZATIONS — how raw extracted text maps to canonical stored values
 # =============================================================================
+
+  # ── UAD 3.6 sketch fields ─────────────────────────────────────────────────
+  # The redesigned URAR exposes the sketch as structured data the 1004 never
+  # did, and the 3.6 checklist asks about each of these directly (ANSI standard
+  # used; legible exterior dimensions to the nearest tenth; all levels present
+  # and labelled). Without registry entries the vision extractor would emit
+  # them and nothing could ever bind a checklist item to them.
+  total_living_area:
+    canonical_name: total_living_area
+    data_type: numeric
+    required: optional
+    value_range: {min: 100, max: 50000}
+    synonyms: ["Total Living Area", "Finished Above Grade", "Total Finished Area", "Above Grade Finished Area"]
+    source_authority: appraisal_report
+    sections: [improvements]
+    notes: >
+      Sketch-reported total. Cross-checked against `gla` by extraction/verify.py —
+      two transcriptions of one number on different pages, so a mismatch is a
+      misread signal rather than a compliance question.
+  ansi_standard_used:
+    canonical_name: ansi_standard_used
+    data_type: boolean
+    required: optional
+    synonyms: ["ANSI", "ANSI Standard", "ANSI Z765", "Measurement Standard"]
+    source_authority: appraisal_report
+    sections: [improvements]
+  sketch_has_dimensions:
+    canonical_name: sketch_has_dimensions
+    data_type: string
+    required: optional
+    synonyms: ["Exterior Dimensions", "Sketch Dimensions"]
+    source_authority: appraisal_report
+    sections: [improvements]
+  levels_labeled:
+    canonical_name: levels_labeled
+    data_type: string
+    required: optional
+    synonyms: ["Levels", "Level and Room Detail", "Level Labels"]
+    source_authority: appraisal_report
+    sections: [improvements]
 
 normalizations:
 
