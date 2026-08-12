@@ -10,6 +10,7 @@ not in this build pass.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, Body
@@ -178,3 +179,140 @@ def _profile_names():
     from pathlib import Path
     d = Path(__file__).parent.parent.parent / "config" / "amc_profiles"
     return sorted(p.stem for p in d.glob("*.yaml") if not p.name.endswith(".wording.yaml"))
+
+
+# ── checklists (frontend-authored, per client and form version) ───────────────
+#
+# The AMC's checklist was a static YAML nobody could change without a deploy.
+# These endpoints make it editable from the admin UI, keyed by (client, form
+# version) because 2.6 and 3.6 are different documents — different wording,
+# different numbering, and different item fields (3.6 carries polarity/proof/
+# evidence_kind because its items are answered from page images).
+#
+# Saving always writes the CLIENT's own copy; the built-in catalogs are seeds
+# and are never edited in place, or one client's edit would silently change
+# every client still inheriting them.
+
+_CHECKLIST_VERSIONS = ("2.6", "3.6")
+
+
+@router.get("/checklists")
+def list_checklists():
+    """Which (client, version) checklists exist, and whether each is customised."""
+    from app.rules.checklist_source import YamlChecklistSource
+    src = YamlChecklistSource()
+    root = Path(__file__).parent.parent.parent / "config" / "checklists"
+    codes = sorted({p.name for p in root.glob("*") if p.is_dir()} |
+                   set(_profile_names()) - {"_base"})
+    out = []
+    for code in codes:
+        for ver in _CHECKLIST_VERSIONS:
+            path = src.path_for(code, ver)
+            own = src.target_path(code, ver)
+            if path is None:
+                continue
+            items = src.load(code, ver)
+            out.append({
+                "amc_code": code,
+                "uad_version": ver,
+                "items": len(items),
+                # False means this client is still reading the built-in seed, so
+                # editing will fork it rather than change the shared file.
+                "customised": path == own,
+                "source_file": path.name,
+                "unclassified": sum(1 for i in items if not i.classified),
+            })
+    return {"checklists": out, "versions": list(_CHECKLIST_VERSIONS)}
+
+
+@router.get("/checklists/{amc_code}/{uad_version}")
+def get_checklist(amc_code: str, uad_version: str):
+    """One checklist, as rows the UI can render and edit."""
+    from app.rules.checklist_source import YamlChecklistSource
+    src = YamlChecklistSource()
+    items = src.load(amc_code, uad_version)
+    path = src.path_for(amc_code, uad_version)
+    return {
+        "amc_code": amc_code.upper(), "uad_version": uad_version,
+        "customised": bool(path and path == src.target_path(amc_code, uad_version)),
+        "source_file": path.name if path else None,
+        "items": [i.as_dict() for i in items],
+        # The UI renders these as dropdowns; sending them keeps the vocabulary in
+        # one place instead of duplicated in TypeScript.
+        "vocabulary": {
+            "polarity": ["yes", "no", "unknown"],
+            "evidence_kind": ["text", "photo", "map", "sketch", "arithmetic"],
+            "proof": ["none", "bracketing", "consistency", "sum"],
+        },
+    }
+
+
+@router.put("/checklists/{amc_code}/{uad_version}")
+def put_checklist(amc_code: str, uad_version: str, body: Dict[str, Any] = Body(...)):
+    """Replace a client's checklist for one form version.
+
+    Validated before it is written, because an invalid checklist does not fail
+    loudly at save time — it fails later, per order, as missing or wrong
+    verdicts that look like extraction problems.
+    """
+    from fastapi import HTTPException
+    from app.rules.checklist_source import YamlChecklistSource
+
+    items = body.get("items")
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="'items' must be a non-empty list")
+
+    allowed_pol = {"yes", "no", "unknown"}
+    seen_ids = set()
+    cleaned = []
+    for idx, raw in enumerate(items):
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=400, detail=f"item {idx} is not an object")
+        question = str(raw.get("requirement") or raw.get("check_text") or "").strip()
+        if not question:
+            raise HTTPException(
+                status_code=400,
+                detail=f"item {idx} has no question text — an item nobody can read "
+                       f"is an item nobody can answer")
+        rid = str(raw.get("rule_id") or raw.get("item_id") or "").strip()
+        if not rid:
+            raise HTTPException(status_code=400, detail=f"item {idx} has no rule_id")
+        if rid in seen_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate rule_id '{rid}' — verdicts are keyed by it, so a "
+                       f"duplicate makes one item silently overwrite the other")
+        seen_ids.add(rid)
+        pol = str(raw.get("polarity") or "unknown").strip().lower()
+        if pol not in allowed_pol:
+            raise HTTPException(
+                status_code=400,
+                detail=f"item {rid}: polarity '{pol}' is not one of {sorted(allowed_pol)}")
+        # An edited item is human-authored, so it counts as classified — that is
+        # the whole point of letting a person set polarity in the UI.
+        cleaned.append({**raw, "rule_id": rid, "requirement": question,
+                        "polarity": pol, "classified": True})
+
+    src = YamlChecklistSource()
+    before = src.path_for(amc_code, uad_version)
+    path = src.save(amc_code, uad_version, cleaned,
+                    {"edited_by": str(body.get("who") or "frontend")})
+    _audit(f"checklist:{amc_code.upper()}:{uad_version}",
+           before.name if before else "(builtin)", f"{len(cleaned)} items",
+           str(body.get("who") or "frontend"))
+    return {"status": "saved", "amc_code": amc_code.upper(),
+            "uad_version": uad_version, "items": len(cleaned), "file": path.name}
+
+
+@router.post("/checklists/{amc_code}/{uad_version}/seed")
+def seed_checklist(amc_code: str, uad_version: str):
+    """Fork the built-in catalog into this client's editable copy."""
+    from app.rules.checklist_source import YamlChecklistSource
+    src = YamlChecklistSource()
+    path = src.seed_from_builtin(amc_code, uad_version)
+    if path is None:
+        return {"status": "exists_or_empty",
+                "detail": "this client already has its own copy, or there is no "
+                          "built-in catalogue for that form version"}
+    return {"status": "seeded", "file": path.name,
+            "items": len(src.load(amc_code, uad_version))}

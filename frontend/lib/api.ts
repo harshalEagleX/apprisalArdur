@@ -1191,3 +1191,69 @@ export interface DocumentMatch {
   rejectedCandidatesJson?: string | null;
   matchedAt?: string | null;
 }
+
+// ── AMC checklists (per client, per form version) ────────────────────────────
+//
+// The QC checklist used to be a YAML file that only a deploy could change.
+// These call Java, which proxies to SHALqc — the browser never reaches SHALqc
+// and never holds its API key.
+//
+// 2.6 and 3.6 items deliberately do NOT share a shape: 3.6 adds polarity /
+// proof / evidence_kind because its items are answered by reading page images
+// rather than by comparing extracted fields. `extra` preserves every key this
+// interface has not been taught about, so saving a checklist round-trips
+// unknown fields instead of quietly deleting them.
+
+export interface ChecklistItem {
+  rule_id: string;
+  checklist_number?: number | null;
+  section?: string;
+  requirement: string;
+  /** Does a COMPLIANT report answer yes or no? "unknown" can never FAIL. */
+  polarity?: "yes" | "no" | "unknown";
+  evidence_kind?: "text" | "photo" | "map" | "sketch" | "arithmetic";
+  proof?: "none" | "bracketing" | "consistency" | "sum";
+  requires_documents?: string[];
+  reject_as?: string[];
+  sources?: { doc: string; fields: string[] }[];
+  classified?: boolean;
+  [extra: string]: unknown;
+}
+
+export interface ChecklistSummary {
+  amc_code: string;
+  uad_version: string;
+  items: number;
+  /** false => still reading the shared built-in seed; saving forks a copy. */
+  customised: boolean;
+  source_file: string;
+  unclassified: number;
+}
+
+export interface ChecklistDetail {
+  amc_code: string;
+  uad_version: string;
+  customised: boolean;
+  source_file: string | null;
+  items: ChecklistItem[];
+  vocabulary: { polarity: string[]; evidence_kind: string[]; proof: string[] };
+}
+
+export const getChecklists = () =>
+  apiFetch<{ checklists: ChecklistSummary[]; versions: string[] }>(
+    "/api/admin/checklists");
+
+export const getChecklist = (amc: string, version: string) =>
+  apiFetch<ChecklistDetail>(
+    `/api/admin/checklists/${encodeURIComponent(amc)}/${encodeURIComponent(version)}`);
+
+export const saveChecklist = (amc: string, version: string,
+                              items: ChecklistItem[], who?: string) =>
+  apiFetch<{ status: string; items: number; file: string }>(
+    `/api/admin/checklists/${encodeURIComponent(amc)}/${encodeURIComponent(version)}`,
+    { method: "PUT", body: JSON.stringify({ items, who }) });
+
+export const seedChecklist = (amc: string, version: string) =>
+  apiFetch<{ status: string; file?: string; items?: number; detail?: string }>(
+    `/api/admin/checklists/${encodeURIComponent(amc)}/${encodeURIComponent(version)}/seed`,
+    { method: "POST" });

@@ -125,28 +125,138 @@ class ChecklistSource:
 
 
 class YamlChecklistSource(ChecklistSource):
-    """Reads the generated catalogs under config/.
+    """Resolves a checklist for (client, form version), most specific first.
 
-    Selected by form version, because 3.6 and 2.6 are two different documents
-    with different wording and numbering, not two revisions of one.
+    Every AMC runs its own checklist, and the same AMC needs a DIFFERENT one per
+    form version — 2.6 and 3.6 are separate documents with separate wording and
+    numbering, not revisions of each other. So the lookup is two-dimensional:
+
+        1. config/checklists/<AMC>/<version>.yaml   this client, this form
+        2. config/checklists/<AMC>/default.yaml     this client, any form
+        3. the built-in catalog for that version    seed / last resort
+
+    There is deliberately NO shared "default client" layer. A checklist is the
+    AMC's own document and inheriting half of one from another client is how a
+    reviewer ends up rejecting an appraisal for failing a question their AMC
+    never asked. Clients are independent; the only fallback is the built-in seed.
+
+    Step 3 keeps the existing files exactly where they are — the 2.6 catalog
+    carries hand-tuned bindings that are the source of record, and moving it to
+    make the new layout tidy would risk them for nothing. A client with nothing
+    configured behaves exactly as it did before this indirection existed.
+
+    **The two versions do not share an item schema, and must not be forced to.**
+    2.6 items carry `check_type` / `reject_as` / `sources`; 3.6 items add
+    `polarity`, `proof`, `evidence_kind` and `requires_documents` because they
+    are answered from page images rather than from extracted fields. `_coerce`
+    reads whichever keys are present and preserves the rest in `raw`, so a
+    version — or a future frontend — can add fields without this loader knowing
+    about them.
+
+    The (amc, version) key is deliberately the key a database table would use,
+    so the DB backend replaces the file walk without changing any caller.
     """
 
-    _BY_VERSION = {"3.6": "qc_catalog_uad36.yaml"}
-    _FALLBACK = Path(__file__).resolve().parent.parent.parent / \
+    _BUILTIN_BY_VERSION = {"3.6": _CONFIG_DIR / "qc_catalog_uad36.yaml"}
+    _BUILTIN_DEFAULT = Path(__file__).resolve().parent.parent.parent / \
         "readme" / "exampleAMC" / "qc_rejection_catalog.yaml"
 
-    def path_for(self, uad_version: Optional[str]) -> Path:
-        name = self._BY_VERSION.get(str(uad_version or "").strip())
-        return (_CONFIG_DIR / name) if name else self._FALLBACK
+    def candidates(self, amc_code: Optional[str],
+                   uad_version: Optional[str]) -> List[Path]:
+        code = (amc_code or "").strip().upper()
+        ver = str(uad_version or "").strip()
+        root = _CONFIG_DIR / "checklists"
+        out: List[Path] = []
+        if code:
+            if ver:
+                out.append(root / code / f"{ver}.yaml")
+            out.append(root / code / "default.yaml")
+        builtin = self._BUILTIN_BY_VERSION.get(ver)
+        out.append(builtin if builtin else self._BUILTIN_DEFAULT)
+        return out
+
+    def path_for(self, amc_code: Optional[str], uad_version: Optional[str]
+                 ) -> Optional[Path]:
+        for path in self.candidates(amc_code, uad_version):
+            if path.exists():
+                return path
+        return None
 
     def load(self, amc_code: Optional[str], uad_version: Optional[str]
              ) -> List[ChecklistItem]:
-        path = self.path_for(uad_version)
-        if not path.exists():
-            logger.warning("checklist: %s not present — no items loaded", path)
+        path = self.path_for(amc_code, uad_version)
+        if path is None:
+            logger.warning("checklist: nothing found for amc=%s uad=%s (looked in %s)",
+                           amc_code, uad_version,
+                           ", ".join(str(p) for p in
+                                     self.candidates(amc_code, uad_version)))
             return []
+        logger.info("checklist: amc=%s uad=%s -> %s", amc_code or "-",
+                    uad_version or "-", path.name)
         doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         return [_coerce(r) for r in (doc.get("items") or []) if isinstance(r, dict)]
+
+
+    # ── write path (what the frontend edits) ─────────────────────────────────
+
+    def target_path(self, amc_code: str, uad_version: str) -> Path:
+        """Where an EDIT is saved — always the client's own file.
+
+        Never the built-in. Editing a shared seed would change the checklist of
+        every client that had not been customised yet, silently and invisibly.
+        Saving always forks the client's own copy instead.
+        """
+        code = (amc_code or "").strip().upper()
+        ver = str(uad_version or "").strip()
+        if not code or not ver:
+            raise ValueError("amc_code and uad_version are both required to save")
+        return _CONFIG_DIR / "checklists" / code / f"{ver}.yaml"
+
+    def save(self, amc_code: str, uad_version: str,
+             items: List[Dict[str, Any]], meta: Optional[Dict[str, Any]] = None) -> Path:
+        """Persist an edited checklist for one client and form version.
+
+        Written whole rather than patched: a checklist is reviewed and approved
+        as a set, and a partial write leaves a state nobody signed off on.
+        """
+        path = self.target_path(amc_code, uad_version)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "meta": {
+                "amc_code": amc_code.strip().upper(),
+                "uad_version": str(uad_version).strip(),
+                "total_items": len(items),
+                "source": "frontend",
+                **(meta or {}),
+            },
+            "items": items,
+        }
+        # Write via a temp file in the same directory and rename, so a crash
+        # mid-write cannot leave a half-parsed checklist that would take the
+        # whole client's QC down on next load.
+        tmp = path.with_suffix(".yaml.tmp")
+        tmp.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True,
+                                      width=100), encoding="utf-8")
+        tmp.replace(path)
+        logger.info("checklist: saved %d item(s) for amc=%s uad=%s -> %s",
+                    len(items), amc_code, uad_version, path)
+        return path
+
+    def seed_from_builtin(self, amc_code: str, uad_version: str) -> Optional[Path]:
+        """Fork the built-in catalog into this client's editable copy, once.
+
+        This is what turns a static file into something a person can edit: the
+        frontend needs rows to show before anyone can change them, and starting
+        from the AMC's real 90/134 items beats starting from a blank form.
+        Refuses to overwrite an existing client file.
+        """
+        target = self.target_path(amc_code, uad_version)
+        if target.exists():
+            return None
+        items = [i.as_dict() for i in self.load(amc_code, uad_version)]
+        if not items:
+            return None
+        return self.save(amc_code, uad_version, items, {"source": "seeded_from_builtin"})
 
 
 class DbChecklistSource(ChecklistSource):

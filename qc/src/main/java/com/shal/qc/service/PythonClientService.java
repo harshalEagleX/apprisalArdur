@@ -305,4 +305,79 @@ public class PythonClientService {
             return null;
         }
     }
+
+    // ── AMC checklists (frontend-authored, per client and form version) ────────
+    //
+    // The checklist lives in SHALqc because that is what evaluates it. The
+    // browser cannot reach SHALqc — it only ever talks to this service, and the
+    // SHALqc API key must never leave the server — so these three methods are
+    // the bridge that makes the checklist editable from the admin UI.
+    //
+    // The payload is passed through as an opaque String rather than mapped to a
+    // DTO on purpose: 2.6 and 3.6 items do NOT share a schema (3.6 adds
+    // polarity/proof/evidence_kind because its items are answered from page
+    // images), and a version — or the UI — must be able to add a field without
+    // a Java release. Mapping here would silently drop whatever Java had not
+    // been taught about yet, which is the worst possible failure for a config
+    // screen: the user saves, sees success, and their change is gone.
+
+    private HttpHeaders shalqcHeaders(boolean json) {
+        HttpHeaders headers = new HttpHeaders();
+        if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+            headers.set("X-API-Key", config.getApiKey());
+        }
+        if (json) {
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+        }
+        return headers;
+    }
+
+    /** Every (client, form version) checklist SHALqc knows about. */
+    public String listChecklists() {
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    config.getUrl() + "/checklists", HttpMethod.GET,
+                    new HttpEntity<>(shalqcHeaders(false)), String.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to list checklists: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** One client's checklist for one form version, as editable rows. */
+    public String getChecklist(String amcCode, String uadVersion) {
+        try {
+            String url = config.getUrl() + "/checklists/" + amcCode + "/" + uadVersion;
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(shalqcHeaders(false)), String.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to get checklist {}/{}: {}", amcCode, uadVersion, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Save an edited checklist.
+     *
+     * SHALqc validates and answers 400 with a message written to be shown to the
+     * operator ("duplicate rule_id 'X-1' — verdicts are keyed by it…"). That
+     * message is propagated rather than swallowed: a config screen that reports
+     * a generic failure leaves the user with no idea what to change.
+     */
+    public String saveChecklist(String amcCode, String uadVersion, String body) {
+        String url = config.getUrl() + "/checklists/" + amcCode + "/" + uadVersion;
+        ResponseEntity<String> response = restTemplate.exchange(
+                url, HttpMethod.PUT, new HttpEntity<>(body, shalqcHeaders(true)), String.class);
+        return response.getBody();
+    }
+
+    /** Fork the built-in catalogue into this client's own editable copy. */
+    public String seedChecklist(String amcCode, String uadVersion) {
+        String url = config.getUrl() + "/checklists/" + amcCode + "/" + uadVersion + "/seed";
+        ResponseEntity<String> response = restTemplate.exchange(
+                url, HttpMethod.POST, new HttpEntity<>(shalqcHeaders(true)), String.class);
+        return response.getBody();
+    }
 }
