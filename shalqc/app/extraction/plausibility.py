@@ -694,16 +694,24 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             ok = _numeric_plausible(value)
             reason = f"not numeric (data_type={fd.data_type})"
         elif fd.data_type == "boolean":
-            # Canonicalize rather than merely accept: the form's own wording
-            # ("None", "No Hazard Zone Noted") is a real answer, and rewriting it
-            # to True/False is what makes it usable by a rule instead of a string
-            # a comparison will miss.
+            # DERIVE the flag; never destroy the words.
+            #
+            # Overwriting the value was silently deleting findings. The appraiser
+            # answers "Apparent Defects, Damages, Deficiencies" with prose, and
+            # crushing that to `False` means any check asking "are defects noted?"
+            # reads False and PASSES — while the sentence that would have raised
+            # the finding no longer exists anywhere in the fact store.
+            #
+            # The judge is the only layer that can reason across pages, and it
+            # never sees the document: whatever extraction discards is gone for
+            # good. So the literal stays in `value` and the boolean goes beside
+            # it, where a rule can use it without anything being lost.
             canonical = _boolean_canonical(value)
-            if canonical is not None and canonical != value:
-                logger.info("Plausibility: canonicalized boolean %s='%s' → '%s'",
-                            fname, value, canonical)
-                ef.value = canonical
-                value = canonical
+            if canonical is not None:
+                ef.derived_boolean = canonical
+                if canonical != value:
+                    logger.info("Plausibility: %s='%s' reads as %s (literal kept)",
+                                fname, value, canonical)
             ok = canonical is not None
             reason = "not a recognized yes/no/true/false token"
         elif fd.data_type == "string" and not fd._is_narrative:

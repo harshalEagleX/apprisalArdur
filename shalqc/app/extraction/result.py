@@ -83,6 +83,17 @@ class ExtractedField:
     suppressed: bool = False
     suppression_reason: Optional[str] = None
 
+    # "True"/"False" derived from a boolean-typed field's LITERAL answer, set
+    # ALONGSIDE it rather than replacing it.
+    #
+    # Overwriting was deleting findings: the appraiser answers "Apparent Defects,
+    # Damages, Deficiencies" in prose, and rewriting that to "False" made every
+    # check asking "are defects noted?" pass while erasing the sentence that
+    # would have raised the finding. The judge never sees the document, so
+    # anything extraction discards cannot be recovered downstream — the words
+    # have to survive, and the flag rides beside them.
+    derived_boolean: Optional[str] = None
+
     @property
     def found(self) -> bool:
         return self.value is not None and not self.suppressed

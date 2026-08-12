@@ -203,22 +203,24 @@ class Settings:
     # the same speed), so hitting a 60s/order target means the calls must overlap.
     # Bounded by ONE key's capacity: over-sending buys 429 retry storms, not
     # throughput.
-    # Wide on purpose, and the narrow alternative was MEASURED and rejected.
+    # Calls IN FLIGHT PER KEY. The total pool is this x the number of keys, so
+    # adding a key widens the pool without re-tuning anything.
     #
-    # Run 16 (23 in flight) showed per-call decode falling from 71-121 tok/s early
-    # to 24-27 tok/s late, which looked like contention worth relieving. Run 17
-    # dropped this to 8 to relieve it, and got WORSE on every axis that matters:
+    # A key serves roughly 101 output tok/s in total, shared across whatever is
+    # running on it. Twenty-three calls over four keys is ~5.75 per key, so each
+    # call sees ~17-25 tok/s — which is where the "25 tok/s floor" came from. It
+    # was never a property of the model; it was self-inflicted, and it then set a
+    # 4,500-token effective ceiling against a 180s timeout that killed every
+    # section legitimately needing more.
     #
-    #     concurrency 23  ->  310.0s wall, 148 fields, slowest call 300s
-    #     concurrency  8  ->  494.1s wall, 150 fields, slowest call 391s
-    #
-    # The reason is structural. All calls are independent and launched at once, so
-    # at full width the wall clock is the SLOWEST CALL. Narrowing the pool does not
-    # make calls faster, it serializes them into waves, and the wall clock becomes
-    # waves x wave-time — 3 waves of ~165s beat a single wave of 300s by nothing
-    # and lost 184s. Contention slows each call sub-linearly; queueing is linear.
-    #
-    # So the lever for latency is OUTPUT SIZE PER CALL, never pool width.
+    # An earlier attempt at 8 total looked worse (494s vs 310s), but that test
+    # changed the grid ceiling at the same time and had no rate-derived timeout,
+    # so it measured two changes at once. With the timeout now sized from the
+    # measured rate, fewer in flight means each call runs near 101 tok/s and
+    # finishes well inside its budget instead of timing out at the ceiling.
+    vision_calls_per_key: int = field(
+        default_factory=lambda: int(_env("VISION_CALLS_PER_KEY", "2") or 2))
+    # Absolute cap, kept as a safety rail for a large key pool.
     vision_concurrency: int = field(default_factory=lambda: int(_env("VISION_CONCURRENCY", "20") or 20))
     # Triage costs a serial round trip (~25s) before any section can start, which
     # a 60s budget cannot absorb. Off by default: sections are located by their

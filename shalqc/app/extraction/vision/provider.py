@@ -24,6 +24,7 @@ import itertools
 import json
 import logging
 import random
+import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -49,11 +50,25 @@ _BACKOFF_BASE_S = 1.5
 # re-uploaded each time, nothing returned.
 _MAX_TIMEOUT_ATTEMPTS = 2
 
-# Measured output decode rate on this account, from run 14's per-call timeline:
-# 25-61 tok/s per call, the low end reached when ~17 calls are in flight across
-# 4 keys. Timeouts must be sized against the FLOOR, not the best case.
-_DECODE_TPS_FLOOR = 25.0
+# Output decode rate, MEASURED AT RUNTIME rather than assumed.
+#
+# The "25 tok/s floor" was never a property of the model or of Together — it was
+# self-inflicted. A key serves roughly 101 tok/s in total, so N calls in flight
+# on one key each see ~101/N. At 23 calls over 4 keys that is 101/5.75 ≈ 17-25
+# tok/s, which is exactly the floor that got baked in as if it were physics.
+#
+# Freezing it as a constant then poisoned the timeout: 25 tok/s x 180s implies a
+# 4,500-token hard ceiling, so every section legitimately needing 5,600-6,500
+# tokens timed out WHILE GENERATING CORRECTLY. Measuring instead means the
+# timeout tracks the concurrency actually in effect.
+_RATE_PER_KEY_TPS = 101.0
+# Until enough calls have completed to measure, assume the rate implied by the
+# configured concurrency rather than a pessimistic constant.
+_MIN_SAMPLES_FOR_RATE = 3
 _REQUEST_OVERHEAD_S = 20.0
+# Sized so a call that is generating correctly is never cut off: the ceiling is
+# the most it can emit, and 1.5x covers queueing and a slow start.
+_TIMEOUT_SAFETY = 1.5
 
 # `json_object` + the schema restated in the prompt is the DEFAULT, and strict
 # `json_schema` is opt-in. That is the opposite of what it looks like it should
@@ -387,6 +402,12 @@ class TogetherVisionProvider(VisionProvider):
         self._keys = keys or [""]
         self._key_turn = itertools.count()
         self._timeout = timeout_s
+        # Rolling record of (output_tokens, seconds) for completed calls, used to
+        # size the next call's timeout from what this account is ACTUALLY
+        # delivering under the concurrency in force right now.
+        self._rate_samples: List[float] = []
+        self._rate_lock = threading.Lock()
+        self._in_flight = 0
         # Hard wall-clock ceiling for ONE logical call including every retry and
         # backoff. Without it the retry policy is unbounded in time: three
         # 180s timeouts plus backoff is 546s spent on a single comparable, which
@@ -400,6 +421,37 @@ class TogetherVisionProvider(VisionProvider):
 
     def _next_key(self) -> str:
         return self._keys[next(self._key_turn) % len(self._keys)]
+
+    def _current_rate(self) -> float:
+        """Output tokens/sec a single call can expect right now.
+
+        Measured once enough calls have finished; until then, predicted from the
+        concurrency in force — a key serves ~101 tok/s in total, shared by the
+        calls on it, so N calls per key each see roughly 101/N. Predicting beats
+        assuming a worst case: a pessimistic constant produces timeouts short
+        enough to kill healthy calls, which is the failure this replaces.
+        """
+        with self._rate_lock:
+            samples = list(self._rate_samples)
+            in_flight = max(self._in_flight, 1)
+        if len(samples) >= _MIN_SAMPLES_FOR_RATE:
+            # Median, not mean: one stalled call should not drag every
+            # subsequent timeout upward.
+            samples.sort()
+            return max(samples[len(samples) // 2], 5.0)
+        per_key = in_flight / max(len(self._keys), 1)
+        return max(_RATE_PER_KEY_TPS / max(per_key, 1.0), 5.0)
+
+    def _record_rate(self, output_tokens: int, seconds: float) -> None:
+        if output_tokens <= 0 or seconds <= 0.5:
+            return
+        with self._rate_lock:
+            self._rate_samples.append(output_tokens / seconds)
+            # Keep it recent: concurrency changes between passes, and a rate
+            # measured during the wide grid pass should not size timeouts during
+            # a narrow one.
+            if len(self._rate_samples) > 24:
+                self._rate_samples.pop(0)
 
     @property
     def model(self) -> str:
@@ -424,22 +476,20 @@ class TogetherVisionProvider(VisionProvider):
         content.append({"type": "text", "text": instruction})
         clean = sanitize_schema(schema)
 
-        # Size the read timeout from the ceiling actually being requested. A
-        # timeout below what `max_tokens` can generate at the measured decode
-        # floor is not a safety net — it is a guaranteed failure that costs the
-        # full wait and returns nothing, and it fires on exactly the calls that
-        # are working hardest. Warned rather than silently clamped, because the
-        # real remedy is a smaller call, not a longer wait.
-        need_s = _REQUEST_OVERHEAD_S + max_tokens / _DECODE_TPS_FLOOR
-        if need_s > self._timeout and max_tokens not in _CEILING_WARNED:
+        # Size the read timeout from the ceiling AND the rate this account is
+        # actually delivering right now. A timeout below what `max_tokens` can
+        # generate is not a safety net — it is a guaranteed failure that costs
+        # the full wait and returns nothing, and it fires on exactly the calls
+        # doing the most work. Run 18 lost its two longest sections that way.
+        rate = self._current_rate()
+        attempt_timeout = max(
+            30.0, _REQUEST_OVERHEAD_S + (max_tokens / rate) * _TIMEOUT_SAFETY)
+        if attempt_timeout > self._timeout and max_tokens not in _CEILING_WARNED:
             _CEILING_WARNED.add(max_tokens)
-            logger.warning(
-                "vision(together): a %d-token ceiling needs ~%.0fs to generate at "
-                "the measured %.0f tok/s floor, but the read timeout is %.0fs — "
-                "these calls can time out while the model is working correctly. "
-                "Lower the ceiling (preferred) or raise the timeout.",
-                max_tokens, need_s, _DECODE_TPS_FLOOR, self._timeout)
-        attempt_timeout = max(30.0, min(need_s, self._timeout))
+            logger.info(
+                "vision(together): %d-token ceiling at the measured %.0f tok/s "
+                "needs ~%.0fs; allowing it rather than cutting off a call that is "
+                "generating correctly", max_tokens, rate, attempt_timeout)
 
         def _post(response_format: Dict[str, Any], extra_text: str = "") -> Any:
             """POST with backoff on transient failures, under a wall-clock budget.
@@ -517,6 +567,8 @@ class TogetherVisionProvider(VisionProvider):
         want_schema = (self._response_format == _FORMAT_JSON_SCHEMA
                        and not _FORMAT_REFUSED.get(model))
         started = time.monotonic()
+        with self._rate_lock:
+            self._in_flight += 1
         try:
             if want_schema:
                 r = _post({"type": "json_schema", "schema": clean})
@@ -534,11 +586,17 @@ class TogetherVisionProvider(VisionProvider):
             return VisionResponse(data={}, model=model, started_at=started,
                                   ended_at=time.monotonic(),
                                   error=f"together: {exc}")
+        finally:
+            with self._rate_lock:
+                self._in_flight = max(self._in_flight - 1, 0)
         ended = time.monotonic()
 
         usage = body.get("usage") or {}
         in_tok = usage.get("prompt_tokens", 0) or 0
         out_tok = usage.get("completion_tokens", 0) or 0
+        # Feed the observed throughput back so the NEXT call's timeout reflects
+        # what this account is delivering under the concurrency in force.
+        self._record_rate(out_tok, ended - started)
         choice = (body.get("choices") or [{}])[0]
         message = choice.get("message") or {}
         text = message.get("content") or ""

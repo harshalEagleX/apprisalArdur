@@ -46,12 +46,12 @@ logger = logging.getLogger(__name__)
 # Stop splitting here. Below a handful of fields the reasoning tax dominates and
 # further splitting adds calls without shrinking the per-call output.
 _MIN_SPLIT = 3
-# How much extra room the retry gets before resorting to a split.
-_RETRY_MULTIPLIER = 2.0
-# Absolute ceiling: a single call may never be given more than this, regardless
-# of multipliers, because output generates SERIALLY — a 30k-token call is ~7
-# minutes of wall clock on its own and would blow any deadline by itself.
-_HARD_MAX_TOKENS = 12_000
+# Absolute ceiling for one call. Output generates SERIALLY, so a ceiling is also
+# a duration: at the rate a contended call actually achieves, 12k tokens is
+# minutes of wall clock and cannot finish inside any sane read timeout. Nothing
+# raises a ceiling any more — see the split note below — so this is a cap on what
+# a CALLER may ask for, not a level anything escalates to.
+_HARD_MAX_TOKENS = 6_500
 
 
 class CompletionResult:
@@ -120,24 +120,29 @@ def transcribe_complete(
         _merge(result.data, resp.data)
         return result
 
-    truncated = resp.truncated or "truncat" in str(resp.error or "").lower() \
-        or "max_tokens" in str(resp.error or "").lower()
+    err = str(resp.error or "").lower()
+    truncated = (resp.truncated or "truncat" in err or "max_tokens" in err
+                 # A read timeout on a generating call is the SAME problem as a
+                 # truncation — the answer was too long to finish — and needs the
+                 # same response. Treating it as a transport fault is why the
+                 # `market` section returned zero fields with splits=0.
+                 or "timed out" in err or "timeout" in err)
 
-    # ── escalation 1: the request was simply under-budgeted ──────────────────
-    if truncated and ceiling < _HARD_MAX_TOKENS and depth == 0:
-        bigger = int(min(ceiling * _RETRY_MULTIPLIER, _HARD_MAX_TOKENS))
-        logger.info("vision(%s): truncated at %d tokens — retrying at %d",
-                    label, ceiling, bigger)
-        result.retries += 1
-        resp2 = provider.transcribe(images, instruction, schema_for(fields),
-                                    max_tokens=bigger, effort=effort)
-        result.absorb(resp2)
-        if resp2.ok and resp2.data:
-            _merge(result.data, resp2.data)
-            return result
-        truncated = resp2.truncated or "truncat" in str(resp2.error or "").lower()
-
-    # ── escalation 2: split the ask, never the answer ────────────────────────
+    # ── SPLIT. Never raise the ceiling. ───────────────────────────────────────
+    #
+    # Raising max_tokens on truncation is backwards, and run 18 shows the doom
+    # loop it creates: a bigger ceiling needs MORE seconds to generate, and the
+    # read timeout is fixed, so each retry is likelier to time out than the
+    # attempt before it. The old escalation doubled 2,400→4,800, 4,600→9,200,
+    # 6,500→12,000 and made failure certain. `market` and `contract_history` —
+    # the two longest-narrative sections, therefore the highest ceilings — died
+    # first and took 41 fields with them, including the contract analysis
+    # sentence that carries the single biggest finding on the order.
+    #
+    # Halving the ask instead halves the tokens to generate AND the time to
+    # generate them, so it converges on the one thing a fixed timeout can
+    # accommodate. There is no case where a call that could not finish in the
+    # time available is helped by being asked for more.
     if truncated and len(fields) > _MIN_SPLIT:
         names = list(fields)
         mid = len(names) // 2

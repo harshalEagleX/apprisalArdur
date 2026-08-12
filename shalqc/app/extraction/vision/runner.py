@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.extraction import page_map, verify as V
 from app.extraction.result import ExtractedField, ExtractedFieldSet, Source
 from app.extraction.vision.budget import BudgetExceeded, BudgetGovernor, project_order_cost
-from app.extraction.vision.grid import extract_grid
+from app.extraction.vision.grid import extract_grid, grid_row_vocabulary
 from app.extraction.vision.provider import VisionProvider, get_vision_provider
 from app.extraction.vision.sections import extract_sections
 
@@ -100,7 +100,17 @@ def run_vision_extraction(appraisal_pdf, schema=None,
     effort_grid = str(rc.get("vision_effort_grid", settings.vision_effort_grid))
 
     use_triage = bool(rc.get("vision_use_triage", settings.vision_use_triage))
-    concurrency = int(rc.get("vision_concurrency", settings.vision_concurrency))
+    # Concurrency is derived from the KEY POOL, not set as an absolute. Each key
+    # serves a fixed total throughput, so what matters is calls-per-key: run wide
+    # and every call is starved to a fraction of the rate, which is what produced
+    # the "25 tok/s floor" and the timeouts that killed two whole sections.
+    keys = getattr(provider, "key_count", 1) or 1
+    concurrency = min(keys * int(rc.get("vision_calls_per_key",
+                                        settings.vision_calls_per_key)),
+                      int(rc.get("vision_concurrency", settings.vision_concurrency)))
+    logger.info("vision: %d key(s) x %s calls/key -> concurrency %d",
+                keys, rc.get("vision_calls_per_key", settings.vision_calls_per_key),
+                concurrency)
     mt_section = int(rc.get("vision_max_tokens_section", settings.vision_max_tokens_section))
     mt_grid = int(rc.get("vision_max_tokens_grid", settings.vision_max_tokens_grid))
 
@@ -155,6 +165,62 @@ def run_vision_extraction(appraisal_pdf, schema=None,
         logger.warning("vision: consistency pass failed: %s", exc)
         report["consistency"] = {"error": str(exc)}
 
+    # ── narrative blocks, verbatim ────────────────────────────────────────────
+    # Kept as prose because the findings that matter most are not field-shaped.
+    # The contract-analysis paragraph on this order states a required septic
+    # repair while the report is dated As Is — a contradiction that exists only
+    # when both statements survive, and one of them is a sentence.
+    try:
+        from app.extraction.vision.narrative import (extract_narratives,
+                                                     find_contradictions)
+        blocks = _narrative_pages(sec_meta, plan["extractable_pages"])
+        if blocks:
+            narratives = extract_narratives(appraisal_pdf, blocks, provider,
+                                            concurrency=concurrency)
+            report["narratives"] = {n: b.as_dict() for n, b in narratives.items()}
+            conflicts = find_contradictions(narratives, values)
+            report["narrative_conflicts"] = conflicts
+            for c in conflicts:
+                report["degradations"].append(
+                    f"{c['detail']} (page {', '.join(str(p) for p in c['pages'])})")
+            unread = [n for n, b in narratives.items() if not b.read]
+            if unread:
+                report["degradations"].append(
+                    f"narrative block(s) not read: {', '.join(unread)} — any finding "
+                    f"that lives in that prose cannot be raised")
+    except Exception as exc:
+        logger.warning("vision: narrative pass failed: %s", exc)
+        report["narratives"] = {"error": str(exc)}
+
+    # ── completeness gate ─────────────────────────────────────────────────────
+    #
+    # A section that returned NOTHING is not a section with no findings — it is a
+    # section nobody read. Run 18 lost `market` and `contract_history` entirely
+    # (41 fields, including the contract-analysis sentence carrying the biggest
+    # finding on the order) and still printed DONE with "coverage 125.7%",
+    # because coverage counted comparable columns against a subject-field
+    # denominator. A health metric that reads green on an unreviewable run is
+    # worse than no metric: it converts a loud failure into a silent one.
+    #
+    # So the run is marked INCOMPLETE and the caller must not publish verdicts
+    # from it. Whatever WAS read is still returned — a reviewer re-running one
+    # section beats re-running the order — but it is labelled.
+    resilience = (sec_meta.get("resilience") or {})
+    empty_sections = sorted(name for name, m in resilience.items()
+                            if not (m or {}).get("fields"))
+    attempted = sec_meta.get("sections_attempted") or []
+    if empty_sections:
+        report["status"] = "INCOMPLETE"
+        report["incomplete_reason"] = (
+            f"{len(empty_sections)} of {len(attempted)} section(s) returned no "
+            f"fields and were not read: {', '.join(empty_sections)}. Verdicts from "
+            f"this run would be based on evidence nobody saw.")
+        report["empty_sections"] = empty_sections
+        report["degradations"].append(report["incomplete_reason"])
+        logger.error("vision: RUN INCOMPLETE — %s", report["incomplete_reason"])
+    else:
+        report["status"] = "COMPLETE"
+
     # ── partial-credit reconciliation of the comparable grid ──────────────────
     # Runs before the pass/fail checks because it answers a different and more
     # useful question. `verify_comp_column` asks "does everything reconcile?",
@@ -188,8 +254,26 @@ def run_vision_extraction(appraisal_pdf, schema=None,
     report["fields_extracted"] = len(fs.found_fields())
     if schema is not None:
         total = len(schema.all_fields())
-        report["coverage_pct"] = round(100.0 * len(fs.found_fields()) / max(total, 1), 1)
+        # Coverage counted EVERY extracted field — including six comparable
+        # columns' worth of rows — against a denominator of subject fields only,
+        # and so reported 125.7% on a run that had lost two whole sections. A
+        # percentage above 100 is a metric describing itself, not the work.
+        #
+        # Comparable rows are counted separately because they answer different
+        # questions and fail independently.
+        found = fs.found_fields()
+        comp_fields = [f for f in found if str(f.canonical_name).startswith("comp_")]
+        subject_fields = [f for f in found if not str(f.canonical_name).startswith("comp_")]
         report["schema_fields"] = total
+        report["coverage_pct"] = round(
+            100.0 * min(len(subject_fields), total) / max(total, 1), 1)
+        report["coverage_detail"] = {
+            "subject_fields_read": len(subject_fields),
+            "subject_fields_in_schema": total,
+            "comparable_fields_read": len(comp_fields),
+            # The number that actually decides whether this run is usable.
+            "sections_empty": report.get("empty_sections") or [],
+        }
 
     logger.info("vision: %d fields, %d/%d regions verified, $%.4f spent",
                 len(fs.found_fields()), report["verification"]["verified"],
@@ -274,7 +358,11 @@ def _reconcile_grid(comps: List[Dict[str, Any]], grid_meta: Dict[str, Any],
         num = comp.get("comp_number")
         rec = V.reconcile_comp(comp, num,
                                pages_expected=sorted(expected.get(num, set())),
-                               answer_key=key_by_comp.get(num))
+                               answer_key=key_by_comp.get(num),
+                               # The grid's canonical row vocabulary, so an
+                               # adjustment filed under a row this form does not
+                               # print is caught as the column shift it is.
+                               expected_rows=grid_row_vocabulary())
         out.append(rec.as_dict())
 
     tally: Dict[str, int] = {}
@@ -373,3 +461,28 @@ def _add(fs: ExtractedFieldSet, name: str, value: Any, source: str,
     fs.add(ExtractedField(
         canonical_name=name, value=str(value), raw_value=str(value),
         source=source, confidence=confidence, page=page, location_quality="page"))
+
+
+def _narrative_pages(sec_meta: Dict[str, Any],
+                     extractable: List[int]) -> Dict[str, List[int]]:
+    """Which pages carry each free-text region.
+
+    Taken from the pages the section pass ACTUALLY read, not from a positional
+    guess — the sections already located themselves, and reusing that costs
+    nothing and cannot drift from it.
+    """
+    read_pages = (sec_meta.get("section_pages") or {})
+    wanted = {
+        # The paragraph carrying the biggest finding on the sample order.
+        "contract_analysis": "contract_history",
+        "listing_history": "contract_history",
+        "reconciliation_comment": "reconciliation",
+        "sketch_commentary": "sketch",
+        "market_commentary": "market",
+    }
+    out: Dict[str, List[int]] = {}
+    for block, section in wanted.items():
+        pages = read_pages.get(section)
+        if pages:
+            out[block] = list(pages)
+    return out

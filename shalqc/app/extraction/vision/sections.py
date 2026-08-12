@@ -133,13 +133,35 @@ def _value_object(describe: str, value_type: str = "string") -> Dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["value", "source_text", "label_text"],
+        "required": ["value", "present", "source_text", "label_text", "image_index"],
         "properties": {
             "value": {"type": [value_type, "null"], "description": describe},
+            # A key that came back null is an ANSWER: the model looked and the
+            # page did not state it. A key that never came back at all is a
+            # FAILURE: the call dropped it. Long JSON silently loses keys, so
+            # without this the two are indistinguishable — and "the appraiser
+            # left it blank" would read the same as "we lost 40 fields".
+            "present": {"type": "boolean",
+                        "description": "True if this field is printed on the page at "
+                                       "all (even if blank); false if the page does "
+                                       "not contain it. Always emit this key."},
             "source_text": {"type": ["string", "null"],
                             "description": "The exact characters as printed on the page."},
             "label_text": {"type": ["string", "null"],
                            "description": "The printed label this value was matched to."},
+            # WHICH IMAGE, not which page. The model cannot know a page number —
+            # nothing in the pixels says "page 40" — so asking for one gets a
+            # guess. It can count the images it was handed, and the caller knows
+            # exactly which page each of those is.
+            #
+            # Stamping pages[0] for every field in a 3-page window was the same
+            # bug from the other direction: the signature block on page 40 came
+            # back tagged page 38, and reject letters cite those numbers to the
+            # AMC.
+            "image_index": {"type": ["integer", "null"],
+                            "description": "Which supplied image this value was read "
+                                           "from: 1 for the first, 2 for the second, "
+                                           "and so on. null if unsure."},
         },
     }
 
@@ -353,6 +375,10 @@ def extract_sections(pdf_path, profiles: List[PageProfile], provider: VisionProv
         if pages:
             jobs.append((spec, pages))
             meta["sections_attempted"].append(spec.section)
+            # Recorded so later passes (narrative, checkbox crops) reuse the
+            # pages a section ACTUALLY landed on instead of re-deriving them and
+            # drifting from it.
+            meta.setdefault("section_pages", {})[spec.section] = list(pages)
 
     def _run(spec: SectionSpec, pages: List[int]) -> Tuple[SectionSpec, List[int], Any]:
         images = [img for img in (render_page(pdf_path, p, dpi=dpi) for p in pages)
@@ -445,15 +471,28 @@ def extract_sections(pdf_path, profiles: List[PageProfile], provider: VisionProv
                     f"section {spec.section}: {len(outcome.missing_fields)} field(s) "
                     f"unresolved after retry and split")
 
-            page_hint = pages[0]
+            def _page_of(payload: Any) -> int:
+                """Resolve the image the model named to the page WE uploaded.
+
+                The mapping is ours, not the model's: it reports an index into
+                the images it was handed, and this turns that into the real page
+                number. Out of range or absent falls back to the first page of
+                the window — the old behaviour — but only as a last resort.
+                """
+                idx = payload.get("image_index") if isinstance(payload, dict) else None
+                if isinstance(idx, int) and 1 <= idx <= len(pages):
+                    return pages[idx - 1]
+                return pages[0]
+
             for name, payload in (outcome.data or {}).items():
                 if isinstance(payload, dict):
                     if payload.get("value") in (None, ""):
                         continue
-                    values[name] = {**payload, "page": page_hint, "section": spec.section}
+                    values[name] = {**payload, "page": _page_of(payload),
+                                    "section": spec.section}
                 elif isinstance(payload, list) and payload:
                     values[name] = {"value": payload, "source_text": None,
-                                    "label_text": None, "page": page_hint,
+                                    "label_text": None, "page": pages[0],
                                     "section": spec.section}
 
     return values, meta

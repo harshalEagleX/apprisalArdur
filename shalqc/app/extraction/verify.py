@@ -238,7 +238,8 @@ class CompReconciliation:
 
 def reconcile_comp(comp: Dict[str, Any], comp_no: Any = "?",
                    pages_expected: Optional[List[int]] = None,
-                   answer_key: Optional[Dict[str, Any]] = None) -> CompReconciliation:
+                   answer_key: Optional[Dict[str, Any]] = None,
+                   expected_rows: Optional[List[str]] = None) -> CompReconciliation:
     """Reconcile one comparable from whatever fragments landed.
 
     `answer_key` is page 33's Value Reconciliation row for this comparable
@@ -278,6 +279,29 @@ def reconcile_comp(comp: Dict[str, Any], comp_no: Any = "?",
     lines = [adj for adj in (_pair_adjustment(v) for v in comp.values())
              if adj is not None]
     rec.line_sum_read = sum(lines) if lines else None
+
+    # ROW BINDING — arithmetic proves the sum, not the assignment.
+    #
+    # Comparable 4 came back CERTIFIED on run 18 while carrying a one-row shift:
+    # the contract-date adjustment of $(4,300) was filed under
+    # `sales_concessions`, and `contract_date_adjustment` was absent entirely.
+    # The checksum could not see it, because a sum is invariant to which label
+    # each addend is filed under — reorder the rows and it still closes.
+    #
+    # So a certified column must ALSO have every adjustment attached to a row the
+    # form actually prints. A value under a label whose neighbour is missing is
+    # the signature of a shift, and it changes what the adjustment MEANS even
+    # though the total is right.
+    labelled = {k for k, v in comp.items()
+                if _pair_adjustment(v) is not None}
+    expected = set(expected_rows or ())
+    if expected and labelled:
+        unknown = sorted(labelled - expected)
+        if unknown:
+            rec.errors.append(
+                f"adjustment(s) filed under row label(s) this form does not print: "
+                f"{', '.join(unknown)} — the column is shifted, so the totals can "
+                f"still add up while individual adjustments mean the wrong thing")
 
     net = rec.net
     # Identity 2: sum(lines) == net. Only a CONFLICT when the read is COMPLETE —

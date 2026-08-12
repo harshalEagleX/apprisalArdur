@@ -913,3 +913,14 @@ def _reextract_column(pdf_path, page: Optional[int], comp_no: int, n_comps: int,
     if not resp.ok:
         return None
     return (resp.data or {}).get("comparable")
+
+
+def grid_row_vocabulary() -> List[str]:
+    """Every row label this grid can legitimately carry an adjustment against.
+
+    Exposed so verification can bind adjustments to rows rather than only summing
+    them. A sum is invariant to which label each addend sits under, so a
+    one-row shift reconciles perfectly while every adjustment below it means the
+    wrong thing — which is exactly what happened to comparable 4 on run 18.
+    """
+    return [name for name, _ in _ROW_VOCAB if name not in _SUMMARY_ROWS]
