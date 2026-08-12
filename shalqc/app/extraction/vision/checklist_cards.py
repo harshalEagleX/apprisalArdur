@@ -30,21 +30,41 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.extraction.vision.checklist_vision import FAIL, PASS, VERIFY, ChecklistAnswer
+from app.extraction.vision.checklist_vision import (CANNOT_EVALUATE, FAIL, PASS,
+                                                    VERIFY, ChecklistAnswer)
 
 __version__ = "ckc-1.0.0"
 
 logger = logging.getLogger(__name__)
 
-_STATUS = {PASS: "SATISFIED", FAIL: "NOT_SATISFIED", VERIFY: "REVIEW"}
+_STATUS = {PASS: "SATISFIED", FAIL: "NOT_SATISFIED", VERIFY: "REVIEW",
+           CANNOT_EVALUATE: "CANNOT_EVALUATE"}
+
+# The group vocabulary is NOT ours to invent — Java keys queue placement on it
+# (`"informational".equals(c.group())`) and the reviewer page filters on it
+# (`cardGroup !== "informational"`), with dedicated chips for `needs_data`
+# ("Couldn't auto-judge") and `unauthored` ("Weakly bound").
+#
+# A first cut emitted looks_good / manual_visual, which the stack has never heard
+# of. Nothing would have crashed — and that is the danger: every PASSING card,
+# being != "informational", would have landed in the reviewer's queue. Ninety
+# items of mostly-passing checklist would have buried the handful that matter.
+_G_OFF_QUEUE = "informational"       # harmless: satisfied, or not applicable
+_G_VERIFY = "please_verify"          # a human must look
+_G_REJECT = "recommended_reject"     # the AMC gave this item reject authority
+_G_NEEDS_DATA = "needs_data"         # we could not auto-judge it at all
 
 
-def _group(answer: ChecklistAnswer, rejectable: bool, visual: bool) -> str:
+def _group(answer: ChecklistAnswer, rejectable: bool) -> str:
     if answer.status == PASS:
-        return "looks_good"
+        return _G_OFF_QUEUE
     if answer.status == FAIL:
-        return "recommended_reject" if rejectable else "please_verify"
-    return "manual_visual" if visual else "please_verify"
+        return _G_REJECT if rejectable else _G_VERIFY
+    if answer.status == CANNOT_EVALUATE:
+        # Not "the reader failed" — "nobody can answer this until the loan file
+        # arrives". The frontend already chips this as "Couldn't auto-judge".
+        return _G_NEEDS_DATA
+    return _G_VERIFY
 
 
 def to_cards(answers: List[ChecklistAnswer], catalog_items: List[Dict[str, Any]],
@@ -77,7 +97,7 @@ def to_cards(answers: List[ChecklistAnswer], catalog_items: List[Dict[str, Any]]
 
         cards.append({
             "item_id": a.rule_id,
-            "group": _group(a, rejectable, visual),
+            "group": _group(a, rejectable),
             "section": a.section,
             "status": status,
             "item_name": (item.get("item") or a.question)[:90],
@@ -102,6 +122,12 @@ def to_cards(answers: List[ChecklistAnswer], catalog_items: List[Dict[str, Any]]
             "guardrails": ([] if a.evidence else ["no visible evidence cited"]),
             "severity": "rejectable" if (rejectable and a.status == FAIL)
                         else "informational",
+            # Drives the reviewer row's camera chip ("Please also look at the
+            # photos/sketch"). Java carries it as a nullable Boolean precisely so
+            # an older payload reads "unknown" rather than "no photo needed", so
+            # sending it explicitly is what turns the badge on for the items whose
+            # evidence really is an image.
+            "photo_verification_required": bool(visual),
         })
     return cards
 
@@ -111,10 +137,18 @@ def summarize(cards: List[Dict[str, Any]]) -> Dict[str, Any]:
     groups: Dict[str, int] = {}
     for c in cards:
         groups[c["group"]] = groups.get(c["group"], 0) + 1
+    # The queue must be computed the SAME way the consumers compute it, or this
+    # number reassures while the reviewer sees something else. Java:
+    # `!"informational".equals(group) && (FAIL || VERIFY)`. The frontend:
+    # `cardGroup !== "informational"`. Anything else here is a lie with a
+    # plausible shape — this line once said `!= "looks_good"` and reported a
+    # 90-item queue for an order whose real queue was 78.
+    queue = sum(n for g, n in groups.items() if g != _G_OFF_QUEUE)
     return {
         "total": len(cards),
         "by_group": groups,
-        # The queue is what is NOT looks_good — the number that decides whether
-        # this order costs a reviewer two minutes or twenty.
-        "queue": sum(n for g, n in groups.items() if g != "looks_good"),
+        "queue": queue,
+        "off_queue": groups.get(_G_OFF_QUEUE, 0),
+        "needs_data": groups.get(_G_NEEDS_DATA, 0),
+        "photo_checks": sum(1 for c in cards if c.get("photo_verification_required")),
     }
