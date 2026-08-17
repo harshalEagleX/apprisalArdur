@@ -34,6 +34,8 @@ gating on completeness.)
 from __future__ import annotations
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.extraction.vision.provider import VisionProvider, VisionResponse
@@ -46,12 +48,48 @@ logger = logging.getLogger(__name__)
 # Stop splitting here. Below a handful of fields the reasoning tax dominates and
 # further splitting adds calls without shrinking the per-call output.
 _MIN_SPLIT = 3
+# How many times one section may halve. Each level doubles the calls AND
+# re-uploads the page images to every one of them: run 19 paid ~3,000 extra
+# input tokens per split, 14 splits, +73% input for -15% output. Past two levels
+# the field set is small enough that a call still failing is not too big — it is
+# unreadable, and re-splitting only buys more prefill. Beyond this the region is
+# reported UNREAD, which is a fact a reviewer can act on.
+_MAX_SPLIT_DEPTH = 2
 # Absolute ceiling for one call. Output generates SERIALLY, so a ceiling is also
 # a duration: at the rate a contended call actually achieves, 12k tokens is
 # minutes of wall clock and cannot finish inside any sane read timeout. Nothing
 # raises a ceiling any more — see the split note below — so this is a cap on what
 # a CALLER may ask for, not a level anything escalates to.
 _HARD_MAX_TOKENS = 6_500
+# Floor for a halved ceiling, sized from the MEASURED output need rather than
+# guessed: fitting run 14's clean section calls gives `out = 515 + 159 x N`, so
+# even a 3-field half needs ~1,000 tokens and a 12-field one needs ~2,400.
+#
+# 700 was far too low and the failure is silent. Run 24 set the section ceiling
+# to 3,000 to chase a latency target; `site` and `contract_history` truncated,
+# split, and their halves inherited 1,500 — below the reasoning floor — so both
+# returned ZERO fields having spent four calls. A ceiling under the floor does
+# not produce a shorter answer, it produces an empty one.
+_MIN_CEILING = 2_500
+# Wall-clock budget for ONE logical section, covering every split beneath it.
+#
+# Run 19 is why this exists. `market` split three times and ran **1,566s of a
+# 1,667s run** — 94% of the wall clock in one logical call, while nine grid calls
+# behind it died of read timeouts waiting for the keys it was holding. Splitting
+# is recursive and SEQUENTIAL, so a section that keeps timing out spawns 1+2+4+8
+# serial attempts and each one is allowed to run the full read timeout. Nothing
+# bounded the total.
+#
+# A section that cannot be read in this long will not become readable with more
+# time; it will only go on starving every other call in the pool. Returning what
+# landed, plus an honest list of what did not, is strictly better than holding
+# the whole order hostage.
+_SECTION_DEADLINE_S = 240.0
+# Least time in which a split half can plausibly complete: the request overhead
+# plus enough decode to clear the reasoning floor. Below this a split produces
+# two calls that abandon before posting, so the section spends four calls to
+# return nothing.
+_MIN_VIABLE_CALL_S = 45.0
 
 
 class CompletionResult:
@@ -63,6 +101,7 @@ class CompletionResult:
         self.input_tokens: int = 0
         self.output_tokens: int = 0
         self.splits: int = 0
+        self.timed_out: bool = False
         self.retries: int = 0
         self.started_at: float = 0.0
         self.ended_at: float = 0.0
@@ -82,8 +121,27 @@ class CompletionResult:
         if resp.ended_at > self.ended_at:
             self.ended_at = resp.ended_at
 
+    def absorb_child(self, child: "CompletionResult") -> None:
+        """Fold a concurrently-run split half back into the parent."""
+        _merge(self.data, child.data)
+        self.calls += child.calls
+        self.input_tokens += child.input_tokens
+        self.output_tokens += child.output_tokens
+        self.splits += child.splits
+        self.retries += child.retries
+        self.timed_out = self.timed_out or child.timed_out
+        self.errors.extend(child.errors)
+        self.missing_fields.extend(
+            n for n in child.missing_fields if n not in self.data)
+        if child.started_at and (not self.started_at
+                                 or child.started_at < self.started_at):
+            self.started_at = child.started_at
+        if child.ended_at > self.ended_at:
+            self.ended_at = child.ended_at
+
     def summary(self) -> Dict[str, Any]:
         return {"calls": self.calls, "splits": self.splits, "retries": self.retries,
+                "timed_out": self.timed_out,
                 "fields": len(self.data), "missing": self.missing_fields,
                 "errors": self.errors[:4]}
 
@@ -100,20 +158,55 @@ def transcribe_complete(
     label: str = "call",
     depth: int = 0,
     result: Optional[CompletionResult] = None,
+    deadline: Optional[float] = None,
 ) -> CompletionResult:
     """Transcribe `fields` from `images`, splitting rather than losing anything.
 
     `schema_for` builds the JSON schema for a subset of `fields`, so the split
     halves are structurally identical to the whole — the model never sees a
     different contract, only a shorter one.
+
+    `deadline` is an absolute `time.monotonic()` value bounding the WHOLE tree of
+    splits, not each call in it. Without it the recursion is unbounded in time —
+    see `_SECTION_DEADLINE_S`.
     """
     result = result or CompletionResult()
     if not fields:
         return result
 
+    if deadline is None:
+        deadline = time.monotonic() + _SECTION_DEADLINE_S
+
+    # Check BEFORE spending, not after. A split half that starts one second
+    # before the deadline still runs a full read timeout.
+    if time.monotonic() >= deadline:
+        result.timed_out = True
+        result.missing_fields.extend(n for n in fields if n not in result.data)
+        logger.warning("vision(%s): section deadline reached — %d field(s) "
+                       "abandoned so the rest of the order can proceed",
+                       label, len(fields))
+        return result
+
     ceiling = int(min(max_tokens, _HARD_MAX_TOKENS))
-    resp = provider.transcribe(images, instruction, schema_for(fields),
-                               max_tokens=ceiling, effort=effort)
+    # Hand the section's REMAINING time down, so the call cannot outlive the
+    # deadline that admitted it. The provider carries its own 300s budget, and
+    # without this the two never meet: run 22 admitted a call just inside a 240s
+    # section deadline, the call then spent the provider's full allowance, and
+    # the section finished at 301.2s inside its own 240s bound.
+    # Clamped: a call admitted just inside the deadline computes a tiny or
+    # NEGATIVE remaining, and a negative budget makes the provider give up
+    # before posting while still counting as an attempt. Run 27 logged
+    # "-32s left", "-42s left", "-73s left" — the ladder was being entered
+    # after its own deadline had passed.
+    remaining = max(0.0, deadline - time.monotonic())
+    try:
+        resp = provider.transcribe(images, instruction, schema_for(fields),
+                                   max_tokens=ceiling, effort=effort,
+                                   budget_s=remaining)
+    except TypeError:
+        # A provider that predates the budget parameter (or a test double).
+        resp = provider.transcribe(images, instruction, schema_for(fields),
+                                   max_tokens=ceiling, effort=effort)
     result.absorb(resp)
 
     if resp.ok and resp.data:
@@ -143,19 +236,58 @@ def transcribe_complete(
     # generate them, so it converges on the one thing a fixed timeout can
     # accommodate. There is no case where a call that could not finish in the
     # time available is helped by being asked for more.
-    if truncated and len(fields) > _MIN_SPLIT:
+    # A split is only worth starting if its halves can actually finish. Once the
+    # section deadline is close, the halves inherit a few seconds, give up before
+    # posting ("call budget 4s spent"), and the section returns NOTHING having
+    # spent four calls — which is strictly worse than keeping the partial read.
+    # Run 24 lost `site` (18 fields) and `contract_history` (22) exactly this way.
+    time_to_split = (deadline - time.monotonic()) >= _MIN_VIABLE_CALL_S
+    if truncated and not time_to_split and len(fields) > _MIN_SPLIT:
+        logger.info("vision(%s): %.0fs left — too little to split into viable "
+                    "halves, keeping what landed", label, deadline - time.monotonic())
+    if truncated and time_to_split and len(fields) > _MIN_SPLIT and depth < _MAX_SPLIT_DEPTH:
         names = list(fields)
         mid = len(names) // 2
         halves = [{n: fields[n] for n in names[:mid]},
                   {n: fields[n] for n in names[mid:]}]
-        logger.info("vision(%s): still truncated — splitting %d fields into %d + %d",
-                    label, len(names), len(halves[0]), len(halves[1]))
+        # HALVE THE CEILING WITH THE FIELDS. Half the fields need roughly half
+        # the output, and the ceiling is what the read timeout is racing — leave
+        # it at full size and each half is just as able to run the clock out as
+        # the whole was. Run 19 split `market` three times and every descendant
+        # still carried the parent's ceiling, which is why splitting recovered
+        # the fields but not the wall clock.
+        half_ceiling = max(_MIN_CEILING, int(max_tokens // 2))
+        logger.info("vision(%s): still truncated — splitting %d fields into %d + %d "
+                    "(ceiling %d -> %d)", label, len(names), len(halves[0]),
+                    len(halves[1]), max_tokens, half_ceiling)
         result.splits += 1
-        for i, half in enumerate(halves):
-            transcribe_complete(
-                provider, images, instruction, half, schema_for,
-                max_tokens=max_tokens, effort=effort,
-                label=f"{label}/{i + 1}", depth=depth + 1, result=result)
+
+        # RUN THE HALVES CONCURRENTLY. They are independent — each transcribes
+        # its own fields from the same images — so serialising them multiplied
+        # the section's wall clock by the size of the split tree for no benefit.
+        # In run 19 that turned `market` into 1,566s of a 1,667s run.
+        #
+        # This is only safe because the provider now enforces a GLOBAL in-flight
+        # limit. Nested pools without that gate is exactly the double-counting
+        # that put 16 calls on 4 keys and timed out nine grid calls; here the
+        # halves queue on the same gate as everything else and simply overlap
+        # their stalls instead of adding them.
+        sub: List[CompletionResult] = [CompletionResult(), CompletionResult()]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(transcribe_complete, provider, images, instruction,
+                            half, schema_for, max_tokens=half_ceiling,
+                            effort=effort, label=f"{label}/{i + 1}",
+                            depth=depth + 1, result=sub[i], deadline=deadline)
+                for i, half in enumerate(halves)
+            ]
+            for f in futures:
+                try:
+                    f.result()
+                except Exception as exc:  # pragma: no cover - defensive
+                    result.errors.append(f"{label}: split failed: {exc}")
+        for s in sub:
+            result.absorb_child(s)
         return result
 
     # ── nothing left to try: record exactly what was lost ────────────────────

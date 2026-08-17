@@ -2859,6 +2859,14 @@ fields:
     data_type: currency
     required: optional
     value_range: {min: 0, max: 100000000}
+    # The appraiser may decline to develop this approach, and saying so IS the
+    # answer. Treating the stated reason as a non-numeric defect threw away a
+    # correct value and left the checklist item unanswerable.
+    exclusion_values:
+      - "Not Necessary for Credible Results"
+      - "Not Developed"
+      - "Not Applicable"
+      - "N/A"
     synonyms:
       - "Indicated Value by Cost Approach"
       - "Cost Approach Value"

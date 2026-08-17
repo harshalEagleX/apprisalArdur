@@ -327,13 +327,23 @@ def extract_sections(pdf_path, profiles: List[PageProfile], provider: VisionProv
                      governor: BudgetGovernor, dpi: int = 130, effort: str = "low",
                      uad_version: str = "3.6", use_triage: bool = False,
                      max_tokens: int = 8000, concurrency: int = 8,
+                     use_structural_router: bool = False,
                      ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Run triage then per-section extraction.
+    """Locate every section, then transcribe each one.
+
+    Sections are located by the first of these that works:
+
+      1. the STRUCTURAL ROUTER — the form's own section tabs, read from pixels;
+      2. TRIAGE — asking the model which sections appear on which page;
+      3. POSITIONAL WINDOWS — a proportional guess from the section's order.
+
+    Only (3) can be silently wrong, which is why it is last: it never fails
+    loudly, it just hands the wrong pages to the right schema.
 
     Returns `(values, meta)`. `values` maps canonical field name ->
-    {value, source_text, label_text, page, section}; `meta` carries the triage
-    map, per-section call outcomes and any degradations, so a partial run is
-    explainable rather than merely short.
+    {value, source_text, label_text, page, page_exact, section}; `meta` carries
+    the locator map, per-section call outcomes and any degradations, so a partial
+    run is explainable rather than merely short.
     """
     specs = load_sections(uad_version)
     meta: Dict[str, Any] = {"sections_attempted": [], "sections_failed": {},
@@ -346,11 +356,39 @@ def extract_sections(pdf_path, profiles: List[PageProfile], provider: VisionProv
     extractable = [p.page for p in profiles if p.extractable]
     section_names = sorted({n for s in specs for n in (s.match_sections or [s.title])})
 
+    # The structural router reads the form's own section tabs. Detection is free
+    # and deterministic; only the tab LABELS cost calls, and those batch into
+    # contact sheets (~4 calls for a 40-page report). It supersedes triage when
+    # it works, and refuses rather than degrades when the geometry does not hold
+    # — a report whose renderer draws no tabs must fall through to asking the
+    # model, never to guessing by position.
+    page_sections: Dict[int, List[str]] = {}
+    if use_structural_router:
+        try:
+            from app.extraction.vision import structural_router as SR
+            routed = SR.route(pdf_path, extractable, provider, governor)
+            meta["structural_router"] = {
+                k: routed[k] for k in ("bands", "no_tab_pages", "health", "usable")
+            }
+            meta["row_groups"] = routed.get("row_groups") or {}
+            if routed.get("usable"):
+                page_sections = routed.get("page_sections") or {}
+            else:
+                meta["degradations"].append(
+                    "structural router unusable (" + "; ".join(routed["health"])
+                    + ") — falling back")
+        except BudgetExceeded as exc:
+            meta["degradations"].append(str(exc))
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("vision.sections: structural router failed: %s", exc)
+            meta["degradations"].append(f"structural router failed: {exc}")
+
     # Triage is a SERIAL round trip in front of every section call — ~25s a 60s
     # budget cannot absorb. Off by default; positional windows locate sections
     # instead. Turn it on for an unfamiliar layout, where accuracy beats latency.
-    page_sections: Dict[int, List[str]] = {}
-    if use_triage:
+    if page_sections:
+        meta["triage"] = {"skipped": "structural router located sections"}
+    elif use_triage:
         try:
             tri = triage_pages(pdf_path, profiles, provider, governor, section_names)
         except BudgetExceeded as exc:
@@ -471,28 +509,47 @@ def extract_sections(pdf_path, profiles: List[PageProfile], provider: VisionProv
                     f"section {spec.section}: {len(outcome.missing_fields)} field(s) "
                     f"unresolved after retry and split")
 
-            def _page_of(payload: Any) -> int:
+            def _page_of(payload: Any) -> Tuple[int, bool]:
                 """Resolve the image the model named to the page WE uploaded.
 
-                The mapping is ours, not the model's: it reports an index into
-                the images it was handed, and this turns that into the real page
-                number. Out of range or absent falls back to the first page of
-                the window — the old behaviour — but only as a last resort.
+                Returns `(page, exact)`. The mapping is ours, not the model's: it
+                reports an index into the images it was handed, and this turns
+                that into the real page number.
+
+                **`exact=False` matters more than it looks.** When the index is
+                absent this falls back to the first page of the window, and the
+                window's left edge is systematically ONE PAGE BEFORE the section
+                begins — it is centred on the section's position and then widened
+                by `centre - 1`. That single default produced every wrong page
+                citation in run 18, all of them reproducible from the window
+                arithmetic alone:
+
+                    assignment  window [1,2,3]    stamped 1,  true 2  (-1)
+                    reconcil.   window [25,26,27] stamped 25, true 26 (-1)
+                    appraiser   window [38,39,40] stamped 38, true 40 (-2)
+
+                A page nobody established is not `pages[0]`; it is unknown. The
+                flag travels with the value so a reviewer's click-to-scroll and
+                an AMC reject letter can tell a citation from a guess.
                 """
                 idx = payload.get("image_index") if isinstance(payload, dict) else None
                 if isinstance(idx, int) and 1 <= idx <= len(pages):
-                    return pages[idx - 1]
-                return pages[0]
+                    return pages[idx - 1], True
+                # A single-page section has nowhere else the value could be, so
+                # the default IS exact. Only a multi-page window is a guess.
+                return pages[0], len(pages) == 1
 
             for name, payload in (outcome.data or {}).items():
                 if isinstance(payload, dict):
                     if payload.get("value") in (None, ""):
                         continue
-                    values[name] = {**payload, "page": _page_of(payload),
+                    page, exact = _page_of(payload)
+                    values[name] = {**payload, "page": page, "page_exact": exact,
                                     "section": spec.section}
                 elif isinstance(payload, list) and payload:
                     values[name] = {"value": payload, "source_text": None,
                                     "label_text": None, "page": pages[0],
+                                    "page_exact": len(pages) == 1,
                                     "section": spec.section}
 
     return values, meta

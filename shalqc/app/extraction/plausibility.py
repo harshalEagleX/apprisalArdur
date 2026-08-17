@@ -470,6 +470,49 @@ def _numeric_plausible(value: str) -> bool:
 _BOOLEAN_TOKENS = frozenset({"yes", "no", "y", "n", "true", "false", "1", "0"})
 
 
+def _is_exclusion(fd, value: str) -> bool:
+    """Is this the form's stated REASON for having no number here?
+
+    Declared per field in field_schema (`exclusion_values`) rather than
+    pattern-matched, so a form that words its exclusion differently is a YAML
+    edit. Matched loosely on case and punctuation only — the appraiser's exact
+    wording is preserved in the value.
+    """
+    allowed = getattr(fd, "exclusion_values", None) or []
+    if not allowed:
+        return False
+    norm = re.sub(r"[^a-z0-9 ]", "", str(value).lower()).strip()
+    return any(norm == re.sub(r"[^a-z0-9 ]", "", str(a).lower()).strip()
+               for a in allowed)
+
+
+def _echoes_own_label(fd, fname: str, value: str) -> bool:
+    """Did the reader return the field's LABEL instead of its answer?
+
+    `is_pud_checked` came back as "Planned Unit Development (PUD)" — the printed
+    row label, not the checkbox state — and `ansi_standard_used` as "ANSI
+    Declaration". Both are the same failure, and both are more dangerous than a
+    plain miss: if anything downstream coerces a non-empty string to True, the
+    PUD items silently pass on a property whose PUD status was never read.
+    """
+    v = re.sub(r"[^a-z0-9]", "", str(value).lower())
+    if not v:
+        return False
+    # A boolean ANSWER always carries a state token. "Planned Unit Development
+    # (PUD)" and "ANSI Declaration" carry none — they are the row label with
+    # decoration, which is why exact matching missed them.
+    if _boolean_canonical(value) is not None:
+        return False
+    candidates = [fname.replace("_", " ")] + list(getattr(fd, "synonyms", None) or [])
+    for c in candidates:
+        c_norm = re.sub(r"[^a-z0-9]", "", str(c).lower())
+        # Long enough to be distinctive: a two-character synonym would match far
+        # too much, and a wrong suppression is a lost field.
+        if len(c_norm) >= 4 and (c_norm in v or v in c_norm):
+            return True
+    return False
+
+
 def _boolean_canonical(value: str) -> Optional[str]:
     """"True"/"False" for a recognised boolean answer, else None.
 
@@ -677,6 +720,14 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             else:
                 ok = False
             reason = f"not one of allowed_values={fd.allowed_values}"
+        elif fd.data_type in _NUMERIC_TYPES and _is_exclusion(fd, value):
+            # A numeric field whose form allows a stated REASON instead of a
+            # number. "Not Necessary for Credible Results" is the correct answer
+            # to the cost approach on this form, and rejecting it as non-numeric
+            # discarded the appraiser's actual answer and left the item
+            # unanswerable. The reason is a legitimate value, not a bad read.
+            ok = True
+            reason = ""
         elif fd.data_type in _NUMERIC_TYPES:
             # UAD writes "<value>;<source>" in a single cell ("7;Per Metrolist",
             # "120;MLS"). Suppressing the whole thing as non-numeric threw away a
@@ -706,14 +757,19 @@ def _generic_schema_gate(merged: Dict[str, ExtractedField]) -> int:
             # never sees the document: whatever extraction discards is gone for
             # good. So the literal stays in `value` and the boolean goes beside
             # it, where a rule can use it without anything being lost.
-            canonical = _boolean_canonical(value)
-            if canonical is not None:
-                ef.derived_boolean = canonical
-                if canonical != value:
-                    logger.info("Plausibility: %s='%s' reads as %s (literal kept)",
-                                fname, value, canonical)
-            ok = canonical is not None
-            reason = "not a recognized yes/no/true/false token"
+            if _echoes_own_label(fd, fname, value):
+                ok = False
+                reason = ("the reader returned this field's own LABEL, not its "
+                          "answer — the checkbox state was never read")
+            else:
+                canonical = _boolean_canonical(value)
+                if canonical is not None:
+                    ef.derived_boolean = canonical
+                    if canonical != value:
+                        logger.info("Plausibility: %s='%s' reads as %s (literal kept)",
+                                    fname, value, canonical)
+                ok = canonical is not None
+                reason = "not a recognized yes/no/true/false token"
         elif fd.data_type == "string" and not fd._is_narrative:
             if _caption_echo_of_field(fname, value):
                 ok = False

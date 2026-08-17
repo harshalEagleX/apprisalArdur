@@ -154,6 +154,20 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
     # final_shalqccore.md §2/§9: the language-driven judgment path. Shares the
     # extraction/locate above; replaces rules+report with the compiled-checklist
     # judge. Wrapped in §16 partial-failure so a language-path crash still returns.
+    # Which FORM the report is on decides which checklist scores it. Detected
+    # once here rather than assumed: scoring a 3.6 report against the 2.6
+    # checklist asks it 134 questions its form does not contain.
+    uad_version = None
+    try:
+        from app.extraction.page_map import detect_uad_version, profile as _prof
+        if getattr(order, "appraisal_pdf", None):
+            uad_version = detect_uad_version(_prof(order.appraisal_pdf),
+                                             order.appraisal_pdf)
+    except Exception as exc:
+        degradations.append(f"uad_version detection failed ({exc}) — using default checklist")
+    logger.info("run_qc %s: form version %s -> checklist scoped accordingly",
+                order.order_id, uad_version or "unknown")
+
     if mode == "language":
         # The judge/LLM phase is the long one and has no per-item callback, so
         # ease slowly (tau ~120s) toward 0.92 — the bar keeps creeping through
@@ -163,7 +177,8 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
         report = _safe_stage(
             "language_judge", degradations, None,
             lambda: _run_language(order, profile, appraisal_fs, engagement_fs,
-                                  contract_fs, llm_client, degradations))
+                                  contract_fs, llm_client, degradations,
+                                  uad_version=uad_version))
         if report is not None:
             _progress.update(progress_token, "finalizing",
                              "Building the reviewer report", 0.94, 0.99, tau=4.0)
@@ -226,7 +241,8 @@ def run_qc(order_dir, llm_client=None, persist: bool = True, judge_mode: bool = 
 
 
 def _run_language(order, profile, appraisal_fs, engagement_fs, contract_fs,
-                  llm_client, degradations: List[str]) -> dict:
+                  llm_client, degradations: List[str],
+                  uad_version: Optional[str] = None) -> dict:
     """final_shalqccore.md §2: compile the AMC checklist (cached by hash) then run
     the language judge over the already-extracted+located field sets."""
     from app.language import compiler as C
@@ -238,7 +254,8 @@ def _run_language(order, profile, appraisal_fs, engagement_fs, contract_fs,
     # Step 1 sign-off gate: only an approved (status=active) bundle may run a live
     # order. An unsigned bundle either hard-stops (require_signed_bundle) or runs
     # with a loud degradation so the false-reject risk is never silent.
-    bundle = C.compiled_path(profile.amc_code)
+    # Version-scoped: 2.6 and 3.6 are different checklists, not revisions.
+    bundle = C.compiled_path(profile.amc_code, uad_version=uad_version)
     status = C.bundle_status(bundle)
     if status != C.STATUS_ACTIVE:
         msg = (f"bundle_not_signed_off:{profile.amc_code}:{status}")
@@ -249,7 +266,8 @@ def _run_language(order, profile, appraisal_fs, engagement_fs, contract_fs,
         degradations.append(msg)
         logger.warning("run_language: %s — running an unsigned bundle (degraded).", msg)
 
-    compiled = compile_checklist(profile.amc_code, client=llm_client)
+    compiled = compile_checklist(profile.amc_code, client=llm_client,
+                                 uad_version=uad_version)
     versions = dict(report_versions(profile))
     versions.update({"judge_mode": "language", "binder_prompt": BINDER_PROMPT_VERSION,
                      "judge_prompt": JUDGE_V2, "packet_builder": "pkt-2.0.0"})

@@ -125,6 +125,16 @@ def load_checklist(path: Path = _DEFAULT_CHECKLIST) -> List[Dict[str, Any]]:
                 "item_name": it.get("item") or it.get("item_name") or "",
                 "check_type": it.get("check_type", "presence"),
                 "sources": it.get("sources") or [],
+                # Carried through, not dropped. `polarity` is the item's expected
+                # DIRECTION and the checklist mixes both ways: "is the zoning
+                # illegal?" expects No, "was ANSI used?" expects Yes. Normalising
+                # it away left `expects` empty on 89 of 90 items and the 3.6 run
+                # returned ZERO satisfied. `proof` is what lets arithmetic settle
+                # an item without a judge call at all.
+                "polarity": it.get("polarity"),
+                "polarity_why": it.get("polarity_why"),
+                "proof": it.get("proof"),
+                "checklist_number": it.get("checklist_number"),
             })
             continue
         # legacy rejection-catalog schema.
@@ -144,6 +154,10 @@ def load_checklist(path: Path = _DEFAULT_CHECKLIST) -> List[Dict[str, Any]]:
             "item_name": it.get("item") or it.get("item_name") or "",
             "check_type": it.get("check_type", "presence"),
             "sources": it.get("sources") or [],
+            "polarity": it.get("polarity"),
+            "polarity_why": it.get("polarity_why"),
+            "proof": it.get("proof"),
+            "checklist_number": it.get("checklist_number"),
         })
     _resolve_reject_refs(rows)
     return rows
@@ -165,9 +179,23 @@ def _resolve_reject_refs(rows: List[Dict[str, Any]]) -> None:
                 b["reject_text"] = canonical.get(str(b["ref"]), "")
 
 
-def checklist_for(amc_code: str) -> Path:
-    """Prefer a per-AMC native checklist (`checklist_<amc>.yaml`) if present, else
-    the default rejection catalog — dynamic onboarding, zero engine change."""
+def checklist_for(amc_code: str, uad_version: Optional[str] = None) -> Path:
+    """The checklist this AMC uses for this FORM VERSION.
+
+    Version first, because 2.6 and 3.6 are two different documents, not two
+    revisions of one. A 3.6 report scored against the 2.6 checklist is asked 134
+    questions its form never contains — measured on the sample order, which came
+    back 134 items and `versions=['uad26']` while the 90-item 3.6 checklist sat
+    unused on disk. That is a false-reject generator, not a cosmetic mismatch.
+
+    Falls back to the AMC's native checklist, then the default catalog, so an
+    AMC with no version-specific file behaves exactly as before.
+    """
+    if uad_version:
+        versioned = (_COMPILED_DIR.parent / "config" / "checklists"
+                     / amc_code / f"{uad_version}.yaml")
+        if versioned.exists():
+            return versioned
     cand = _DEFAULT_CHECKLIST.parent / f"checklist_{amc_code.lower()}.yaml"
     return cand if cand.exists() else _DEFAULT_CHECKLIST
 
@@ -190,6 +218,11 @@ def _canon(field: str) -> str:
     return cat_canon(field)
 
 
+# Every binding name the compiler had to discard this process. Read by the
+# integrity test so a checklist cannot ship referencing fields nobody extracts.
+_UNKNOWN_BINDINGS: set = set()
+
+
 def _labels_from_sources(sources: List[dict]) -> Tuple[List[str], bool]:
     """Canonical, known-only labels named by the checklist's `sources`. Also
     returns whether any source references the engagement/contract doc."""
@@ -201,8 +234,24 @@ def _labels_from_sources(sources: List[dict]) -> Tuple[List[str], bool]:
             needs_other_doc = True
         for f in (src.get("fields") or []):
             lbl = LD.canonical_label(_canon(f))
-            if LD.is_known(lbl) and lbl not in labels:
-                labels.append(lbl)
+            if LD.is_known(lbl):
+                if lbl not in labels:
+                    labels.append(lbl)
+            else:
+                # LOUD, not silent. An unknown name used to vanish here, so a
+                # checklist item listing four fields where two are unknown
+                # compiled cleanly, reported as bound, and delivered half its
+                # evidence — the exact shape of an item that needs several
+                # values to decide and quietly decides on one.
+                #
+                # The naming contract is `comp_N_<field>` (or comp_1_..comp_6_),
+                # NOT `comp_<field>`: comp_1_gla and comp_N_gla are known,
+                # comp_gla and comp_proximity are not, and every binding written
+                # in the short form was discarded without a word.
+                _UNKNOWN_BINDINGS.add(f)
+                logger.warning("compiler: binding field %r is not a known label "
+                               "— DROPPED. Use comp_N_<field> for comparables; "
+                               "add the label to the field schema otherwise.", f)
         if src.get("maps") or src.get("photos"):
             needs_other_doc = needs_other_doc  # visual handled separately
     return labels, needs_other_doc
@@ -221,10 +270,33 @@ def _heuristic_labels(check_text: str, limit: int = 6) -> List[str]:
     return [lbl for _s, lbl in scored[:limit]]
 
 
-def _expects_from(check_text: str) -> str:
+def _expects_from(check_text: str, row: Optional[Dict[str, Any]] = None) -> str:
+    """What a COMPLIANT report looks like for this item.
+
+    Without it the judge has no direction, and the checklist mixes both: EQ-16
+    ("is the zoning legal non-conforming or illegal?") expects NO, EQ-20 ("was
+    ANSI used?") expects YES. TRACKER 4i calls the missing direction "the single
+    biggest silent failure mode", and project memory records empty `expects`
+    letting the judge invert logic as a known false-positive class.
+
+    Freshly compiled, the 3.6 bundle had `expects` empty on 89 of 90 items and
+    the run returned ZERO satisfied against 34 on the (long-hand-tuned) 2.6
+    bundle. The 3.6 catalog already carries the answer in its `polarity` column
+    (54 yes / 25 no / 11 unknown) — it was simply never read.
+
+    `unknown` stays empty ON PURPOSE: a guessed direction is worse than none,
+    and those 11 items are the ones an AMC must confirm rather than have the
+    compiler invent.
+    """
     m = _COUNT_RX.search(check_text)
     if m:
         return f"count(comp_* present) >= {m.group(1)}"
+    polarity = str((row or {}).get("polarity") or "").strip().lower()
+    why = str((row or {}).get("polarity_why") or "").strip()
+    if polarity == "yes":
+        return why or "a compliant report answers YES to this"
+    if polarity == "no":
+        return why or "a compliant report answers NO to this"
     return ""
 
 
@@ -287,8 +359,19 @@ def _compile_item(row: Dict[str, Any], client,
         never_reject=bool(row.get("never_reject", False)),
     )
 
+    # Direction FIRST, before any early return. Every branch below can `return
+    # item`, so setting this further down left it empty on 89 of 90 items — and
+    # an item with no expected direction gives the judge nothing to satisfy,
+    # which is why the freshly compiled 3.6 bundle returned ZERO satisfied.
+    item.expects = _expects_from(check_text, row)
+
     # Visual → constant card, never the LLM (§3).
-    if row.get("check_type") == "cross_modal" or _VISUAL_RX.search(check_text):
+    # "visual" is the 3.6 catalog's spelling, "cross_modal" the 2.6 one. Matching
+    # only the latter left 14 of the 3.6 items relying on a regex over the
+    # question text to be recognised as image-evidence at all — which works until
+    # an AMC words one differently, and then the item silently becomes a normal
+    # text check the judge cannot answer.
+    if row.get("check_type") in ("cross_modal", "visual") or _VISUAL_RX.search(check_text):
         item.scope = "visual"
         item.judgeable = "visual"
         item.bound_by = "constant"
@@ -297,7 +380,6 @@ def _compile_item(row: Dict[str, Any], client,
 
     src_labels, needs_other = _labels_from_sources(row.get("sources", []))
     item.bound_labels = list(src_labels)
-    item.expects = _expects_from(check_text)
 
     data = _llm_bind(client, check_text, item.section)
     if data:
@@ -386,7 +468,8 @@ def _heuristic_conditional(check_text: str) -> Dict[str, List[str]]:
 
 def compile_checklist(amc_code: str, path: Optional[Path] = None,
                       client=None, force: bool = False,
-                      allow_active_overwrite: bool = False) -> List[CompiledItem]:
+                      allow_active_overwrite: bool = False,
+                      uad_version: Optional[str] = None) -> List[CompiledItem]:
     """Compile (or load cached) the checklist for `amc_code`. The checklist is the
     per-AMC native file when present, else the default catalog. Cached by hash, so
     a second call is a file read; recompiles when the checklist/schema/prompt
@@ -400,7 +483,7 @@ def compile_checklist(amc_code: str, path: Optional[Path] = None,
     refused unless the caller explicitly opts in via `allow_active_overwrite`. The
     normal edit flow (edit source → new hash → new path) is never affected: it writes
     a different file and leaves the active bundle untouched."""
-    path = path or checklist_for(amc_code)
+    path = path or checklist_for(amc_code, uad_version)
     chash = checklist_hash(path)
     out_path = _COMPILED_DIR / amc_code / f"{chash}.yaml"
     if out_path.exists() and not force:
@@ -460,9 +543,10 @@ def load_compiled(path: Path) -> List[CompiledItem]:
     return [CompiledItem.from_yaml(d) for d in raw.get("items", [])]
 
 
-def compiled_path(amc_code: str, path: Optional[Path] = None) -> Path:
+def compiled_path(amc_code: str, path: Optional[Path] = None,
+                  uad_version: Optional[str] = None) -> Path:
     """Path of the compiled artifact for this AMC's current checklist version."""
-    path = path or checklist_for(amc_code)
+    path = path or checklist_for(amc_code, uad_version)
     return _COMPILED_DIR / amc_code / f"{checklist_hash(path)}.yaml"
 
 

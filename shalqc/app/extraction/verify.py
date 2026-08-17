@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 __version__ = "vfy-1.0.0"
 
@@ -55,6 +55,17 @@ class VerifyResult:
     # — an honest null from the extractor lands here, and conflating the two would
     # punish exactly the abstention behavior we want.
     skipped: List[str] = field(default_factory=list)
+    # Checks that do not APPLY to this region's class — a different thing again.
+    # A pending listing has no sale price, so `sale + net == adjusted` is not a
+    # missing input, it is the wrong identity; the right one uses list price.
+    #
+    # Collapsing these three into one bit is what made run 18 stamp 0.55
+    # confidence on all 48 of comparable 6's fields and call the region UNREAD.
+    # Every figure in it had been read correctly: its line items summed to
+    # -8,200, matching the printed net exactly, and 349,900 - 8,200 = 341,700
+    # matched the printed adjusted price. A VERIFIER GAP was reported as an
+    # extraction failure, and every check touching that comparable inherited it.
+    not_applicable: List[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -67,10 +78,18 @@ class VerifyResult:
         verified is how an empty extraction passes as a clean one."""
         return self.checks_run > 0 and not self.errors
 
+    @property
+    def verifier_gap(self) -> bool:
+        """Nothing ran, and not because the data was missing. This is a backlog
+        item against THIS FILE — write the missing identity — never a signal
+        about the document, and it must not lower any field's confidence."""
+        return self.checks_run == 0 and bool(self.not_applicable)
+
     def as_dict(self) -> Dict[str, Any]:
         return {"region": self.region, "ok": self.ok, "verified": self.verified,
                 "checks_run": self.checks_run, "errors": self.errors,
-                "skipped": self.skipped}
+                "skipped": self.skipped, "not_applicable": self.not_applicable,
+                "verifier_gap": self.verifier_gap}
 
 
 # ── coercion ──────────────────────────────────────────────────────────────────
@@ -131,45 +150,102 @@ def _pair_adjustment(cell: Any) -> Optional[float]:
 
 # ── comp column ───────────────────────────────────────────────────────────────
 
+_CLOSED_STATUSES = ("settled", "sold", "closed")
+
+
+def base_price(comp: Dict[str, Any]) -> Tuple[Optional[float], str]:
+    """The price the adjustment grid works FROM, and which field it came from.
+
+    **The identity depends on the comparable's class**, and assuming otherwise
+    is what discarded a wholly correct comparable in run 18:
+
+        closed sale      ->  adjusted == sale_price + net
+        pending / active ->  adjusted == list_price + net
+
+    The report states this methodology itself (p32, *Active / Pending /
+    Contingent listings*): the Final Sale-to-List ratio is applied to pendings
+    and the Original Sale-to-List ratio to actives. A pending comparable has no
+    sale price — the cell prints an em-dash — so reading `sale_price` and
+    finding nothing is the expected result, not a defect.
+    """
+    status = str(comp.get("listing_status") or "").strip().lower()
+    sale = to_number(comp.get("sale_price"))
+    listed = to_number(comp.get("list_price"))
+
+    if status and not any(s in status for s in _CLOSED_STATUSES):
+        # Pending / active / contingent: priced off the list price.
+        if listed is not None:
+            return listed, "list_price"
+        return None, "list_price"
+    if sale is not None:
+        return sale, "sale_price"
+    # No status to go on. Fall back to whichever price is present rather than
+    # failing closed — but never silently prefer one when both exist.
+    if listed is not None and sale is None:
+        return listed, "list_price"
+    return sale, "sale_price"
+
+
 def verify_comp_column(comp: Dict[str, Any], comp_no: Any = "?") -> VerifyResult:
     """The most valuable check in the file.
 
     Two independent identities hold in every sales grid:
         sum(line adjustments)            == net adjustment total
-        sale price + net adjustment      == adjusted sale price
+        base price + net adjustment      == adjusted sale price
 
     A column shifted by one cell, a dropped row, a sign flip, or a transposed
     digit breaks at least one of them. Because the two identities share the net
     total, a misread that satisfies both is vanishingly unlikely.
+
+    `base price` is comp-class aware — see `base_price`.
     """
     res = VerifyResult(region=f"comp_{comp_no}")
 
     lines = [adj for adj in (_pair_adjustment(v) for v in comp.values())
              if adj is not None]
     net = to_number(comp.get("net_adjustment_total"))
+    base, base_field = base_price(comp)
+    adjusted = to_number(comp.get("adjusted_price"))
 
-    if net is not None and lines:
+    # When the summary block's net was never read, DERIVE it from the printed
+    # adjusted price. That keeps the line-item check alive on a column whose
+    # net cell is the only thing missing — which is precisely comparable 6,
+    # whose net was absent while all thirteen of its line adjustments were read.
+    net_derived = None
+    if net is None and None not in (base, adjusted):
+        net_derived = adjusted - base
+    effective_net = net if net is not None else net_derived
+
+    if effective_net is not None and lines:
         res.checks_run += 1
         total = sum(lines)
-        if abs(total - net) > _MONEY_TOL:
+        if abs(total - effective_net) > _MONEY_TOL:
+            source = ("net adjustment" if net is not None
+                      else f"net derived from adjusted price - {base_field}")
             res.errors.append(
-                f"net adjustment {net:,.0f} does not equal the sum of the "
+                f"{source} {effective_net:,.0f} does not equal the sum of the "
                 f"{len(lines)} line adjustments ({total:,.0f}) — the column is "
                 f"misaligned or a row was missed")
     else:
         res.skipped.append("net_vs_line_sum")
 
-    sale = to_number(comp.get("sale_price"))
-    adjusted = to_number(comp.get("adjusted_price"))
-    if None not in (sale, net, adjusted):
+    if None not in (base, net, adjusted):
         res.checks_run += 1
-        if abs(sale + net - adjusted) > _MONEY_TOL:
+        if abs(base + net - adjusted) > _MONEY_TOL:
             res.errors.append(
-                f"adjusted price {adjusted:,.0f} does not equal sale price "
-                f"{sale:,.0f} + net adjustment {net:,.0f} "
-                f"(= {sale + net:,.0f})")
+                f"adjusted price {adjusted:,.0f} does not equal {base_field} "
+                f"{base:,.0f} + net adjustment {net:,.0f} "
+                f"(= {base + net:,.0f})")
+    elif net is None and net_derived is not None:
+        # The identity was consumed to derive the net above, so re-checking it
+        # here would be circular — it holds by construction. Recording it as
+        # `skipped` would understate what was proven and, in run 18, dragged a
+        # correct region to UNREAD.
+        res.not_applicable.append("adjusted_vs_base_plus_net (net was derived from it)")
+    elif base is None and adjusted is not None:
+        res.skipped.append(f"adjusted_vs_base_plus_net (no {base_field})")
     else:
-        res.skipped.append("adjusted_vs_sale_plus_net")
+        res.skipped.append("adjusted_vs_base_plus_net")
 
     return res
 
@@ -252,7 +328,11 @@ def reconcile_comp(comp: Dict[str, Any], comp_no: Any = "?",
     rec.pages_read = sorted(p for p in (comp.get("_pages") or []) if p is not None)
     rec.pages_missing = [p for p in rec.pages_expected if p not in rec.pages_read]
 
-    rec.sale = to_number(comp.get("sale_price"))
+    # Comp-class aware: a pending or active listing is priced off its LIST price,
+    # because its sale-price cell is an em-dash. Reading `sale_price` directly
+    # here is what left comparable 6 with no derivable net and sent an entirely
+    # correct column to UNREAD. See `base_price`.
+    rec.sale, base_field = base_price(comp)
     rec.adjusted = to_number(comp.get("adjusted_price"))
     if rec.adjusted is None and answer_key:
         rec.adjusted = to_number(answer_key.get("adjusted_price"))
@@ -264,17 +344,17 @@ def reconcile_comp(comp: Dict[str, Any], comp_no: Any = "?",
     if rec.sale is not None and rec.adjusted is not None:
         rec.net_derived = rec.adjusted - rec.sale
 
-    # Identity 1: sale + net == adjusted. Needs no line items at all, so it can
+    # Identity 1: base + net == adjusted. Needs no line items at all, so it can
     # certify while the line-item pages are still missing.
     if rec.net_printed is not None and rec.net_derived is not None:
         if abs(rec.net_printed - rec.net_derived) <= _MONEY_TOL:
             rec.proven.append(
-                f"adjusted price {rec.adjusted:,.0f} = sale {rec.sale:,.0f} + net "
-                f"{rec.net_printed:,.0f}")
+                f"adjusted price {rec.adjusted:,.0f} = {base_field} "
+                f"{rec.sale:,.0f} + net {rec.net_printed:,.0f}")
         else:
             rec.errors.append(
                 f"printed net {rec.net_printed:,.0f} disagrees with adjusted price "
-                f"minus sale price ({rec.net_derived:,.0f})")
+                f"minus {base_field} ({rec.net_derived:,.0f})")
 
     lines = [adj for adj in (_pair_adjustment(v) for v in comp.values())
              if adj is not None]

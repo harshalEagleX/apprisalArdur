@@ -240,7 +240,9 @@ items:
   reject_as: []
   sources:
   - doc: appraisal
-    fields: []
+    fields:
+    - assessors_parcel_number
+    - site_area
   polarity: 'yes'
   evidence_kind: text
   proof: none
@@ -283,7 +285,8 @@ items:
   reject_as: []
   sources:
   - doc: appraisal
-    fields: []
+    fields:
+    - street_ownership
   polarity: 'yes'
   evidence_kind: text
   proof: none
@@ -305,7 +308,6 @@ items:
   sources:
   - doc: appraisal
     fields:
-    - zoning_classification
     - zoning_compliance
   polarity: 'yes'
   evidence_kind: text
@@ -1278,7 +1280,7 @@ items:
 - id: U36-66
   rule_id: U36-PU-7
   item: Is the transaction non-arm's length?
-  check_type: unbound
+  check_type: same_section
   requirement: Is the transaction non-arm's length?
   uad_version: '3.6'
   section: project_pud
@@ -1286,11 +1288,12 @@ items:
   requires_documents:
   - loan_file
   - sales_contract
-  binding: unbound
+  binding: bound
   reject_as: []
   sources:
   - doc: appraisal
-    fields: []
+    fields:
+    - sale_type
   polarity: 'no'
   evidence_kind: text
   proof: none
@@ -1378,7 +1381,13 @@ items:
   reject_as: []
   sources:
   - doc: appraisal
-    fields: []
+    fields:
+    - comp_1_proximity
+    - comp_2_proximity
+    - comp_3_proximity
+    - comp_4_proximity
+    - comp_5_proximity
+    - comp_6_proximity
   polarity: 'yes'
   evidence_kind: map
   proof: none
@@ -1552,7 +1561,8 @@ items:
   reject_as: []
   sources:
   - doc: appraisal
-    fields: []
+    fields:
+    - property_rights
   polarity: 'yes'
   evidence_kind: text
   proof: none
@@ -1595,7 +1605,13 @@ items:
   reject_as: []
   sources:
   - doc: appraisal
-    fields: []
+    fields:
+    - comp_1_proximity
+    - comp_2_proximity
+    - comp_3_proximity
+    - comp_4_proximity
+    - comp_5_proximity
+    - comp_6_proximity
   polarity: unknown
   evidence_kind: text
   proof: none

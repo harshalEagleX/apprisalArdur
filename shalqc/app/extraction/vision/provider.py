@@ -48,7 +48,16 @@ _BACKOFF_BASE_S = 1.5
 # image. Run 14 spent 546 seconds — the single longest item in the whole order —
 # discovering that on one comparable: three consecutive 180s timeouts, ~1.5 MB
 # re-uploaded each time, nothing returned.
-_MAX_TIMEOUT_ATTEMPTS = 2
+#
+# ONE attempt, not two. The second is pure loss and the log above says why: the
+# model is still generating, so re-posting abandons that work, re-uploads every
+# image, and starts over against the same clock. It therefore costs a failing
+# call EXACTLY DOUBLE its read timeout — reconstructed across run 25/26, five of
+# five unclamped give-ups landed at 2x their timeout plus 4-8s of reconnect.
+#
+# Giving up after one attempt also feeds the split path sooner, and splitting is
+# what actually recovers the fields; the retry never did.
+_MAX_TIMEOUT_ATTEMPTS = 1
 
 # Output decode rate, MEASURED AT RUNTIME rather than assumed.
 #
@@ -386,7 +395,8 @@ class TogetherVisionProvider(VisionProvider):
     def __init__(self, api_keys, model: Optional[str] = None,
                  tiers: Optional[Dict[str, str]] = None, timeout_s: float = 180.0,
                  call_budget_s: float = 300.0,
-                 response_format: str = _FORMAT_JSON_OBJECT):
+                 response_format: str = _FORMAT_JSON_OBJECT,
+                 max_in_flight: int = 0):
         # See the _FORMAT_* note above: json_object is the default because strict
         # schema decoding measured 2.7x slower on the same schema and image, for
         # an identical result.
@@ -414,6 +424,18 @@ class TogetherVisionProvider(VisionProvider):
         # is what set run 14's entire 555s wall clock. The run finishes when its
         # slowest call finishes, so this bound IS the latency control.
         self._call_budget = call_budget_s
+        # GLOBAL admission control. The caller's `concurrency` is handed to the
+        # section pool AND the grid pool, which run at the same time, so the
+        # configured limit was silently applied twice: run 19 asked for 2
+        # calls/key and measured `peak_in_flight: 16` across 4 keys — 4 per key.
+        # Past ~2 per key a key's fixed throughput is split so thin that calls
+        # stop completing and start timing out; nine of that run's twelve grid
+        # calls died that way.
+        #
+        # A pool-side limit cannot express this, because neither pool can see the
+        # other. The provider is the only object both share, so the invariant
+        # lives here. Zero disables the gate.
+        self._admission = threading.BoundedSemaphore(max_in_flight) if max_in_flight else None
 
     @property
     def key_count(self) -> int:
@@ -463,7 +485,28 @@ class TogetherVisionProvider(VisionProvider):
 
     def transcribe(self, images: List[RenderedPage], instruction: str,
                    schema: Dict[str, Any], *, max_tokens: int = 4000,
-                   effort: str = "low", tier: Optional[str] = None) -> VisionResponse:
+                   effort: str = "low", tier: Optional[str] = None,
+                   budget_s: Optional[float] = None) -> VisionResponse:
+        """Queue behind the global admission gate, then transcribe.
+
+        Waiting here is not lost time. A call admitted past the point where each
+        key is serving more than ~2 requests does not run slower and still
+        finish — it runs slower and TIMES OUT, returning nothing for the full
+        wait. Queuing converts that into a completion that arrives later.
+        """
+        if self._admission is None:
+            return self._transcribe(images, instruction, schema,
+                                    max_tokens=max_tokens, effort=effort, tier=tier,
+                                    budget_s=budget_s)
+        with self._admission:
+            return self._transcribe(images, instruction, schema,
+                                    max_tokens=max_tokens, effort=effort, tier=tier,
+                                    budget_s=budget_s)
+
+    def _transcribe(self, images: List[RenderedPage], instruction: str,
+                    schema: Dict[str, Any], *, max_tokens: int = 4000,
+                    effort: str = "low", tier: Optional[str] = None,
+                    budget_s: Optional[float] = None) -> VisionResponse:
         import requests
 
         model = self.for_tier(tier) if tier else self._model
@@ -514,15 +557,37 @@ class TogetherVisionProvider(VisionProvider):
                     # setting for transcription.
                     "temperature": 0,
                     "response_format": response_format, "messages": msgs}
-            deadline = time.monotonic() + self._call_budget
+            # The CALLER's remaining time wins when it is tighter. Without this
+            # the two budgets do not know about each other: a section deadline
+            # gates ENTRY to a call, but the call then runs the provider's own
+            # 300s allowance, so a call admitted one second before a 240s section
+            # deadline still ran to 539s. Run 22 measured exactly that — slowest
+            # call 301.2s inside a 240s deadline, total 530.4s.
+            budget = min(self._call_budget, budget_s) if budget_s else self._call_budget
+            deadline = time.monotonic() + budget
             last = None
             resp = None
             timeouts = 0
             for attempt in range(_MAX_HTTP_ATTEMPTS):
                 remaining = deadline - time.monotonic()
-                if remaining < 30.0:
-                    logger.info("vision(together): %s — call budget %.0fs spent, "
-                                "not starting another attempt", model, self._call_budget)
+                # NEVER dispatch a call whose timeout would be shorter than the
+                # work needs. `timeout=min(attempt_timeout, remaining)` looks
+                # prudent and is a doom loop: as a section's budget runs down,
+                # remaining shrinks, so each call gets a TIGHTER deadline exactly
+                # when the model is slowest, times out, is counted as truncation,
+                # splits, and hands its halves even less. Run 27 issued its last
+                # five calls with 43s timeouts — the shortest in the run — and
+                # all five failed, ending at 170 fields against 291.
+                #
+                # A call that cannot be given the time it needs is not "worth
+                # trying anyway": it burns a slot, re-uploads the images, and
+                # returns nothing. Abandoning it honestly leaves the budget for
+                # calls that can still finish.
+                if remaining < min(attempt_timeout, 30.0):
+                    logger.info("vision(together): %s — %.0fs left but this call "
+                                "needs ~%.0fs; abandoning rather than dispatching "
+                                "it pre-doomed", model, max(remaining, 0.0),
+                                attempt_timeout)
                     break
                 try:
                     resp = requests.post(
@@ -683,7 +748,22 @@ def get_vision_provider() -> Optional[VisionProvider]:
                     "section": rc.get("vision_model_section", settings.vision_model_section),
                     "grid": rc.get("vision_model_grid", settings.vision_model_grid),
                     "escalate": rc.get("vision_model_escalate", settings.vision_model_escalate),
-                })
+                },
+                # Derived from the key pool, exactly like the caller's pool size —
+                # but enforced ONCE, globally, so the section and grid pools
+                # cannot each spend the whole allowance (run 19: asked for 8,
+                # measured 16 in flight, nine grid calls lost to timeouts).
+                # min() with the absolute cap, or the cap is unreachable: the
+                # per-key figure alone put 16-23 calls in flight on a 12-key pool
+                # and MEASURED THROUGHPUT FELL — 301 tok/s at 8 in flight, 193 at
+                # 16, 157 at 23, with 10-13 connection errors per run. This
+                # account is throttled globally, not per key, so the pool is not
+                # a linear throughput lever and the absolute cap has to bind.
+                max_in_flight=max(1, min(
+                    len(together_keys) * int(rc.get(
+                        "vision_calls_per_key", settings.vision_calls_per_key)),
+                    int(rc.get("vision_concurrency", settings.vision_concurrency)))),
+            )
     except Exception as exc:
         logger.warning("vision: provider init failed: %s", exc)
         return None

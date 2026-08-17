@@ -48,6 +48,13 @@ class FieldDefinition:
     required_for_review: bool = False
     allowed_values: List[str] = field(default_factory=list)
     value_range: Dict[str, Any] = field(default_factory=dict)
+    # Answers that are legitimate for a NUMERIC field but are not numbers: the
+    # form's stated reason for having no figure. The cost approach may answer
+    # "Not Necessary for Credible Results", which is the correct answer, and
+    # rejecting it as non-numeric discarded it and left the item unanswerable.
+    # Declared per field so a form that words its exclusion differently is a YAML
+    # edit rather than a pattern in code.
+    exclusion_values: List[str] = field(default_factory=list)
     notes: str = ""
     # SHALqc-CORE §1: explicit XML-vs-PDF ownership override from field_schema.yaml.
     # Empty ⇒ inferred (see primary_source/secondary_source below).
@@ -224,6 +231,7 @@ class SchemaLoader:
                 required_for_review=defn.get("required_for_review", False),
                 allowed_values=flat_allowed,
                 value_range=defn.get("value_range", {}),
+                exclusion_values=defn.get("exclusion_values", []) or [],
                 notes=defn.get("notes", ""),
                 primary_source_override=defn.get("primary_source", ""),
                 secondary_source_override=defn.get("secondary_source", ""),

@@ -54,7 +54,16 @@ PROMPT_VERSION = "judge_v2"
 # ceil(batches/3) rounds, not "the slowest batch". Threads are I/O-bound
 # (blocked on httpx.post), so raising this doesn't cost CPU — only request-rate
 # tolerance, which TogetherPool now governs directly per-key anyway.
-_MAX_LANES = 10
+# Safety rail only — the REAL ceiling is the pool's capacity, computed in
+# `_lanes_for` as keys x max_inflight_per_key. This was 10 when the account had
+# two keys, and it has since silently become the binding limit instead of the
+# rail: with 11 judge keys the pool reports capacity 22, but lanes were still
+# clamped to 10, so 27 batches ran in ~2.7 waves. Measured on the 3.6 full run —
+# judge wall 264.4s against a slowest batch of 107.2s. The batches were never
+# slow; they were queued.
+#
+# Sized well above any plausible key count so capacity binds, not this number.
+_MAX_LANES = 64
 _MIN_TOKENS = 1024   # floor so a 1-item batch still gets a workable output budget
 
 

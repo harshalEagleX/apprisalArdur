@@ -604,13 +604,13 @@ items:
 - id: U36-34
   rule_id: U36-UI-1
   item: Is the square footage in this section consistent with the sketch?
-  check_type: unbound
+  check_type: same_section
   requirement: Is the square footage in this section consistent with the sketch?
   uad_version: '3.6'
   section: unit_interior
   checklist_number: 34
   requires_documents: []
-  binding: unbound
+  binding: bound
   reject_as: []
   sources:
   - doc: appraisal
@@ -620,7 +620,7 @@ items:
   polarity: 'yes'
   classified: true
   evidence_kind: text
-  proof: none
+  proof: consistency
   polarity_why: A problem‑free report will have square footage matching the sketch.
 - id: U36-35
   rule_id: U36-UI-2
@@ -1412,6 +1412,12 @@ items:
   - doc: appraisal
     fields:
     - contract_price
+    - comp_1_sale_price
+    - comp_2_sale_price
+    - comp_3_sale_price
+    - comp_4_sale_price
+    - comp_5_sale_price
+    - comp_6_sale_price
   polarity: 'yes'
   evidence_kind: text
   proof: bracketing
@@ -1680,6 +1686,12 @@ items:
   - doc: appraisal
     fields:
     - baths
+    - comp_1_bathrooms
+    - comp_2_bathrooms
+    - comp_3_bathrooms
+    - comp_4_bathrooms
+    - comp_5_bathrooms
+    - comp_6_bathrooms
   polarity: 'yes'
   evidence_kind: text
   proof: bracketing

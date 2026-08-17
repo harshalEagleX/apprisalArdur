@@ -61,8 +61,15 @@ class Settings:
     # with NO extra 429 risk (unlike raising per-key inflight, which contends on
     # one key's budget). Reads TOGETHER_API_KEY_1..8 so adding a key to .env is
     # all it takes to widen the pipe — the TogetherPool round-robins across them.
+    # The scan is SPARSE on purpose: it collects whatever indices are present
+    # rather than stopping at the first gap. A pool numbered 1,2,3,5,6,7,8 (no 4)
+    # is normal once keys have been rotated, and a loop that stopped at the gap
+    # would silently run on three keys while the operator believed they had
+    # seven. The ceiling is generous because an absent index costs one dict
+    # lookup while a missed key costs a linear share of the run's throughput —
+    # keys 9-12 were present in .env and ignored, which is a third of the pool.
     together_keys: List[str] = field(default_factory=lambda: [
-        k for k in (_env(f"TOGETHER_API_KEY_{i}") for i in range(1, 9)) if k
+        k for k in (_env(f"TOGETHER_API_KEY_{i}") for i in range(1, 33)) if k
     ])
     together_model: str = field(default_factory=lambda: _env("TOGETHER_MODEL", "openai/gpt-oss-120b"))
     together_base_url: str = "https://api.together.xyz/v1/chat/completions"
@@ -95,8 +102,18 @@ class Settings:
     # binds on calls that are already slow, so raising it costs nothing on the
     # 9.5s median and buys back the tail. `_call_timeout_s` in llm/client.py scales
     # the effective per-call budget by the requested max_tokens on top of this.
+    # 2026-08-14: 120 was still clipping the tail. On the 3.6 full run 20 of 24
+    # judge batches finished inside 79s, and THREE hit exactly this ceiling —
+    # including a ONE-ITEM batch, which cannot be a load problem. Each was then
+    # re-chunked and re-judged, so the run paid 120s of dead wait plus a 90s
+    # retry round for work the retry proved was doable: 179s of a 258s judge
+    # pass, on three calls.
+    #
+    # The ceiling only binds on calls that are already slow, so raising it costs
+    # nothing on the 5-14s median and buys back the tail — the same argument
+    # that moved it 45 -> 120, with the same evidence one tier further out.
     together_timeout_s: float = field(
-        default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "120") or 120))
+        default_factory=lambda: float(_env("TOGETHER_TIMEOUT_S", "240") or 240))
 
     # ── extraction ────────────────────────────────────────────────────────────
     # Was a hardcoded `max_pages: int = 8` in pdf_digital/pdf_scanned — right for a
@@ -227,6 +244,32 @@ class Settings:
     # position in the document instead (section ORDER is stable across URAR
     # variants even where page NUMBERS are not). Turn on for unfamiliar layouts.
     vision_use_triage: bool = field(default_factory=lambda: _flag("VISION_USE_TRIAGE", False))
+    # Structural router: find sections from the form's own section TABS, which are
+    # drawn by the form engine and geometrically invariant (measured: the page-top
+    # tab sits at y=4.82% of page height on every tabbed page, zero variance).
+    #
+    # Strictly better than both alternatives it replaces. Positional windows put
+    # the wrong pages in front of the model on any report whose sections expand or
+    # repeat — a condo, a 2-4, an FHA assignment — and a model handed the wrong
+    # page does not error, it returns plausible values for fields that are not
+    # there. Triage answers the same question for a serial round trip per page
+    # batch; this answers it from pixels for free, plus ~4 cheap calls to read the
+    # detected tab labels.
+    #
+    # It also recovers the sales grid's row-group bands, which is the row-label
+    # template `grid_reconcile` needs to catch a transposed adjustment.
+    #
+    # Off by default until validated on a live order: detection is pinned by
+    # tests, but the labelling pass has not yet run against the provider.
+    # Bulk extraction: the whole report in ceil(pages/10) calls instead of one
+    # call per section. Calls cost ~14.3s and ~1,230 output tokens of reasoning
+    # each; fields cost 0.16s and 21 tokens. Measured 99.5s vs 555.6s on the
+    # sample report. The grid keeps its per-comparable crops either way, because
+    # the checksum is worth its call.
+    vision_use_bulk: bool = field(
+        default_factory=lambda: _flag("VISION_USE_BULK", True))
+    vision_use_structural_router: bool = field(
+        default_factory=lambda: _flag("VISION_USE_STRUCTURAL_ROUTER", False))
     # output_config.effort. Transcription is not a reasoning task; "low" keeps thinking
     # spend (which shares the max_tokens budget on Sonnet 5) off the section pass.
     vision_effort_section: str = field(default_factory=lambda: _env("VISION_EFFORT_SECTION", "low") or "low")

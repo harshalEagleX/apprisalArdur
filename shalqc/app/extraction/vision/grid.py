@@ -28,6 +28,7 @@ Three defenses, each earned from a specific observed failure:
 from __future__ import annotations
 
 import logging
+import time
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
@@ -38,6 +39,10 @@ from app.extraction.vision.provider import VisionProvider
 from app.extraction.vision.render import (label_and_column_clips,
                                           render_label_value_composite,
                                           render_page, render_region)
+
+# Wall-clock cap on the whole checksum-retry pass. Run 27 spent 943s here,
+# unlogged and unbounded, on a loop that is serial in both dimensions.
+_RETRY_BUDGET_S = 90.0
 
 __version__ = "grd-1.0.0"
 
@@ -664,10 +669,32 @@ def extract_grid(pdf_path, grid_pages: List[int], provider: VisionProvider,
                 comps[idx] = comp
 
     # ── pass 2: checksum gate, with per-column re-extraction on failure ───────
+    #
+    # BOUNDED IN WALL CLOCK. This loop is serial across comparables and serial
+    # again across each one's retries, and every retry is a fresh model call at
+    # the HIGHER retry DPI — bigger images, slower calls. Six failing columns at
+    # two attempts each is twelve serial calls with nothing capping them.
+    #
+    # Run 27 spent 943 SECONDS here — 72% of a 1,305s run — in a stretch that
+    # logged nothing at all between the consistency pass and the final
+    # surrenders. A reviewer waiting on that order had no way to tell the
+    # pipeline apart from a hang.
+    #
+    # A column that will not reconcile after one bounded attempt is a REVIEW
+    # card, and a REVIEW card delivered now is worth more than a certified one
+    # delivered a quarter of an hour late.
+    retry_deadline = time.monotonic() + _RETRY_BUDGET_S
     for idx in sorted(comps):
         res = V.verify_comp_column(comps[idx], idx)
         attempt = 0
         while res.errors and attempt < max_retries:
+            if time.monotonic() >= retry_deadline:
+                meta.setdefault("degradations", []).append(
+                    f"grid retry budget ({_RETRY_BUDGET_S:.0f}s) spent — comp {idx} "
+                    "and any later column keep their unverified read")
+                logger.warning("vision(grid): retry budget spent at comp %s — "
+                               "remaining columns go to review unretried", idx)
+                break
             attempt += 1
             meta["retries"] += 1
             redo = _reextract_column(

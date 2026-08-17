@@ -100,6 +100,9 @@ def run_vision_extraction(appraisal_pdf, schema=None,
     effort_grid = str(rc.get("vision_effort_grid", settings.vision_effort_grid))
 
     use_triage = bool(rc.get("vision_use_triage", settings.vision_use_triage))
+    use_router = bool(rc.get("vision_use_structural_router",
+                             settings.vision_use_structural_router))
+    use_bulk = bool(rc.get("vision_use_bulk", settings.vision_use_bulk))
     # Concurrency is derived from the KEY POOL, not set as an absolute. Each key
     # serves a fixed total throughput, so what matters is calls-per-key: run wide
     # and every call is starved to a fraction of the rate, which is what produced
@@ -127,15 +130,37 @@ def run_vision_extraction(appraisal_pdf, schema=None,
     # identical for a value-only schema), so a 60s/order target is only reachable
     # if the calls overlap rather than queue. Sections and grid pages are
     # independent, so they run together.
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f_sections = pool.submit(
-            _safe_sections, appraisal_pdf, profiles, provider, governor,
-            dpi_section, effort_sec, use_triage, mt_section, concurrency)
-        f_grid = pool.submit(
-            _safe_grid, appraisal_pdf, grid_pages, provider, governor, dpi_grid,
-            dpi_retry, effort_grid, retries, expected_comps, mt_grid, concurrency)
-        values, sec_meta = f_sections.result()
-        grid, grid_meta = f_grid.result()
+    if use_bulk:
+        # SEQUENTIAL when bulk is on. Bulk is four calls carrying ~8,500-token
+        # ceilings; the grid is twelve small ones. Run together they share the
+        # per-key throughput sixteen ways, and the BIGGEST calls starve first —
+        # a call needing ~98s of generation is the one that cannot survive a
+        # 16-way split. Measured exactly this way: bulk standalone returned 93
+        # fields from 4/4 calls in 121.5s, and the identical code inside the
+        # concurrent pipeline returned 12 fields with 3/4 calls dead at zero
+        # output tokens and NO provider error — the signature of starvation,
+        # not of a bad request.
+        #
+        # Serialising costs the grid's wall time but is strictly faster than the
+        # concurrent form that loses three quarters of the schema and then pays
+        # for a re-read anyway.
+        values, sec_meta = _safe_sections(
+            appraisal_pdf, profiles, provider, governor, dpi_section, effort_sec,
+            use_triage, mt_section, concurrency, use_router, use_bulk)
+        grid, grid_meta = _safe_grid(
+            appraisal_pdf, grid_pages, provider, governor, dpi_grid, dpi_retry,
+            effort_grid, retries, expected_comps, mt_grid, concurrency)
+    else:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_sections = pool.submit(
+                _safe_sections, appraisal_pdf, profiles, provider, governor,
+                dpi_section, effort_sec, use_triage, mt_section, concurrency,
+                use_router, use_bulk)
+            f_grid = pool.submit(
+                _safe_grid, appraisal_pdf, grid_pages, provider, governor, dpi_grid,
+                dpi_retry, effort_grid, retries, expected_comps, mt_grid, concurrency)
+            values, sec_meta = f_sections.result()
+            grid, grid_meta = f_grid.result()
 
     report["sections"] = sec_meta
     report["degradations"].extend(sec_meta.get("degradations", []))
@@ -192,34 +217,8 @@ def run_vision_extraction(appraisal_pdf, schema=None,
         logger.warning("vision: narrative pass failed: %s", exc)
         report["narratives"] = {"error": str(exc)}
 
-    # ── completeness gate ─────────────────────────────────────────────────────
-    #
-    # A section that returned NOTHING is not a section with no findings — it is a
-    # section nobody read. Run 18 lost `market` and `contract_history` entirely
-    # (41 fields, including the contract-analysis sentence carrying the biggest
-    # finding on the order) and still printed DONE with "coverage 125.7%",
-    # because coverage counted comparable columns against a subject-field
-    # denominator. A health metric that reads green on an unreviewable run is
-    # worse than no metric: it converts a loud failure into a silent one.
-    #
-    # So the run is marked INCOMPLETE and the caller must not publish verdicts
-    # from it. Whatever WAS read is still returned — a reviewer re-running one
-    # section beats re-running the order — but it is labelled.
-    resilience = (sec_meta.get("resilience") or {})
-    empty_sections = sorted(name for name, m in resilience.items()
-                            if not (m or {}).get("fields"))
-    attempted = sec_meta.get("sections_attempted") or []
-    if empty_sections:
-        report["status"] = "INCOMPLETE"
-        report["incomplete_reason"] = (
-            f"{len(empty_sections)} of {len(attempted)} section(s) returned no "
-            f"fields and were not read: {', '.join(empty_sections)}. Verdicts from "
-            f"this run would be based on evidence nobody saw.")
-        report["empty_sections"] = empty_sections
-        report["degradations"].append(report["incomplete_reason"])
-        logger.error("vision: RUN INCOMPLETE — %s", report["incomplete_reason"])
-    else:
-        report["status"] = "COMPLETE"
+    _finalise_status(report, sec_meta)
+
 
     # ── partial-credit reconciliation of the comparable grid ──────────────────
     # Runs before the pass/fail checks because it answers a different and more
@@ -275,6 +274,45 @@ def run_vision_extraction(appraisal_pdf, schema=None,
             "sections_empty": report.get("empty_sections") or [],
         }
 
+    # ── arithmetic proofs ─────────────────────────────────────────────────────
+    #
+    # Checklist items that arithmetic can SETTLE are settled here, in code, and
+    # never reach the judge. This is not an optimisation — it is the difference
+    # between a verdict that is byte-identical across runs and one that varies.
+    #
+    # Every item whose `check_type` has no dedicated body falls through to
+    # `_body_section_compare`, which returns VERIFY unconditionally and hands the
+    # fields to the judge. On the 3.6 catalog that is 84 of 90 items, so almost
+    # the entire checklist was being decided by an LLM even where the answer is a
+    # comparison of two numbers.
+    #
+    # The proofs are declared per item (`proof: bracketing | consistency | sum`),
+    # so a different AMC's checklist drives the same code with no edit here.
+    try:
+        from app.extraction.vision.checklist_arithmetic import prove
+        from app.rules.catalog import catalog_path_for, load_catalog
+
+        # The 3.6 catalog specifically. `load_catalog()` defaults to the 2.6 one,
+        # which carries no `proof` field at all — the two forms ship separate
+        # checklists on purpose, and scoring a 3.6 report against 2.6 wording is
+        # how you reject an appraisal for failing a question its form never asked.
+        catalog = load_catalog(catalog_path_for("3.6"))
+        proved = prove({f.canonical_name: f.value for f in fs.found_fields()},
+                       report.get("grid_reconciliation"), catalog)
+        report["proofs"] = [
+            {"checklist_number": a.checklist_number, "status": a.status,
+             "question": a.question, "computation": a.computation,
+             "reason": a.reason, "inputs": a.inputs, "missing": a.missing}
+            for a in proved
+        ]
+        decided = [a for a in proved if a.status in ("PASS", "FAIL")]
+        logger.info("vision: %d checklist item(s) settled by arithmetic, no judge "
+                    "call (%d decided, %d abstained)",
+                    len(proved), len(decided), len(proved) - len(decided))
+    except Exception as exc:
+        logger.warning("vision: arithmetic proof pass failed: %s", exc)
+        report["proofs"] = {"error": str(exc)}
+
     logger.info("vision: %d fields, %d/%d regions verified, $%.4f spent",
                 len(fs.found_fields()), report["verification"]["verified"],
                 report["verification"]["regions"], governor.spent_usd)
@@ -284,11 +322,17 @@ def run_vision_extraction(appraisal_pdf, schema=None,
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _safe_sections(pdf, profiles, provider, governor, dpi, effort, use_triage,
-                   max_tokens, concurrency):
+                   max_tokens, concurrency, use_structural_router=False,
+                   use_bulk=False):
     try:
+        if use_bulk:
+            from app.extraction.vision.bulk import extract_bulk
+            return extract_bulk(pdf, profiles, provider, governor, dpi=dpi,
+                                effort=effort)
         return extract_sections(pdf, profiles, provider, governor, dpi=dpi,
                                 effort=effort, use_triage=use_triage,
-                                max_tokens=max_tokens, concurrency=concurrency)
+                                max_tokens=max_tokens, concurrency=concurrency,
+                                use_structural_router=use_structural_router)
     except BudgetExceeded as exc:
         return {}, {"degradations": [str(exc)]}
     except Exception as exc:
@@ -383,6 +427,74 @@ def _sketch_view(values: Dict[str, Any]) -> Dict[str, Any]:
             "total_living_area": _plain(values.get("total_living_area"))}
 
 
+def _finalise_status(report: Dict[str, Any], sec_meta: Dict[str, Any]) -> None:
+    """Decide COMPLETE vs INCOMPLETE from what the section pass lost.
+
+    Extracted so every loss path is directly testable — the status is the
+    only signal telling a caller whether verdicts from this run may be
+    published."""
+    # ── completeness gate ─────────────────────────────────────────────────────
+    #
+    # A section that returned NOTHING is not a section with no findings — it is a
+    # section nobody read. Run 18 lost `market` and `contract_history` entirely
+    # (41 fields, including the contract-analysis sentence carrying the biggest
+    # finding on the order) and still printed DONE with "coverage 125.7%",
+    # because coverage counted comparable columns against a subject-field
+    # denominator. A health metric that reads green on an unreviewable run is
+    # worse than no metric: it converts a loud failure into a silent one.
+    #
+    # So the run is marked INCOMPLETE and the caller must not publish verdicts
+    # from it. Whatever WAS read is still returned — a reviewer re-running one
+    # section beats re-running the order — but it is labelled.
+    resilience = (sec_meta.get("resilience") or {})
+    empty_sections = sorted(name for name, m in resilience.items()
+                            if not (m or {}).get("fields"))
+    attempted = sec_meta.get("sections_attempted") or []
+    # A section that hit its wall-clock deadline returned SOME fields and
+    # abandoned the rest. That is deliberate — it stops one slow section holding
+    # the whole order hostage — but it is still evidence nobody saw, so it must
+    # not be reported as a complete run. Run 20 bounded `market` and
+    # `contract_history` at the deadline, lost 21 fields and two narrative blocks
+    # between them, and still printed COMPLETE; that is the same class of
+    # dishonest green as run 18's "coverage 125.7%".
+    timed_out_sections = sorted(name for name, m in resilience.items()
+                                if (m or {}).get("timed_out"))
+    # A section can also lose fields WITHOUT hitting the deadline, by exhausting
+    # the split-depth bound. Run 21 did exactly that: `contract_history` returned
+    # 6 fields and abandoned 16, timed_out was False, and the run printed
+    # COMPLETE. Whichever limit stopped the read, the consequence is identical —
+    # fields nobody saw — so the status must key on the LOSS, not on which guard
+    # produced it.
+    lossy_sections = {name: len(m.get("missing") or [])
+                      for name, m in resilience.items()
+                      if (m or {}).get("missing") and name not in timed_out_sections}
+    if empty_sections or timed_out_sections or lossy_sections:
+        report["status"] = "INCOMPLETE"
+        reasons = []
+        if empty_sections:
+            reasons.append(
+                f"{len(empty_sections)} of {len(attempted)} section(s) returned no "
+                f"fields and were not read: {', '.join(empty_sections)}")
+        if timed_out_sections:
+            reasons.append(
+                f"{len(timed_out_sections)} section(s) hit the wall-clock deadline "
+                f"and abandoned fields: {', '.join(timed_out_sections)}")
+        if lossy_sections:
+            reasons.append(
+                "field(s) unresolved after retry and split in "
+                + ", ".join(f"{n} ({c})" for n, c in sorted(lossy_sections.items())))
+        report["incomplete_reason"] = (
+            "; ".join(reasons) + ". Verdicts from this run would be based on "
+            "evidence nobody saw.")
+        report["empty_sections"] = empty_sections
+        report["timed_out_sections"] = timed_out_sections
+        report["lossy_sections"] = lossy_sections
+        report["degradations"].append(report["incomplete_reason"])
+        logger.error("vision: RUN INCOMPLETE — %s", report["incomplete_reason"])
+    else:
+        report["status"] = "COMPLETE"
+
+
 def _emit_section_fields(fs: ExtractedFieldSet, values: Dict[str, Any],
                          verified_regions: set) -> None:
     sketch_ok = "sketch" in verified_regions
@@ -403,15 +515,22 @@ def _emit_section_fields(fs: ExtractedFieldSet, values: Dict[str, Any],
         # fields keep the verified confidence and rely on abstention plus
         # provenance instead of pretending a check ran.
         unverified = name in ("total_living_area", "living_area_calcs") and not sketch_ok
+        # Whether the page was ESTABLISHED or defaulted to the window's left
+        # edge. The window starts one page before the section, so a defaulted
+        # page is reliably wrong by one — and scrolling a reviewer to the page
+        # BEFORE the value is worse than not scrolling at all: they look at a
+        # page the field is not on and conclude the extraction is wrong.
+        page_exact = payload.get("page_exact", True) if isinstance(payload, dict) else True
         fs.add(ExtractedField(
             canonical_name=name, value=str(value), raw_value=str(value),
             source=Source.VISION_UNVERIFIED if unverified else Source.VISION,
             confidence=_CONF_UNVERIFIED if unverified else _CONF_VERIFIED,
             page=int(payload.get("page") or 0) if isinstance(payload, dict) else 0,
             # No bbox: the page has no text layer to locate against, so the
-            # back-locator cannot refine this. "page" is honest — the reviewer
-            # gets scroll-to-page rather than a box drawn in the wrong place.
-            location_quality="page",
+            # back-locator cannot refine this. "page" is honest when the page is
+            # known — the reviewer gets scroll-to-page rather than a box drawn in
+            # the wrong place — and "none" is the honest answer when it is not.
+            location_quality="page" if page_exact else "none",
         ))
 
 
